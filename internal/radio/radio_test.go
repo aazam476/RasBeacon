@@ -1,0 +1,154 @@
+package radio
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+// iwOutputWithAP is a shortened real `iw phy info` output from a radio that
+// can run a hotspot.
+const iwOutputWithAP = `Wiphy phy1
+	Supported interface modes:
+		 * IBSS
+		 * managed
+		 * AP
+		 * monitor
+	Band 1:
+`
+
+const iwOutputWithoutAP = `Wiphy phy0
+	Supported interface modes:
+		 * managed
+		 * monitor
+	Supported commands:
+		 * AP
+`
+
+func TestSupportsAPMode(t *testing.T) {
+	if !SupportsAPMode(iwOutputWithAP) {
+		t.Error("expected AP support to be detected")
+	}
+	// "* AP" under "Supported commands" must not count as an interface mode.
+	if SupportsAPMode(iwOutputWithoutAP) {
+		t.Error("AP listed outside 'Supported interface modes' must not count")
+	}
+}
+
+// fakeSysfs builds a directory tree that looks like /sys/class/net with:
+//   - wlan0: built-in Broadcom radio (brcmfmac), no USB
+//   - wlan1: USB TP-Link Archer T3U (rtw88_8822bu, 2357:012d)
+//   - eth0:  wired Ethernet (not Wi-Fi, must be ignored)
+func fakeSysfs(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	classNet := filepath.Join(root, "class", "net")
+	devices := filepath.Join(root, "devices")
+	drivers := filepath.Join(root, "drivers")
+
+	mkdir := func(p string) {
+		if err := os.MkdirAll(p, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write := func(p, content string) {
+		mkdir(filepath.Dir(p))
+		if err := os.WriteFile(p, []byte(content+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	link := func(target, name string) {
+		mkdir(filepath.Dir(name))
+		if err := os.Symlink(target, name); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Built-in radio on the SDIO bus.
+	builtinDev := filepath.Join(devices, "platform", "mmc1", "mmc1:0001:1")
+	mkdir(builtinDev)
+	mkdir(filepath.Join(drivers, "brcmfmac"))
+	write(filepath.Join(classNet, "wlan0", "phy80211", "name"), "phy0")
+	link(builtinDev, filepath.Join(classNet, "wlan0", "device"))
+	link(filepath.Join(drivers, "brcmfmac"), filepath.Join(builtinDev, "driver"))
+
+	// USB radio: the interface directory (1-1:1.0) sits inside the USB device
+	// directory (1-1), which holds idVendor/idProduct.
+	usbDevice := filepath.Join(devices, "usb1", "1-1")
+	usbInterface := filepath.Join(usbDevice, "1-1:1.0")
+	mkdir(usbInterface)
+	write(filepath.Join(usbDevice, "idVendor"), "2357")
+	write(filepath.Join(usbDevice, "idProduct"), "012d")
+	mkdir(filepath.Join(drivers, "rtw88_8822bu"))
+	write(filepath.Join(classNet, "wlan1", "phy80211", "name"), "phy1")
+	link(usbInterface, filepath.Join(classNet, "wlan1", "device"))
+	link(filepath.Join(drivers, "rtw88_8822bu"), filepath.Join(usbInterface, "driver"))
+
+	// Wired Ethernet: no phy80211 directory.
+	mkdir(filepath.Join(classNet, "eth0"))
+
+	return classNet
+}
+
+func TestDetect_FindsBuiltInAndUSBRadios(t *testing.T) {
+	classNet := fakeSysfs(t)
+	phyInfo := func(phy string) (string, error) { return iwOutputWithAP, nil }
+
+	radios, err := Detect(classNet, phyInfo)
+	if err != nil {
+		t.Fatalf("Detect: %v", err)
+	}
+	if len(radios) != 2 {
+		t.Fatalf("found %d radios, want 2 (eth0 must be ignored): %+v", len(radios), radios)
+	}
+
+	builtin, usb := radios[0], radios[1]
+	if builtin.Interface != "wlan0" || builtin.Driver != "brcmfmac" || builtin.IsUSB {
+		t.Errorf("built-in radio detected wrong: %+v", builtin)
+	}
+	if usb.Interface != "wlan1" || usb.Driver != "rtw88_8822bu" || !usb.IsUSB || usb.USBID != "2357:012d" {
+		t.Errorf("USB radio detected wrong: %+v", usb)
+	}
+}
+
+func TestAssignRoles_USBAdapterRunsHotspot(t *testing.T) {
+	radios := []Radio{
+		{Interface: "wlan0", Driver: "brcmfmac", SupportsAP: true},
+		{Interface: "wlan1", Driver: "rtw88_8822bu", IsUSB: true, SupportsAP: true},
+	}
+	got, warnings := AssignRoles(radios)
+
+	if got[1].Role != RoleHotspot {
+		t.Errorf("USB radio role = %q, want hotspot", got[1].Role)
+	}
+	if got[0].Role != RoleUplink {
+		t.Errorf("built-in radio role = %q, want uplink", got[0].Role)
+	}
+	if len(warnings) != 0 {
+		t.Errorf("unexpected warnings: %v", warnings)
+	}
+}
+
+func TestAssignRoles_NoUSBAdapterFallsBackWithWarning(t *testing.T) {
+	radios := []Radio{{Interface: "wlan0", Driver: "brcmfmac", SupportsAP: true}}
+	got, warnings := AssignRoles(radios)
+
+	if got[0].Role != RoleHotspot {
+		t.Errorf("built-in radio should run the hotspot as a fallback, got %q", got[0].Role)
+	}
+	if len(warnings) != 1 || !strings.Contains(warnings[0], "about 8 devices") {
+		t.Errorf("expected a warning about the client limit, got %v", warnings)
+	}
+}
+
+func TestAssignRoles_NoAPCapableRadio(t *testing.T) {
+	radios := []Radio{{Interface: "wlan0", SupportsAP: false}}
+	got, warnings := AssignRoles(radios)
+	if got[0].Role == RoleHotspot {
+		t.Error("a radio without AP support must not be given the hotspot role")
+	}
+	if len(warnings) == 0 {
+		t.Error("expected a warning")
+	}
+}
