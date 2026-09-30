@@ -36,7 +36,12 @@ mkdir -p "$repo_root/build/rig-$board"
   -c "$stage/config/rasbeacon-$board.yaml" -- \
   IGconf_artefact_version="$version"
 
-# 4. Compress it for Raspberry Pi Imager / balenaEtcher and record its hash.
+# 4. Check the result (firmware present, SSH settings, no baked-in secrets).
+#    The build tree is partly owned by root, hence sudo.
+rootfs="$(sudo find "$repo_root/build/rig-$board" -maxdepth 3 -type d -path "*/chroot-*/filesystem" | head -n 1)"
+sudo "$repo_root/image/verify.sh" "$rootfs"
+
+# 5. Compress it for Raspberry Pi Imager / balenaEtcher and record its hash.
 # rpi-image-gen writes the raw image to <work dir>/image-<name>/<name>.img.
 built="$repo_root/build/rig-$board/image-rasbeacon-$board/rasbeacon-$board.img"
 if [ ! -f "$built" ]; then

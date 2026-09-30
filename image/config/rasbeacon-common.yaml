@@ -22,8 +22,13 @@ layer:
   base: rasbeacon-base
   app: rasbeacon
 
+# SSH settings come from our own file,
+# layer/rasbeacon.d/customize.overlay/etc/ssh/sshd_config.d/00-rasbeacon.conf
+# (keys only, root only). rpi-image-gen's "pubkey_only" option is left off
+# because its file would forbid root login, and OpenSSH uses the first value
+# it reads for each setting.
 ssh:
-  pubkey_only: y
+  pubkey_only: n
 
 locale:
   default: en_US.UTF-8

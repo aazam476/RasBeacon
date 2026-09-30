@@ -22,6 +22,11 @@ mmdebstrap:
     - rfkill
     # Shows USB adapters in the diagnostics report
     - usbutils
+    # Firmware the USB Wi-Fi adapters load when they start: Realtek (e.g.
+    # TP-Link Archer T3U/T4U) and MediaTek (e.g. MT7612U, MT7921AU). The
+    # kernel has their drivers, but without firmware they don't work.
+    - firmware-realtek
+    - firmware-mediatek
   customize-hooks:
     # rbweb runs as its own unprivileged user.
     - chroot $1 useradd --system --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin rbweb
