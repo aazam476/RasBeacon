@@ -1,0 +1,31 @@
+# rbweb: the web server for the settings pages (see cmd/rbweb). It runs as
+# the unprivileged "rbweb" user with only the right to use port 80/443.
+[Unit]
+Description=RasBeacon web UI (rbweb)
+Wants=rbd.service
+After=rbd.service
+
+[Service]
+ExecStart=/usr/bin/rbweb
+User=rbweb
+Group=rbweb
+Restart=always
+RestartSec=3
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

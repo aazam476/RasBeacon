@@ -1,0 +1,19 @@
+# rbd: RasBeacon's privileged background program (see cmd/rbd).
+[Unit]
+Description=RasBeacon network agent (rbd)
+# The lockdown firewall must be in place first.
+Requires=rasbeacon-firewall-early.service
+After=rasbeacon-firewall-early.service network-pre.target systemd-udevd.service
+# rbd keeps settings on /persistent and reads setup.txt from /bootfs.
+RequiresMountsFor=/persistent /bootfs
+
+[Service]
+ExecStart=/usr/bin/rbd
+Restart=always
+RestartSec=3
+# rbd must run as root to change network settings. Limit what else it can do.
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

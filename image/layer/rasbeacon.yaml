@@ -1,0 +1,37 @@
+# METABEGIN
+# X-Env-Layer-Name: rasbeacon
+# X-Env-Layer-Category: app
+# X-Env-Layer-Desc: RasBeacon itself: the rbd and rbweb programs, the network
+#  programs they control, and their systemd services. Files in
+#  rasbeacon.d/customize.overlay/ are copied into the image as-is.
+# X-Env-Layer-Version: 1.0.0
+# X-Env-Layer-Requires: rasbeacon-base
+# METAEND
+---
+mmdebstrap:
+  packages:
+    # Wi-Fi hotspot
+    - hostapd
+    # DHCP and DNS for the hotspot (the program only; we supply the service)
+    - dnsmasq-base
+    # Firewall
+    - nftables
+    # Wi-Fi and network tools used by rbd
+    - iw
+    - iproute2
+    - rfkill
+    # Shows USB adapters in the diagnostics report
+    - usbutils
+  customize-hooks:
+    # rbweb runs as its own unprivileged user.
+    - chroot $1 useradd --system --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin rbweb
+    # The programs are copied in by the overlay; make sure they can run.
+    - chmod 0755 $1/usr/bin/rbd $1/usr/bin/rbweb
+    # Start the early firewall, rbd and rbweb at boot. hostapd and dnsmasq
+    # are started by rbd when it has written their configuration.
+    - $BDEBSTRAP_HOOKS/enable-units "$1" rasbeacon-firewall-early.service rbd.service rbweb.service
+    # SSH is off until the owner turns it on in the web UI (rbd starts it).
+    - chroot $1 systemctl disable ssh.service
+    - chroot $1 systemctl mask ssh.socket
+    # Debian's own hostapd service must not start with the default config.
+    - chroot $1 systemctl mask hostapd.service

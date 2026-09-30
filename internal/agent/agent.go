@@ -86,6 +86,10 @@ type Agent struct {
 	setupDeadline    time.Time
 	setupWindowTimer *time.Timer
 	stopLEDBlink     chan struct{}
+
+	// usbRadioWait is how long startup waits for a USB Wi-Fi adapter to
+	// appear (see waitForRadios). Tests set it to zero.
+	usbRadioWait time.Duration
 }
 
 // New creates an agent that uses the given file locations and command
@@ -97,6 +101,8 @@ func New(p paths.Paths, runner system.Runner) *Agent {
 		afterFunc: time.AfterFunc,
 		now:       time.Now,
 		lan:       render.DefaultLAN,
+		// USB adapters usually appear within a few seconds of power-on.
+		usbRadioWait: 20 * time.Second,
 	}
 }
 
@@ -221,8 +227,12 @@ func (a *Agent) loadOrCreateSettings() error {
 // setUpRadios detects the Wi-Fi radios, assigns roles, and renames the
 // hotspot radio to "ap0". It also applies the regulatory country.
 func (a *Agent) setUpRadios() error {
-	phyInfo := func(phy string) (string, error) { return system.PhyInfo(a.runner, phy) }
-	detected, err := radio.Detect(a.paths.SysClassNet(), phyInfo)
+	// Raspberry Pi images can start with Wi-Fi "soft-blocked" (switched off
+	// in software) until a country is set. Switch it on; if the rfkill tool
+	// is missing, there is nothing to unblock.
+	_, _ = a.runner.Run("rfkill", "unblock", "wifi")
+
+	detected, err := a.waitForRadios()
 	if err != nil {
 		return err
 	}
@@ -248,6 +258,32 @@ func (a *Agent) setUpRadios() error {
 		a.warnings = append(a.warnings, "Could not set the Wi-Fi country: "+err.Error())
 	}
 	return system.EnsureBridge(a.runner, render.BridgeName, a.lan.Prefix.String())
+}
+
+// waitForRadios detects the Wi-Fi radios. When the device boots, USB
+// adapters take a few seconds to appear, and rbd may start before them. So
+// if no USB radio that can run a hotspot is found yet, it looks again every
+// second until usbRadioWait has passed. After that it returns whatever it
+// found, and AssignRoles falls back to the built-in radio with a warning.
+func (a *Agent) waitForRadios() ([]radio.Radio, error) {
+	phyInfo := func(phy string) (string, error) { return system.PhyInfo(a.runner, phy) }
+	deadline := a.now().Add(a.usbRadioWait)
+	for {
+		detected, err := radio.Detect(a.paths.SysClassNet(), phyInfo)
+		if err != nil {
+			return nil, err
+		}
+		for _, r := range detected {
+			if r.IsUSB && r.SupportsAP {
+				return detected, nil
+			}
+		}
+		if !a.now().Before(deadline) {
+			return detected, nil
+		}
+		slog.Info("waiting for a USB Wi-Fi adapter to appear")
+		time.Sleep(time.Second)
+	}
 }
 
 // hotspotRadio returns the radio with the hotspot role, or nil.

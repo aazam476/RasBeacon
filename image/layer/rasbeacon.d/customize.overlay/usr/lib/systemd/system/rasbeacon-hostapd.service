@@ -1,0 +1,10 @@
+# The Wi-Fi hotspot. Started and restarted by rbd after it writes
+# /run/rbd/hostapd.conf; not started on its own at boot.
+[Unit]
+Description=RasBeacon hotspot (hostapd)
+After=rbd.service
+
+[Service]
+ExecStart=/usr/sbin/hostapd /run/rbd/hostapd.conf
+Restart=on-failure
+RestartSec=2

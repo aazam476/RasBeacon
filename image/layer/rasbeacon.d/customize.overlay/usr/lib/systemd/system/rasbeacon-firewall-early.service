@@ -1,0 +1,17 @@
+# Loads the "lockdown" firewall before any network interface comes up, so
+# nothing can reach or pass through the device during boot. rbd replaces it
+# with the full rules once it has started.
+[Unit]
+Description=RasBeacon lockdown firewall (before networking)
+DefaultDependencies=no
+Before=network-pre.target
+Wants=network-pre.target
+After=local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/nft -f /usr/lib/rasbeacon/lockdown.nft
+
+[Install]
+WantedBy=sysinit.target
