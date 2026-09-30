@@ -1,0 +1,114 @@
+# Contributing to RasBeacon
+
+Thanks for helping! This project is written to be readable by a junior
+engineer or a second- or third-year computer science student. If something
+in the code is hard to follow, that is a bug worth reporting.
+
+## Repository layout
+
+```
+cmd/rbd/            rbd: privileged background program (network agent)
+cmd/rbweb/          rbweb: web server for the settings pages
+internal/agent/     rbd's logic: boot sequence, modes, settings, API
+internal/webserver/ rbweb's logic: sessions, login, forwarding to rbd
+internal/render/    config generators; templates/ holds the commented config templates
+internal/config/    settings types, validation, crash-safe file writing
+internal/...        small focused packages (radio detection, setup.txt, ...)
+internal/devsim/    simulated device for development without a Pi
+web/                the web UI (React + TypeScript)
+image/              Raspberry Pi image definition (rpi-image-gen layers, systemd units)
+test/netns/         tests with real firewall/DHCP/DNS in network namespaces
+test/e2e/           browser walkthrough of the web UI
+docs/               design, architecture, API, UI contract, glossary, test plans
+```
+
+## Tools you need
+
+- **Go 1.24 or newer.**
+- **Node.js 22 or newer.**
+- **Linux**, for the network namespace tests and image builds. Everything
+  else also works on macOS.
+
+## Everyday commands
+
+```sh
+make test     # all unit tests (Go and web UI)
+make lint     # formatting and static checks, the same as CI
+make build    # build the web UI and both programs into build/
+make dev      # simulated device at http://127.0.0.1:8080
+make e2e      # browser walkthrough against a simulated device
+make pi       # build both programs for the Raspberry Pi (64-bit ARM)
+```
+
+- **Network namespace tests** (Linux, needs root):
+  `sudo -E go test ./test/netns/ -v`
+- **Browser test:** it needs Playwright's Chromium once:
+  `cd test/e2e && npm ci && npx playwright install chromium`.
+
+## Running a simulated device
+
+`rbd -dev <dir>` runs RasBeacon as if on a Raspberry Pi with a built-in
+radio and a USB adapter, but keeps all files under `<dir>` and only *logs*
+the commands it would run. Nothing on your computer changes. `make dev`
+starts it with `rbweb` on `http://127.0.0.1:8080`.
+
+To work on the web UI with instant reload, start the simulated device in one
+terminal and `cd web && npm run dev` in another. To get back to first-time
+setup, stop everything and delete the `-dev` directory.
+
+## Building an SD card image
+
+Images are normally built by GitHub Actions
+(`.github/workflows/release.yml`). To build one yourself on Debian or Ubuntu
+(arm64 is fastest; amd64 works with QEMU emulation):
+
+```sh
+git clone https://github.com/raspberrypi/rpi-image-gen.git ../rpi-image-gen
+sudo ../rpi-image-gen/install_deps.sh
+image/build.sh pi4        # or pi5
+```
+
+## Code style
+
+These rules are also in [docs/design.md](docs/design.md) (section 9a).
+
+- **Every file starts with a comment:** what it is for and how it fits in.
+- **Every function, type and constant has a comment** that says what it
+  does and **why** it exists.
+- **Plain code over clever code:**
+  - descriptive names
+  - small functions
+  - no reflection or code generation
+  - no goroutine tricks (rbd changes state under one lock, one change at a
+    time)
+- **Configs are templates** (`internal/render/templates/*.tmpl`) that look
+  like the real file, with a comment on each rule. When you change one, run
+  `go test ./internal/render -update` and review the diff of the
+  `testdata/*.golden` files.
+- **Error messages are full sentences** that say what went wrong and what
+  to do. Validation messages are shown to users as-is.
+- **Tests describe behaviour** in their names, e.g.
+  `TestFirstBoot_BrokenSetupTxt_KeepsNetworkOffInsteadOfOpen`.
+- **Web UI:** logic goes in `use<Screen>.ts`, markup in `<Screen>View.tsx`.
+  See [docs/ui-contract.md](docs/ui-contract.md).
+
+## Commit messages
+
+Start the subject with a type prefix:
+
+| Prefix | Use for |
+|---|---|
+| `feat:` | New feature |
+| `fix:` | Bug fix |
+| `chore:` | Tooling, config, dependencies |
+| `refactor:` | Code change that isn't a fix or feature |
+| `docs:` | Documentation only |
+| `style:` | Formatting, no logic change |
+| `test:` | Adding or fixing tests |
+
+## Adding hardware to the compatibility table
+
+If you test a board, USB Wi-Fi adapter or power bank, add a row to
+[docs/compatibility.md](docs/compatibility.md) with what you measured, and
+say how (for example "iPhone + 9 other devices associated for 30 min").
+Measured numbers are much more useful than "works for me".
