@@ -668,6 +668,38 @@ LICENSE, LICENSES/THIRD_PARTY.md, CONTRIBUTING.md, SECURITY.md
 | `style:` | Formatting, no logic change |
 | `test:` | Adding or fixing tests |
 
+## 9a. Code readability (top priority)
+
+**The audience is a junior engineer or a 2nd–3rd year computer science
+student.** When readability conflicts with cleverness or brevity, readability
+wins.
+
+- **Every file starts with a header comment**: what the file is for, where it
+  fits in the system, and which files it works with.
+- **Every function, type and constant has a comment.** It says what the thing
+  does and why it exists; the "why" matters most. Non-obvious networking
+  terms (NAT, conntrack, WireGuard handshake, PMF) link to `docs/glossary.md`.
+- **Plain code over clever code:**
+  - descriptive names (no one-letter names outside short loops)
+  - small functions and early returns
+  - no reflection or code generation
+  - no deep inheritance or abstraction layers
+  - Go: no goroutine tricks; `rbd` is a single event loop so state changes
+    happen in one place, in order
+- **Configs are template files, not string-building code.** The nftables
+  ruleset, hostapd, wpa_supplicant and dnsmasq configs live as `.tmpl` files
+  that read top to bottom, like the real config, with a comment on every rule
+  or block explaining it.
+- **Tests double as documentation.** Each kill-switch state has a golden file
+  showing the exact firewall rules it produces, and test names describe
+  behavior (e.g. `TestKillSwitchOn_TunnelDown_DropsClientDNS`).
+- **Error messages say what went wrong and what to try next.**
+- **Formatters and linters in CI:** `gofmt`, `go vet` and `staticcheck` for Go;
+  the matching formatter and linter for the web UI.
+- **Docs for newcomers:** `docs/architecture.md` (how the pieces fit, with
+  diagrams), `docs/glossary.md`, and `CONTRIBUTING.md` (how to build, run the
+  simulated network and add a test).
+
 ## 10. License and redistribution
 - **Our code:** **Apache-2.0** (decided). We copy no code from RaspAP
   (GPL-3.0), Travelmate or esp32_nat_router.
