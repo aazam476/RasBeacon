@@ -225,7 +225,7 @@ func (a *Agent) UpdateSSHSettings(req api.SSHSettings) error {
 		return &config.ValidationError{Field: "authorizedKeys", Message: err.Error()}
 	}
 	if req.Enabled && keys == "" {
-		return &config.ValidationError{Field: "authorizedKeys", Message: "add at least one public key before turning SSH on"}
+		return &config.ValidationError{Field: "authorizedKeys", Message: "Add at least one public key before turning SSH on."}
 	}
 
 	keyFile := a.paths.SSHAuthorizedKeysFile()
@@ -265,7 +265,7 @@ func cleanAuthorizedKeys(text string) (string, error) {
 			continue
 		}
 		if _, _, _, _, err := ssh.ParseAuthorizedKey([]byte(line)); err != nil {
-			return "", fmt.Errorf("line %d is not a valid SSH public key (it should start with ssh-ed25519, ssh-rsa or ecdsa-sha2-...)", i+1)
+			return "", fmt.Errorf("Line %d is not a valid SSH public key. It should start with ssh-ed25519, ssh-rsa or ecdsa-sha2-.", i+1)
 		}
 		keys = append(keys, line)
 	}

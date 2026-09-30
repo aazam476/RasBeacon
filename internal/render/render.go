@@ -103,11 +103,11 @@ func Hostapd(in HotspotInput) (string, error) {
 		// Re-check here: the password goes into the file as-is, so a
 		// newline in it could inject extra settings.
 		if err := config.ValidateWiFiPassword(in.Password); err != nil {
-			return "", fmt.Errorf("hotspot password %w", err)
+			return "", fmt.Errorf("hotspot password: %w", err)
 		}
 	}
 	if err := config.ValidateSSID(in.SSID); err != nil {
-		return "", fmt.Errorf("hotspot name %w", err)
+		return "", fmt.Errorf("hotspot name: %w", err)
 	}
 
 	data := hostapdData{

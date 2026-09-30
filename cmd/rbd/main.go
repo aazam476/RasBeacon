@@ -17,6 +17,7 @@ import (
 	"strconv"
 
 	"rasbeacon/internal/agent"
+	"rasbeacon/internal/devsim"
 	"rasbeacon/internal/paths"
 	"rasbeacon/internal/system"
 	"rasbeacon/internal/version"
@@ -25,6 +26,8 @@ import (
 func main() {
 	webGroup := flag.String("web-group", "rbweb", "group allowed to use the API socket (rbweb's group)")
 	debug := flag.Bool("debug", false, "log every command that is run")
+	devRoot := flag.String("dev", "", "run as a simulated device under this directory, without touching "+
+		"the real network (for web UI development; see CONTRIBUTING.md)")
 	flag.Parse()
 
 	level := slog.LevelInfo
@@ -35,7 +38,17 @@ func main() {
 	slog.Info("rbd starting", "version", version.Version)
 
 	p := paths.Default()
-	a := agent.New(p, system.ExecRunner{})
+	var runner system.Runner = system.ExecRunner{}
+	if *devRoot != "" {
+		var err error
+		if p, err = devsim.Setup(*devRoot); err != nil {
+			slog.Error("could not create the simulated device", "error", err)
+			os.Exit(1)
+		}
+		runner = devsim.Runner{}
+		slog.Warn("SIMULATED DEVICE: no real network changes will be made", "root", *devRoot)
+	}
+	a := agent.New(p, runner)
 	if err := a.Start(); err != nil {
 		// systemd restarts rbd after a failure (see rbd.service), and the
 		// firewall rules loaded at boot stay in place in the meantime.
