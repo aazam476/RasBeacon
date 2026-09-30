@@ -700,6 +700,48 @@ wins.
   diagrams), `docs/glossary.md`, and `CONTRIBUTING.md` (how to build, run the
   simulated network and add a test).
 
+## 9b. Languages and web UI handoff
+
+**Languages (decided):**
+- Go for `rbd`, `rbweb` and the simulated-network tests.
+- React + TypeScript + Vite for the web UI. It runs in the browser; the Pi only
+  serves the built files, which are embedded in `rbweb`, so there's no Node on
+  the device.
+- nftables rules, hostapd/wpa_supplicant/dnsmasq configs as commented `.tmpl`
+  files.
+- Bash only inside image-build hooks and CI steps.
+
+**The web UI is built bare in this project, then restyled elsewhere.**
+- **What "bare" means:**
+  - semantic HTML (forms, labels, tables, buttons)
+  - one small stylesheet for basic mobile layout
+  - no CSS framework and no component library
+  - every screen still works fully: it handles loading, error and empty
+    states, shows validation messages, and is usable on a phone
+- **Logic and looks are split so a designer can restyle without touching
+  behavior:**
+  - `web/src/api/`: typed API client and the TypeScript types for every
+    request and response. This is the same contract as `docs/api.md`.
+  - `web/src/screens/<Screen>/use<Screen>.ts`: that screen's data loading,
+    form state, validation and actions. No markup.
+  - `web/src/screens/<Screen>/<Screen>View.tsx`: markup only. It receives
+    everything through props and calls callbacks for actions, and it holds no
+    fetch calls and no business rules.
+  - `docs/ui-contract.md`: for each screen, its props, actions, states and
+    messages. This is the document to give the designing agent.
+- **Integrating the styled version:**
+  - The designer replaces `*View.tsx` files and styles, keeping the view props.
+  - I type-check it against the contract and run the UI logic tests.
+  - I check that nothing calls the API directly or re-implements validation,
+    and that no new third-party dependencies were added without review.
+  - If the designer needs data a view doesn't receive, the fix is to add it to
+    the screen's `use<Screen>.ts` and the contract, not to fetch it in the view.
+- **Ready for the v2 mobile app:**
+  - The API is versioned under `/api/v1` and documented in `docs/api.md`.
+  - The API accepts a token login alongside the browser's cookie sessions.
+  - All rules live in `rbd`/`rbweb`, so the web UI and a future app behave
+    identically.
+
 ## 10. License and redistribution
 - **Our code:** **Apache-2.0** (decided). We copy no code from RaspAP
   (GPL-3.0), Travelmate or esp32_nat_router.
