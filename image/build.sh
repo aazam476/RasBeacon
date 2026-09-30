@@ -37,12 +37,13 @@ mkdir -p "$repo_root/build/rig-$board"
   IGconf_artefact_version="$version"
 
 # 4. Compress it for Raspberry Pi Imager / balenaEtcher and record its hash.
-built="$(find "$repo_root/build/rig-$board" -name "rasbeacon-$board.img" | head -n 1)"
-if [ -z "$built" ]; then
-  echo "Could not find the built image under build/rig-$board" >&2
+# rpi-image-gen writes the raw image to <work dir>/image-<name>/<name>.img.
+built="$repo_root/build/rig-$board/image-rasbeacon-$board/rasbeacon-$board.img"
+if [ ! -f "$built" ]; then
+  echo "Could not find the built image at $built" >&2
   exit 1
 fi
 final="$out/rasbeacon-$board-$version.img.xz"
-xz -T0 -9 -c "$built" > "$final"
+xz -T0 -6 -c "$built" > "$final"
 (cd "$out" && sha256sum "$(basename "$final")" > "$(basename "$final").sha256")
 echo "Built $final"
