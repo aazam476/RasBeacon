@@ -69,16 +69,17 @@ compatibility table records the result.
 
   Every feature is in the single image. There are no variants.
 
-### 2.2 Partition layout (GPT; Pi 4/5 bootloader A/B "tryboot")
+### 2.2 Partition layout (GPT, A/B "tryboot")
 
-| # | FS | Size | Contents |
+As built in milestone 1, this uses rpi-image-gen's `image-rota` layout
+(see `image/README.md`), which implements the design below.
+
+| Partition | FS | Size | Contents |
 |---|---|---|---|
-| 1 | FAT | 64 MB | `autoboot.txt` (`tryboot_a_b=1`), plus the user-visible files `setup.txt` and `factory-reset` (section 5) |
-| 2 | FAT | 256 MB | Boot slot A: firmware, kernel, `cmdline.txt` pointing to root A |
-| 3 | FAT | 256 MB | Boot slot B |
-| 4 | ext4, mounted **read-only** | 1.5 GB | Root A |
-| 5 | ext4, mounted read-only | 1.5 GB | Root B |
-| 6 | ext4 (`data=journal`, `noatime`) | Rest of the card, grown on first boot | `/data`: config, secrets, saved clock, leases |
+| `BOOTCONFIG` | FAT | 32 MB | A/B boot selection (`autoboot.txt`), plus the user-visible files `setup.txt` and `factory-reset` (section 5). Mounted at `/bootfs`. |
+| `boot_a`, `boot_b` | FAT | 128 MB each | Firmware and kernel for each slot |
+| `system_a`, `system_b` | erofs, **read-only** | 768 MB each | The operating system for each slot |
+| `persistent` | ext4 | 512 MB | `/persistent`: RasBeacon settings in `/persistent/rasbeacon`, SSH host keys, per-slot `/var` |
 
 - `/var/log`, `/tmp` and `/run` are tmpfs, and journald is `Storage=volatile`.
   Nothing writes to flash except explicit config saves, the clock save and
@@ -113,7 +114,7 @@ rbweb   user "rbweb", no capabilities, systemd-hardened
         (ProtectSystem=strict, NoNewPrivileges, AF_INET/AF_UNIX only)
         │  typed JSON-RPC over /run/rbd/api.sock (0660 root:rbweb)
         ▼
-rbd     root, systemd-hardened; owns /data/secrets; renders configs to /run/rbd;
+rbd     root, systemd-hardened; owns /persistent/rasbeacon; renders configs to /run/rbd;
         drives hostapd / wpa_supplicant (control sockets), nft, wg (netlink),
         networkd, dnsmasq
 ```
@@ -124,7 +125,7 @@ rbd     root, systemd-hardened; owns /data/secrets; renders configs to /run/rbd;
   - Sessions, login rate limiting and CSRF protection.
   - Admin password hashing (argon2id from `golang.org/x/crypto`, our only
     third-party Go dependency).
-- **`rbd`** is a single event loop and the **only** writer of network state.
+- **`rbd`** changes state under a single lock (one change at a time) and is the **only** writer of network state.
   It owns:
   - Validating and rendering configs.
   - The kill-switch/uplink/portal state machine (section 4.5).
@@ -137,7 +138,7 @@ rbd     root, systemd-hardened; owns /data/secrets; renders configs to /run/rbd;
   from the device.
 
 Secrets:
-- Stored in `/data/secrets/*.json`, `root:root 0600`.
+- Stored in `/persistent/rasbeacon/secrets.json`, `root:root 0600` (directory 0700).
 - Rendered into `/run/rbd/*.conf` at 0600.
 - Never logged:
   - `wpa_supplicant` and `hostapd` run without `-d`.
@@ -451,7 +452,7 @@ tunnel health check plus a portal probe, and the flow repeats.
 
 ### 4.7 Time
 - The Pi 4 has no RTC; the Pi 5's RTC needs its battery.
-- **Time floor** = max(image build time, `/data/clock` saved every 15 min and
+- **Time floor** = max(image build time, `/persistent/rasbeacon/clock` saved every 15 min and
   at shutdown). It is applied at boot before anything else, so certificate
   validity checks (EAP) and WireGuard handshake timestamps start from a sane
   time.
@@ -535,7 +536,7 @@ tunnel health check plus a portal probe, and the flow repeats.
 **Factory reset:**
 1. In the UI (asks for the password again).
 2. **Offline:** put the SD card in any computer, create an empty file named
-   `factory-reset` on the visible partition, and boot. `rbd` wipes `/data` and
+   `factory-reset` on the visible partition, and boot. `rbd` wipes `/persistent/rasbeacon` and
    deletes the file.
 3. **Optional hardware button:** short GPIO3 (pin 5) to GND (pin 6) for 10 s
    while running. A momentary button can be wired there.
@@ -684,7 +685,7 @@ wins.
   - small functions and early returns
   - no reflection or code generation
   - no deep inheritance or abstraction layers
-  - Go: no goroutine tricks; `rbd` is a single event loop so state changes
+  - Go: no goroutine tricks; `rbd` changes state under a single lock so state changes
     happen in one place, in order
 - **Configs are template files, not string-building code.** The nftables
   ruleset, hostapd, wpa_supplicant and dnsmasq configs live as `.tmpl` files
