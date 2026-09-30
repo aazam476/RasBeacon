@@ -1,6 +1,6 @@
 # Design: open-source portable Wi-Fi travel router
 
-- Status: **Proposed, revision 2**. Owner answers to Q1–Q12 are folded in; Q3, Q5, Q7 and Q12 are still open (section 13).
+- Status: **Proposed, revision 3**. All of Q1–Q12 are answered except the project name and your WireGuard server's subnet (section 13).
 - Date: 2026-09-30
 - Depends on: [ADR 0001](decisions/0001-platform.md), which is accepted
 - Working name: `travelrouter`. Daemons are `trd` (privileged agent) and
@@ -19,9 +19,9 @@ eduroam, and says which milestone checks them.
 | Raspberry Pi 4B (2 GB or more) or Pi 5 | Board (reference) | arm64. Pi 5 has an RTC (needs its optional battery to keep time while off). |
 | Raspberry Pi Zero 2 W | Board (**supported**, lower throughput) | 512 MB RAM. Onboard radio is 2.4 GHz only (about 33 Mbps measured), so the Wi-Fi uplink ceiling is about 30 Mbps through the tunnel. No Ethernet. The adapter plugs in through a micro-USB OTG adapter. Best battery life (ADR §5, config A). |
 | Onboard CYW43455 (Pi 4/5) or BCM43436 (Zero 2 W), brcmfmac | **Wi-Fi uplink** | WPA2-Personal/Enterprise, open. WPA3 depends on firmware (M3 checks this). |
-| Built-in Gigabit Ethernet (Pi 4/5) | **Wired uplink** by default (Q12) | |
+| Built-in Gigabit Ethernet (Pi 4/5), or a USB Ethernet adapter | **Role setting:** *Uplink* (default) or *Client port* (4.1) | |
 | USB adapter with MT7612U (mt76x2u), e.g. Alfa AWUS036ACM | **Hotspot** (reference): 2.4 GHz default, 5 GHz optional | 128-entry station table. SAE and MFP supported. 2 AP interfaces (main + guest). |
-| TP-Link "AC1300" USB adapters (Realtek, rtw88 driver) | **Hotspot** (supported, **at risk**) | TP-Link sells several AC1300 models with different chips: **Archer T3U, T3U Plus and T4U v3 use RTL8812BU**; **Archer T4U v1/v2 use RTL8812AU**. Both drivers are in the Raspberry Pi kernel (6.18, `CONFIG_RTW88_8822BU` and `CONFIG_RTW88_8812AU`), with a 32-entry station table and MFP (needed for WPA3). **Known risk:** users have reported the RTL8812BU dropping clients in AP mode ("failed to download beacon", "timed out to flush queue"). The ≥10-client M1 gate runs on this adapter too. Run `lsusb` to identify yours: `2357:012d`, `2357:0138` and `2357:0115` are RTL8812BU; `2357:0101`, `2357:0103` and `2357:010d` are RTL8812AU. |
+| TP-Link "AC1300" USB adapters (Realtek, rtw88 driver) | **Hotspot** (supported, **at risk**) | TP-Link sells several AC1300 models with different chips: **Archer T3U, T3U Plus and T4U v3 use RTL8812BU**; **Archer T4U v1/v2 use RTL8812AU**. Both drivers are in the Raspberry Pi kernel (6.18, `CONFIG_RTW88_8822BU` and `CONFIG_RTW88_8812AU`), with a 32-entry station table and MFP (needed for WPA3). **Known risk:** users have reported the RTL8812BU dropping clients in AP mode ("failed to download beacon", "timed out to flush queue"). The ≥10-client M1 gate runs on this adapter too. Run `lsusb` to identify yours: `2357:012d`, `2357:0138` and `2357:0115` are RTL8812BU; `2357:0101`, `2357:0103` and `2357:010d` are RTL8812AU. **The owner's test adapter is an Archer T3U (RTL8812BU, expected ID `2357:012d`).** If it fails the M1 gate, `trd` first tries the reported mitigation (a longer beacon interval, plus a driver reload on beacon errors), and the fallback is an MT7612U adapter. |
 | USB power bank | Power | About 20,000 mAh for about 12 h on a Pi 4/5 (ADR §0); a Zero 2 W gets about 12 to 14 h from 10,000 mAh (estimate). Each bank's auto-off threshold and pass-through behavior are documented per model. |
 
 Roles are assigned automatically:
@@ -153,10 +153,10 @@ per-device is generated on first boot.
 
 | Interface | Managed by | Address |
 |---|---|---|
-| `ap0` (hotspot) | hostapd + `trd` | `10.8.0.1/24`, plus an IPv6 ULA `/64` (4.4). If it collides with the uplink subnet **or the WireGuard tunnel's addresses**, `trd` falls back to `10.9.0.1/24`, pushes short leases and shows why in the UI. `10.8.0.0/24` is also OpenVPN's default subnet and a common WireGuard default (wg-easy), so this fallback may trigger with your server (section 13). |
+| `br-lan` (client side) = `ap0` + `eth0` when Ethernet is set to *Client port* | `trd` (bridge), hostapd (`bridge=br-lan`) | `10.8.0.1/24`, plus an IPv6 ULA `/64` (4.4). If it collides with the uplink subnet **or the WireGuard tunnel's addresses**, `trd` falls back to `10.9.0.1/24`, pushes short leases and shows why in the UI. `10.8.0.0/24` is also OpenVPN's default subnet and a common WireGuard default (wg-easy), so this fallback may trigger with your server (section 13). |
 | `ap0g` (guest, stretch) | hostapd second BSS | `10.8.8.1/24` |
 | `wlan0` (Wi-Fi uplink) | wpa_supplicant (driven by `trd`) + networkd DHCPv4/RA | From uplink DHCP |
-| `eth0` (wired uplink) | networkd | From uplink DHCP |
+| `eth0` | *Uplink:* networkd DHCP client. *Client port:* bridged into `br-lan` | From uplink DHCP / none |
 | `wg0` | `trd` via netlink | From the `.conf` `Address` |
 
 - **Hotspot:**
@@ -173,7 +173,18 @@ per-device is generated on first boot.
   non-overlapping one (risk of adjacent-channel desense) will be **decided by
   iperf measurement in M2**. The default until then is same-channel. The
   uplink prefers 5 GHz BSSs when the same SSID is on both bands.
-- **DHCP (dnsmasq on `ap0` only):**
+- **Ethernet role setting** (Settings → Ethernet): *Uplink* (default) or
+  *Client port*. The setting is hidden when there is no Ethernet interface,
+  as on a Zero 2 W without a USB Ethernet adapter.
+  - *Client port* bridges `eth0` into `br-lan`. A wired laptop gets the same
+    subnet, DHCP, kill switch and portal policy as Wi-Fi clients, and can
+    reach phones for AirPlay and mDNS.
+  - **Safety check:** before bridging, and on every link-up, `trd` sends a
+    DHCPDISCOVER on `eth0`. If a foreign DHCP server answers (you plugged a
+    client port into a hotel wall jack), `eth0` stays out of the bridge. The
+    UI then offers "This port looks like an uplink. Switch to Uplink?", so we
+    never hand out addresses onto someone else's network.
+- **DHCP (dnsmasq on `br-lan`, and `ap0g` for guests):**
   - Leases last 1 h and the pool is `.20` to `.250`. Leases are keyed on client
     identifier or MAC, so rotating private MAC addresses just get new leases.
   - The client count comes from **currently associated stations**
@@ -209,7 +220,7 @@ Tables and rules, with WireGuard enabled:
 
 ```
 ip rule  90: fwmark 0x5182 lookup main          # WireGuard's own UDP goes via uplink
-ip rule 100: iif ap0  lookup 51820              # all client traffic → tunnel table
+ip rule 100: iif br-lan lookup 51820            # all client traffic → tunnel table
 ip rule 101: iif ap0g lookup 51820
 table 51820: default dev wg0
              unreachable default metric 4096    # KS ON: no fall-through to main
@@ -230,7 +241,7 @@ main:        default via <uplink gw> (networkd, metric by uplink priority)
     re-resolve.
   - `PersistentKeepalive=25` is the default so the tunnel survives NAT and
     uplink roaming.
-- **MTU/MSS:** `wg0` MTU defaults to **1380** (Q7; it tolerates PPPoE and
+- **MTU/MSS:** `wg0` MTU defaults to **1380** (decided; it tolerates PPPoE and
   tunneled hotel uplinks at about 3% cost), is configurable and honours `MTU=`
   from the `.conf`. SYN MSS is clamped to `rt mtu` on `wg0` and the uplinks.
 
@@ -239,17 +250,17 @@ main:        default via <uplink gw> (networkd, metric by uplink priority)
   with a single `nft -f` transaction (flush and rebuild together). There are
   never partial rules.
 - **Chain `input` (policy drop):**
-  - Allowed: `lo`, established, DHCP/DNS/HTTP(S) on `ap0`/`ap0g`, ICMP.
+  - Allowed: `lo`, established, DHCP/DNS/HTTP(S) on `br-lan`/`ap0g`, ICMP.
   - Guests get DHCP/DNS only (no admin UI).
   - On uplinks: established flows and DHCP replies only.
   - Nothing is accepted from `wg0` except established.
   - **The admin UI is therefore unreachable from the uplink and from the tunnel.**
 - **Chain `forward` (policy drop):**
-  - `ap0` → `wg0`: accepted when WireGuard is enabled and the state allows it.
-  - `ap0` → uplink: accepted **only** when WireGuard is disabled, or in the
+  - `br-lan` → `wg0`: accepted when WireGuard is enabled and the state allows it.
+  - `br-lan` → uplink: accepted **only** when WireGuard is disabled, or in the
     kill-switch-OFF `DIRECT` state, or in `PORTAL` (4.6) restricted to
     TCP 80/443 and to UDP/TCP 53 towards the uplink's DNS.
-  - `ap0g` ↔ `ap0`: dropped.
+  - `ap0g` ↔ `br-lan`: dropped.
   - Everything else: dropped.
   - IPv4 NAT masquerades on the egress interface.
 - **DNS:**
@@ -274,7 +285,7 @@ main:        default via <uplink gw> (networkd, metric by uplink priority)
 - **IPv6 (clients get IPv6):**
   - **Hotspot side:**
     - On first boot each device generates a random ULA `/48` (RFC 4193) and
-      puts `fdXX:XXXX:XXXX:1::/64` on `ap0` (`:8::/64` on `ap0g`).
+      puts `fdXX:XXXX:XXXX:1::/64` on `br-lan` (`:8::/64` on `ap0g`).
     - dnsmasq sends router advertisements (SLAAC plus RDNSS, no DHCPv6),
       which Android also needs.
   - **Egress** uses NAT66 (masquerade), because hotels, eduroam and most
@@ -400,7 +411,7 @@ the portal's URL.
    iOS, macOS and Android should then show their "Log in to network" sheet
    **with our notice page** automatically (to verify in M5).
 2. You tap **Start**, in that sheet or in the UI, and `trd` enters `PORTAL`:
-   - The ruleset allows `ap0` → uplink for TCP 80/443 and DNS.
+   - The ruleset allows `br-lan` → uplink for TCP 80/443 and DNS.
    - dnsmasq forwards to the uplink DNS and stops spoofing the probe names.
    - A countdown starts: 10 min by default, 30 min maximum, extendable.
    - The notice page then navigates to a plain-HTTP URL, which the upstream
@@ -412,8 +423,28 @@ the portal's URL.
    client conntrack, then moves to `TIME_SYNC` and the tunnel comes up.
    Timeout or cancel restores the normal ruleset the same way.
 4. The notice page and the UI warn that during portal mode, web and DNS
-   traffic from **all** hotspot devices bypasses the tunnel. Option Q5 limits
-   it to the device that started it.
+   traffic from **all** client devices bypasses the tunnel (decided: all
+   devices, so the login sheet can appear on whichever one is handy).
+
+**Why the hole is needed, and why it isn't the same as turning the kill switch
+off:**
+- Until the portal login is done, the hotel network blocks everything except
+  its login page. That includes WireGuard's UDP, so the tunnel can't come up.
+- With the kill switch ON, clients may only use the tunnel, so no client can
+  reach the login page, and the router can't get logged in from your phone.
+- Something has to let a client reach the portal. There are three options:
+
+| Option | What leaves outside the tunnel | Ends |
+|---|---|---|
+| Turn the kill switch OFF by hand | **Everything**, from all devices, on all ports | Only when you remember to turn it back on |
+| **Portal mode (chosen)** | Web and DNS only (TCP 80/443, DNS) | Automatically, as soon as the login works or after 10 min |
+| Zero-leak remote browser (stretch) | Nothing from clients: the router itself loads the portal and shows it to you inside our UI | When you finish |
+
+  Portal mode is a narrower, self-closing version of turning the kill switch
+  off. **The kill-switch setting itself stays ON the whole time.** If you'd
+  rather never open a hole, the remote-browser option can later become the
+  default, at the cost of RAM, image size, and no automatic login sheet on the
+  phone.
 
 **Re-login:** portals that expire sessions are detected by the next failed
 tunnel health check plus a portal probe, and the flow repeats.
@@ -436,9 +467,9 @@ tunnel health check plus a portal probe, and the flow repeats.
 - **Private or rotating MAC addresses** only produce new leases; the pool
   covers about 230 addresses and leases last 1 h. Client counts come from
   associations.
-- **Client-to-client traffic** (AirPlay, mDNS) works by default on `ap0`.
+- **Client-to-client traffic** (AirPlay, mDNS) works by default on `br-lan`, between Wi-Fi and wired clients alike.
 - **Guest mode (stretch):** a second BSS `ap0g` with its own SSID and password,
-  `ap_isolate=1`, and firewall isolation from `ap0`. It shares the kill-switch
+  `ap_isolate=1`, and firewall isolation from `br-lan`. It shares the kill-switch
   policy. The MT7612U allows 2 interfaces, per its `iw list` combinations.
 - **Metered toggle (stretch):**
   - **Android: verified.** dnsmasq sends `dhcp-option=43,"ANDROID_METERED"`,
@@ -461,9 +492,20 @@ tunnel health check plus a portal probe, and the flow repeats.
    adapter MAC):
    - **Open by default**, with a captive-portal redirect to the setup page, so
      phones pop the setup screen automatically.
-   - If you created `setup.txt` with `setup_password=…` on the FAT partition
-     the card shows after flashing, the setup network uses WPA2/WPA3 with that
-     password instead. This is recommended in crowded places.
+   - **`setup.txt` (optional; checked on every boot until the device is
+     claimed):**
+     - After flashing, the card shows one partition as a normal drive. If a
+       file named `setup.txt` there contains `setup_password=<8 to 63
+       characters>`, the setup network uses WPA2/WPA3 with that password
+       instead of being open. This is recommended in crowded places.
+     - If the file exists but can't be used (wrong format, or a password of
+       the wrong length), the device **does not fall back to an open
+       network**. The setup network stays off, the activity LED blinks an
+       error pattern (3 short, 1 long), and the README troubleshooting section
+       explains how to fix the file.
+     - The UI shows which mode the setup network used.
+     - After the device is claimed, `trd` overwrites and deletes `setup.txt`,
+       so the password doesn't sit in plain text on the card.
 3. **Claim-once:** the first client to set the admin password (at least 10
    characters, checked against a small built-in list of common passwords)
    claims the device. The setup network then shuts down and the configured
@@ -473,7 +515,7 @@ tunnel health check plus a portal probe, and the flow repeats.
    the setup network never returns unless you factory reset.
 
 **Admin UI:**
-- Reachable only on `ap0` (see 4.4), at `http://10.8.0.1` and
+- Reachable only from the client side, `br-lan` (see 4.4), at `http://10.8.0.1` and
   `http://travelrouter.lan`.
 - **HTTP by default.** Settings → Security → HTTPS offers two choices:
   - **Generated certificate:** a per-device self-signed certificate for
@@ -676,14 +718,16 @@ LICENSE, LICENSES/THIRD_PARTY.md, CONTRIBUTING.md, SECURITY.md
 - Q11: Pi 4B, Pi 5 and Zero 2 W all supported. Hotspot adapters: MT7612U
   (reference) and TP-Link AC1300 (RTL8812BU/AU, at risk until the M1 gate).
 
+- Q3: `setup.txt` is optional and checked on every boot until claimed; an
+  invalid file never falls back to an open network (section 5).
+- Q5: portal mode applies to all client devices (4.6, including why a hole is
+  needed at all).
+- Q7: WireGuard MTU 1380.
+- Q12: Ethernet role setting, *Uplink* (default) or *Client port*, with a
+  foreign-DHCP safety check (4.1).
+- Owner's hotspot adapter: TP-Link Archer T3U (RTL8812BU).
+
 **Still open:**
-- **Q1b. Project name.**
-- **Q3. Setup network security.** Open with a 30-minute claim window
-  (default), with `setup.txt` optional? Or `setup.txt` required?
-- **Q5. Portal mode scope.** All hotspot devices, or only the device that
-  started it?
-- **Q7. WireGuard MTU.** 1380 or 1420?
+- **Q1b. Project name.** `travelrouter` is the working name until you pick one.
 - **Q10b.** Does your WireGuard server use `10.8.0.0/24` for tunnel
-  addresses? If so, the hotspot will fall back to `10.9.0.0/24`. You could
-  pick a different hotspot subnet instead.
-- **Q12. Ethernet role.** Uplink only, a client port, or a setting to choose?
+  addresses? If so, the hotspot automatically falls back to `10.9.0.0/24`.
