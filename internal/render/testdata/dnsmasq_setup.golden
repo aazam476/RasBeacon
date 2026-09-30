@@ -34,5 +34,8 @@ address=/rasbeacon.lan/10.87.0.1
 # internet access (for example captive.apple.com), it reaches the setup page
 # and shows its "Log in to network" screen automatically.
 address=/#/10.87.0.1
+# Answer every other question (like IPv6 "AAAA" lookups) here with "no such
+# address", instead of refusing it, so phones cleanly fall back to IPv4.
+local=/#/
 # RFC 8910: tell modern phones directly where the setup page is.
 dhcp-option=114,"http://10.87.0.1/api/v1/captive"
