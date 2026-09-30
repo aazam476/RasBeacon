@@ -1,0 +1,91 @@
+package webserver
+
+// This file lets rbweb talk to rbd over rbd's Unix socket.
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"time"
+)
+
+// RBDClient sends requests to rbd's local API.
+type RBDClient struct {
+	http *http.Client
+	// baseURL is a placeholder host: requests are sent over the Unix socket
+	// no matter what the URL's host says.
+	baseURL string
+}
+
+// NewRBDClient connects to rbd's Unix socket at socketPath.
+func NewRBDClient(socketPath string) *RBDClient {
+	transport := &http.Transport{
+		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			var dialer net.Dialer
+			return dialer.DialContext(ctx, "unix", socketPath)
+		},
+	}
+	return &RBDClient{
+		http:    &http.Client{Transport: transport, Timeout: 60 * time.Second},
+		baseURL: "http://rbd",
+	}
+}
+
+// NewRBDClientForHandler sends requests straight to an http.Handler instead
+// of a socket. Tests use it to run rbweb against a real agent in memory.
+func NewRBDClientForHandler(handler http.Handler) *RBDClient {
+	return &RBDClient{
+		http:    &http.Client{Transport: handlerTransport{handler}},
+		baseURL: "http://rbd",
+	}
+}
+
+// Do sends a request to rbd and returns the status code and response body.
+// body may be nil for requests without one.
+func (c *RBDClient) Do(method, path string, body []byte) (int, []byte, error) {
+	var reader io.Reader
+	if body != nil {
+		reader = bytes.NewReader(body)
+	}
+	req, err := http.NewRequest(method, c.baseURL+path, reader)
+	if err != nil {
+		return 0, nil, err
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return 0, nil, fmt.Errorf("contacting rbd: %w", err)
+	}
+	defer resp.Body.Close()
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
+	return resp.StatusCode, respBody, err
+}
+
+// GetJSON fetches path from rbd and decodes the JSON response into target.
+func (c *RBDClient) GetJSON(path string, target any) error {
+	status, body, err := c.Do(http.MethodGet, path, nil)
+	if err != nil {
+		return err
+	}
+	if status != http.StatusOK {
+		return fmt.Errorf("rbd %s returned %d: %s", path, status, body)
+	}
+	return json.Unmarshal(body, target)
+}
+
+// handlerTransport is an http.RoundTripper that calls a handler directly,
+// recording the response with the standard library's httptest recorder.
+type handlerTransport struct{ handler http.Handler }
+
+func (t handlerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	recorder := httptest.NewRecorder()
+	t.handler.ServeHTTP(recorder, req)
+	return recorder.Result(), nil
+}

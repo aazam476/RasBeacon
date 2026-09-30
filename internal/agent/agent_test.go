@@ -1,0 +1,444 @@
+package agent
+
+// These tests run the agent against a temporary directory (standing in for
+// the device's disk) and a fake command runner (standing in for ip, iw,
+// systemctl, ...). They check what the agent WOULD do on a real device:
+// which files it writes and which commands it runs.
+
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"rasbeacon/internal/api"
+	"rasbeacon/internal/config"
+	"rasbeacon/internal/paths"
+)
+
+// fakeRunner records commands instead of running them.
+type fakeRunner struct {
+	commands []string
+	// outputs maps a command line (e.g. "iw phy phy1 info") to its output.
+	outputs map[string]string
+}
+
+func (f *fakeRunner) Run(name string, args ...string) (string, error) {
+	line := strings.TrimSpace(name + " " + strings.Join(args, " "))
+	f.commands = append(f.commands, line)
+	if out, ok := f.outputs[line]; ok {
+		return out, nil
+	}
+	if strings.HasPrefix(line, "ip link show") {
+		return "", errors.New("does not exist") // pretend links don't exist yet
+	}
+	return "", nil
+}
+
+// ran reports whether a command containing text was run.
+func (f *fakeRunner) ran(text string) bool {
+	for _, c := range f.commands {
+		if strings.Contains(c, text) {
+			return true
+		}
+	}
+	return false
+}
+
+// fakeTimers collects functions scheduled with afterFunc so a test can run
+// them when it wants, instead of waiting in real time.
+type fakeTimers struct {
+	pending []func()
+	delays  []time.Duration
+}
+
+func (ft *fakeTimers) afterFunc(d time.Duration, f func()) *time.Timer {
+	ft.pending = append(ft.pending, f)
+	ft.delays = append(ft.delays, d)
+	return nil
+}
+
+// runAll runs every scheduled function (as if their time had come).
+func (ft *fakeTimers) runAll() {
+	funcs := ft.pending
+	ft.pending = nil
+	for _, f := range funcs {
+		f()
+	}
+}
+
+const iwInfoWithAP = "Wiphy phy1\n\tSupported interface modes:\n\t\t * managed\n\t\t * AP\n"
+
+// testEnv is a fresh fake device.
+type testEnv struct {
+	t      *testing.T
+	paths  paths.Paths
+	runner *fakeRunner
+	timers *fakeTimers
+	agent  *Agent
+}
+
+// newTestEnv creates a fake device with a built-in radio (wlan0) and a USB
+// Archer T3U (wlan1).
+func newTestEnv(t *testing.T) *testEnv {
+	t.Helper()
+	p := paths.Paths{Root: t.TempDir()}
+
+	// Fake /sys/class/net with two radios.
+	classNet := p.SysClassNet()
+	addRadio := func(iface, phy, devicePath string) {
+		mustWrite(t, filepath.Join(classNet, iface, "phy80211", "name"), phy)
+		device := filepath.Join(p.Root, "sys", "devices", devicePath)
+		if err := os.MkdirAll(device, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(device, filepath.Join(classNet, iface, "device")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	addRadio("wlan0", "phy0", "platform/mmc1/mmc1:0001:1")
+	addRadio("wlan1", "phy1", "usb1/1-1/1-1:1.0")
+	mustWrite(t, filepath.Join(p.Root, "sys", "devices", "usb1", "1-1", "idVendor"), "2357")
+	mustWrite(t, filepath.Join(p.Root, "sys", "devices", "usb1", "1-1", "idProduct"), "012d")
+	if err := os.MkdirAll(p.BootConfigDir(), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	runner := &fakeRunner{outputs: map[string]string{
+		"iw phy phy0 info": iwInfoWithAP,
+		"iw phy phy1 info": iwInfoWithAP,
+	}}
+	timers := &fakeTimers{}
+	a := New(p, runner)
+	a.afterFunc = timers.afterFunc
+	return &testEnv{t: t, paths: p, runner: runner, timers: timers, agent: a}
+}
+
+func mustWrite(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func (e *testEnv) readFile(path string) string {
+	e.t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		e.t.Fatalf("reading %s: %v", path, err)
+	}
+	return string(data)
+}
+
+func (e *testEnv) start() {
+	e.t.Helper()
+	if err := e.agent.Start(); err != nil {
+		e.t.Fatalf("Start: %v", err)
+	}
+}
+
+// validClaim is a claim request that passes every check.
+var validClaim = api.ClaimRequest{
+	AdminPassword:   "tangerine-orbit-42",
+	HotspotSSID:     "Ali's Travel Wi-Fi",
+	HotspotPassword: "kq7m-2xvd-h8pt-rn4w",
+	HotspotBand:     config.Band2GHz,
+}
+
+func TestFirstBoot_NoSetupTxt_StartsOpenSetupNetwork(t *testing.T) {
+	e := newTestEnv(t)
+	e.start()
+
+	state := e.agent.SetupState()
+	if state.Mode != api.ModeSetup || state.Claimed || state.SetupNetworkSecured {
+		t.Fatalf("unexpected state: %+v", state)
+	}
+	if state.SuggestedHotspotPassword == "" {
+		t.Error("setup wizard should get a suggested hotspot password")
+	}
+
+	// The USB adapter runs the hotspot and is renamed to ap0.
+	if !e.runner.ran("ip link set dev wlan1 name ap0") {
+		t.Errorf("USB radio should be renamed to ap0; commands: %v", e.runner.commands)
+	}
+	hostapd := e.readFile(e.paths.HostapdConfig())
+	if strings.Contains(hostapd, "wpa=") {
+		t.Error("setup network without setup.txt must be open")
+	}
+	if !strings.Contains(hostapd, "ssid2="+hexOf("RasBeacon-Setup-"+state.DeviceShortID)) {
+		t.Error("setup network should be named RasBeacon-Setup-XXXX")
+	}
+	if !strings.Contains(e.readFile(e.paths.DnsmasqConfig()), "address=/#/10.87.0.1") {
+		t.Error("setup mode should send every name to the setup page")
+	}
+	if !e.runner.ran("nft -f") || !e.runner.ran("systemctl restart rasbeacon-hostapd.service") {
+		t.Errorf("firewall and hostapd should be applied; commands: %v", e.runner.commands)
+	}
+	if _, err := os.Stat(e.paths.IdentityFile()); err != nil {
+		t.Error("first boot should save the device identity")
+	}
+}
+
+func TestFirstBoot_ValidSetupTxt_ProtectsSetupNetwork(t *testing.T) {
+	e := newTestEnv(t)
+	mustWrite(t, e.paths.SetupTxtFile(), "setup_password=my-setup-pass\n")
+	e.start()
+
+	if !e.agent.SetupState().SetupNetworkSecured {
+		t.Error("setup network should be marked secured")
+	}
+	hostapd := e.readFile(e.paths.HostapdConfig())
+	if !strings.Contains(hostapd, "wpa_passphrase=my-setup-pass") {
+		t.Error("setup network should use the setup.txt password")
+	}
+}
+
+func TestFirstBoot_BrokenSetupTxt_KeepsNetworkOffInsteadOfOpen(t *testing.T) {
+	e := newTestEnv(t)
+	mustWrite(t, e.paths.SetupTxtFile(), "setup_password=short\n")
+	e.start()
+	defer e.agent.stopLED()
+
+	if mode := e.agent.SetupState().Mode; mode != api.ModeSetupError {
+		t.Fatalf("mode = %q, want setup-error", mode)
+	}
+	if _, err := os.Stat(e.paths.HostapdConfig()); err == nil {
+		t.Error("no hotspot config should be written when setup.txt is broken")
+	}
+	if !e.runner.ran("systemctl stop rasbeacon-hostapd.service") {
+		t.Error("hostapd should be stopped")
+	}
+}
+
+func TestSetupWindow_ClosesAfter30Minutes(t *testing.T) {
+	e := newTestEnv(t)
+	e.start()
+	if e.timers.delays[0] != 30*time.Minute {
+		t.Fatalf("setup window timer = %v, want 30m", e.timers.delays[0])
+	}
+	e.timers.runAll()
+	if mode := e.agent.SetupState().Mode; mode != api.ModeSetupClosed {
+		t.Errorf("mode = %q, want setup-closed", mode)
+	}
+	if _, err := e.agent.Claim(validClaim); !errors.Is(err, ErrWrongMode) {
+		t.Errorf("claiming after the window closed should fail with ErrWrongMode, got %v", err)
+	}
+}
+
+func TestClaim_WeakAdminPasswordIsRejectedWithField(t *testing.T) {
+	e := newTestEnv(t)
+	e.start()
+
+	req := validClaim
+	req.AdminPassword = "password123"
+	_, err := e.agent.Claim(req)
+
+	var validation *config.ValidationError
+	if !errors.As(err, &validation) || validation.Field != "adminPassword" {
+		t.Fatalf("want a validation error on adminPassword, got %v", err)
+	}
+	if e.agent.SetupState().Claimed {
+		t.Error("device must stay unclaimed after a rejected claim")
+	}
+}
+
+func TestClaim_SavesSettingsThenSwitchesToOwnersHotspot(t *testing.T) {
+	e := newTestEnv(t)
+	mustWrite(t, e.paths.SetupTxtFile(), "setup_password=my-setup-pass\n")
+	e.start()
+
+	resp, err := e.agent.Claim(validClaim)
+	if err != nil {
+		t.Fatalf("Claim: %v", err)
+	}
+	if resp.HotspotSSID != validClaim.HotspotSSID || resp.AdminURL != "http://10.87.0.1/" {
+		t.Errorf("unexpected response: %+v", resp)
+	}
+
+	// Saved to disk, with the secrets file private.
+	var saved config.Config
+	if err := config.ReadJSON(e.paths.ConfigFile(), &saved); err != nil || !saved.Claimed {
+		t.Fatalf("config should be saved as claimed: %+v, %v", saved, err)
+	}
+	info, _ := os.Stat(e.paths.SecretsFile())
+	if info.Mode().Perm() != 0o600 {
+		t.Errorf("secrets file mode = %o, want 600", info.Mode().Perm())
+	}
+	if strings.Contains(e.readFile(e.paths.SecretsFile()), validClaim.AdminPassword) {
+		t.Error("the admin password itself must never be stored, only its hash")
+	}
+
+	// The network switch happens later (after the response reaches the phone).
+	e.timers.runAll()
+
+	if mode := e.agent.SetupState().Mode; mode != api.ModeNormal {
+		t.Fatalf("mode = %q, want normal", mode)
+	}
+	hostapd := e.readFile(e.paths.HostapdConfig())
+	if !strings.Contains(hostapd, "wpa_passphrase="+validClaim.HotspotPassword) {
+		t.Error("hotspot should use the owner's password")
+	}
+	if strings.Contains(e.readFile(e.paths.DnsmasqConfig()), "address=/#/") {
+		t.Error("normal mode must not redirect every name")
+	}
+	if _, err := os.Stat(e.paths.SetupTxtFile()); !os.IsNotExist(err) {
+		t.Error("setup.txt should be deleted after claiming")
+	}
+	if !e.agent.VerifyAdminPassword(validClaim.AdminPassword) || e.agent.VerifyAdminPassword("nope-nope-nope") {
+		t.Error("admin password check is wrong after claim")
+	}
+}
+
+func TestClaim_TwiceIsRejected(t *testing.T) {
+	e := newTestEnv(t)
+	e.start()
+	if _, err := e.agent.Claim(validClaim); err != nil {
+		t.Fatal(err)
+	}
+	e.timers.runAll()
+	if _, err := e.agent.Claim(validClaim); !errors.Is(err, ErrWrongMode) {
+		t.Errorf("second claim should fail with ErrWrongMode, got %v", err)
+	}
+}
+
+func TestReboot_AfterClaim_StartsInNormalMode(t *testing.T) {
+	e := newTestEnv(t)
+	e.start()
+	if _, err := e.agent.Claim(validClaim); err != nil {
+		t.Fatal(err)
+	}
+	e.timers.runAll()
+
+	// Simulate a reboot: a new agent reading the same disk.
+	restarted := New(e.paths, e.runner)
+	restarted.afterFunc = e.timers.afterFunc
+	if err := restarted.Start(); err != nil {
+		t.Fatal(err)
+	}
+	if mode := restarted.SetupState().Mode; mode != api.ModeNormal {
+		t.Errorf("after reboot mode = %q, want normal", mode)
+	}
+}
+
+func TestFactoryResetFile_WipesSettingsAtBoot(t *testing.T) {
+	e := newTestEnv(t)
+	e.start()
+	if _, err := e.agent.Claim(validClaim); err != nil {
+		t.Fatal(err)
+	}
+	e.timers.runAll()
+
+	mustWrite(t, e.paths.FactoryResetFile(), "")
+	restarted := New(e.paths, e.runner)
+	restarted.afterFunc = e.timers.afterFunc
+	if err := restarted.Start(); err != nil {
+		t.Fatal(err)
+	}
+	if state := restarted.SetupState(); state.Claimed || state.Mode != api.ModeSetup {
+		t.Errorf("after factory reset the device should be unclaimed in setup mode, got %+v", state)
+	}
+	if _, err := os.Stat(e.paths.FactoryResetFile()); !os.IsNotExist(err) {
+		t.Error("factory-reset file must be deleted, or every boot would reset")
+	}
+}
+
+func TestUpdateHotspotSettings_ValidatesAndKeepsPasswordWhenEmpty(t *testing.T) {
+	e := newTestEnv(t)
+	e.start()
+	if _, err := e.agent.Claim(validClaim); err != nil {
+		t.Fatal(err)
+	}
+	e.timers.runAll()
+
+	settings := e.agent.HotspotSettings()
+	settings.Band = config.Band5GHz
+	settings.Channel = 52 // DFS channel: not allowed
+	if err := e.agent.UpdateHotspotSettings(settings); err == nil {
+		t.Fatal("DFS channel should be rejected")
+	}
+
+	settings.Channel = 44
+	settings.Password = "" // keep the current password
+	if err := e.agent.UpdateHotspotSettings(settings); err != nil {
+		t.Fatalf("valid update failed: %v", err)
+	}
+	hostapd := e.readFile(e.paths.HostapdConfig())
+	if !strings.Contains(hostapd, "channel=44") || !strings.Contains(hostapd, "wpa_passphrase="+validClaim.HotspotPassword) {
+		t.Errorf("hotspot config not updated correctly:\n%s", hostapd)
+	}
+}
+
+func TestSSH_RequiresKeyAndOpensPortOnlyWhenOn(t *testing.T) {
+	e := newTestEnv(t)
+	e.start()
+	if _, err := e.agent.Claim(validClaim); err != nil {
+		t.Fatal(err)
+	}
+	e.timers.runAll()
+
+	if err := e.agent.UpdateSSHSettings(api.SSHSettings{Enabled: true}); err == nil {
+		t.Error("turning SSH on without a key should be rejected")
+	}
+	if err := e.agent.UpdateSSHSettings(api.SSHSettings{Enabled: true, AuthorizedKeys: "not a key"}); err == nil {
+		t.Error("an invalid key should be rejected")
+	}
+
+	key := "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGQ5pS6BbR0bM1vB7C3P3tYhGx7r0gq4n6qF3m3c8xQk laptop"
+	if err := e.agent.UpdateSSHSettings(api.SSHSettings{Enabled: true, AuthorizedKeys: key}); err != nil {
+		t.Fatalf("valid SSH settings rejected: %v", err)
+	}
+	if !strings.Contains(e.readFile(e.paths.FirewallRules()), "tcp dport 22 accept") {
+		t.Error("SSH port should be open when SSH is on")
+	}
+	if !e.runner.ran("systemctl restart ssh.service") {
+		t.Error("SSH server should be started")
+	}
+}
+
+func TestRedact_HidesSecretsAndMACs(t *testing.T) {
+	text := "password=hunter2hunter2 station 3a:1f:22:aa:bb:cc connected"
+	got := Redact(text, []string{"hunter2hunter2", ""})
+	if strings.Contains(got, "hunter2") || strings.Contains(got, "aa:bb:cc") {
+		t.Errorf("secrets or MAC not hidden: %q", got)
+	}
+	if !strings.Contains(got, "3a:1f:22:xx:xx:xx") {
+		t.Errorf("MAC should keep its first half: %q", got)
+	}
+}
+
+func TestHTTP_ClaimWithBadInputReturns400AndField(t *testing.T) {
+	e := newTestEnv(t)
+	e.start()
+
+	body, _ := json.Marshal(api.ClaimRequest{AdminPassword: "short", HotspotSSID: "x", HotspotPassword: "12345678", HotspotBand: config.Band2GHz})
+	rec := httptest.NewRecorder()
+	e.agent.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/claim", bytes.NewReader(body)))
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+	var resp api.ErrorResponse
+	_ = json.Unmarshal(rec.Body.Bytes(), &resp)
+	if resp.Field != "adminPassword" {
+		t.Errorf("error should name the adminPassword field, got %+v", resp)
+	}
+}
+
+// hexOf returns the hexadecimal form of s, as used by hostapd's ssid2=.
+func hexOf(s string) string {
+	const digits = "0123456789abcdef"
+	out := make([]byte, 0, len(s)*2)
+	for i := 0; i < len(s); i++ {
+		out = append(out, digits[s[i]>>4], digits[s[i]&15])
+	}
+	return string(out)
+}

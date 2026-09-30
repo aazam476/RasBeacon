@@ -1,0 +1,8 @@
+# Built web UI (created by `make ui`). The .gitkeep file keeps the directory
+# so `go build` works before the UI has been built.
+/web/dist/*
+!/web/dist/.gitkeep
+/web/node_modules/
+
+# Build outputs
+/build/
