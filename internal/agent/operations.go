@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"golang.org/x/crypto/ssh"
 
@@ -127,6 +128,11 @@ func (a *Agent) finishClaim() {
 	}
 }
 
+// passwordCheckMu makes password checks run one at a time. Each check uses
+// 32 MiB of memory on purpose (see internal/auth), so many at once could run
+// a 512 MB Raspberry Pi Zero 2 W out of memory.
+var passwordCheckMu sync.Mutex
+
 // VerifyAdminPassword reports whether password is the admin password.
 func (a *Agent) VerifyAdminPassword(password string) bool {
 	a.mu.Lock()
@@ -136,6 +142,8 @@ func (a *Agent) VerifyAdminPassword(password string) bool {
 	if hash == "" {
 		return false // not claimed yet: there is no admin password
 	}
+	passwordCheckMu.Lock()
+	defer passwordCheckMu.Unlock()
 	ok, err := auth.VerifyPassword(password, hash)
 	if err != nil {
 		slog.Error("stored admin password hash is damaged", "error", err)
