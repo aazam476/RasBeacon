@@ -1,0 +1,85 @@
+# Runs on every push and pull request: formatting, linting, unit tests,
+# network namespace tests and the browser end-to-end test.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    name: Go (format, vet, staticcheck, unit tests)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Check formatting
+        run: test -z "$(gofmt -l .)" || (echo "Run gofmt -w on:"; gofmt -l .; exit 1)
+      - run: go vet ./...
+      - run: go run honnef.co/go/tools/cmd/staticcheck@2025.1.1 ./...
+      - run: go test ./...
+
+  web:
+    name: Web UI (typecheck, lint, format, tests, build)
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm test
+      - run: npm run build
+
+  netns:
+    name: Network namespace tests (real firewall and dnsmasq)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Install network tools
+        run: sudo apt-get update -q && sudo apt-get install -y -q nftables dnsmasq-base busybox iproute2 iputils-ping
+      - name: Run tests as root
+        # RASBEACON_REQUIRE_NETNS=1 makes the tests fail instead of skipping
+        # if they can't run.
+        run: sudo -E env "PATH=$PATH" RASBEACON_REQUIRE_NETNS=1 go test -count=1 -v ./test/netns/
+
+  e2e:
+    name: Browser end-to-end test (simulated device)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Install Playwright's Chromium
+        working-directory: test/e2e
+        run: npm ci --no-audit --no-fund && npx playwright install --with-deps chromium
+      - name: Run the walkthrough
+        env:
+          SCREENSHOT_DIR: ${{ runner.temp }}/screenshots
+        run: mkdir -p "$SCREENSHOT_DIR" && make e2e
+      - name: Keep screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-screenshots
+          path: ${{ runner.temp }}/screenshots

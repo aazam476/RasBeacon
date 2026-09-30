@@ -1,0 +1,98 @@
+# Builds the SD card images.
+#
+# - Pushing a tag like v0.1.0 builds both images and publishes a GitHub
+#   release with the images and SHA256SUMS.
+# - "Run workflow" on the Actions tab builds images for testing without a
+#   release (download them from the run's artifacts).
+#
+# The image tool (rpi-image-gen) is pinned to an exact commit so builds are
+# repeatable. Update IMAGE_GEN_COMMIT deliberately and test the result.
+name: Release images
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: >-
+          Build machine. arm64 is faster and is what rpi-image-gen supports
+          officially, but it is only free for public repositories. amd64 uses
+          QEMU emulation (slower, not officially supported).
+        type: choice
+        options: [ubuntu-24.04-arm, ubuntu-24.04]
+        default: ubuntu-24.04
+
+permissions:
+  contents: write
+
+env:
+  IMAGE_GEN_REPO: https://github.com/raspberrypi/rpi-image-gen.git
+  IMAGE_GEN_COMMIT: 6fec7d5ed1a1c68a6bcab8af74603ae1355d7916
+
+jobs:
+  image:
+    name: Image (${{ matrix.board }})
+    runs-on: ${{ inputs.runner || 'ubuntu-24.04-arm' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        board: [pi4, pi5]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Version
+        id: version
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then v="${GITHUB_REF_NAME}"; else v="dev-${GITHUB_SHA::7}"; fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - name: Get rpi-image-gen
+        run: |
+          git clone --quiet "$IMAGE_GEN_REPO" ../rpi-image-gen
+          git -C ../rpi-image-gen checkout --quiet "$IMAGE_GEN_COMMIT"
+
+      - name: Install image build dependencies
+        run: |
+          sudo apt-get update -q
+          if [ "$(uname -m)" != "aarch64" ]; then
+            # Emulate 64-bit ARM on an x86 build machine.
+            sudo apt-get install -y -q qemu-user-static binfmt-support
+          fi
+          sudo ../rpi-image-gen/install_deps.sh
+
+      - name: Build image
+        run: image/build.sh ${{ matrix.board }} ${{ steps.version.outputs.version }}
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: rasbeacon-${{ matrix.board }}-${{ steps.version.outputs.version }}
+          path: build/image/
+          # Images are large; keep test builds for a week.
+          retention-days: 7
+
+  publish:
+    name: Publish release
+    if: github.ref_type == 'tag'
+    needs: image
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Combine checksums
+        working-directory: dist
+        run: cat *.sha256 > SHA256SUMS && rm *.sha256 && cat SHA256SUMS
+      - uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            dist/*.img.xz
+            dist/SHA256SUMS
+          draft: true

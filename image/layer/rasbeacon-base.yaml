@@ -1,0 +1,19 @@
+# METABEGIN
+# X-Env-Layer-Name: rasbeacon-base
+# X-Env-Layer-Category: suite
+# X-Env-Layer-Desc: Minimal Debian trixie system for RasBeacon. This is
+#  rpi-image-gen's trixie-minbase without iwd: RasBeacon controls Wi-Fi
+#  itself with hostapd and wpa_supplicant, and a second Wi-Fi manager would
+#  fight over the radios.
+# X-Env-Layer-Version: 1.0.0
+# X-Env-Layer-Requires: debian-trixie-arm64-multi,
+#  rpi-debian-trixie,
+#  rpi-misc-utils,
+#  rpi-essential-base,
+#  rpi-misc-skel,
+#  systemd-net-min,
+#  openssh-server,
+#  systemd-timesyncd,
+#  wireless-regulatory
+# METAEND
+---

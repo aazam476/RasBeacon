@@ -1,0 +1,23 @@
+#!/usr/sbin/nft -f
+# RasBeacon lockdown firewall, loaded at boot before networking starts.
+# It uses the same table name as rbd's full rules
+# (internal/render/templates/firewall.nft.tmpl), so rbd can replace it in one
+# step. Until then: nothing gets in (except replies) and nothing passes
+# through.
+
+table inet rasbeacon
+delete table inet rasbeacon
+
+table inet rasbeacon {
+	chain input {
+		type filter hook input priority filter; policy drop;
+		iif "lo" accept
+		ct state established,related accept
+	}
+	chain forward {
+		type filter hook forward priority filter; policy drop;
+	}
+	chain output {
+		type filter hook output priority filter; policy accept;
+	}
+}

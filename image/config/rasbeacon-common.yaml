@@ -1,0 +1,30 @@
+# Settings shared by every RasBeacon image. The per-board files
+# (rasbeacon-pi4.yaml, rasbeacon-pi5.yaml) include this file and pick the
+# board layer.
+#
+# Layout: rpi-image-gen's "image-rota" A/B layout. Two copies of the
+# read-only system (A and B) let an update be tried and rolled back
+# automatically; writable data lives on the /persistent partition.
+device:
+  hostname: rasbeacon
+  # The login user created by the base layers. It has no password, so it
+  # cannot log in with one; SSH (off by default) only accepts keys for root.
+  user1: rasbeacon
+  user1sudo: none
+
+image:
+  layer: image-rota
+  boot_part_size: 128M
+  system_part_size: 768M
+  data_part_size: 512M
+
+layer:
+  base: rasbeacon-base
+  app: rasbeacon
+
+ssh:
+  pubkey_only: y
+
+locale:
+  default: en_US.UTF-8
+  timezone: Etc/UTC

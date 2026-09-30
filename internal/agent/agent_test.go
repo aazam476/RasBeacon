@@ -117,6 +117,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	timers := &fakeTimers{}
 	a := New(p, runner)
 	a.afterFunc = timers.afterFunc
+	a.usbRadioWait = 0
 	return &testEnv{t: t, paths: p, runner: runner, timers: timers, agent: a}
 }
 
@@ -321,6 +322,7 @@ func TestReboot_AfterClaim_StartsInNormalMode(t *testing.T) {
 	// Simulate a reboot: a new agent reading the same disk.
 	restarted := New(e.paths, e.runner)
 	restarted.afterFunc = e.timers.afterFunc
+	restarted.usbRadioWait = 0
 	if err := restarted.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -340,6 +342,7 @@ func TestFactoryResetFile_WipesSettingsAtBoot(t *testing.T) {
 	mustWrite(t, e.paths.FactoryResetFile(), "")
 	restarted := New(e.paths, e.runner)
 	restarted.afterFunc = e.timers.afterFunc
+	restarted.usbRadioWait = 0
 	if err := restarted.Start(); err != nil {
 		t.Fatal(err)
 	}

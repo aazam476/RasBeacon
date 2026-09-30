@@ -1,0 +1,11 @@
+# DHCP and DNS for devices on the hotspot. Started and restarted by rbd after
+# it writes /run/rbd/dnsmasq.conf. dnsmasq drops to the "nobody" user after
+# opening its files.
+[Unit]
+Description=RasBeacon DHCP and DNS (dnsmasq)
+After=rbd.service
+
+[Service]
+ExecStart=/usr/sbin/dnsmasq --keep-in-foreground --conf-file=/run/rbd/dnsmasq.conf --pid-file= --user=nobody --group=nogroup --log-facility=-
+Restart=on-failure
+RestartSec=2
