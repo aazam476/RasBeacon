@@ -707,7 +707,7 @@ LICENSE, LICENSES/THIRD_PARTY.md, CONTRIBUTING.md, SECURITY.md
 
 ## 13. Open questions (consolidated)
 
-**Decided (revision 2):**
+**Decided:**
 - Q1: Apache-2.0.
 - Q2: private for now, moving to a public repo later (see 2.1).
 - Q4: HTTP by default; HTTPS setting with a generated or uploaded certificate.
@@ -717,7 +717,6 @@ LICENSE, LICENSES/THIRD_PARTY.md, CONTRIBUTING.md, SECURITY.md
 - Q10: see Q10b below.
 - Q11: Pi 4B, Pi 5 and Zero 2 W all supported. Hotspot adapters: MT7612U
   (reference) and TP-Link AC1300 (RTL8812BU/AU, at risk until the M1 gate).
-
 - Q3: `setup.txt` is optional and checked on every boot until claimed; an
   invalid file never falls back to an open network (section 5).
 - Q5: portal mode applies to all client devices (4.6, including why a hole is
@@ -726,7 +725,6 @@ LICENSE, LICENSES/THIRD_PARTY.md, CONTRIBUTING.md, SECURITY.md
 - Q12: Ethernet role setting, *Uplink* (default) or *Client port*, with a
   foreign-DHCP safety check (4.1).
 - Owner's hotspot adapter: TP-Link Archer T3U (RTL8812BU).
-
 - Q1b: project name **RasBeacon**. It avoids the "Raspberry Pi" trademark in
   the name; the image is described as based on Debian and Raspberry Pi OS
   packages.
