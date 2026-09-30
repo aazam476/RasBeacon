@@ -656,6 +656,18 @@ docs/               architecture, eduroam (Rutgers example), wireguard-server, c
 LICENSE, LICENSES/THIRD_PARTY.md, CONTRIBUTING.md, SECURITY.md
 ```
 
+**Commit messages** use a type prefix, documented in `CONTRIBUTING.md` once it exists:
+
+| Prefix | Use for |
+|---|---|
+| `feat:` | New feature |
+| `fix:` | Bug fix |
+| `chore:` | Tooling, config, dependencies |
+| `refactor:` | Code change that isn't a fix or feature |
+| `docs:` | Documentation only |
+| `style:` | Formatting, no logic change |
+| `test:` | Adding or fixing tests |
+
 ## 10. License and redistribution
 - **Our code:** **Apache-2.0** (decided). We copy no code from RaspAP
   (GPL-3.0), Travelmate or esp32_nat_router.
