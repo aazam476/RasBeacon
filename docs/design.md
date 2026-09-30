@@ -1,10 +1,10 @@
 # Design: open-source portable Wi-Fi travel router
 
-- Status: **Proposed, revision 3**. All of Q1–Q12 are answered except the project name and your WireGuard server's subnet (section 13).
+- Status: **Proposed, revision 4**. All questions answered (section 13); waiting for approval to start milestone 1.
 - Date: 2026-09-30
 - Depends on: [ADR 0001](decisions/0001-platform.md), which is accepted
-- Working name: `travelrouter`. Daemons are `trd` (privileged agent) and
-  `trweb` (web UI). The final name is still open (Q1). The license is **Apache-2.0**.
+- Project name: **RasBeacon**. Daemons are `rbd` (privileged agent) and
+  `rbweb` (web UI). The license is **Apache-2.0**.
 
 Where this doc says "verified", the evidence is cited in ADR 0001 or here.
 "To verify" marks items that can only be settled on your hardware or on
@@ -21,7 +21,7 @@ eduroam, and says which milestone checks them.
 | Onboard CYW43455 (Pi 4/5) or BCM43436 (Zero 2 W), brcmfmac | **Wi-Fi uplink** | WPA2-Personal/Enterprise, open. WPA3 depends on firmware (M3 checks this). |
 | Built-in Gigabit Ethernet (Pi 4/5), or a USB Ethernet adapter | **Role setting:** *Uplink* (default) or *Client port* (4.1) | |
 | USB adapter with MT7612U (mt76x2u), e.g. Alfa AWUS036ACM | **Hotspot** (reference): 2.4 GHz default, 5 GHz optional | 128-entry station table. SAE and MFP supported. 2 AP interfaces (main + guest). |
-| TP-Link "AC1300" USB adapters (Realtek, rtw88 driver) | **Hotspot** (supported, **at risk**) | TP-Link sells several AC1300 models with different chips: **Archer T3U, T3U Plus and T4U v3 use RTL8812BU**; **Archer T4U v1/v2 use RTL8812AU**. Both drivers are in the Raspberry Pi kernel (6.18, `CONFIG_RTW88_8822BU` and `CONFIG_RTW88_8812AU`), with a 32-entry station table and MFP (needed for WPA3). **Known risk:** users have reported the RTL8812BU dropping clients in AP mode ("failed to download beacon", "timed out to flush queue"). The ≥10-client M1 gate runs on this adapter too. Run `lsusb` to identify yours: `2357:012d`, `2357:0138` and `2357:0115` are RTL8812BU; `2357:0101`, `2357:0103` and `2357:010d` are RTL8812AU. **The owner's test adapter is an Archer T3U (RTL8812BU, expected ID `2357:012d`).** If it fails the M1 gate, `trd` first tries the reported mitigation (a longer beacon interval, plus a driver reload on beacon errors), and the fallback is an MT7612U adapter. |
+| TP-Link "AC1300" USB adapters (Realtek, rtw88 driver) | **Hotspot** (supported, **at risk**) | TP-Link sells several AC1300 models with different chips: **Archer T3U, T3U Plus and T4U v3 use RTL8812BU**; **Archer T4U v1/v2 use RTL8812AU**. Both drivers are in the Raspberry Pi kernel (6.18, `CONFIG_RTW88_8822BU` and `CONFIG_RTW88_8812AU`), with a 32-entry station table and MFP (needed for WPA3). **Known risk:** users have reported the RTL8812BU dropping clients in AP mode ("failed to download beacon", "timed out to flush queue"). The ≥10-client M1 gate runs on this adapter too. Run `lsusb` to identify yours: `2357:012d`, `2357:0138` and `2357:0115` are RTL8812BU; `2357:0101`, `2357:0103` and `2357:010d` are RTL8812AU. **The owner's test adapter is an Archer T3U (RTL8812BU, expected ID `2357:012d`).** If it fails the M1 gate, `rbd` first tries the reported mitigation (a longer beacon interval, plus a driver reload on beacon errors), and the fallback is an MT7612U adapter. |
 | USB power bank | Power | About 20,000 mAh for about 12 h on a Pi 4/5 (ADR §0); a Zero 2 W gets about 12 to 14 h from 10,000 mAh (estimate). Each bank's auto-off threshold and pass-through behavior are documented per model. |
 
 Roles are assigned automatically:
@@ -60,9 +60,9 @@ compatibility table records the result.
     runner with QEMU user emulation, which is slower. Nothing in the code or
     workflows hard-codes the repository name, so the move is a plain push.
 - **Release artifacts:**
-  - `travelrouter-<ver>-rpi-arm64.img.xz`: flash with Raspberry Pi Imager
+  - `rasbeacon-<ver>-rpi-arm64.img.xz`: flash with Raspberry Pi Imager
     ("Use custom") or balenaEtcher.
-  - `travelrouter-<ver>.update`: signed update bundle.
+  - `rasbeacon-<ver>.update`: signed update bundle.
   - `SHA256SUMS` and `SHA256SUMS.sig` (Ed25519, minisign-compatible format).
   - GitHub build-provenance attestation.
   - `sources-<ver>.tar`: GPL/LGPL corresponding source (section 10).
@@ -91,7 +91,7 @@ compatibility table records the result.
      older than the running one. A downgrade needs an explicit confirmation.
   2. Write the inactive boot and root slots, verify their hashes, then run
      `reboot "0 tryboot"`.
-  3. The new slot runs a health check: `trd` running, `ap0` beaconing, the UI
+  3. The new slot runs a health check: `rbd` running, `ap0` beaconing, the UI
      answering locally, all within 180 s. If it passes, `autoboot.txt` is
      swapped to commit the update. If it fails, a normal reboot, which
      automatically returns to the old slot.
@@ -107,24 +107,24 @@ compatibility table records the result.
 
 ```
 hotspot clients (phones, laptops)
-        │  HTTP(S) to 10.8.0.1 only
+        │  HTTP(S) to 10.87.0.1 only
         ▼
-trweb   user "trweb", no capabilities, systemd-hardened
+rbweb   user "rbweb", no capabilities, systemd-hardened
         (ProtectSystem=strict, NoNewPrivileges, AF_INET/AF_UNIX only)
-        │  typed JSON-RPC over /run/trd/api.sock (0660 root:trweb)
+        │  typed JSON-RPC over /run/rbd/api.sock (0660 root:rbweb)
         ▼
-trd     root, systemd-hardened; owns /data/secrets; renders configs to /run/trd;
+rbd     root, systemd-hardened; owns /data/secrets; renders configs to /run/rbd;
         drives hostapd / wpa_supplicant (control sockets), nft, wg (netlink),
         networkd, dnsmasq
 ```
 
-- **`trweb`** serves the static UI and a REST/JSON API. It never reads
+- **`rbweb`** serves the static UI and a REST/JSON API. It never reads
   secrets: secret fields are write-only and the API only reports
   "set / not set". It handles:
   - Sessions, login rate limiting and CSRF protection.
   - Admin password hashing (argon2id from `golang.org/x/crypto`, our only
     third-party Go dependency).
-- **`trd`** is a single event loop and the **only** writer of network state.
+- **`rbd`** is a single event loop and the **only** writer of network state.
   It owns:
   - Validating and rendering configs.
   - The kill-switch/uplink/portal state machine (section 4.5).
@@ -138,10 +138,10 @@ trd     root, systemd-hardened; owns /data/secrets; renders configs to /run/trd;
 
 Secrets:
 - Stored in `/data/secrets/*.json`, `root:root 0600`.
-- Rendered into `/run/trd/*.conf` at 0600.
+- Rendered into `/run/rbd/*.conf` at 0600.
 - Never logged:
   - `wpa_supplicant` and `hostapd` run without `-d`.
-  - `trd`'s logger redacts known secret keys.
+  - `rbd`'s logger redacts known secret keys.
   - The eduroam identity is shown masked (`N***@rutgers.edu`) in logs and exports.
 
 Release images contain no keys, passwords or per-device material. Everything
@@ -153,11 +153,11 @@ per-device is generated on first boot.
 
 | Interface | Managed by | Address |
 |---|---|---|
-| `br-lan` (client side) = `ap0` + `eth0` when Ethernet is set to *Client port* | `trd` (bridge), hostapd (`bridge=br-lan`) | `10.8.0.1/24`, plus an IPv6 ULA `/64` (4.4). If it collides with the uplink subnet **or the WireGuard tunnel's addresses**, `trd` falls back to `10.9.0.1/24`, pushes short leases and shows why in the UI. `10.8.0.0/24` is also OpenVPN's default subnet and a common WireGuard default (wg-easy), so this fallback may trigger with your server (section 13). |
-| `ap0g` (guest, stretch) | hostapd second BSS | `10.8.8.1/24` |
-| `wlan0` (Wi-Fi uplink) | wpa_supplicant (driven by `trd`) + networkd DHCPv4/RA | From uplink DHCP |
+| `br-lan` (client side) = `ap0` + `eth0` when Ethernet is set to *Client port* | `rbd` (bridge), hostapd (`bridge=br-lan`) | `10.87.0.1/24`, plus an IPv6 ULA `/64` (4.4). If it collides with the uplink subnet **or the WireGuard tunnel's addresses**, `rbd` falls back to `10.88.0.1/24`, pushes short leases and shows why in the UI. |
+| `ap0g` (guest, stretch) | hostapd second BSS | `10.87.8.1/24` |
+| `wlan0` (Wi-Fi uplink) | wpa_supplicant (driven by `rbd`) + networkd DHCPv4/RA | From uplink DHCP |
 | `eth0` | *Uplink:* networkd DHCP client. *Client port:* bridged into `br-lan` | From uplink DHCP / none |
-| `wg0` | `trd` via netlink | From the `.conf` `Address` |
+| `wg0` | `rbd` via netlink | From the `.conf` `Address` |
 
 - **Hotspot:**
   - `hostapd` runs with `country_code=US` (configurable), `ieee80211d=1`,
@@ -179,7 +179,7 @@ per-device is generated on first boot.
   - *Client port* bridges `eth0` into `br-lan`. A wired laptop gets the same
     subnet, DHCP, kill switch and portal policy as Wi-Fi clients, and can
     reach phones for AirPlay and mDNS.
-  - **Safety check:** before bridging, and on every link-up, `trd` sends a
+  - **Safety check:** before bridging, and on every link-up, `rbd` sends a
     DHCPDISCOVER on `eth0`. If a foreign DHCP server answers (you plugged a
     client port into a hotel wall jack), `eth0` stays out of the bridge. The
     UI then offers "This port looks like an uplink. Switch to Uplink?", so we
@@ -192,7 +192,7 @@ per-device is generated on first boot.
 
 ### 4.2 Uplink management
 - **Priority:** Ethernet with a link, then saved Wi-Fi networks in your order,
-  scanning for any that are in range. `trd` drives `wpa_supplicant` over its
+  scanning for any that are in range. `rbd` drives `wpa_supplicant` over its
   control socket, one network at a time, and switches when the current uplink
   loses DHCP or connectivity for 20 s.
 - **Enterprise uplinks:** `eap=TTLS` + `phase2="auth=PAP"`, `PEAP` +
@@ -236,7 +236,7 @@ main:        default via <uplink gw> (networkd, metric by uplink priority)
   so a routing mistake can't leak.
 - **Endpoint handling:**
   - `wg0` sets `fwmark 0x5182`, so encrypted packets always leave via the uplink.
-  - The endpoint hostname is re-resolved by `trd` over the uplink resolver on
+  - The endpoint hostname is re-resolved by `rbd` over the uplink resolver on
     every uplink change and on handshake failure, because the kernel doesn't
     re-resolve.
   - `PersistentKeepalive=25` is the default so the tunnel survives NAT and
@@ -246,7 +246,7 @@ main:        default via <uplink gw> (networkd, metric by uplink priority)
   from the `.conf`. SYN MSS is clamped to `rt mtu` on `wg0` and the uplinks.
 
 ### 4.4 Firewall (nftables, one atomic ruleset)
-- **Rendering:** `trd` renders the whole ruleset from its state and applies it
+- **Rendering:** `rbd` renders the whole ruleset from its state and applies it
   with a single `nft -f` transaction (flush and rebuild together). There are
   never partial rules.
 - **Chain `input` (policy drop):**
@@ -264,7 +264,7 @@ main:        default via <uplink gw> (networkd, metric by uplink priority)
   - Everything else: dropped.
   - IPv4 NAT masquerades on the egress interface.
 - **DNS:**
-  - Clients are handed `10.8.0.1`, and any UDP/TCP 53 to other addresses is
+  - Clients are handed `10.87.0.1`, and any UDP/TCP 53 to other addresses is
     redirected to it.
   - dnsmasq forwards to the tunnel DNS from the `.conf` `DNS=` line, or to a
     configured resolver reached via `wg0`. The rule for that resolver's /32
@@ -308,19 +308,19 @@ main:        default via <uplink gw> (networkd, metric by uplink priority)
   - **Endpoint:** the device may reach the WireGuard endpoint over IPv4 or IPv6
     on the uplink.
 - **Boot ordering:**
-  1. `trd-firewall-early.service` loads the **lockdown ruleset** (input:
+  1. `rbd-firewall-early.service` loads the **lockdown ruleset** (input:
      lo + established only; forward: drop; output: allow) and runs
      `Before=network-pre.target`.
   2. Then `sysctl net.ipv4.ip_forward=1`. Forwarding is shipped off in
      `sysctl.d` and turned on only after the lockdown ruleset is in place.
-  3. hostapd, networkd and `trd` start only after that unit succeeds.
+  3. hostapd, networkd and `rbd` start only after that unit succeeds.
 
-  If `trd` crashes, the last ruleset stays in force. It is fail-closed and
-  never flushed on exit. systemd restarts `trd`.
+  If `rbd` crashes, the last ruleset stays in force. It is fail-closed and
+  never flushed on exit. systemd restarts `rbd`.
 
 ### 4.5 Uplink / tunnel / kill-switch state machine
 
-States, all owned by `trd`:
+States, all owned by `rbd`:
 
 | State | Client forwarding |
 |---|---|
@@ -403,14 +403,14 @@ the portal's URL.
    clients get no internet. The hotspot then shows a **"login required"
    notice**:
    - dnsmasq answers the OS probe hostnames (`captive.apple.com`,
-     `connectivitycheck.gstatic.com`, etc.) with `10.8.0.1`.
-   - `trweb` returns a small page: "The hotspot's uplink needs a login. Tap to
+     `connectivitycheck.gstatic.com`, etc.) with `10.87.0.1`.
+   - `rbweb` returns a small page: "The hotspot's uplink needs a login. Tap to
      start portal mode (up to 10 min)."
-   - Clients also get DHCP option 114 pointing to the RFC 8908 API on `trweb`.
+   - Clients also get DHCP option 114 pointing to the RFC 8908 API on `rbweb`.
 
    iOS, macOS and Android should then show their "Log in to network" sheet
    **with our notice page** automatically (to verify in M5).
-2. You tap **Start**, in that sheet or in the UI, and `trd` enters `PORTAL`:
+2. You tap **Start**, in that sheet or in the UI, and `rbd` enters `PORTAL`:
    - The ruleset allows `br-lan` → uplink for TCP 80/443 and DNS.
    - dnsmasq forwards to the uplink DNS and stops spoofing the probe names.
    - A countdown starts: 10 min by default, 30 min maximum, extendable.
@@ -418,8 +418,8 @@ the portal's URL.
      portal intercepts, so you log in inside the same sheet.
    - Devices that didn't show a sheet can open any `http://` URL, or use the
      portal link in our UI.
-3. `trd` probes over the uplink every 5 s. When the probe returns 204, the
-   portal is done: `trd` applies the normal ruleset **first** (atomic), flushes
+3. `rbd` probes over the uplink every 5 s. When the probe returns 204, the
+   portal is done: `rbd` applies the normal ruleset **first** (atomic), flushes
    client conntrack, then moves to `TIME_SYNC` and the tunnel comes up.
    Timeout or cancel restores the normal ruleset the same way.
 4. The notice page and the UI warn that during portal mode, web and DNS
@@ -456,7 +456,7 @@ tunnel health check plus a portal probe, and the flow repeats.
   validity checks (EAP) and WireGuard handshake timestamps start from a sane
   time.
 - **Sync:** `systemd-timesyncd` does NTP via the uplink. **If NTP is blocked**
-  (no answer in 20 s), `trd` falls back to the HTTP `Date` header from three
+  (no answer in 20 s), `rbd` falls back to the HTTP `Date` header from three
   plain-HTTP hosts. It accepts a time only when at least 2 agree within 5 s
   and the time is at or after the floor.
 - **Tunnel dependency:** the tunnel waits for synced time, with a 60 s cap,
@@ -488,7 +488,7 @@ tunnel health check plus a portal probe, and the flow repeats.
 1. The data partition is grown and initialised. The device generates its
    per-device ID, TLS key/cert, session secret and the random default hotspot
    PSK (shown after setup).
-2. The **setup network** comes up as `travelrouter-setup-XXXX` (XXXX from the
+2. The **setup network** comes up as `RasBeacon-Setup-XXXX` (XXXX from the
    adapter MAC):
    - **Open by default**, with a captive-portal redirect to the setup page, so
      phones pop the setup screen automatically.
@@ -504,7 +504,7 @@ tunnel health check plus a portal probe, and the flow repeats.
        error pattern (3 short, 1 long), and the README troubleshooting section
        explains how to fix the file.
      - The UI shows which mode the setup network used.
-     - After the device is claimed, `trd` overwrites and deletes `setup.txt`,
+     - After the device is claimed, `rbd` overwrites and deletes `setup.txt`,
        so the password doesn't sit in plain text on the card.
 3. **Claim-once:** the first client to set the admin password (at least 10
    characters, checked against a small built-in list of common passwords)
@@ -515,14 +515,14 @@ tunnel health check plus a portal probe, and the flow repeats.
    the setup network never returns unless you factory reset.
 
 **Admin UI:**
-- Reachable only from the client side, `br-lan` (see 4.4), at `http://10.8.0.1` and
-  `http://travelrouter.lan`.
+- Reachable only from the client side, `br-lan` (see 4.4), at `http://10.87.0.1` and
+  `http://rasbeacon.lan`.
 - **HTTP by default.** Settings → Security → HTTPS offers two choices:
   - **Generated certificate:** a per-device self-signed certificate for
-    `travelrouter.lan` and `10.8.0.1`. The UI shows its SHA-256 fingerprint so
+    `rasbeacon.lan` and `10.87.0.1`. The UI shows its SHA-256 fingerprint so
     you can check it in the browser warning, and a "regenerate" button.
   - **Upload:** a PEM certificate plus key, or a chain. It's checked for a key
-    match, validity dates and a name matching `travelrouter.lan`/`10.8.0.1` or
+    match, validity dates and a name matching `rasbeacon.lan`/`10.87.0.1` or
     a custom hostname you enter.
 
   An optional "redirect HTTP to HTTPS" switch is available. No HSTS, so turning
@@ -535,7 +535,7 @@ tunnel health check plus a portal probe, and the flow repeats.
 **Factory reset:**
 1. In the UI (asks for the password again).
 2. **Offline:** put the SD card in any computer, create an empty file named
-   `factory-reset` on the visible partition, and boot. `trd` wipes `/data` and
+   `factory-reset` on the visible partition, and boot. `rbd` wipes `/data` and
    deletes the file.
 3. **Optional hardware button:** short GPIO3 (pin 5) to GND (pin 6) for 10 s
    while running. A momentary button can be wired there.
@@ -594,16 +594,16 @@ The Pi 5's power button is left at its default behavior.
 ### 8.2 Network-namespace integration (CI, stock `ubuntu-24.04` runners with sudo)
 
 ```
-[client ns] --veth "ap0"-- [router ns: real nft ruleset, policy routing, dnsmasq, wg0, trd]
+[client ns] --veth "ap0"-- [router ns: real nft ruleset, policy routing, dnsmasq, wg0, rbd]
                                    --veth "eth0"-- [uplink ns: NAT GW, DNS, HTTP portal emulator, tcpdump]
                                                         -- [vpn ns: WireGuard peer, DNS, echo/HTTP]
 ```
 
-`trd` runs with a `--sim` flag that replaces hostapd and wpa_supplicant with
+`rbd` runs with a `--sim` flag that replaces hostapd and wpa_supplicant with
 veth links. Each test captures packets on the uplink veth and **asserts that
 no client-sourced packet other than WireGuard UDP to the endpoint appears**
 (the leak test):
-- Boot: traffic generated before `trd` starts is dropped.
+- Boot: traffic generated before `rbd` starts is dropped.
 - KS ON, tunnel healthy: traffic goes via `wg0`; client DNS reaches the vpn ns
   only.
 - KS ON, tunnel blocked at the uplink: client TCP, UDP, DNS and ICMP are all
@@ -641,8 +641,8 @@ and during `iperf3`.
 ## 9. Repository layout
 
 ```
-cmd/trd/            privileged agent (state machine, renderers, drivers)
-cmd/trweb/          web server + API
+cmd/rbd/            privileged agent (state machine, renderers, drivers)
+cmd/rbweb/          web server + API
 internal/config/    schema, validation, atomic store
 internal/render/    hostapd / wpa_supplicant / dnsmasq / nft / wg generators (+ testdata golden files)
 internal/fsm/       uplink/tunnel/portal state machine
@@ -670,7 +670,7 @@ LICENSE, LICENSES/THIRD_PARTY.md, CONTRIBUTING.md, SECURITY.md
      `/usr/share/doc/*/copyright` in the image) and listing firmware licenses
      in `LICENSES/THIRD_PARTY.md`. **In M1 I'll verify that each firmware
      license permits binary redistribution.**
-  3. Not calling the image "Raspberry Pi OS" (trademark). It is "travelrouter,
+  3. Not calling the image "Raspberry Pi OS" (trademark). It is "RasBeacon,
      based on Debian and Raspberry Pi OS packages".
   4. GPLv3 installation information: users can always reflash the SD card and
      build their own image from the documented tooling.
@@ -708,13 +708,13 @@ LICENSE, LICENSES/THIRD_PARTY.md, CONTRIBUTING.md, SECURITY.md
 ## 13. Open questions (consolidated)
 
 **Decided (revision 2):**
-- Q1: Apache-2.0. The name is still open; `travelrouter` is the working name.
+- Q1: Apache-2.0.
 - Q2: private for now, moving to a public repo later (see 2.1).
 - Q4: HTTP by default; HTTPS setting with a generated or uploaded certificate.
 - Q6: IPv6 for clients (ULA plus NAT66, section 4.4).
 - Q8: manual upload, plus an opt-in GitHub check.
 - Q9: SSH off by default, with a setting to turn it on.
-- Q10: `10.8.0.0/24`, with automatic fallback to `10.9.0.0/24` on collision.
+- Q10: see Q10b below.
 - Q11: Pi 4B, Pi 5 and Zero 2 W all supported. Hotspot adapters: MT7612U
   (reference) and TP-Link AC1300 (RTL8812BU/AU, at risk until the M1 gate).
 
@@ -727,7 +727,10 @@ LICENSE, LICENSES/THIRD_PARTY.md, CONTRIBUTING.md, SECURITY.md
   foreign-DHCP safety check (4.1).
 - Owner's hotspot adapter: TP-Link Archer T3U (RTL8812BU).
 
-**Still open:**
-- **Q1b. Project name.** `travelrouter` is the working name until you pick one.
-- **Q10b.** Does your WireGuard server use `10.8.0.0/24` for tunnel
-  addresses? If so, the hotspot automatically falls back to `10.9.0.0/24`.
+- Q1b: project name **RasBeacon**. It avoids the "Raspberry Pi" trademark in
+  the name; the image is described as based on Debian and Raspberry Pi OS
+  packages.
+- Q10/Q10b: hotspot subnet **`10.87.0.0/24`** (guest `10.87.8.0/24`), with
+  fallback to `10.88.0.0/24` if the uplink or tunnel overlaps.
+
+**Still open:** none.
