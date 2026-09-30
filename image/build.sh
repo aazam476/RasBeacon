@@ -30,7 +30,8 @@ install -m 0755 "$repo_root/build/arm64/rbd" "$repo_root/build/arm64/rbweb" \
   "$stage/layer/rasbeacon.d/customize.overlay/usr/bin/"
 rm -f "$stage/layer/rasbeacon.d/customize.overlay/usr/bin/.gitkeep"
 
-# 3. Build the image.
+# 3. Build the image (rpi-image-gen needs its work directory to exist).
+mkdir -p "$repo_root/build/rig-$board"
 "$rig/rpi-image-gen" build -S "$stage" -B "$repo_root/build/rig-$board" \
   -c "$stage/config/rasbeacon-$board.yaml" -- \
   IGconf_artefact_version="$version"
