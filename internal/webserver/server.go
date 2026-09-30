@@ -308,7 +308,8 @@ func (s *Server) handleUI(w http.ResponseWriter, r *http.Request) {
 	if h, _, err := net.SplitHostPort(host); err == nil {
 		host = h
 	}
-	if st.Mode == api.ModeSetup && host != lan && host != hostName {
+	isDevice := host == lan || host == hostName || host == "localhost" || host == "127.0.0.1"
+	if st.Mode == api.ModeSetup && !isDevice {
 		w.Header().Set("Cache-Control", "no-store")
 		http.Redirect(w, r, "http://"+lan+"/", http.StatusFound)
 		return

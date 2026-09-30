@@ -124,13 +124,13 @@ var commonPasswords = func() map[string]bool {
 // weak to protect the admin UI, or nil if it is acceptable.
 func CheckAdminPasswordStrength(password string) error {
 	if len([]rune(password)) < MinAdminPasswordLength {
-		return fmt.Errorf("must be at least %d characters long", MinAdminPasswordLength)
+		return fmt.Errorf("Must be at least %d characters long.", MinAdminPasswordLength)
 	}
 	if commonPasswords[strings.ToLower(password)] {
-		return errors.New("is one of the most commonly used passwords; please choose another")
+		return errors.New("This is one of the most commonly used passwords. Please choose another.")
 	}
 	if strings.Contains(strings.ToLower(password), "rasbeacon") {
-		return errors.New("must not contain the device name")
+		return errors.New("Must not contain the device name.")
 	}
 	return nil
 }

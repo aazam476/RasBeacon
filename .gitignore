@@ -6,3 +6,4 @@
 
 # Build outputs
 /build/
+/test/e2e/node_modules/

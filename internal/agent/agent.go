@@ -108,9 +108,22 @@ func (a *Agent) Start() error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	for _, dir := range []string{a.paths.DataDir(), a.paths.RunDir()} {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return fmt.Errorf("creating %s: %w", dir, err)
+	// The data directory holds secrets, so only root may open it (0700).
+	// The runtime directory holds rbweb's API socket, so other users may pass
+	// through it (0711) but not list it; the secret files inside are 0600.
+	dirs := []struct {
+		path string
+		mode os.FileMode
+	}{
+		{a.paths.DataDir(), 0o700},
+		{a.paths.RunDir(), 0o711},
+	}
+	for _, dir := range dirs {
+		if err := os.MkdirAll(dir.path, dir.mode); err != nil {
+			return fmt.Errorf("creating %s: %w", dir.path, err)
+		}
+		if err := os.Chmod(dir.path, dir.mode); err != nil {
+			return fmt.Errorf("setting permissions on %s: %w", dir.path, err)
 		}
 	}
 
@@ -166,7 +179,7 @@ func (a *Agent) wipeData() error {
 	if err := os.RemoveAll(a.paths.DataDir()); err != nil {
 		return fmt.Errorf("erasing settings: %w", err)
 	}
-	return os.MkdirAll(a.paths.DataDir(), 0o755)
+	return os.MkdirAll(a.paths.DataDir(), 0o700)
 }
 
 // loadOrCreateSettings reads identity, config and secrets. Missing files

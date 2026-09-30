@@ -131,7 +131,7 @@ type ValidationError struct {
 }
 
 func (e *ValidationError) Error() string {
-	return fmt.Sprintf("%s %s", e.Field, e.Message)
+	return fmt.Sprintf("%s: %s", e.Field, e.Message)
 }
 
 // Validate checks every setting in the hotspot section. It returns the first
@@ -141,16 +141,16 @@ func (h HotspotConfig) Validate() error {
 		return &ValidationError{Field: "hotspot.ssid", Message: err.Error()}
 	}
 	if h.Band != Band2GHz && h.Band != Band5GHz {
-		return &ValidationError{Field: "hotspot.band", Message: `must be "2.4GHz" or "5GHz"`}
+		return &ValidationError{Field: "hotspot.band", Message: `Must be "2.4GHz" or "5GHz".`}
 	}
 	if h.Security != SecurityWPA2WPA3 && h.Security != SecurityWPA2 {
-		return &ValidationError{Field: "hotspot.security", Message: `must be "wpa2-wpa3" or "wpa2"`}
+		return &ValidationError{Field: "hotspot.security", Message: `Must be "wpa2-wpa3" or "wpa2".`}
 	}
 	if h.Channel != 0 && !IsAllowedChannel(h.Band, h.Channel) {
-		return &ValidationError{Field: "hotspot.channel", Message: "is not an allowed channel for this band"}
+		return &ValidationError{Field: "hotspot.channel", Message: "This channel is not offered for this band."}
 	}
 	if !isCountryCode(h.Country) {
-		return &ValidationError{Field: "hotspot.country", Message: "must be a two-letter country code such as US"}
+		return &ValidationError{Field: "hotspot.country", Message: "Must be a two-letter country code such as US."}
 	}
 	return nil
 }
@@ -160,14 +160,14 @@ func (h HotspotConfig) Validate() error {
 // break config files and confuse phones.
 func ValidateSSID(ssid string) error {
 	if len(ssid) < 1 || len(ssid) > 32 {
-		return errors.New("must be 1 to 32 bytes long")
+		return errors.New("Must be 1 to 32 bytes long (emoji and accented letters count as several bytes).")
 	}
 	if !utf8.ValidString(ssid) {
-		return errors.New("must be valid text")
+		return errors.New("Must be valid text.")
 	}
 	for _, r := range ssid {
 		if unicode.IsControl(r) {
-			return errors.New("must not contain control characters")
+			return errors.New("Must not contain control characters.")
 		}
 	}
 	return nil
@@ -177,11 +177,11 @@ func ValidateSSID(ssid string) error {
 // to 63 printable ASCII characters (letters, digits, punctuation, spaces).
 func ValidateWiFiPassword(password string) error {
 	if len(password) < 8 || len(password) > 63 {
-		return errors.New("must be 8 to 63 characters long")
+		return errors.New("Must be 8 to 63 characters long.")
 	}
 	for _, r := range password {
 		if r < 0x20 || r > 0x7e {
-			return errors.New("may only contain printable ASCII characters (no emoji or accented letters)")
+			return errors.New("May only contain printable ASCII characters (no emoji or accented letters).")
 		}
 	}
 	return nil

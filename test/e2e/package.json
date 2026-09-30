@@ -1,0 +1,13 @@
+{
+  "name": "rasbeacon-e2e",
+  "private": true,
+  "description": "End-to-end test: drives the web UI in a real browser against a simulated device.",
+  "license": "Apache-2.0",
+  "type": "commonjs",
+  "scripts": {
+    "test": "node walkthrough.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}

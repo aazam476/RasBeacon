@@ -107,7 +107,7 @@ func parse(text string) (string, error) {
 		return "", errors.New("setup.txt has no setup_password=... line")
 	}
 	if err := config.ValidateWiFiPassword(password); err != nil {
-		return "", fmt.Errorf("setup.txt setup_password %w", err)
+		return "", fmt.Errorf("setup.txt: setup_password: %w", err)
 	}
 	return password, nil
 }
