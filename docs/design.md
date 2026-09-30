@@ -1,10 +1,10 @@
 # Design: open-source portable Wi-Fi travel router
 
-- Status: **Proposed**, waiting for owner approval
+- Status: **Proposed, revision 2**. Owner answers to Q1–Q12 are folded in; Q3, Q5, Q7 and Q12 are still open (section 13).
 - Date: 2026-09-30
 - Depends on: [ADR 0001](decisions/0001-platform.md), which is accepted
 - Working name: `travelrouter`. Daemons are `trd` (privileged agent) and
-  `trweb` (web UI). The final name is open question Q1.
+  `trweb` (web UI). The final name is still open (Q1). The license is **Apache-2.0**.
 
 Where this doc says "verified", the evidence is cited in ADR 0001 or here.
 "To verify" marks items that can only be settled on your hardware or on
@@ -16,11 +16,13 @@ eduroam, and says which milestone checks them.
 
 | Part | Role | Notes |
 |---|---|---|
-| Raspberry Pi 4B (2 GB or more) or Pi 5 | Board | arm64. Pi 5 has an RTC (needs its optional battery to keep time while off). |
-| Onboard CYW43455 (brcmfmac) | **Wi-Fi uplink** (2.4/5 GHz) | WPA2-Personal/Enterprise, open. WPA3 depends on firmware (M3 checks this). |
-| Built-in Gigabit Ethernet | **Wired uplink** (preferred when it has a link) | |
-| USB adapter with MT7612U (mt76x2u) | **Hotspot**: 2.4 GHz default, 5 GHz optional | 2 AP interfaces per radio (main + guest). SAE and MFP supported. The ≥10-client test is the M1 gate. |
-| USB power bank, about 20,000 mAh | Power | Needed for about 12 h on a Pi 4 (ADR §0). Its auto-off threshold and pass-through behavior are documented per model. |
+| Raspberry Pi 4B (2 GB or more) or Pi 5 | Board (reference) | arm64. Pi 5 has an RTC (needs its optional battery to keep time while off). |
+| Raspberry Pi Zero 2 W | Board (**supported**, lower throughput) | 512 MB RAM. Onboard radio is 2.4 GHz only (about 33 Mbps measured), so the Wi-Fi uplink ceiling is about 30 Mbps through the tunnel. No Ethernet. The adapter plugs in through a micro-USB OTG adapter. Best battery life (ADR §5, config A). |
+| Onboard CYW43455 (Pi 4/5) or BCM43436 (Zero 2 W), brcmfmac | **Wi-Fi uplink** | WPA2-Personal/Enterprise, open. WPA3 depends on firmware (M3 checks this). |
+| Built-in Gigabit Ethernet (Pi 4/5) | **Wired uplink** by default (Q12) | |
+| USB adapter with MT7612U (mt76x2u), e.g. Alfa AWUS036ACM | **Hotspot** (reference): 2.4 GHz default, 5 GHz optional | 128-entry station table. SAE and MFP supported. 2 AP interfaces (main + guest). |
+| TP-Link "AC1300" USB adapters (Realtek, rtw88 driver) | **Hotspot** (supported, **at risk**) | TP-Link sells several AC1300 models with different chips: **Archer T3U, T3U Plus and T4U v3 use RTL8812BU**; **Archer T4U v1/v2 use RTL8812AU**. Both drivers are in the Raspberry Pi kernel (6.18, `CONFIG_RTW88_8822BU` and `CONFIG_RTW88_8812AU`), with a 32-entry station table and MFP (needed for WPA3). **Known risk:** users have reported the RTL8812BU dropping clients in AP mode ("failed to download beacon", "timed out to flush queue"). The ≥10-client M1 gate runs on this adapter too. Run `lsusb` to identify yours: `2357:012d`, `2357:0138` and `2357:0115` are RTL8812BU; `2357:0101`, `2357:0103` and `2357:010d` are RTL8812AU. |
+| USB power bank | Power | About 20,000 mAh for about 12 h on a Pi 4/5 (ADR §0); a Zero 2 W gets about 12 to 14 h from 10,000 mAh (estimate). Each bank's auto-off threshold and pass-through behavior are documented per model. |
 
 Roles are assigned automatically:
 - A mac80211 USB adapter that supports AP mode becomes `ap0`.
@@ -28,6 +30,10 @@ Roles are assigned automatically:
 - Ethernet is `eth0`.
 
 The UI lets you swap roles, for example to use a second USB adapter as the uplink.
+
+The **M1 hardware gate runs on every hotspot adapter we list**. It must hold at
+least 10 associated clients with WPA2/WPA3 for 30 minutes with no drops. The
+compatibility table records the result.
 
 ## 2. Build, image, storage and release
 
@@ -41,14 +47,18 @@ The UI lets you swap roles, for example to use a second USB adapter as the uplin
     `systemd-networkd`, `systemd-timesyncd`, `iw`, `conntrack`
   - Our two binaries and static web assets
 
-  **Removed:** NetworkManager, desktop/X, Bluetooth services, avahi, SSH
-  (openssh can be enabled from the UI, key-only), and cloud-init.
+  **Removed:** NetworkManager, desktop/X, Bluetooth services, avahi, and
+  cloud-init. **SSH** is installed but **off by default**, with a setting in
+  the UI to turn it on (key-only, hotspot side only).
 - **CI:** GitHub Actions.
   - `ci.yml` runs on every push and PR: Go vet and tests, golden-file tests,
     network-namespace integration tests, and hwsim tests (section 8).
   - `release.yml` runs on version tags and builds the image. It uses
     `ubuntu-24.04-arm` runners, which are free only for **public** repos. This
-    repo is private today, so see Q2.
+    repo stays private until you move the project to a public repo (Q2). Until
+    then, `release.yml` can be started by hand, and it falls back to an x86
+    runner with QEMU user emulation, which is slower. Nothing in the code or
+    workflows hard-codes the repository name, so the move is a plain push.
 - **Release artifacts:**
   - `travelrouter-<ver>-rpi-arm64.img.xz`: flash with Raspberry Pi Imager
     ("Use custom") or balenaEtcher.
@@ -97,7 +107,7 @@ The UI lets you swap roles, for example to use a second USB adapter as the uplin
 
 ```
 hotspot clients (phones, laptops)
-        │  HTTP(S) to 10.87.0.1 only
+        │  HTTP(S) to 10.8.0.1 only
         ▼
 trweb   user "trweb", no capabilities, systemd-hardened
         (ProtectSystem=strict, NoNewPrivileges, AF_INET/AF_UNIX only)
@@ -143,8 +153,8 @@ per-device is generated on first boot.
 
 | Interface | Managed by | Address |
 |---|---|---|
-| `ap0` (hotspot) | hostapd + `trd` | `10.87.0.1/24` (Q10). If it collides with the uplink subnet, `trd` renumbers to `10.88.0.1/24` and pushes short leases. |
-| `ap0g` (guest, stretch) | hostapd second BSS | `10.87.8.1/24` |
+| `ap0` (hotspot) | hostapd + `trd` | `10.8.0.1/24`, plus an IPv6 ULA `/64` (4.4). If it collides with the uplink subnet **or the WireGuard tunnel's addresses**, `trd` falls back to `10.9.0.1/24`, pushes short leases and shows why in the UI. `10.8.0.0/24` is also OpenVPN's default subnet and a common WireGuard default (wg-easy), so this fallback may trigger with your server (section 13). |
+| `ap0g` (guest, stretch) | hostapd second BSS | `10.8.8.1/24` |
 | `wlan0` (Wi-Fi uplink) | wpa_supplicant (driven by `trd`) + networkd DHCPv4/RA | From uplink DHCP |
 | `eth0` (wired uplink) | networkd | From uplink DHCP |
 | `wg0` | `trd` via netlink | From the `.conf` `Address` |
@@ -206,6 +216,8 @@ table 51820: default dev wg0
 main:        default via <uplink gw> (networkd, metric by uplink priority)
 ```
 
+- **IPv6:** the same rules and tables are installed with `ip -6` when an IPv6
+  path exists (4.4).
 - **Kill switch OFF, in `DIRECT` state:** rules 100 and 101 are swapped to
   `lookup main`.
 - **WireGuard disabled:** there is no table 51820 and clients use `main`.
@@ -241,7 +253,7 @@ main:        default via <uplink gw> (networkd, metric by uplink priority)
   - Everything else: dropped.
   - IPv4 NAT masquerades on the egress interface.
 - **DNS:**
-  - Clients are handed `10.87.0.1`, and any UDP/TCP 53 to other addresses is
+  - Clients are handed `10.8.0.1`, and any UDP/TCP 53 to other addresses is
     redirected to it.
   - dnsmasq forwards to the tunnel DNS from the `.conf` `DNS=` line, or to a
     configured resolver reached via `wg0`. The rule for that resolver's /32
@@ -259,12 +271,31 @@ main:        default via <uplink gw> (networkd, metric by uplink priority)
   - DNS for those
   - DHCP
   - the opt-in update check
-- **IPv6 (v1):**
-  - No router advertisements or DHCPv6 on `ap0`.
-  - `ip6` forward policy is drop, including in `DIRECT` mode.
-  - The device may use uplink IPv6 for its own WireGuard endpoint.
-  - Clients are IPv4-only, so nothing can leak over IPv6.
-  - Carrying IPv6 through the tunnel is a later option (Q6).
+- **IPv6 (clients get IPv6):**
+  - **Hotspot side:**
+    - On first boot each device generates a random ULA `/48` (RFC 4193) and
+      puts `fdXX:XXXX:XXXX:1::/64` on `ap0` (`:8::/64` on `ap0g`).
+    - dnsmasq sends router advertisements (SLAAC plus RDNSS, no DHCPv6),
+      which Android also needs.
+  - **Egress** uses NAT66 (masquerade), because hotels, eduroam and most
+    WireGuard servers don't hand us a routable prefix to pass on:
+    - via `wg0`, when the tunnel config has an IPv6 `Address` and `::/0` in
+      `AllowedIPs`;
+    - via the uplink, in `DIRECT`/no-VPN mode, when the uplink has global
+      IPv6.
+  - **No IPv6 path means no advertised route:** when neither path has IPv6,
+    router advertisements go out with router lifetime 0. Clients keep
+    link-local/ULA for local traffic but get no IPv6 default route, so there
+    is no black-holing and they use IPv4.
+  - **Same kill-switch policy:** one `inet`-family table covers IPv4 and IPv6,
+    so the kill-switch and portal rules apply to both identically. With kill
+    switch ON, `ip6` forwarding goes only to `wg0`.
+  - **Known limitation:** clients whose only IPv6 address is a ULA prefer IPv4
+    for dual-stack sites (RFC 6724 address selection). IPv6-only sites work.
+    If your WireGuard server routes a real `/64` to the device, a later option
+    can hand it out instead of NAT66.
+  - **Endpoint:** the device may reach the WireGuard endpoint over IPv4 or IPv6
+    on the uplink.
 - **Boot ordering:**
   1. `trd-firewall-early.service` loads the **lockdown ruleset** (input:
      lo + established only; forward: drop; output: allow) and runs
@@ -361,7 +392,7 @@ the portal's URL.
    clients get no internet. The hotspot then shows a **"login required"
    notice**:
    - dnsmasq answers the OS probe hostnames (`captive.apple.com`,
-     `connectivitycheck.gstatic.com`, etc.) with `10.87.0.1`.
+     `connectivitycheck.gstatic.com`, etc.) with `10.8.0.1`.
    - `trweb` returns a small page: "The hotspot's uplink needs a login. Tap to
      start portal mode (up to 10 min)."
    - Clients also get DHCP option 114 pointing to the RFC 8908 API on `trweb`.
@@ -442,11 +473,18 @@ tunnel health check plus a portal probe, and the flow repeats.
    the setup network never returns unless you factory reset.
 
 **Admin UI:**
-- Reachable only on `ap0` (see 4.4), at `http://10.87.0.1` and
+- Reachable only on `ap0` (see 4.4), at `http://10.8.0.1` and
   `http://travelrouter.lan`.
-- HTTPS with the per-device self-signed certificate is available, with its
-  fingerprint shown in the UI, but not forced (Q4). Self-signed warnings on
-  iOS make it poor as a default.
+- **HTTP by default.** Settings → Security → HTTPS offers two choices:
+  - **Generated certificate:** a per-device self-signed certificate for
+    `travelrouter.lan` and `10.8.0.1`. The UI shows its SHA-256 fingerprint so
+    you can check it in the browser warning, and a "regenerate" button.
+  - **Upload:** a PEM certificate plus key, or a chain. It's checked for a key
+    match, validity dates and a name matching `travelrouter.lan`/`10.8.0.1` or
+    a custom hostname you enter.
+
+  An optional "redirect HTTP to HTTPS" switch is available. No HSTS, so turning
+  HTTPS off can never lock you out.
 - Sessions: HttpOnly, SameSite=Strict cookies with CSRF tokens, 12 h idle
   timeout.
 - Login back-off: exponential per client IP, with a global lockout of 5 min
@@ -536,7 +574,7 @@ no client-sourced packet other than WireGuard UDP to the endpoint appears**
 - Portal: emulator redirects until "login", pass-through allows only
   80/443/53, the ruleset is restored before the tunnel is up, and the timeout
   path works.
-- IPv6: a client's IPv6 attempts never reach the uplink.
+- IPv6: with kill switch ON, client IPv6 goes only via `wg0`. With no v6 path, RAs carry lifetime 0. In `DIRECT` mode, NAT66 goes via the uplink. A tunnel without IPv6 never lets client v6 reach the uplink.
 - MSS: SYNs through `wg0` carry the clamped MSS.
 - Time: NTP blocked plus HTTP Date fallback; the tunnel waits.
 
@@ -577,11 +615,8 @@ LICENSE, LICENSES/THIRD_PARTY.md, CONTRIBUTING.md, SECURITY.md
 ```
 
 ## 10. License and redistribution
-- **Our code:** recommend **Apache-2.0**. It's permissive with an explicit
-  patent grant and familiar to contributors. We copy no code from RaspAP
-  (GPL-3.0), Travelmate or esp32_nat_router, so nothing constrains this.
-  The alternative is GPL-3.0-or-later if you want derivative firmware to stay
-  open (Q1).
+- **Our code:** **Apache-2.0** (decided). We copy no code from RaspAP
+  (GPL-3.0), Travelmate or esp32_nat_router.
 - **The image aggregates** Debian and Raspberry Pi packages under GPL-2.0,
   GPL-3.0, LGPL, MIT and others, plus binary firmware (Broadcom/Cypress Wi-Fi,
   Pi boot firmware, MediaTek MT7612U from linux-firmware). Redistributing it
@@ -609,8 +644,8 @@ LICENSE, LICENSES/THIRD_PARTY.md, CONTRIBUTING.md, SECURITY.md
 5. **Captive-portal mode:** notice page, pass-through, device CNA checks.
 6. **Hardening + docs:** A/B updates, signing, factory reset paths,
    diagnostics, compatibility table, redistribution, README 15-minute path.
-7. **Stretch:** guest SSID, metered toggle, optional HTTPS default, IPv6
-   through the tunnel.
+7. **Stretch:** guest SSID, metered toggle, zero-leak portal login (remote
+   browser), routed IPv6 prefix instead of NAT66.
 
 ## 12. Requirements I'd change
 1. **Battery:** the goal of 12 h on a common bank becomes **about 12 h on a
@@ -619,8 +654,9 @@ LICENSE, LICENSES/THIRD_PARTY.md, CONTRIBUTING.md, SECURITY.md
    user-initiated portal mode, time-limited and restricted to 80/443/53. It
    can't be leak-free while still letting phones' own portal sheets appear.
    The remote-browser mode stays available later for zero-leak portal logins.
-3. **Client IPv6 is blocked in v1** rather than tunnelled, which is simpler and
-   provably leak-free. Tunnelled IPv6 moves to stretch.
+3. **Client IPv6 uses ULA plus NAT66** rather than a routed prefix, because
+   travel uplinks don't delegate prefixes. Clients prefer IPv4 for dual-stack
+   sites.
 4. **The Apple beacon-level metered hint is dropped:** there is no verified
    mechanism. Apple devices get the reminder only.
 5. **The hotspot defaults to WPA2/WPA3 transition mode with PMF optional**,
@@ -628,28 +664,26 @@ LICENSE, LICENSES/THIRD_PARTY.md, CONTRIBUTING.md, SECURITY.md
    it explicit.
 
 ## 13. Open questions (consolidated)
-- **Q1. Name and license.** Project name? Apache-2.0 (recommended) or
-  GPL-3.0-or-later?
-- **Q2. Repo visibility.** Will it be public? Free arm64 CI runners are
-  public-only. If it stays private until launch, I'll build images on x86
-  runners with QEMU user emulation (slower and not officially supported by
-  `rpi-image-gen`), or you pay for arm64 minutes.
-- **Q3. Setup network.** Open with claim-once and a 30 min window, plus an
-  optional `setup.txt` password (recommended), or **require** `setup.txt`
-  (more secure, one more step in the 15-minute path)?
-- **Q4. Admin UI transport.** HTTP on the encrypted hotspot with optional
-  self-signed HTTPS (recommended), or HTTPS by default with a one-time
-  certificate warning?
-- **Q5. Portal mode scope.** All hotspot devices (recommended; the sheet
-  appears on whichever device is handy) or only the device that started it?
-- **Q6. IPv6.** OK to block for clients in v1?
-- **Q7. WireGuard MTU default.** 1380 (recommended) or 1420?
-- **Q8. Update checks.** Manual upload only by default, with an opt-in GitHub
-  check. OK?
-- **Q9. SSH** off by default, key-only when enabled. OK?
-- **Q10. Hotspot subnet.** `10.87.0.0/24` (auto-renumbers on collision). Any
-  preference?
-- **Q11. Hardware.** Pi 4B or Pi 5? Which MT7612U adapter (Alfa AWUS036ACM is
-  the best-documented) and which power bank will you test with?
-- **Q12. Ethernet.** Only as an uplink (planned), or do you also want a
-  "wired client" mode where the port serves a laptop behind the tunnel?
+
+**Decided (revision 2):**
+- Q1: Apache-2.0. The name is still open; `travelrouter` is the working name.
+- Q2: private for now, moving to a public repo later (see 2.1).
+- Q4: HTTP by default; HTTPS setting with a generated or uploaded certificate.
+- Q6: IPv6 for clients (ULA plus NAT66, section 4.4).
+- Q8: manual upload, plus an opt-in GitHub check.
+- Q9: SSH off by default, with a setting to turn it on.
+- Q10: `10.8.0.0/24`, with automatic fallback to `10.9.0.0/24` on collision.
+- Q11: Pi 4B, Pi 5 and Zero 2 W all supported. Hotspot adapters: MT7612U
+  (reference) and TP-Link AC1300 (RTL8812BU/AU, at risk until the M1 gate).
+
+**Still open:**
+- **Q1b. Project name.**
+- **Q3. Setup network security.** Open with a 30-minute claim window
+  (default), with `setup.txt` optional? Or `setup.txt` required?
+- **Q5. Portal mode scope.** All hotspot devices, or only the device that
+  started it?
+- **Q7. WireGuard MTU.** 1380 or 1420?
+- **Q10b.** Does your WireGuard server use `10.8.0.0/24` for tunnel
+  addresses? If so, the hotspot will fall back to `10.9.0.0/24`. You could
+  pick a different hotspot subnet instead.
+- **Q12. Ethernet role.** Uplink only, a client port, or a setting to choose?
