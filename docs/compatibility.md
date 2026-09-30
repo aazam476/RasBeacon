@@ -1,0 +1,51 @@
+# Hardware compatibility
+
+**Status meanings:**
+- **Tested:** someone ran the listed checks on real hardware and recorded
+  the numbers.
+- **Untested:** expected to work from specifications or driver support, but
+  not yet checked.
+- **Known-limited** or **known-bad:** tried, with the problem described.
+
+Please add your results. See
+[CONTRIBUTING.md](../CONTRIBUTING.md#adding-hardware-to-the-compatibility-table).
+Sources for figures not measured by us are listed in
+[decisions/0001-platform.md](decisions/0001-platform.md).
+
+## Boards
+
+| Board | Image | Status | Notes |
+|---|---|---|---|
+| Raspberry Pi 4 Model B (2 GB+) | `rasbeacon-pi4` | Untested (reference) | Built-in Wi-Fi: CYW43455, 2.4/5 GHz (uplink). Gigabit Ethernet. Published idle figures range from about 1.4 W to 2.9 W depending on setup: measure yours. |
+| Raspberry Pi 5 | `rasbeacon-pi5` | Untested (reference) | On power banks (no 5 V/5 A USB-PD), the Pi 5 limits all USB ports to 600 mA combined. One MT7612U adapter (about 380 mA under load) fits. |
+| Raspberry Pi Zero 2 W | `rasbeacon-pi4` | Untested | Same kernel as the Pi 4 image. **Unverified:** whether its boot ROM starts the image's GPT (A/B) layout. Built-in Wi-Fi is 2.4 GHz only (about 33 Mbps measured). The adapter needs a micro-USB OTG cable. |
+| Raspberry Pi 3 / 3A+ / 3B+ | `rasbeacon-pi4` | Untested | Same question about GPT boot as the Zero 2 W. |
+
+## USB Wi-Fi adapters (hotspot radio)
+
+**Gate for "Tested":** at least 10 devices associated with WPA2/WPA3 for 30
+minutes with no drops, plus power draw at idle and under `iperf3` load. See
+[testing/m1.md](testing/m1.md).
+
+| Adapter | Chip (Linux driver) | USB ID | Status | Max clients | Throughput | Power | Notes |
+|---|---|---|---|---|---|---|---|
+| Alfa AWUS036ACM | MT7612U (mt76x2u) | 0e8d:7612 | Untested (reference) | Driver table 128; 10 unverified | 400+ Mb/s AP on 5 GHz/80 MHz (Pi 4B, iperf3, third-party) | About 380 mA heavy load (third-party); idle unmeasured | WPA3-SAE supported |
+| TP-Link Archer T3U | RTL8812BU (rtw88_8822bu) | 2357:012d | Untested, **at risk** | Driver table 32; 10 unverified | — | — | Reported AP-mode drops ("failed to download beacon") on older kernels. Pi kernel 6.18. |
+| TP-Link Archer T3U Plus | RTL8812BU (rtw88_8822bu) | 2357:0138 | Untested, at risk | as above | — | — | |
+| TP-Link Archer T4U v3 | RTL8812BU (rtw88_8822bu) | 2357:0115 | Untested, at risk | as above | — | — | |
+| TP-Link Archer T4U v1/v2 | RTL8812AU (rtw88_8812au) | 2357:0101, 0103, 010d | Untested | Driver table 32 | — | — | In-kernel driver since Linux 6.14 |
+| MT7921AU adapters (e.g. Alfa AWUS036AXML) | MT7921AU (mt7921u) | varies | Untested (fallback) | Driver table 15 | — | Higher (USB 3, Wi-Fi 6) | AP mode since Linux 5.19 |
+| Built-in Wi-Fi (any Pi) as the hotspot | brcmfmac | — | **Known-limited** | About 8 (third-party reports) | — | — | Used only as a fallback; RasBeacon warns on the status page |
+
+## Power banks
+
+| Model | Capacity | Status | Auto-off with RasBeacon idle? | Pass-through charging? | Measured runtime |
+|---|---|---|---|---|---|
+| *(add yours)* | | | | | |
+
+**What to note:**
+- Does the bank switch off when the load is low? This is common below about
+  50 to 200 mA.
+- Does the Pi reboot when you plug the bank into a charger while it's
+  running? (Pass-through dropouts.)
+- Does the bank have an "always on" or "low current" mode?
