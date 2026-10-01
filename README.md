@@ -12,11 +12,11 @@ hotel login pages.
 - **No telemetry and no cloud.** Everything works offline.
 - **Licensed under Apache-2.0.**
 
-> **Status: milestone 2 of 6.** The image boots, runs the first-boot setup
+> **Status: milestone 3 of 6.** The image boots, runs the first-boot setup
 > network and web UI, runs your hotspot, and connects it to the internet
-> through an Ethernet cable or an open or password-protected Wi-Fi network.
-> Still to come: eduroam and other WPA-Enterprise networks (milestone 3),
-> WireGuard and the kill switch (milestone 4), and hotel login pages
+> through an Ethernet cable or a Wi-Fi network: open, password-protected,
+> or WPA-Enterprise such as eduroam ([guide](docs/eduroam.md)). Still to
+> come: WireGuard and the kill switch (milestone 4) and hotel login pages
 > (milestone 5). See [docs/design.md](docs/design.md) for the full plan.
 
 ## What you need

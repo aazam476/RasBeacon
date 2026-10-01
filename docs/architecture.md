@@ -97,6 +97,11 @@ seconds later, so the phone receives the "success" page first.
      upstream network uses 10.87.0.0/24 too;
   4. tells devices whether IPv6 internet is available, through dnsmasq's
      *router advertisements*.
+- **WPA-Enterprise (eduroam):** the username, password and uploaded
+  certificates go into `wpa_supplicant.conf` (`internal/agent/enterprise.go`).
+  RasBeacon only accepts a login server whose certificate is signed by the
+  uploaded CA *and* carries the configured server name. See
+  [eduroam.md](eduroam.md).
 - **IPv6:** devices always get a private IPv6 address on the hotspot. They
   only get an IPv6 route to the internet when the uplink has IPv6; then
   their traffic is translated like IPv4 (*NAT66*).
@@ -107,6 +112,7 @@ seconds later, so the phone receives the "success" page first.
 |---|---|---|
 | `/persistent/rasbeacon/config.json` | Non-secret settings | rbd |
 | `/persistent/rasbeacon/secrets.json` (mode 0600) | Hotspot password, admin password hash, upstream Wi-Fi passwords | rbd |
+| `/persistent/rasbeacon/certs/` (directory 0700) | Certificates and keys for WPA-Enterprise networks, named after each network's ID | rbd |
 | `/persistent/rasbeacon/identity.json` | Device ID, IPv6 prefix, suggested password | rbd, once |
 | `/run/rbd/*.conf`, `firewall.nft` | Generated configs (in memory) | rbd |
 | `/run/systemd/network/00-rasbeacon-*.network` | Generated networkd settings (in memory) | rbd |
@@ -137,6 +143,9 @@ For example, when you change the hotspot band:
 
 - **Unit tests** check each package, and golden files show the exact
   configs generated.
+- **`test/hwsim`** logs in to a simulated WPA-Enterprise network: the
+  Linux module `mac80211_hwsim` provides virtual radios, hostapd plays the
+  campus network, and wpa_supplicant uses RasBeacon's generated settings.
 - **`test/netns`** runs the real firewall rules and dnsmasq inside Linux
   *network namespaces*, with virtual cables instead of Wi-Fi.
 - **`rbd -dev`** (`internal/devsim`) simulates a whole device for UI work,
