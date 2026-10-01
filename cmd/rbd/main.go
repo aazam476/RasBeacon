@@ -49,12 +49,17 @@ func main() {
 		slog.Warn("SIMULATED DEVICE: no real network changes will be made", "root", *devRoot)
 	}
 	a := agent.New(p, runner)
+	if *devRoot != "" {
+		a.SetDHCPProbe(devsim.DHCPProbe)
+	}
 	if err := a.Start(); err != nil {
 		// systemd restarts rbd after a failure (see rbd.service), and the
 		// firewall rules loaded at boot stay in place in the meantime.
 		slog.Error("startup failed", "error", err)
 		os.Exit(1)
 	}
+	// Watch the internet connection in the background (see agent/uplink.go).
+	go a.RunUplinkMonitor()
 
 	if err := a.ListenUnix(p.APISocket(), lookupGroupID(*webGroup)); err != nil {
 		slog.Error("API server stopped", "error", err)

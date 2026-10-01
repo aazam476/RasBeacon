@@ -74,6 +74,9 @@ func (s *Server) Handler() http.Handler {
 		"POST /api/v1/settings/hotspot/reveal-password": "/settings/hotspot/reveal-password",
 		"GET /api/v1/settings/ssh":                      "/settings/ssh",
 		"PUT /api/v1/settings/ssh":                      "/settings/ssh",
+		"GET /api/v1/settings/uplink":                   "/settings/uplink",
+		"PUT /api/v1/settings/uplink":                   "/settings/uplink",
+		"POST /api/v1/uplink/scan":                      "/uplink/scan",
 		"POST /api/v1/system/reboot":                    "/system/reboot",
 		"GET /api/v1/diagnostics":                       "/diagnostics",
 	}

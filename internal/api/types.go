@@ -13,6 +13,7 @@ import (
 	"rasbeacon/internal/config"
 	"rasbeacon/internal/radio"
 	"rasbeacon/internal/stations"
+	"rasbeacon/internal/uplink"
 )
 
 // Mode is what the device is doing right now.
@@ -104,6 +105,7 @@ type Status struct {
 	UptimeSeconds int                `json:"uptimeSeconds"`
 	Mode          Mode               `json:"mode"`
 	Hotspot       HotspotStatus      `json:"hotspot"`
+	Uplink        UplinkStatus       `json:"uplink"`
 	Radios        []radio.Radio      `json:"radios"`
 	Clients       []stations.Station `json:"clients"`
 	// Warnings are problems the owner should know about, in plain words.
@@ -120,6 +122,76 @@ type HotspotStatus struct {
 	Interface string          `json:"interface"`
 	// LANAddress is RasBeacon's address on the hotspot, e.g. 10.87.0.1.
 	LANAddress string `json:"lanAddress"`
+}
+
+// UplinkStatus describes RasBeacon's connection to the internet.
+type UplinkStatus struct {
+	// Connected is true when RasBeacon has a route to the internet.
+	Connected bool `json:"connected"`
+	// Kind is "ethernet" or "wifi" for the uplink in use, or "" if none.
+	Kind      string `json:"kind"`
+	Interface string `json:"interface"`
+	// Address is RasBeacon's IPv4 address on the upstream network.
+	Address string `json:"address"`
+	Gateway string `json:"gateway"`
+	// IPv6 is true when devices get IPv6 internet access.
+	IPv6     bool                 `json:"ipv6"`
+	WiFi     WiFiUplinkStatus     `json:"wifi"`
+	Ethernet EthernetUplinkStatus `json:"ethernet"`
+}
+
+// WiFiUplinkStatus describes the Wi-Fi uplink radio.
+type WiFiUplinkStatus struct {
+	// Available is false when there is no second radio for joining Wi-Fi
+	// (for example when the built-in radio has to run the hotspot).
+	Available bool   `json:"available"`
+	Interface string `json:"interface"`
+	// State is "connected", "connecting", "searching" or "off".
+	State     string `json:"state"`
+	SSID      string `json:"ssid"`
+	Band      string `json:"band"`
+	SignalDBM int    `json:"signalDbm"`
+}
+
+// EthernetUplinkStatus describes the Ethernet port.
+type EthernetUplinkStatus struct {
+	Present bool                `json:"present"`
+	Role    config.EthernetRole `json:"role"`
+	// CablePlugged is true when the port has a link.
+	CablePlugged bool `json:"cablePlugged"`
+	// ForeignDHCPServer is set in client-port mode when a DHCP server
+	// answered on the port: it is probably plugged into a network rather
+	// than a laptop, so it was not connected to the hotspot network.
+	ForeignDHCPServer string `json:"foreignDhcpServer,omitempty"`
+}
+
+// UplinkSettings is read and written by the Internet (uplink) settings page.
+type UplinkSettings struct {
+	EthernetRole config.EthernetRole `json:"ethernetRole"`
+	// Networks are upstream Wi-Fi networks, most preferred first.
+	Networks []SavedNetwork `json:"networks"`
+	// Read-only hints for the UI.
+	EthernetPresent     bool `json:"ethernetPresent"`
+	WiFiUplinkAvailable bool `json:"wifiUplinkAvailable"`
+}
+
+// SavedNetwork is one upstream Wi-Fi network in UplinkSettings.
+type SavedNetwork struct {
+	// ID is empty for a network being added; rbd assigns one.
+	ID       string                `json:"id"`
+	SSID     string                `json:"ssid"`
+	Security config.UplinkSecurity `json:"security"`
+	Hidden   bool                  `json:"hidden"`
+	// HasPassword is true when a password is saved (it is never returned).
+	HasPassword bool `json:"hasPassword"`
+	// Password is write-only: set it to add or change the password, leave it
+	// empty to keep the saved one.
+	Password string `json:"password,omitempty"`
+}
+
+// ScanResponse lists the Wi-Fi networks RasBeacon can see.
+type ScanResponse struct {
+	Networks []uplink.NearbyNetwork `json:"networks"`
 }
 
 // HotspotSettings is read and written by the hotspot settings page. The

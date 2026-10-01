@@ -1,0 +1,14 @@
+# Joins upstream Wi-Fi networks on one radio, e.g. rasbeacon-wpa@wlan0.service.
+# Started and restarted by rbd after it writes /run/rbd/wpa_supplicant.conf;
+# not started on its own at boot.
+[Unit]
+Description=RasBeacon Wi-Fi uplink on %i (wpa_supplicant)
+After=rbd.service
+BindsTo=sys-subsystem-net-devices-%i.device
+After=sys-subsystem-net-devices-%i.device
+
+[Service]
+# No -d (debug) option: debug output could include network passwords.
+ExecStart=/usr/sbin/wpa_supplicant -i %i -c /run/rbd/wpa_supplicant.conf -D nl80211
+Restart=on-failure
+RestartSec=2

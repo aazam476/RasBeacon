@@ -14,6 +14,11 @@ mmdebstrap:
     - hostapd
     # DHCP and DNS for the hotspot (the program only; we supply the service)
     - dnsmasq-base
+    # Joins upstream Wi-Fi networks (the uplink)
+    - wpasupplicant
+    # The device's own DNS resolver (127.0.0.53), fed by systemd-networkd
+    # with the uplink's DNS servers
+    - systemd-resolved
     # Firewall
     - nftables
     # Wi-Fi and network tools used by rbd
@@ -35,6 +40,9 @@ mmdebstrap:
     # Start the early firewall, rbd and rbweb at boot. hostapd and dnsmasq
     # are started by rbd when it has written their configuration.
     - $BDEBSTRAP_HOOKS/enable-units "$1" rasbeacon-firewall-early.service rbd.service rbweb.service
+    # systemd-networkd gets addresses on the uplinks; systemd-resolved is the
+    # device's DNS resolver.
+    - $BDEBSTRAP_HOOKS/enable-units "$1" systemd-networkd.service systemd-resolved.service
     # Opt-in debug log (does nothing unless a "debug" file is on the card).
     - $BDEBSTRAP_HOOKS/enable-units "$1" rasbeacon-debug-log.service
     # SSH is off until the owner turns it on in the web UI (rbd starts it).
@@ -42,3 +50,6 @@ mmdebstrap:
     - chroot $1 systemctl mask ssh.socket
     # Debian's own hostapd service must not start with the default config.
     - chroot $1 systemctl mask hostapd.service
+    # Debian's own wpa_supplicant service must not grab the radios either;
+    # rbd starts rasbeacon-wpa@<radio>.service instead.
+    - chroot $1 systemctl mask wpa_supplicant.service

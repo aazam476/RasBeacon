@@ -28,3 +28,21 @@ dhcp-authoritative
 domain=lan
 local=/lan/
 address=/rasbeacon.lan/10.87.0.1
+
+# --- DNS: internet names ---
+# Questions about any other name are passed on to these servers.
+# 127.0.0.53 is RasBeacon's own resolver (systemd-resolved), which asks the
+# DNS servers the current uplink (hotel, café, ...) handed out.
+server=127.0.0.53
+
+# --- IPv6 for devices ---
+# RasBeacon announces a private IPv6 network ("router advertisements").
+# Devices pick their own addresses in it (SLAAC); no DHCPv6 is used, which is
+# also what Android requires.
+enable-ra
+dhcp-range=::,constructor:br-lan,ra-only,64,1h
+# Tell devices to use RasBeacon for DNS over IPv6 too ([::] = this device).
+dhcp-option=option6:dns-server,[::]
+# The uplink has IPv6, so devices may send IPv6 internet traffic here.
+# Announce every 60 s; devices keep the route for 30 minutes.
+ra-param=br-lan,60,1800
