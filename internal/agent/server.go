@@ -124,6 +124,42 @@ func (a *Agent) Handler() http.Handler {
 		writeJSON(w, http.StatusOK, resp)
 	})
 
+	mux.HandleFunc("GET /settings/vpn", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, a.VPNSettings())
+	})
+
+	mux.HandleFunc("PUT /settings/vpn", func(w http.ResponseWriter, r *http.Request) {
+		var req api.VPNSettings
+		if !readJSON(w, r, &req) {
+			return
+		}
+		if err := a.UpdateVPNSettings(req); err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, a.VPNSettings())
+	})
+
+	mux.HandleFunc("POST /settings/vpn/import", func(w http.ResponseWriter, r *http.Request) {
+		var req api.VPNImportRequest
+		if !readJSON(w, r, &req) {
+			return
+		}
+		if err := a.ImportVPNConfig(req.Conf); err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, a.VPNSettings())
+	})
+
+	mux.HandleFunc("POST /settings/vpn/generate-key", func(w http.ResponseWriter, r *http.Request) {
+		if err := a.GenerateVPNKey(); err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, a.VPNSettings())
+	})
+
 	mux.HandleFunc("POST /system/reboot", func(w http.ResponseWriter, r *http.Request) {
 		a.Reboot()
 		w.WriteHeader(http.StatusNoContent)

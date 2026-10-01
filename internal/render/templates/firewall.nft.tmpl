@@ -18,11 +18,12 @@ table inet rasbeacon
 delete table inet rasbeacon
 
 table inet rasbeacon {
-{{- if .Uplinks}}
-	# The interfaces that lead to the internet (Ethernet and/or Wi-Fi uplink).
-	set uplinks {
+{{- if .Egress}}
+	# Where devices' traffic may leave RasBeacon: the uplinks (Ethernet,
+	# Wi-Fi), or only the VPN tunnel when the VPN is in use.
+	set egress {
 		type ifname
-		elements = { {{range $i, $name := .Uplinks}}{{if $i}}, {{end}}"{{$name}}"{{end}} }
+		elements = { {{range $i, $name := .Egress}}{{if $i}}, {{end}}"{{$name}}"{{end}} }
 	}
 {{end}}
 	# INPUT: packets addressed to RasBeacon itself.
@@ -66,7 +67,7 @@ table inet rasbeacon {
 	# internet). Anything not allowed here is dropped.
 	chain forward {
 		type filter hook forward priority filter; policy drop;
-{{- if .Uplinks}}
+{{- if .Egress}}
 
 		# Make new TCP connections use packets small enough for every link on
 		# the way ("MSS clamping"). Without this, some websites hang on hotel
@@ -77,15 +78,15 @@ table inet rasbeacon {
 		ct state established,related accept
 		ct state invalid drop
 
-		# Devices on the hotspot may reach the internet through the uplinks.
-		# Nothing from the uplinks may start a connection to a device.
-		iifname "{{.Bridge}}" oifname @uplinks accept
+		# Devices on the hotspot may reach the internet, only through the
+		# interfaces in "egress". Nothing from outside may start a
+		# connection to a device.
+		iifname "{{.Bridge}}" oifname @egress accept
 {{- else}}
-		# No uplink is in use (for example during first-boot setup), so
-		# nothing is forwarded.
+		# Nothing is forwarded (for example during first-boot setup).
 {{- end}}
 	}
-{{- if .Uplinks}}
+{{- if .Egress}}
 
 	# DNS: devices that ignore RasBeacon's DNS server (some phones, smart TVs)
 	# are sent to it anyway, so every name lookup follows RasBeacon's rules.
@@ -94,17 +95,25 @@ table inet rasbeacon {
 		iifname "{{.Bridge}}" meta l4proto { tcp, udp } th dport 53 redirect
 	}
 
-	# NAT ("masquerade"): traffic leaving through an uplink gets RasBeacon's
-	# uplink address as its sender, so the upstream network only ever sees
-	# one device. This covers IPv4 and IPv6 ("NAT66").
+	# NAT ("masquerade"): devices' traffic gets RasBeacon's own address as
+	# its sender, so the network outside only ever sees one device. This
+	# covers IPv4 and IPv6 ("NAT66").
 	chain postrouting_nat {
 		type nat hook postrouting priority srcnat;
-		oifname @uplinks masquerade
+		oifname @egress masquerade
 	}
 {{- end}}
 
-	# OUTPUT: packets RasBeacon itself sends. Allowed.
+	# OUTPUT: packets RasBeacon itself sends. Allowed, except:
 	chain output {
 		type filter hook output priority filter; policy accept;
+{{- if .TunnelDNS4}}
+		# The VPN's DNS servers may only be reached through the tunnel, so
+		# devices' name lookups never leak to the uplink.
+		ip daddr { {{range $i, $a := .TunnelDNS4}}{{if $i}}, {{end}}{{$a}}{{end}} } oifname != "{{.TunnelInterface}}" reject
+{{- end}}
+{{- if .TunnelDNS6}}
+		ip6 daddr { {{range $i, $a := .TunnelDNS6}}{{if $i}}, {{end}}{{$a}}{{end}} } oifname != "{{.TunnelInterface}}" reject
+{{- end}}
 	}
 }

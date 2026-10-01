@@ -72,6 +72,8 @@ type uplinkState struct {
 	ethernetInBridge bool
 	// foreignDHCPServer is the DHCP server found by the safety check.
 	foreignDHCPServer string
+	// connectedSince is when the uplink last became connected.
+	connectedSince time.Time
 }
 
 // --- Which interfaces are uplinks ---
@@ -293,9 +295,17 @@ func (a *Agent) checkUplink() {
 		status.Address != previous.Address {
 		slog.Info("uplink changed", "connected", status.Connected, "interface", status.Interface,
 			"address", status.Address, "ipv6", status.IPv6)
+		// A new network: look up the VPN server's address again at once.
+		a.vpn.lastRefresh = time.Time{}
+		a.uplink.connectedSince = a.now()
 	}
 
-	// 3. If the upstream network uses the hotspot's addresses, move the
+	// 3. The VPN and its kill switch.
+	if err := a.updateTunnel(); err != nil {
+		slog.Error("could not update the VPN", "error", err)
+	}
+
+	// 4. If the upstream network uses the hotspot's addresses, move the
 	//    hotspot network. Otherwise, update the IPv6 announcements if IPv6
 	//    internet access came or went. (Moving the network also does that.)
 	if want := render.ChooseLANPrefix(upstreamIPv4); want != a.lan.Prefix {
@@ -388,12 +398,26 @@ func (a *Agent) observeWiFi(iface string) api.WiFiUplinkStatus {
 	case wpa.LoginFailed:
 		s.State = "login-failed"
 		s.SSID = wpa.SSID
+	case len(a.tempDisabledNetworks(iface)) > 0:
+		// A saved network rejected the login and is paused.
+		s.State = "login-failed"
+		s.SSID = a.tempDisabledNetworks(iface)[0]
 	case wpa.State == "SCANNING" || wpa.State == "DISCONNECTED" || wpa.State == "INACTIVE":
 		s.State = "searching"
 	default:
 		s.State = "connecting"
 	}
 	return s
+}
+
+// tempDisabledNetworks lists saved networks wpa_supplicant paused after
+// failed logins.
+func (a *Agent) tempDisabledNetworks(iface string) []string {
+	out, err := system.WPACommand(a.runner, a.paths.WPAControlDir(), iface, "list_networks")
+	if err != nil {
+		return nil
+	}
+	return uplink.ParseTempDisabled(out)
 }
 
 // checkEthernetClientPort is the safety check for Ethernet in client-port

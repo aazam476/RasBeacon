@@ -77,6 +77,10 @@ func (s *Server) Handler() http.Handler {
 		"GET /api/v1/settings/uplink":                   "/settings/uplink",
 		"PUT /api/v1/settings/uplink":                   "/settings/uplink",
 		"POST /api/v1/uplink/scan":                      "/uplink/scan",
+		"GET /api/v1/settings/vpn":                      "/settings/vpn",
+		"PUT /api/v1/settings/vpn":                      "/settings/vpn",
+		"POST /api/v1/settings/vpn/import":              "/settings/vpn/import",
+		"POST /api/v1/settings/vpn/generate-key":        "/settings/vpn/generate-key",
 		"POST /api/v1/system/reboot":                    "/system/reboot",
 		"GET /api/v1/diagnostics":                       "/diagnostics",
 	}

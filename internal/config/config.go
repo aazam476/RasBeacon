@@ -15,14 +15,20 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/netip"
+	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 )
 
 // CurrentVersion is the format version of config.json. It goes up when a
-// release changes the file layout, so newer code can upgrade older files.
-const CurrentVersion = 1
+// release changes the file layout, so newer code can upgrade older files
+// (see FillDefaults).
+//
+//	1: milestones 1 to 3
+//	2: adds the VPN section, with the kill switch on by default
+const CurrentVersion = 2
 
 // Band is the Wi-Fi frequency band the hotspot uses.
 type Band string
@@ -61,6 +67,36 @@ type Config struct {
 	SSH      SSHConfig      `json:"ssh"`
 	Ethernet EthernetConfig `json:"ethernet"`
 	Uplink   UplinkConfig   `json:"uplink"`
+	VPN      VPNConfig      `json:"vpn"`
+}
+
+// VPNConfig holds the WireGuard VPN settings. The private key and the
+// optional preshared key are kept in Secrets.
+type VPNConfig struct {
+	// Enabled sends devices' traffic through the WireGuard tunnel.
+	Enabled bool `json:"enabled"`
+	// KillSwitch on (the default) means devices' traffic never leaves
+	// outside the tunnel: if the tunnel is down, nothing gets through.
+	// Off means traffic goes directly through the uplink while the tunnel
+	// is down (see internal/tunnel).
+	KillSwitch bool `json:"killSwitch"`
+	// Addresses are RasBeacon's addresses inside the tunnel.
+	Addresses []netip.Prefix `json:"addresses"`
+	// DNS servers reached through the tunnel.
+	DNS []netip.Addr `json:"dns"`
+	// MTU is 0 for the default (wireguard.DefaultMTU).
+	MTU  int     `json:"mtu"`
+	Peer VPNPeer `json:"peer"`
+}
+
+// VPNPeer is the WireGuard server.
+type VPNPeer struct {
+	// PublicKey is the server's key, in base64. Empty means no VPN has been
+	// set up yet.
+	PublicKey           string         `json:"publicKey"`
+	Endpoint            string         `json:"endpoint"`
+	AllowedIPs          []netip.Prefix `json:"allowedIps"`
+	PersistentKeepalive int            `json:"persistentKeepalive"`
 }
 
 // HotspotConfig describes the Wi-Fi network RasBeacon broadcasts for your
@@ -198,6 +234,11 @@ func (c *Config) FillDefaults() {
 	if c.Ethernet.Role == "" {
 		c.Ethernet.Role = EthernetUplink
 	}
+	if c.Version < 2 {
+		// Version 2 added the VPN. Its kill switch starts on.
+		c.VPN.KillSwitch = true
+	}
+	c.Version = CurrentVersion
 }
 
 // Validate checks the Ethernet settings.
@@ -260,6 +301,11 @@ type Secrets struct {
 	// UplinkPasswords holds the passwords of saved upstream Wi-Fi networks,
 	// keyed by SavedNetwork.ID.
 	UplinkPasswords map[string]string `json:"uplinkPasswords,omitempty"`
+	// WireGuardPrivateKey is RasBeacon's own WireGuard key (base64).
+	WireGuardPrivateKey string `json:"wireguardPrivateKey,omitempty"`
+	// WireGuardPresharedKey is an optional extra secret shared with the
+	// WireGuard server (base64).
+	WireGuardPresharedKey string `json:"wireguardPresharedKey,omitempty"`
 }
 
 // Identity holds values generated once, on first boot.
@@ -293,6 +339,7 @@ func DefaultConfig(identity Identity) Config {
 		},
 		SSH:      SSHConfig{Enabled: false},
 		Ethernet: EthernetConfig{Role: EthernetUplink},
+		VPN:      VPNConfig{KillSwitch: true},
 	}
 }
 
@@ -404,6 +451,9 @@ func (c Config) Clone() Config {
 			c.Uplink.Networks[i].Enterprise = &copied
 		}
 	}
+	c.VPN.Addresses = slices.Clone(c.VPN.Addresses)
+	c.VPN.DNS = slices.Clone(c.VPN.DNS)
+	c.VPN.Peer.AllowedIPs = slices.Clone(c.VPN.Peer.AllowedIPs)
 	return c
 }
 

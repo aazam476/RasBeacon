@@ -18,8 +18,9 @@ table inet rasbeacon
 delete table inet rasbeacon
 
 table inet rasbeacon {
-	# The interfaces that lead to the internet (Ethernet and/or Wi-Fi uplink).
-	set uplinks {
+	# Where devices' traffic may leave RasBeacon: the uplinks (Ethernet,
+	# Wi-Fi), or only the VPN tunnel when the VPN is in use.
+	set egress {
 		type ifname
 		elements = { "eth0", "wlan0" }
 	}
@@ -71,9 +72,10 @@ table inet rasbeacon {
 		ct state established,related accept
 		ct state invalid drop
 
-		# Devices on the hotspot may reach the internet through the uplinks.
-		# Nothing from the uplinks may start a connection to a device.
-		iifname "br-lan" oifname @uplinks accept
+		# Devices on the hotspot may reach the internet, only through the
+		# interfaces in "egress". Nothing from outside may start a
+		# connection to a device.
+		iifname "br-lan" oifname @egress accept
 	}
 
 	# DNS: devices that ignore RasBeacon's DNS server (some phones, smart TVs)
@@ -83,15 +85,15 @@ table inet rasbeacon {
 		iifname "br-lan" meta l4proto { tcp, udp } th dport 53 redirect
 	}
 
-	# NAT ("masquerade"): traffic leaving through an uplink gets RasBeacon's
-	# uplink address as its sender, so the upstream network only ever sees
-	# one device. This covers IPv4 and IPv6 ("NAT66").
+	# NAT ("masquerade"): devices' traffic gets RasBeacon's own address as
+	# its sender, so the network outside only ever sees one device. This
+	# covers IPv4 and IPv6 ("NAT66").
 	chain postrouting_nat {
 		type nat hook postrouting priority srcnat;
-		oifname @uplinks masquerade
+		oifname @egress masquerade
 	}
 
-	# OUTPUT: packets RasBeacon itself sends. Allowed.
+	# OUTPUT: packets RasBeacon itself sends. Allowed, except:
 	chain output {
 		type filter hook output priority filter; policy accept;
 	}

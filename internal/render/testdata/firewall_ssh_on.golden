@@ -57,11 +57,10 @@ table inet rasbeacon {
 	# internet). Anything not allowed here is dropped.
 	chain forward {
 		type filter hook forward priority filter; policy drop;
-		# No uplink is in use (for example during first-boot setup), so
-		# nothing is forwarded.
+		# Nothing is forwarded (for example during first-boot setup).
 	}
 
-	# OUTPUT: packets RasBeacon itself sends. Allowed.
+	# OUTPUT: packets RasBeacon itself sends. Allowed, except:
 	chain output {
 		type filter hook output priority filter; policy accept;
 	}

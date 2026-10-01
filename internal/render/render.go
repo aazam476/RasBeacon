@@ -17,6 +17,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/netip"
+	"slices"
 	"strings"
 	"text/template"
 
@@ -271,30 +272,51 @@ func Dnsmasq(in DnsmasqInput) (string, error) {
 // FirewallInput is everything needed to write the firewall rules.
 type FirewallInput struct {
 	SSHEnabled bool
-	// Uplinks are the interfaces that lead to the internet, e.g. "eth0" and
-	// "wlan0". Devices' traffic is forwarded (with NAT) to these interfaces
-	// only. Empty means nothing is forwarded, as during first-boot setup.
-	Uplinks []string
+	// Egress lists the interfaces devices' traffic may leave through (with
+	// NAT): the uplinks, e.g. "eth0" and "wlan0", or only "wg0" when the
+	// VPN is in use. Empty means nothing is forwarded, as during first-boot
+	// setup.
+	Egress []string
+	// TunnelDNS are the VPN's DNS servers. RasBeacon may only reach them
+	// through the tunnel (TunnelInterface), so lookups never leak to the
+	// uplink, even if a route is missing.
+	TunnelDNS       []netip.Addr
+	TunnelInterface string
 }
 
 type firewallData struct {
-	Bridge     string
-	SSHEnabled bool
-	Uplinks    []string
+	Bridge          string
+	SSHEnabled      bool
+	Egress          []string
+	TunnelDNS4      []string
+	TunnelDNS6      []string
+	TunnelInterface string
 }
 
 // Firewall produces the nftables ruleset.
 func Firewall(in FirewallInput) (string, error) {
-	for _, name := range in.Uplinks {
-		if !isInterfaceName(name) {
+	for _, name := range append(slices.Clone(in.Egress), in.TunnelInterface) {
+		if name != "" && !isInterfaceName(name) {
 			return "", fmt.Errorf("invalid interface name %q", name)
 		}
 	}
-	return execute("firewall.nft.tmpl", firewallData{
-		Bridge:     BridgeName,
-		SSHEnabled: in.SSHEnabled,
-		Uplinks:    in.Uplinks,
-	})
+	data := firewallData{
+		Bridge:          BridgeName,
+		SSHEnabled:      in.SSHEnabled,
+		Egress:          in.Egress,
+		TunnelInterface: in.TunnelInterface,
+	}
+	if len(in.TunnelDNS) > 0 && in.TunnelInterface == "" {
+		return "", fmt.Errorf("tunnel DNS servers need a tunnel interface")
+	}
+	for _, dns := range in.TunnelDNS {
+		if dns.Is4() {
+			data.TunnelDNS4 = append(data.TunnelDNS4, dns.String())
+		} else {
+			data.TunnelDNS6 = append(data.TunnelDNS6, dns.String())
+		}
+	}
+	return execute("firewall.nft.tmpl", data)
 }
 
 // isInterfaceName reports whether name is a safe Linux interface name

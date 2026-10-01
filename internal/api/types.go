@@ -106,6 +106,7 @@ type Status struct {
 	Mode          Mode               `json:"mode"`
 	Hotspot       HotspotStatus      `json:"hotspot"`
 	Uplink        UplinkStatus       `json:"uplink"`
+	VPN           VPNStatus          `json:"vpn"`
 	Radios        []radio.Radio      `json:"radios"`
 	Clients       []stations.Station `json:"clients"`
 	// Warnings are problems the owner should know about, in plain words.
@@ -165,6 +166,53 @@ type EthernetUplinkStatus struct {
 	// answered on the port: it is probably plugged into a network rather
 	// than a laptop, so it was not connected to the hotspot network.
 	ForeignDHCPServer string `json:"foreignDhcpServer,omitempty"`
+}
+
+// VPNStatus describes the WireGuard tunnel.
+type VPNStatus struct {
+	Enabled    bool `json:"enabled"`
+	KillSwitch bool `json:"killSwitch"`
+	// State is "off", "connecting", "up", "down" or "direct" (see
+	// internal/tunnel). In "connecting" and "down" with the kill switch on,
+	// devices have no internet; in "direct" they use the uplink directly.
+	State string `json:"state"`
+	// HandshakeAgeSeconds is the time since the last handshake with the
+	// server, or -1 if there has been none.
+	HandshakeAgeSeconds int    `json:"handshakeAgeSeconds"`
+	Endpoint            string `json:"endpoint"`
+	ReceivedBytes       int64  `json:"receivedBytes"`
+	SentBytes           int64  `json:"sentBytes"`
+}
+
+// VPNSettings is read and written by the VPN page. Addresses are text
+// (e.g. "10.66.0.2/32") so mistakes can be reported per field.
+type VPNSettings struct {
+	Enabled    bool `json:"enabled"`
+	KillSwitch bool `json:"killSwitch"`
+	// Configured is true once a server has been set up (read-only).
+	Configured bool     `json:"configured"`
+	Addresses  []string `json:"addresses"`
+	DNS        []string `json:"dns"`
+	MTU        int      `json:"mtu"`
+	// Server (peer) settings.
+	PeerPublicKey       string   `json:"peerPublicKey"`
+	Endpoint            string   `json:"endpoint"`
+	AllowedIPs          []string `json:"allowedIps"`
+	PersistentKeepalive int      `json:"persistentKeepalive"`
+	// PublicKey is RasBeacon's own public key, to give to the server
+	// (read-only; empty until a private key exists).
+	PublicKey string `json:"publicKey"`
+	// Write-only secrets: empty keeps the saved value.
+	PrivateKey      string `json:"privateKey,omitempty"`
+	PresharedKey    string `json:"presharedKey,omitempty"`
+	HasPresharedKey bool   `json:"hasPresharedKey"`
+	// RemovePresharedKey deletes the saved preshared key.
+	RemovePresharedKey bool `json:"removePresharedKey,omitempty"`
+}
+
+// VPNImportRequest carries a WireGuard .conf file's text.
+type VPNImportRequest struct {
+	Conf string `json:"conf"`
 }
 
 // UplinkSettings is read and written by the Internet (uplink) settings page.

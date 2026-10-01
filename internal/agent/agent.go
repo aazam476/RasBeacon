@@ -9,6 +9,9 @@
 //	agent.go       startup sequence and switching between modes (this file)
 //	operations.go  actions requested through the API (claim, settings, ...)
 //	uplink.go      the connection to the internet (Ethernet, Wi-Fi)
+//	enterprise.go  certificates for eduroam and other Enterprise networks
+//	vpn.go         the WireGuard VPN and its kill switch
+//	clock.go       keeping the time right without a clock battery
 //	status.go      the status page and diagnostics export
 //	server.go      the local HTTP API that rbweb talks to
 //
@@ -43,6 +46,7 @@ import (
 	"rasbeacon/internal/paths"
 	"rasbeacon/internal/radio"
 	"rasbeacon/internal/render"
+	"rasbeacon/internal/routing"
 	"rasbeacon/internal/setupfile"
 	"rasbeacon/internal/system"
 )
@@ -86,6 +90,7 @@ type Agent struct {
 	mode     api.Mode
 	lan      render.LAN
 	uplink   uplinkState
+	vpn      vpnState
 
 	// Setup mode details.
 	setupSecured     bool
@@ -141,6 +146,9 @@ func (a *Agent) Start() error {
 			return fmt.Errorf("setting permissions on %s: %w", dir.path, err)
 		}
 	}
+
+	// 0. Don't let the clock go backwards across a reboot.
+	a.applyTimeFloor()
 
 	// 1. Factory reset requested by placing a file on the SD card?
 	if err := a.handleFactoryResetFile(); err != nil {
@@ -385,6 +393,11 @@ func (a *Agent) startNormalMode() error {
 		Security:  h.Security,
 		Password:  a.secrets.HotspotPassword,
 	}
+	// The VPN first, so DNS for devices goes to the VPN from the start.
+	if err := a.applyVPNConfig(); err != nil {
+		slog.Error("could not set up the VPN", "error", err)
+		a.warnings = append(a.warnings, "Could not set up the VPN: "+err.Error())
+	}
 	if err := a.applyHotspotAndDHCP(hotspot, false); err != nil {
 		return err
 	}
@@ -426,8 +439,8 @@ func (a *Agent) applyDHCP(captive bool) error {
 		LAN:              a.lan,
 		LeaseFile:        a.paths.DnsmasqLeases(),
 		Captive:          captive,
-		Upstream:         []string{deviceResolver},
-		IPv6DefaultRoute: a.uplink.status.IPv6,
+		Upstream:         a.upstreamDNS(),
+		IPv6DefaultRoute: a.devicesHaveIPv6Internet(),
 	}
 	if captive {
 		input.LAN.IPv6Prefix = netip.Prefix{} // no IPv6 for the setup network
@@ -448,10 +461,11 @@ func (a *Agent) applyDHCP(captive bool) error {
 // applyFirewall writes and loads the firewall rules for the current
 // settings.
 func (a *Agent) applyFirewall() error {
-	input := render.FirewallInput{SSHEnabled: a.cfg.SSH.Enabled}
-	// Devices' traffic is only forwarded once setup is finished.
-	if a.mode == api.ModeNormal {
-		input.Uplinks = a.uplinkInterfaces()
+	input := render.FirewallInput{
+		SSHEnabled:      a.cfg.SSH.Enabled,
+		Egress:          a.egressInterfaces(),
+		TunnelDNS:       a.tunnelDNSGuard(),
+		TunnelInterface: routing.TunnelInterface,
 	}
 	rules, err := render.Firewall(input)
 	if err != nil {

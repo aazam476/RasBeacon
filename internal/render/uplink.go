@@ -10,6 +10,7 @@ package render
 import (
 	"encoding/hex"
 	"fmt"
+	"net/netip"
 	"strings"
 
 	"rasbeacon/internal/config"
@@ -185,4 +186,37 @@ func NetworkdUnmanaged(ifaces []string) (string, error) {
 		}
 	}
 	return execute("unmanaged.network.tmpl", struct{ Interfaces string }{strings.Join(ifaces, " ")})
+}
+
+// --- WireGuard (the VPN tunnel) ---
+
+// WireGuardInput is everything needed to write wg0.conf.
+type WireGuardInput struct {
+	// Keys in base64.
+	PrivateKey    string
+	PeerPublicKey string
+	PresharedKey  string // optional
+	Endpoint      string // "host:port"
+	AllowedIPs    []netip.Prefix
+	Keepalive     int
+}
+
+// WireGuard produces the `wg setconf` file for the tunnel.
+func WireGuard(in WireGuardInput) (string, error) {
+	for _, key := range []string{in.PrivateKey, in.PeerPublicKey, in.PresharedKey} {
+		if strings.ContainsAny(key, "\n\r") || (key != "" && len(key) != 44) {
+			return "", fmt.Errorf("invalid WireGuard key")
+		}
+	}
+	if strings.ContainsAny(in.Endpoint, "\n\r") || in.Endpoint == "" {
+		return "", fmt.Errorf("invalid endpoint %q", in.Endpoint)
+	}
+	var allowed []string
+	for _, p := range in.AllowedIPs {
+		allowed = append(allowed, p.String())
+	}
+	return execute("wg0.conf.tmpl", struct {
+		WireGuardInput
+		AllowedIPs string
+	}{in, strings.Join(allowed, ", ")})
 }

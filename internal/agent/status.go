@@ -45,9 +45,10 @@ func (a *Agent) Status() api.Status {
 			LANAddress: a.lan.Address(),
 		},
 		Uplink:   a.uplink.status,
+		VPN:      a.vpnStatus(),
 		Radios:   a.radios,
 		Clients:  a.connectedClients(),
-		Warnings: slices.Concat(a.warnings, a.uplinkWarnings(), a.enterpriseWarnings()),
+		Warnings: slices.Concat(a.warnings, a.vpnWarnings(), a.uplinkWarnings(), a.enterpriseWarnings()),
 	}
 	// Empty lists are sent as [] rather than null, which is easier for the UI.
 	if status.Radios == nil {
@@ -110,6 +111,10 @@ var diagnosticCommands = [][]string{
 	{"ip", "-brief", "address"},
 	{"ip", "route"},
 	{"ip", "-6", "route"},
+	{"ip", "rule"},
+	{"ip", "route", "show", "table", "51820"},
+	// "wg show" never prints the private key.
+	{"wg", "show"},
 	{"networkctl", "--no-pager", "list"},
 	{"resolvectl", "--no-pager", "status"},
 	{"iw", "dev"},
@@ -131,6 +136,7 @@ func (a *Agent) Diagnostics() string {
 
 	a.mu.Lock()
 	secretsToHide := []string{a.secrets.HotspotPassword, a.setupPassword, a.identity.SuggestedHotspotPassword}
+	secretsToHide = append(secretsToHide, a.secrets.WireGuardPrivateKey, a.secrets.WireGuardPresharedKey)
 	for _, password := range a.secrets.UplinkPasswords {
 		secretsToHide = append(secretsToHide, password)
 	}
