@@ -62,7 +62,7 @@ func TestPortal_LoginModeOpensWebOnlyThenClosesWhenLoggedIn(t *testing.T) {
 	if !strings.Contains(rules, `elements = { "wlan0" }`) || !strings.Contains(rules, "tcp dport { 80, 443 } accept") {
 		t.Fatalf("login mode should allow web traffic to the uplink:\n%s", rules)
 	}
-	if strings.Contains(rules, `iifname "br-lan" oifname @egress accept`) {
+	if strings.Contains(rules, `iifname @lans oifname @egress accept`) {
 		t.Error("login mode must not allow everything")
 	}
 	if !e.runner.ran("ip -4 rule delete priority 100") {

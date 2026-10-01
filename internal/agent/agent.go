@@ -11,6 +11,7 @@
 //	uplink.go      the connection to the internet (Ethernet, Wi-Fi)
 //	enterprise.go  certificates for eduroam and other Enterprise networks
 //	vpn.go         the WireGuard VPN and its kill switch
+//	guest.go       the guest network
 //	portal.go      hotel login pages (captive portals) with the VPN on
 //	clock.go       keeping the time right without a clock battery
 //	https.go       the HTTPS setting
@@ -419,7 +420,10 @@ func (a *Agent) startNormalMode() error {
 		Country:   h.Country,
 		Security:  h.Security,
 		Password:  a.secrets.HotspotPassword,
+		Guest:     a.guestHostapd(),
 	}
+	// The guest network's bridge must exist before hostapd starts.
+	a.applyGuestBridge(hotspot.Guest != nil)
 	// The VPN first, so DNS for devices goes to the VPN from the start.
 	if err := a.applyVPNConfig(); err != nil {
 		slog.Error("could not set up the VPN", "error", err)
@@ -468,6 +472,8 @@ func (a *Agent) applyDHCP(captive bool) error {
 		Captive:          captive,
 		Upstream:         a.upstreamDNS(),
 		IPv6DefaultRoute: a.devicesHaveIPv6Internet(),
+		Guest:            a.guestLAN(),
+		Metered:          a.cfg.Hotspot.Metered,
 	}
 	if a.noticeActive() {
 		input.NoticeHostnames = portal.ProbeHostnames
@@ -497,6 +503,7 @@ func (a *Agent) applyFirewall() error {
 		TunnelDNS:       a.tunnelDNSGuard(),
 		TunnelInterface: routing.TunnelInterface,
 		PortalOnly:      a.mode == api.ModeNormal && a.portal.loginMode,
+		Guest:           a.guestActive(),
 	}
 	rules, err := render.Firewall(input)
 	if err != nil {

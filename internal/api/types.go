@@ -115,6 +115,7 @@ type Status struct {
 	Update        UpdateStatus       `json:"update"`
 	Radios        []radio.Radio      `json:"radios"`
 	Clients       []stations.Station `json:"clients"`
+	Guest         GuestStatus        `json:"guest"`
 	// Warnings are problems the owner should know about, in plain words.
 	Warnings []string `json:"warnings"`
 }
@@ -129,6 +130,31 @@ type HotspotStatus struct {
 	Interface string          `json:"interface"`
 	// LANAddress is RasBeacon's address on the hotspot, e.g. 10.87.0.1.
 	LANAddress string `json:"lanAddress"`
+	// Metered is true when devices are told the connection is limited.
+	Metered bool `json:"metered"`
+}
+
+// GuestStatus describes the guest network on the status page.
+type GuestStatus struct {
+	Enabled bool `json:"enabled"`
+	// Running is true when the guest network is being broadcast.
+	Running bool   `json:"running"`
+	SSID    string `json:"ssid"`
+	// Clients are the guests connected right now.
+	Clients []stations.Station `json:"clients"`
+}
+
+// GuestSettings is read and written by the guest network page. The
+// password is never returned; Password in a PUT request is optional and an
+// empty value keeps the saved one.
+type GuestSettings struct {
+	Enabled     bool   `json:"enabled"`
+	SSID        string `json:"ssid"`
+	Password    string `json:"password,omitempty"`
+	HasPassword bool   `json:"hasPassword"`
+	// Supported is false when the hotspot's Wi-Fi adapter can't broadcast
+	// two networks at once (read-only).
+	Supported bool `json:"supported"`
 }
 
 // UplinkStatus describes RasBeacon's connection to the internet.
@@ -333,7 +359,10 @@ type HotspotSettings struct {
 	Channel  int             `json:"channel"`
 	Security config.Security `json:"security"`
 	Country  string          `json:"country"`
-	Password string          `json:"password,omitempty"`
+	// Metered tells devices the internet connection is limited (Android
+	// reads it automatically; see docs/api.md).
+	Metered  bool   `json:"metered"`
+	Password string `json:"password,omitempty"`
 }
 
 // RevealPasswordResponse returns the hotspot password after the admin

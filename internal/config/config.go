@@ -64,6 +64,7 @@ type Config struct {
 	Claimed bool `json:"claimed"`
 
 	Hotspot  HotspotConfig  `json:"hotspot"`
+	Guest    GuestConfig    `json:"guest"`
 	SSH      SSHConfig      `json:"ssh"`
 	Ethernet EthernetConfig `json:"ethernet"`
 	Uplink   UplinkConfig   `json:"uplink"`
@@ -129,6 +130,37 @@ type HotspotConfig struct {
 	// Country is the two-letter regulatory country code (for example "US").
 	// It decides which channels and transmit powers are legal.
 	Country string `json:"country"`
+	// Metered tells devices that the internet connection is limited (a
+	// phone's hotspot, a paid plan), so they hold back large downloads.
+	// Only Android reads this hint automatically (see render.Dnsmasq).
+	Metered bool `json:"metered"`
+}
+
+// GuestConfig describes the optional guest Wi-Fi network: a second network
+// name on the same radio for visitors. Guests can use the internet (through
+// the VPN, if it is on) but can't reach your devices, each other, or
+// RasBeacon's settings. The password is stored in Secrets.GuestPassword.
+type GuestConfig struct {
+	Enabled bool   `json:"enabled"`
+	SSID    string `json:"ssid"`
+}
+
+// Validate checks the guest network settings. password is the guest
+// network's password (from Secrets), hotspotSSID the main network's name.
+func (g GuestConfig) Validate(password, hotspotSSID string) error {
+	if !g.Enabled {
+		return nil
+	}
+	if err := ValidateSSID(g.SSID); err != nil {
+		return &ValidationError{Field: "ssid", Message: err.Error()}
+	}
+	if g.SSID == hotspotSSID {
+		return &ValidationError{Field: "ssid", Message: "Must be different from your own network's name."}
+	}
+	if err := ValidateWiFiPassword(password); err != nil {
+		return &ValidationError{Field: "password", Message: err.Error()}
+	}
+	return nil
 }
 
 // SSHConfig controls remote login for advanced users. It is off by default.
@@ -253,6 +285,10 @@ func (c *Config) FillDefaults() {
 	if c.Ethernet.Role == "" {
 		c.Ethernet.Role = EthernetUplink
 	}
+	if c.Guest.SSID == "" {
+		// Settings from before the guest network existed.
+		c.Guest.SSID = GuestSSIDFor(c.Hotspot.SSID)
+	}
 	if c.Version < 2 {
 		// Version 2 added the VPN. Its kill switch starts on.
 		c.VPN.KillSwitch = true
@@ -320,6 +356,8 @@ type Secrets struct {
 	// UplinkPasswords holds the passwords of saved upstream Wi-Fi networks,
 	// keyed by SavedNetwork.ID.
 	UplinkPasswords map[string]string `json:"uplinkPasswords,omitempty"`
+	// GuestPassword is the WPA2/WPA3 password for the guest network.
+	GuestPassword string `json:"guestPassword,omitempty"`
 	// WireGuardPrivateKey is RasBeacon's own WireGuard key (base64).
 	WireGuardPrivateKey string `json:"wireguardPrivateKey,omitempty"`
 	// WireGuardPresharedKey is an optional extra secret shared with the
@@ -356,10 +394,22 @@ func DefaultConfig(identity Identity) Config {
 			Channel:  0,
 			Country:  "US",
 		},
+		Guest:    GuestConfig{SSID: GuestSSIDFor("RasBeacon-" + identity.ShortID)},
 		SSH:      SSHConfig{Enabled: false},
 		Ethernet: EthernetConfig{Role: EthernetUplink},
 		VPN:      VPNConfig{KillSwitch: true},
 	}
+}
+
+// GuestSSIDFor suggests a guest network name: the hotspot's name plus
+// "-Guest", shortened if needed to stay within the 32-byte limit.
+func GuestSSIDFor(hotspotSSID string) string {
+	name := hotspotSSID
+	for len(name)+len("-Guest") > 32 {
+		_, size := utf8.DecodeLastRuneInString(name)
+		name = name[:len(name)-size]
+	}
+	return name + "-Guest"
 }
 
 // ValidationError explains which setting is wrong and why, in words that can

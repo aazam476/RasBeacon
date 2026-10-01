@@ -76,6 +76,7 @@ func (a *Agent) Claim(req api.ClaimRequest) (api.ClaimResponse, error) {
 	newCfg := a.cfg.Clone()
 	newCfg.Hotspot.SSID = req.HotspotSSID
 	newCfg.Hotspot.Band = req.HotspotBand
+	newCfg.Guest.SSID = config.GuestSSIDFor(req.HotspotSSID)
 	if err := newCfg.Hotspot.Validate(); err != nil {
 		return api.ClaimResponse{}, err
 	}
@@ -160,7 +161,7 @@ func (a *Agent) HotspotSettings() api.HotspotSettings {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	h := a.cfg.Hotspot
-	return api.HotspotSettings{SSID: h.SSID, Band: h.Band, Channel: h.Channel, Security: h.Security, Country: h.Country}
+	return api.HotspotSettings{SSID: h.SSID, Band: h.Band, Channel: h.Channel, Security: h.Security, Country: h.Country, Metered: h.Metered}
 }
 
 // UpdateHotspotSettings saves new hotspot settings and restarts the hotspot.
@@ -176,6 +177,7 @@ func (a *Agent) UpdateHotspotSettings(req api.HotspotSettings) error {
 	newCfg := a.cfg.Clone()
 	newCfg.Hotspot = config.HotspotConfig{
 		SSID: req.SSID, Band: req.Band, Channel: req.Channel, Security: req.Security, Country: req.Country,
+		Metered: req.Metered,
 	}
 	if err := newCfg.Hotspot.Validate(); err != nil {
 		return err
@@ -194,9 +196,21 @@ func (a *Agent) UpdateHotspotSettings(req api.HotspotSettings) error {
 	if err := config.WriteJSON(a.paths.ConfigFile(), newCfg, 0o644); err != nil {
 		return err
 	}
+	if newCfg.Guest.Enabled && newCfg.Guest.SSID == newCfg.Hotspot.SSID {
+		return &config.ValidationError{Field: "hotspot.ssid", Message: "Your guest network already uses this name."}
+	}
 	countryChanged := newCfg.Hotspot.Country != a.cfg.Hotspot.Country
+	// Only the metered hint changed? Then the hotspot can keep running:
+	// DHCP alone carries the hint (devices see it when they reconnect).
+	onlyMetered := req.Password == "" && newCfg.Hotspot.SSID == a.cfg.Hotspot.SSID &&
+		newCfg.Hotspot.Band == a.cfg.Hotspot.Band && newCfg.Hotspot.Channel == a.cfg.Hotspot.Channel &&
+		newCfg.Hotspot.Security == a.cfg.Hotspot.Security && !countryChanged
 	a.cfg = newCfg
 	a.secrets = newSecrets
+	if onlyMetered {
+		slog.Info("metered setting saved", "metered", newCfg.Hotspot.Metered)
+		return a.applyDHCP(false)
+	}
 
 	if countryChanged {
 		if err := system.SetRegulatoryCountry(a.runner, newCfg.Hotspot.Country); err != nil {

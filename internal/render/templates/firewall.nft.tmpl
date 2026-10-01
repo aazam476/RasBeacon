@@ -26,6 +26,14 @@ table inet rasbeacon {
 		elements = { {{range $i, $name := .Egress}}{{if $i}}, {{end}}"{{$name}}"{{end}} }
 	}
 {{end}}
+	# The networks devices connect to: your hotspot ("{{.Bridge}}"){{if .Guest}}
+	# and the guest network ("{{.GuestBridge}}"){{end}}. Both may reach the
+	# internet the same way; only yours may reach RasBeacon's settings.
+	set lans {
+		type ifname
+		elements = { "{{.Bridge}}"{{if .Guest}}, "{{.GuestBridge}}"{{end}} }
+	}
+
 	# INPUT: packets addressed to RasBeacon itself.
 	chain input {
 		type filter hook input priority filter; policy drop;
@@ -58,6 +66,15 @@ table inet rasbeacon {
 		# SSH was turned on in the web UI (hotspot side only).
 		iifname "{{.Bridge}}" tcp dport 22 accept
 {{- end}}
+{{- if .Guest}}
+
+		# --- From the guest network ("{{.GuestBridge}}") ---
+		# Only DHCP and DNS. Everything else (the web UI, SSH) is refused
+		# straight away ("reject"), so guests' phones don't wait for it.
+		iifname "{{.GuestBridge}}" udp dport 67 accept
+		iifname "{{.GuestBridge}}" meta l4proto { tcp, udp } th dport 53 accept
+		iifname "{{.GuestBridge}}" reject
+{{- end}}
 
 		# Everything else is dropped by the policy above. In particular,
 		# nothing from the upstream network can reach the web UI or SSH.
@@ -80,21 +97,22 @@ table inet rasbeacon {
 		# current path. When the path changes (for example from login mode
 		# back to the VPN), connections on the old path stop at once instead
 		# of carrying on outside the tunnel.
-		iifname "{{.Bridge}}" oifname @egress ct state established,related accept
-		iifname @egress oifname "{{.Bridge}}" ct state established,related accept
+		iifname @lans oifname @egress ct state established,related accept
+		iifname @egress oifname @lans ct state established,related accept
 {{- if .PortalOnly}}
 
 		# LOGIN MODE (captive portal): for a few minutes, devices may reach
 		# the network's login page directly: web (TCP 80 and 443) and DNS
 		# only. Everything else stays blocked.
-		iifname "{{.Bridge}}" oifname @egress tcp dport { 80, 443 } accept
-		iifname "{{.Bridge}}" oifname @egress meta l4proto { tcp, udp } th dport 53 accept
+		iifname @lans oifname @egress tcp dport { 80, 443 } accept
+		iifname @lans oifname @egress meta l4proto { tcp, udp } th dport 53 accept
 {{- else}}
 
-		# Devices on the hotspot may reach the internet, only through the
-		# interfaces in "egress". Nothing from outside may start a
-		# connection to a device.
-		iifname "{{.Bridge}}" oifname @egress accept
+		# Devices on the hotspot{{if .Guest}} and guests{{end}} may reach the internet, only
+		# through the interfaces in "egress". Nothing from outside may start
+		# a connection to a device{{if .Guest}}, and the two networks can't reach
+		# each other{{end}}.
+		iifname @lans oifname @egress accept
 {{- end}}
 {{- else}}
 		# Nothing is forwarded (for example during first-boot setup).
@@ -106,7 +124,7 @@ table inet rasbeacon {
 	# are sent to it anyway, so every name lookup follows RasBeacon's rules.
 	chain prerouting_nat {
 		type nat hook prerouting priority dstnat;
-		iifname "{{.Bridge}}" meta l4proto { tcp, udp } th dport 53 redirect
+		iifname @lans meta l4proto { tcp, udp } th dport 53 redirect
 	}
 
 	# NAT ("masquerade"): devices' traffic gets RasBeacon's own address as

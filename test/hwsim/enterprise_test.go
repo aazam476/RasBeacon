@@ -1,5 +1,6 @@
-// Package hwsim tests RasBeacon's WPA-Enterprise configuration against a
-// real Wi-Fi login, using simulated radios.
+// Package hwsim tests RasBeacon's Wi-Fi configuration against real Wi-Fi
+// logins, using simulated radios: WPA-Enterprise uplinks (this file) and
+// the hotspot with its guest network (guest_test.go).
 //
 // # What is simulated
 //
@@ -9,8 +10,8 @@
 // server), standing in for eduroam's RADIUS servers. The other runs
 // wpa_supplicant with the exact configuration RasBeacon generates.
 //
-// Each test checks one login method, or that RasBeacon refuses a login
-// server it should not trust.
+// Each Enterprise test checks one login method, or that RasBeacon refuses a
+// login server it should not trust.
 //
 // # Running
 //

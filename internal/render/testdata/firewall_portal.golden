@@ -25,6 +25,13 @@ table inet rasbeacon {
 		elements = { "wlan0" }
 	}
 
+	# The networks devices connect to: your hotspot ("br-lan"). Both may reach the
+	# internet the same way; only yours may reach RasBeacon's settings.
+	set lans {
+		type ifname
+		elements = { "br-lan" }
+	}
+
 	# INPUT: packets addressed to RasBeacon itself.
 	chain input {
 		type filter hook input priority filter; policy drop;
@@ -74,21 +81,21 @@ table inet rasbeacon {
 		# current path. When the path changes (for example from login mode
 		# back to the VPN), connections on the old path stop at once instead
 		# of carrying on outside the tunnel.
-		iifname "br-lan" oifname @egress ct state established,related accept
-		iifname @egress oifname "br-lan" ct state established,related accept
+		iifname @lans oifname @egress ct state established,related accept
+		iifname @egress oifname @lans ct state established,related accept
 
 		# LOGIN MODE (captive portal): for a few minutes, devices may reach
 		# the network's login page directly: web (TCP 80 and 443) and DNS
 		# only. Everything else stays blocked.
-		iifname "br-lan" oifname @egress tcp dport { 80, 443 } accept
-		iifname "br-lan" oifname @egress meta l4proto { tcp, udp } th dport 53 accept
+		iifname @lans oifname @egress tcp dport { 80, 443 } accept
+		iifname @lans oifname @egress meta l4proto { tcp, udp } th dport 53 accept
 	}
 
 	# DNS: devices that ignore RasBeacon's DNS server (some phones, smart TVs)
 	# are sent to it anyway, so every name lookup follows RasBeacon's rules.
 	chain prerouting_nat {
 		type nat hook prerouting priority dstnat;
-		iifname "br-lan" meta l4proto { tcp, udp } th dport 53 redirect
+		iifname @lans meta l4proto { tcp, udp } th dport 53 redirect
 	}
 
 	# NAT ("masquerade"): devices' traffic gets RasBeacon's own address as

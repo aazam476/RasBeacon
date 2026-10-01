@@ -173,7 +173,7 @@ func buildVPNNetwork(t *testing.T) vpnNetwork {
 		DNS:        []netip.Addr{netip.MustParseAddr(vpnServerAddress)},
 		KernelIPv6: routing.KernelHasIPv6("/proc/sys/net/ipv6"),
 	}))
-	runAll(t, routerNS, routing.ClientsThroughTunnel(render.BridgeName, routing.KernelHasIPv6("/proc/sys/net/ipv6")))
+	runAll(t, routerNS, routing.ClientsThroughTunnel(routing.KernelHasIPv6("/proc/sys/net/ipv6")))
 
 	n.applyRouterRules(t, []string{routing.TunnelInterface}, []string{vpnServerAddress})
 	return n

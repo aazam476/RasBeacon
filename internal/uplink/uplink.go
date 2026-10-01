@@ -81,6 +81,8 @@ type WiFiStatus struct {
 	// "SCANNING", "ASSOCIATING", "DISCONNECTED" or "INACTIVE".
 	State string
 	SSID  string
+	// BSSID is the access point's MAC address.
+	BSSID string
 	// FrequencyMHz tells the band: below 3000 is 2.4 GHz, above is 5 GHz.
 	FrequencyMHz int
 	// KeyMgmt is the security in use, e.g. "WPA2-PSK", "SAE" or "NONE".
@@ -107,6 +109,8 @@ func ParseWPAStatus(out string) WiFiStatus {
 			s.State = value
 		case "ssid":
 			s.SSID = DecodeSSID(value)
+		case "bssid":
+			s.BSSID = value
 		case "freq":
 			s.FrequencyMHz, _ = strconv.Atoi(value)
 		case "key_mgmt":

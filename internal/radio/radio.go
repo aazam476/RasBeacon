@@ -58,7 +58,10 @@ type Radio struct {
 	// TP-Link Archer T3U. Empty for built-in radios.
 	USBID      string `json:"usbId"`
 	SupportsAP bool   `json:"supportsAp"`
-	Role       Role   `json:"role"`
+	// MaxAPs is how many hotspot networks the radio can broadcast at once
+	// (see MaxAPInterfaces). The guest network needs 2.
+	MaxAPs int  `json:"maxAps"`
+	Role   Role `json:"role"`
 }
 
 // PhyInfoFunc returns the output of `iw phy <phy> info`. It is a parameter so
@@ -108,6 +111,7 @@ func Detect(sysClassNet string, phyInfo PhyInfoFunc) ([]Radio, error) {
 
 		if info, err := phyInfo(phyName); err == nil {
 			r.SupportsAP = SupportsAPMode(info)
+			r.MaxAPs = MaxAPInterfaces(info)
 		}
 
 		radios = append(radios, r)
@@ -194,6 +198,99 @@ func SupportsAPMode(iwPhyInfo string) bool {
 		}
 	}
 	return false
+}
+
+// MaxAPInterfaces reads `iw phy <name> info` output and returns how many
+// access point (hotspot) interfaces the radio can run at the same time. The
+// driver lists what it can combine under "valid interface combinations":
+//
+//	valid interface combinations:
+//		 * #{ managed } <= 1, #{ AP, mesh point } <= 4,
+//		   total <= 4, #channels <= 1
+//
+// Here the answer is 4. Radios that list no combinations can run only one
+// interface; radios without AP mode, none.
+func MaxAPInterfaces(iwPhyInfo string) int {
+	if !SupportsAPMode(iwPhyInfo) {
+		return 0
+	}
+	best := 1
+	inCombinations := false
+	var combination strings.Builder
+	finish := func() {
+		if n := apsInCombination(combination.String()); n > best {
+			best = n
+		}
+		combination.Reset()
+	}
+	for _, line := range strings.Split(iwPhyInfo, "\n") {
+		trimmed := strings.TrimSpace(line)
+		switch {
+		case trimmed == "valid interface combinations:":
+			inCombinations = true
+		case !inCombinations:
+		case strings.HasPrefix(trimmed, "* "):
+			finish() // a new combination starts
+			combination.WriteString(strings.TrimPrefix(trimmed, "* "))
+		case strings.HasPrefix(trimmed, "total") || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "Radar"):
+			combination.WriteString(" " + trimmed) // continuation line
+		default:
+			inCombinations = false // the list has ended
+			finish()
+		}
+	}
+	finish()
+	return best
+}
+
+// apsInCombination returns how many AP interfaces one combination allows,
+// for example 4 for "#{ managed } <= 1, #{ AP, mesh point } <= 4, total <= 4".
+func apsInCombination(text string) int {
+	aps, total := 0, -1
+	for _, part := range strings.Split(text, ",") {
+		part = strings.TrimSpace(part)
+		if strings.HasPrefix(part, "total <=") {
+			total = atoi(strings.TrimSpace(strings.TrimPrefix(part, "total <=")))
+		}
+	}
+	// Each "#{ types } <= n" group: n interfaces of any of these types.
+	for rest := text; ; {
+		start := strings.Index(rest, "#{")
+		if start < 0 {
+			break
+		}
+		end := strings.Index(rest[start:], "}")
+		if end < 0 {
+			break
+		}
+		types := rest[start+2 : start+end]
+		rest = rest[start+end+1:]
+		limit := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(rest), "<="))
+		if i := strings.IndexAny(limit, ", "); i >= 0 {
+			limit = limit[:i]
+		}
+		for _, t := range strings.Split(types, ",") {
+			if strings.TrimSpace(t) == "AP" {
+				aps += atoi(limit)
+			}
+		}
+	}
+	if total >= 0 && aps > total {
+		return total
+	}
+	return aps
+}
+
+// atoi reads a small non-negative number, or returns 0.
+func atoi(s string) int {
+	n := 0
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return 0
+		}
+		n = n*10 + int(r-'0')
+	}
+	return n
 }
 
 // readTrimmed reads a small sysfs file and removes the trailing newline.

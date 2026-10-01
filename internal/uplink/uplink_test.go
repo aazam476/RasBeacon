@@ -49,7 +49,7 @@ func TestParseWPAStatus_Connected(t *testing.T) {
 	out := "bssid=aa:bb:cc:dd:ee:ff\nfreq=5180\nssid=Hotel \\\"Guest\\\"\nid=0\nmode=station\n" +
 		"pairwise_cipher=CCMP\nkey_mgmt=WPA2-PSK\nwpa_state=COMPLETED\nip_address=192.168.4.20\n"
 	s := ParseWPAStatus(out)
-	if !s.Connected() || s.SSID != `Hotel "Guest"` || s.FrequencyMHz != 5180 || s.KeyMgmt != "WPA2-PSK" {
+	if !s.Connected() || s.SSID != `Hotel "Guest"` || s.FrequencyMHz != 5180 || s.KeyMgmt != "WPA2-PSK" || s.BSSID != "aa:bb:cc:dd:ee:ff" {
 		t.Errorf("got %+v", s)
 	}
 	if BandName(s.FrequencyMHz) != "5GHz" {

@@ -16,11 +16,12 @@ no-hosts
 # --- DHCP: addresses for connected devices ---
 # Leases last 1 hour, so devices using private/rotating MAC addresses free
 # their old address quickly.
-dhcp-range=10.87.0.20,10.87.0.250,255.255.255.0,1h
+# "set:lan" labels these devices so the options below can be per network.
+dhcp-range=set:lan,10.87.0.20,10.87.0.250,255.255.255.0,1h
 dhcp-leasefile=x
 # Tell devices to use RasBeacon as their router and DNS server.
-dhcp-option=option:router,10.87.0.1
-dhcp-option=option:dns-server,10.87.0.1
+dhcp-option=tag:lan,option:router,10.87.0.1
+dhcp-option=tag:lan,option:dns-server,10.87.0.1
 # Answer DHCP requests immediately even for devices we have not seen before.
 dhcp-authoritative
 
