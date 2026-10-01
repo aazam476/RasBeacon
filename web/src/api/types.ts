@@ -70,6 +70,8 @@ export interface Radio {
   isUsb: boolean;
   usbId: string;
   supportsAp: boolean;
+  /** How many networks the radio can broadcast at once (2+ for the guest network). */
+  maxAps: number;
   role: "hotspot" | "uplink" | "unused";
 }
 
@@ -90,6 +92,30 @@ export interface HotspotStatus {
   security: Security;
   interface: string;
   lanAddress: string;
+  /** Devices are told the connection is limited. */
+  metered: boolean;
+}
+
+/** The guest network on the status page. */
+export interface GuestStatus {
+  enabled: boolean;
+  /** Being broadcast right now. */
+  running: boolean;
+  ssid: string;
+  clients: Client[];
+}
+
+/**
+ * GET/PUT /api/v1/settings/guest. `password` is never returned; in a PUT,
+ * leave it empty to keep the saved one.
+ */
+export interface GuestSettings {
+  enabled: boolean;
+  ssid: string;
+  password?: string;
+  hasPassword: boolean;
+  /** False when the Wi-Fi adapter can only broadcast one network (read-only). */
+  supported: boolean;
 }
 
 /** What the Wi-Fi uplink radio is doing. */
@@ -157,7 +183,40 @@ export interface PortalStatus {
   /** Devices may reach the login page directly right now. */
   loginMode: boolean;
   secondsLeft: number;
+  /** The login page can be opened in RasBeacon's own browser (zero-leak login). */
+  canBrowse: boolean;
+  /** RasBeacon's browser is open. */
+  browsing: boolean;
 }
+
+/** POST /api/v1/portal/browser/start: the phone screen's size in CSS pixels. */
+export interface PortalBrowserStart {
+  width: number;
+  height: number;
+}
+
+/** GET /api/v1/portal/browser/frame?after=<seq>: a picture of the login page. */
+export interface PortalBrowserFrame {
+  /** False when the browser is closed (the other fields are then empty). */
+  running: boolean;
+  seq: number;
+  /** Base64 JPEG, width x height. */
+  image: string;
+  width: number;
+  height: number;
+  url: string;
+  title: string;
+}
+
+/** POST /api/v1/portal/browser/input: something the owner did on the picture. */
+export type PortalBrowserInput =
+  | { action: "click"; x: number; y: number }
+  | { action: "scroll"; x: number; y: number; deltaY: number }
+  | { action: "type"; text: string }
+  | { action: "key"; key: "Enter" | "Backspace" | "Tab" | "Escape" }
+  | { action: "back" }
+  | { action: "reload" }
+  | { action: "navigate"; url: string };
 
 /** Where the WireGuard tunnel is (see internal/tunnel in the Go code). */
 export type VPNState = "off" | "connecting" | "up" | "down" | "direct";
@@ -171,6 +230,8 @@ export interface VPNStatus {
   endpoint: string;
   receivedBytes: number;
   sentBytes: number;
+  /** The public IPv6 network devices get addresses from, while in use. */
+  routedIpv6Prefix?: string;
 }
 
 /** GET /api/v1/status */
@@ -187,6 +248,7 @@ export interface Status {
   update: UpdateStatus;
   radios: Radio[];
   clients: Client[];
+  guest: GuestStatus;
   warnings: string[];
 }
 
@@ -200,6 +262,8 @@ export interface HotspotSettings {
   channel: number; // 0 = default channel for the band
   security: Security;
   country: string;
+  /** Tell devices the connection is limited (Android reads it automatically). */
+  metered: boolean;
   password?: string;
 }
 
@@ -302,6 +366,8 @@ export interface VPNSettings {
   presharedKey?: string;
   hasPresharedKey: boolean;
   removePresharedKey?: boolean;
+  /** Optional public IPv6 /64 the server routes to RasBeacon; "" = off. */
+  routedIpv6Prefix: string;
 }
 
 /**

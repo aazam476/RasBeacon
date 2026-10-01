@@ -92,8 +92,23 @@ export function HotspotSettingsView(props: HotspotSettingsViewProps) {
         </label>
         <FieldError message={errors.country} />
 
+        <label>
+          <input
+            type="checkbox"
+            checked={values.metered}
+            onChange={(e) => setField("metered", e.target.checked)}
+          />
+          Metered connection (for example a phone&apos;s hotspot or a paid plan)
+        </label>
+        <p>
+          Tells devices to hold back big downloads and backups. Android phones read this
+          automatically when they reconnect. On iPhones and Macs, turn on &quot;Low Data Mode&quot;
+          for this network in Wi-Fi settings; on Windows, set it as a metered connection. Changing
+          only this doesn&apos;t restart the hotspot.
+        </p>
+
         {props.saveError && <p role="alert">{props.saveError}</p>}
-        {props.saved && <p>Saved. The hotspot has restarted.</p>}
+        {props.saved && <p>Saved.</p>}
         <button type="submit" disabled={props.saving}>
           {props.saving ? "Saving…" : "Save"}
         </button>

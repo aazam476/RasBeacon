@@ -22,6 +22,8 @@ import { VPNSettingsView } from "../screens/VPN/VPNSettingsView";
 import { useVPNSettings } from "../screens/VPN/useVPNSettings";
 import { HTTPSSettingsView } from "../screens/HTTPS/HTTPSSettingsView";
 import { useHTTPSSettings } from "../screens/HTTPS/useHTTPSSettings";
+import { GuestSettingsView } from "../screens/Guest/GuestSettingsView";
+import { useGuestSettings } from "../screens/Guest/useGuestSettings";
 import { SSHSettingsView } from "../screens/SSHSettings/SSHSettingsView";
 import { useSSHSettings } from "../screens/SSHSettings/useSSHSettings";
 import { SystemView } from "../screens/System/SystemView";
@@ -82,6 +84,8 @@ function MainPage({ page, onLoggedOut }: { page: Page; onLoggedOut: () => void }
       return <VPNScreen />;
     case "hotspot":
       return <HotspotScreen />;
+    case "guest":
+      return <GuestScreen />;
     case "ssh":
       return <SSHScreen />;
     case "https":
@@ -105,6 +109,10 @@ function VPNScreen() {
 
 function HotspotScreen() {
   return <HotspotSettingsView {...useHotspotSettings()} />;
+}
+
+function GuestScreen() {
+  return <GuestSettingsView {...useGuestSettings()} />;
 }
 
 function SSHScreen() {
