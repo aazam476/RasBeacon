@@ -24,3 +24,22 @@ export function describeSignal(dbm: number): string {
   if (dbm >= -75) return `fair (${dbm} dBm)`;
   return `poor (${dbm} dBm)`;
 }
+
+/** 2437 → "2.4 GHz"; 5180 → "5 GHz". */
+export function describeBand(frequencyMhz: number): string {
+  if (frequencyMhz <= 0) return "unknown band";
+  if (frequencyMhz < 3000) return "2.4 GHz";
+  if (frequencyMhz < 5925) return "5 GHz";
+  return "6 GHz";
+}
+
+/** A one-line summary of the internet connection for the status page. */
+export function describeUplink(uplink: {
+  connected: boolean;
+  kind: string;
+  wifi: { ssid: string };
+}): string {
+  if (!uplink.connected) return "Not connected";
+  if (uplink.kind === "ethernet") return "Connected by Ethernet";
+  return uplink.wifi.ssid ? `Connected to Wi-Fi "${uplink.wifi.ssid}"` : "Connected by Wi-Fi";
+}

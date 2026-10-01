@@ -90,6 +90,43 @@ export interface HotspotStatus {
   lanAddress: string;
 }
 
+/** What the Wi-Fi uplink radio is doing. */
+export type WiFiUplinkState = "connected" | "connecting" | "searching" | "not-configured" | "off";
+
+export interface WiFiUplinkStatus {
+  /** False when there is no second radio for joining Wi-Fi networks. */
+  available: boolean;
+  interface: string;
+  state: WiFiUplinkState;
+  ssid: string;
+  band: string;
+  signalDbm: number;
+}
+
+export type EthernetRole = "uplink" | "client-port";
+
+export interface EthernetUplinkStatus {
+  present: boolean;
+  role: EthernetRole;
+  cablePlugged: boolean;
+  /** Set when the port is a client port but a DHCP server answered on it. */
+  foreignDhcpServer?: string;
+}
+
+/** RasBeacon's connection to the internet. */
+export interface UplinkStatus {
+  connected: boolean;
+  /** Which uplink is in use, or "" when not connected. */
+  kind: "ethernet" | "wifi" | "";
+  interface: string;
+  address: string;
+  gateway: string;
+  /** True when devices get IPv6 internet access. */
+  ipv6: boolean;
+  wifi: WiFiUplinkStatus;
+  ethernet: EthernetUplinkStatus;
+}
+
 /** GET /api/v1/status */
 export interface Status {
   version: string;
@@ -98,6 +135,7 @@ export interface Status {
   uptimeSeconds: number;
   mode: Mode;
   hotspot: HotspotStatus;
+  uplink: UplinkStatus;
   radios: Radio[];
   clients: Client[];
   warnings: string[];
@@ -124,4 +162,43 @@ export interface RevealPasswordResponse {
 export interface SSHSettings {
   enabled: boolean;
   authorizedKeys: string;
+}
+
+export type UplinkSecurity = "open" | "personal";
+
+/**
+ * One saved upstream Wi-Fi network. `password` is never returned; in a PUT,
+ * leave it empty to keep the saved password. `id` is "" for a new network.
+ */
+export interface SavedNetwork {
+  id: string;
+  ssid: string;
+  security: UplinkSecurity;
+  hidden: boolean;
+  hasPassword: boolean;
+  password?: string;
+}
+
+/** GET/PUT /api/v1/settings/uplink */
+export interface UplinkSettings {
+  ethernetRole: EthernetRole;
+  /** Most preferred first. */
+  networks: SavedNetwork[];
+  /** Read-only hints (ignored in a PUT). */
+  ethernetPresent: boolean;
+  wifiUplinkAvailable: boolean;
+}
+
+/** A Wi-Fi network found by a scan. */
+export interface NearbyNetwork {
+  ssid: string;
+  signalDbm: number;
+  frequencyMhz: number;
+  /** "enterprise" (e.g. eduroam) arrives in milestone 3; "other" is not supported. */
+  security: "open" | "personal" | "enterprise" | "other";
+}
+
+/** POST /api/v1/uplink/scan */
+export interface ScanResponse {
+  networks: NearbyNetwork[];
 }

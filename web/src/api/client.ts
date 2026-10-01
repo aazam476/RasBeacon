@@ -9,10 +9,12 @@ import type {
   ErrorResponse,
   HotspotSettings,
   RevealPasswordResponse,
+  ScanResponse,
   SessionInfo,
   SetupState,
   SSHSettings,
   Status,
+  UplinkSettings,
 } from "./types";
 
 /**
@@ -134,6 +136,19 @@ export function getSSHSettings(): Promise<SSHSettings> {
 
 export function updateSSHSettings(settings: SSHSettings): Promise<SSHSettings> {
   return request("PUT", "/settings/ssh", settings);
+}
+
+export function getUplinkSettings(): Promise<UplinkSettings> {
+  return request("GET", "/settings/uplink");
+}
+
+export function updateUplinkSettings(settings: UplinkSettings): Promise<UplinkSettings> {
+  return request("PUT", "/settings/uplink", settings);
+}
+
+/** Looks for nearby Wi-Fi networks. Takes about 5 seconds. */
+export function scanNearbyNetworks(): Promise<ScanResponse> {
+  return request("POST", "/uplink/scan");
 }
 
 export function reboot(): Promise<void> {

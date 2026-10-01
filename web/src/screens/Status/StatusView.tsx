@@ -1,7 +1,7 @@
 // Markup for the status page.
 
 import type { StatusLogic } from "./useStatus";
-import { describeSignal, formatDuration } from "../../shared/format";
+import { describeSignal, describeUplink, formatDuration } from "../../shared/format";
 
 export type StatusViewProps = StatusLogic;
 
@@ -9,7 +9,7 @@ export function StatusView({ status, error, loading, reload }: StatusViewProps) 
   if (!status) {
     return <section>{error ? <p role="alert">{error}</p> : <p>Loading…</p>}</section>;
   }
-  const { hotspot } = status;
+  const { hotspot, uplink } = status;
 
   return (
     <section>
@@ -25,6 +25,43 @@ export function StatusView({ status, error, loading, reload }: StatusViewProps) 
           ))}
         </ul>
       )}
+
+      <h3>Internet</h3>
+      <dl>
+        <dt>Connection</dt>
+        <dd>{describeUplink(uplink)}</dd>
+        {uplink.connected && (
+          <>
+            <dt>Address on that network</dt>
+            <dd>{uplink.address || "waiting for address"}</dd>
+            <dt>IPv6 for your devices</dt>
+            <dd>{uplink.ipv6 ? "Yes" : "No (IPv4 only)"}</dd>
+          </>
+        )}
+        {uplink.wifi.available && (
+          <>
+            <dt>Wi-Fi</dt>
+            <dd>{describeWiFiState(uplink.wifi.state)}</dd>
+            {uplink.wifi.state === "connected" && (
+              <>
+                <dt>Wi-Fi signal</dt>
+                <dd>
+                  {describeSignal(uplink.wifi.signalDbm)}, {uplink.wifi.band}
+                </dd>
+              </>
+            )}
+          </>
+        )}
+        {uplink.ethernet.present && (
+          <>
+            <dt>Ethernet</dt>
+            <dd>
+              {uplink.ethernet.role === "uplink" ? "Uplink" : "Client port"},{" "}
+              {uplink.ethernet.cablePlugged ? "cable plugged in" : "no cable"}
+            </dd>
+          </>
+        )}
+      </dl>
 
       <h3>Hotspot</h3>
       <dl>
@@ -107,4 +144,20 @@ export function StatusView({ status, error, loading, reload }: StatusViewProps) 
       </button>
     </section>
   );
+}
+
+/** Wi-Fi uplink states in words. */
+function describeWiFiState(state: string): string {
+  switch (state) {
+    case "connected":
+      return "Connected";
+    case "connecting":
+      return "Connecting…";
+    case "searching":
+      return "Looking for your saved networks";
+    case "not-configured":
+      return "No networks saved (add one on the Internet page)";
+    default:
+      return "Off";
+  }
 }
