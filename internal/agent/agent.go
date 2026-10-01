@@ -102,6 +102,9 @@ type Agent struct {
 	setupWindowTimer *time.Timer
 	stopLEDBlink     chan struct{}
 
+	// webGroup is rbweb's group ID (-1 = unknown), for the HTTPS key copy.
+	webGroup int
+
 	// usbRadioWait is how long startup waits for a USB Wi-Fi adapter to
 	// appear (see waitForRadios). Tests set it to zero.
 	usbRadioWait time.Duration
@@ -118,6 +121,7 @@ func New(p paths.Paths, runner system.Runner) *Agent {
 		sleep:     time.Sleep,
 		dhcpProbe: dhcpprobe.Probe,
 		lan:       render.DefaultLAN,
+		webGroup:  -1,
 		// USB adapters usually appear within a few seconds of power-on.
 		usbRadioWait: 20 * time.Second,
 	}
@@ -161,6 +165,13 @@ func (a *Agent) Start() error {
 	// 2. Load settings, creating them on first boot.
 	if err := a.loadOrCreateSettings(); err != nil {
 		return err
+	}
+
+	// 2b. The HTTPS certificate for rbweb, if HTTPS is on. (rbweb waits
+	//     for rbd before starting, so it finds the files.)
+	if _, err := a.applyHTTPS(); err != nil {
+		slog.Error("HTTPS could not be set up; the web UI stays on HTTP", "error", err)
+		a.warnings = append(a.warnings, "HTTPS could not be set up: "+err.Error())
 	}
 
 	// 3. Firewall first, so the web UI is only reachable from the hotspot.

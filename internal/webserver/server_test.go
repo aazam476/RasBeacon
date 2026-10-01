@@ -276,3 +276,31 @@ func TestPortalActions_PublicButJSONOnly(t *testing.T) {
 		t.Errorf("form post: got %d, forwarded %q", rec.Code, rbd.lastForwarded)
 	}
 }
+
+func TestHTTPS_SettingsMoveToHTTPSButTheNoticeStays(t *testing.T) {
+	s, rbd := newTestServer(api.ModeNormal)
+	s.UseHTTPS()
+
+	rec := request(s, "GET", "http://10.87.0.1/", "", nil, nil)
+	if rec.Code != http.StatusFound || rec.Header().Get("Location") != "https://10.87.0.1/" {
+		t.Errorf("plain-HTTP visit: got %d to %q, want a redirect to HTTPS", rec.Code, rec.Header().Get("Location"))
+	}
+	rec = request(s, "POST", "http://10.87.0.1/api/v1/session", `{"password":"tangerine-orbit-42"}`, nil, nil)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("login over plain HTTP: got %d, want 403", rec.Code)
+	}
+	rec = request(s, "GET", "http://10.87.0.1/api/v1/status", "", nil, nil)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("settings over plain HTTP: got %d, want 403", rec.Code)
+	}
+
+	// The login-page notice must still work over plain HTTP.
+	rbd.portalNotice = true
+	s.forgetState()
+	if rec := request(s, "GET", "http://10.87.0.1/", "", nil, nil); rec.Code != http.StatusOK {
+		t.Errorf("notice over plain HTTP: got %d, want 200", rec.Code)
+	}
+	if rec := request(s, "GET", "http://10.87.0.1/api/v1/portal", "", nil, nil); rec.Code != http.StatusOK {
+		t.Errorf("portal API over plain HTTP: got %d", rec.Code)
+	}
+}

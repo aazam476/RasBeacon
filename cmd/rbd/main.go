@@ -54,6 +54,7 @@ func main() {
 	if *devRoot != "" {
 		a.SetDHCPProbe(devsim.DHCPProbe)
 	}
+	a.SetWebGroup(lookupGroupID(*webGroup))
 	if err := a.Start(); err != nil {
 		// systemd restarts rbd after a failure (see rbd.service), and the
 		// firewall rules loaded at boot stay in place in the meantime.

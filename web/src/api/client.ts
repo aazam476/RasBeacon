@@ -8,6 +8,7 @@ import type {
   ClaimResponse,
   ErrorResponse,
   HotspotSettings,
+  HTTPSSettings,
   PortalStatus,
   RevealPasswordResponse,
   ScanResponse,
@@ -169,6 +170,14 @@ export function importVPNConfig(conf: string): Promise<VPNSettings> {
 /** Makes a new key pair for RasBeacon; the public key is in the answer. */
 export function generateVPNKey(): Promise<VPNSettings> {
   return request("POST", "/settings/vpn/generate-key");
+}
+
+export function getHTTPSSettings(): Promise<HTTPSSettings> {
+  return request("GET", "/settings/https");
+}
+
+export function updateHTTPSSettings(settings: HTTPSSettings): Promise<HTTPSSettings> {
+  return request("PUT", "/settings/https", settings);
 }
 
 // --- Captive portal login mode (no login needed) ---
