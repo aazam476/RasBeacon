@@ -15,7 +15,10 @@ import type { EthernetRole, NearbyNetwork, SavedNetwork, UplinkSettings } from "
 import { useLoad } from "../../shared/useLoad";
 import {
   checkNewNetwork,
+  EDUROAM_FORM,
   EMPTY_NEW_NETWORK,
+  certificatesToUpload,
+  fileToUpload,
   formFromNearby,
   moveNetwork,
   networkErrorField,
@@ -24,7 +27,11 @@ import {
   toSavedNetwork,
   type NewNetworkErrors,
   type NewNetworkForm,
+  type UploadedFile,
 } from "./networkList";
+
+/** The form inputs that hold uploaded files. */
+export type CertificateField = "caCert" | "clientCert" | "clientKey";
 
 export interface UplinkSettingsLogic {
   /** The settings being edited, or undefined while they load. */
@@ -46,6 +53,13 @@ export interface UplinkSettingsLogic {
   newNetwork: NewNetworkForm;
   setNewNetworkField: <K extends keyof NewNetworkForm>(field: K, value: NewNetworkForm[K]) => void;
   newNetworkErrors: NewNetworkErrors;
+  /**
+   * Reads chosen certificate or key files into the form (empty clears it).
+   * Several files are allowed for the CA certificate.
+   */
+  setNewNetworkFiles: (field: CertificateField, files: File[]) => void;
+  /** Fills the form with the eduroam preset. */
+  applyEduroamPreset: () => void;
   /** Adds the form's network to the end of the list (saved with "Save"). */
   addNetwork: () => void;
 
@@ -91,6 +105,22 @@ export function useUplinkSettings(): UplinkSettingsLogic {
 
   function changeNetworks(update: (networks: SavedNetwork[]) => SavedNetwork[]) {
     change((current) => ({ ...current, networks: update(current.networks) }));
+  }
+
+  async function setNewNetworkFiles(field: CertificateField, files: File[]) {
+    const read = await Promise.all(
+      files.map(async (f) => ({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) })),
+    );
+    let upload: UploadedFile | null = null;
+    if (read.length > 0) {
+      // Certificates can be combined into one PEM bundle; a key is one file.
+      upload =
+        field === "clientKey"
+          ? fileToUpload(read[0].name, read[0].bytes)
+          : certificatesToUpload(read);
+    }
+    setNewNetwork((current) => ({ ...current, [field]: upload }));
+    setNewNetworkErrors((current) => ({ ...current, [field]: undefined }));
   }
 
   function addNetwork() {
@@ -163,6 +193,11 @@ export function useUplinkSettings(): UplinkSettingsLogic {
       setNewNetworkErrors((current) => ({ ...current, [field]: undefined }));
     },
     newNetworkErrors,
+    setNewNetworkFiles: (field, files) => void setNewNetworkFiles(field, files),
+    applyEduroamPreset: () => {
+      setNewNetwork(EDUROAM_FORM);
+      setNewNetworkErrors({});
+    },
     addNetwork,
     scan: () => void scan(),
     scanning,
