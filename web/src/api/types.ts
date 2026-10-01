@@ -128,6 +128,20 @@ export interface UplinkStatus {
   ethernet: EthernetUplinkStatus;
 }
 
+/** Where the WireGuard tunnel is (see internal/tunnel in the Go code). */
+export type VPNState = "off" | "connecting" | "up" | "down" | "direct";
+
+export interface VPNStatus {
+  enabled: boolean;
+  killSwitch: boolean;
+  state: VPNState;
+  /** Seconds since the last handshake with the server; -1 = never. */
+  handshakeAgeSeconds: number;
+  endpoint: string;
+  receivedBytes: number;
+  sentBytes: number;
+}
+
 /** GET /api/v1/status */
 export interface Status {
   version: string;
@@ -137,6 +151,7 @@ export interface Status {
   mode: Mode;
   hotspot: HotspotStatus;
   uplink: UplinkStatus;
+  vpn: VPNStatus;
   radios: Radio[];
   clients: Client[];
   warnings: string[];
@@ -230,4 +245,28 @@ export interface NearbyNetwork {
 /** POST /api/v1/uplink/scan */
 export interface ScanResponse {
   networks: NearbyNetwork[];
+}
+
+/**
+ * GET/PUT /api/v1/settings/vpn. Addresses are text, e.g. "10.66.0.2/32".
+ * `privateKey` and `presharedKey` are write-only (empty = keep).
+ */
+export interface VPNSettings {
+  enabled: boolean;
+  killSwitch: boolean;
+  /** A server has been set up (read-only). */
+  configured: boolean;
+  addresses: string[];
+  dns: string[];
+  mtu: number;
+  peerPublicKey: string;
+  endpoint: string;
+  allowedIps: string[];
+  persistentKeepalive: number;
+  /** RasBeacon's public key, to add to the WireGuard server (read-only). */
+  publicKey: string;
+  privateKey?: string;
+  presharedKey?: string;
+  hasPresharedKey: boolean;
+  removePresharedKey?: boolean;
 }

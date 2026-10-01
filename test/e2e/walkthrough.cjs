@@ -14,6 +14,18 @@ const { chromium } = require("playwright");
 const BASE_URL = process.env.RASBEACON_URL ?? "http://127.0.0.1:8080";
 const SCREENSHOT_DIR = process.env.SCREENSHOT_DIR ?? "";
 
+// A WireGuard file with the WireGuard documentation's example keys.
+const WIREGUARD_CONF = `[Interface]
+PrivateKey = yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=
+Address = 10.66.0.2/32
+DNS = 10.66.0.1
+
+[Peer]
+PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=
+Endpoint = vpn.example.com:51820
+AllowedIPs = 0.0.0.0/0, ::/0
+`;
+
 async function main() {
   const browser = await chromium.launch(
     process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {},
@@ -87,6 +99,21 @@ async function main() {
     await page.getByRole("button", { name: "Add to list" }).click();
     await page.getByRole("button", { name: "Save" }).click();
     await page.getByText("RasBeacon Test Campus CA (valid until").waitFor();
+  });
+
+  await step("VPN: a WireGuard file is imported and the VPN turned on", async () => {
+    await page.getByRole("button", { name: "VPN" }).click();
+    await page.getByLabel("Or paste its contents").fill(WIREGUARD_CONF.replace("DNS =", "PostUp = echo hi\nDNS ="));
+    await page.getByRole("button", { name: "Import" }).click();
+    await page.getByText("never runs commands").waitFor();
+    await page.getByLabel("Or paste its contents").fill(WIREGUARD_CONF);
+    await page.getByRole("button", { name: "Import" }).click();
+    await page.getByText("WireGuard file imported").waitFor();
+    await page.getByLabel("Use the VPN").check();
+    await page.getByRole("button", { name: "Save" }).click();
+    await page.getByText("Saved.").waitFor();
+    await page.getByRole("button", { name: "Status" }).click();
+    await page.getByText("Connected: your devices' traffic goes through the VPN.").waitFor();
   });
 
   await step("hotspot settings validate and save", async () => {

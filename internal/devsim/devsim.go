@@ -7,6 +7,7 @@
 //     port with no cable,
 //   - pretend the built-in radio is connected to a café's Wi-Fi with
 //     internet (IPv4 only), and that a scan finds a few networks,
+//   - pretend a WireGuard tunnel, once set up, works,
 //   - log the commands it would run (ip, iw, systemctl, ...) instead of
 //     running them, and answer with made-up output (two connected phones).
 //
@@ -138,6 +139,10 @@ func (Runner) Run(name string, args ...string) (string, error) {
 		return signalPoll, nil
 	case strings.HasPrefix(line, "wpa_cli") && strings.HasSuffix(line, " scan_results"):
 		return scanResults, nil
+	case line == "wg show wg0 dump":
+		// A tunnel that just completed a handshake.
+		return fmt.Sprintf("priv\tpub\t0\toff\nxTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=\t(none)\t203.0.113.5:51820\t0.0.0.0/0,::/0\t%d\t48213\t20981\t25\n",
+			time.Now().Unix()-20), nil
 	case strings.HasPrefix(line, "ip link show"):
 		return "", fmt.Errorf("devsim: link does not exist")
 	}

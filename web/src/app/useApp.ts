@@ -10,7 +10,7 @@ import type { SetupState } from "../api/types";
 import { useLoad } from "../shared/useLoad";
 
 /** The pages available after login. Shown in the address bar as #status etc. */
-export const PAGES = ["status", "internet", "hotspot", "ssh", "system"] as const;
+export const PAGES = ["status", "internet", "vpn", "hotspot", "ssh", "system"] as const;
 export type Page = (typeof PAGES)[number];
 
 export type AppPhase =

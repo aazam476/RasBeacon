@@ -13,6 +13,7 @@ export interface LayoutViewProps {
 const PAGE_TITLES: Record<Page, string> = {
   status: "Status",
   internet: "Internet",
+  vpn: "VPN",
   hotspot: "Hotspot",
   ssh: "SSH",
   system: "System",

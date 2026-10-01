@@ -15,6 +15,7 @@ import type {
   SSHSettings,
   Status,
   UplinkSettings,
+  VPNSettings,
 } from "./types";
 
 /**
@@ -149,6 +150,24 @@ export function updateUplinkSettings(settings: UplinkSettings): Promise<UplinkSe
 /** Looks for nearby Wi-Fi networks. Takes about 5 seconds. */
 export function scanNearbyNetworks(): Promise<ScanResponse> {
   return request("POST", "/uplink/scan");
+}
+
+export function getVPNSettings(): Promise<VPNSettings> {
+  return request("GET", "/settings/vpn");
+}
+
+export function updateVPNSettings(settings: VPNSettings): Promise<VPNSettings> {
+  return request("PUT", "/settings/vpn", settings);
+}
+
+/** Sends a WireGuard .conf file's text; the server checks and saves it. */
+export function importVPNConfig(conf: string): Promise<VPNSettings> {
+  return request("POST", "/settings/vpn/import", { conf });
+}
+
+/** Makes a new key pair for RasBeacon; the public key is in the answer. */
+export function generateVPNKey(): Promise<VPNSettings> {
+  return request("POST", "/settings/vpn/generate-key");
 }
 
 export function reboot(): Promise<void> {

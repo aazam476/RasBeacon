@@ -1,7 +1,12 @@
 // Markup for the status page.
 
 import type { StatusLogic } from "./useStatus";
-import { describeSignal, describeUplink, formatDuration } from "../../shared/format";
+import {
+  describeSignal,
+  describeUplink,
+  describeVPNState,
+  formatDuration,
+} from "../../shared/format";
 
 export type StatusViewProps = StatusLogic;
 
@@ -9,7 +14,7 @@ export function StatusView({ status, error, loading, reload }: StatusViewProps) 
   if (!status) {
     return <section>{error ? <p role="alert">{error}</p> : <p>Loading…</p>}</section>;
   }
-  const { hotspot, uplink } = status;
+  const { hotspot, uplink, vpn } = status;
 
   return (
     <section>
@@ -62,6 +67,21 @@ export function StatusView({ status, error, loading, reload }: StatusViewProps) 
           </>
         )}
       </dl>
+
+      <h3>VPN</h3>
+      <p>{describeVPNState(vpn.enabled ? vpn.state : "off", vpn.killSwitch)}</p>
+      {vpn.enabled && (
+        <dl>
+          <dt>Server</dt>
+          <dd>{vpn.endpoint || "not reached yet"}</dd>
+          <dt>Last handshake</dt>
+          <dd>
+            {vpn.handshakeAgeSeconds < 0
+              ? "never"
+              : `${formatDuration(vpn.handshakeAgeSeconds)} ago`}
+          </dd>
+        </dl>
+      )}
 
       <h3>Hotspot</h3>
       <dl>
