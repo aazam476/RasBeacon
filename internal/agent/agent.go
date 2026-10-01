@@ -13,6 +13,8 @@
 //	vpn.go         the WireGuard VPN and its kill switch
 //	portal.go      hotel login pages (captive portals) with the VPN on
 //	clock.go       keeping the time right without a clock battery
+//	https.go       the HTTPS setting
+//	update.go      installing and confirming updates
 //	status.go      the status page and diagnostics export
 //	server.go      the local HTTP API that rbweb talks to
 //
@@ -33,6 +35,7 @@ package agent
 import (
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/netip"
 	"os"
@@ -94,6 +97,9 @@ type Agent struct {
 	uplink   uplinkState
 	vpn      vpnState
 	portal   portalState
+	update   updateState
+	// decompress is zstdDecompress, or a stand-in in tests.
+	decompress func(io.Reader) (io.Reader, func() error, error)
 
 	// Setup mode details.
 	setupSecured     bool
@@ -114,14 +120,15 @@ type Agent struct {
 // runner. Production code passes paths.Default() and system.ExecRunner{}.
 func New(p paths.Paths, runner system.Runner) *Agent {
 	return &Agent{
-		paths:     p,
-		runner:    runner,
-		afterFunc: time.AfterFunc,
-		now:       time.Now,
-		sleep:     time.Sleep,
-		dhcpProbe: dhcpprobe.Probe,
-		lan:       render.DefaultLAN,
-		webGroup:  -1,
+		paths:      p,
+		runner:     runner,
+		afterFunc:  time.AfterFunc,
+		now:        time.Now,
+		sleep:      time.Sleep,
+		dhcpProbe:  dhcpprobe.Probe,
+		decompress: zstdDecompress,
+		lan:        render.DefaultLAN,
+		webGroup:   -1,
 		// USB adapters usually appear within a few seconds of power-on.
 		usbRadioWait: 20 * time.Second,
 	}
@@ -154,8 +161,10 @@ func (a *Agent) Start() error {
 		}
 	}
 
-	// 0. Don't let the clock go backwards across a reboot.
+	// 0. Don't let the clock go backwards across a reboot, and see whether
+	//    this start is the trial of an update.
 	a.applyTimeFloor()
+	a.checkTrialStart()
 
 	// 1. Factory reset requested by placing a file on the SD card?
 	if err := a.handleFactoryResetFile(); err != nil {
@@ -192,7 +201,11 @@ func (a *Agent) Start() error {
 
 	// 5. Start the setup network or the owner's hotspot, and the uplink.
 	if a.cfg.Claimed {
-		return a.startNormalMode()
+		if err := a.startNormalMode(); err != nil {
+			return err
+		}
+		a.scheduleConfirmation() // only does something on an update's trial
+		return nil
 	}
 	return a.startSetupMode()
 }

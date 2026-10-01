@@ -1,0 +1,4 @@
+Public keys (*.pub) that RasBeacon update files must be signed with.
+
+An image without any key here can't install update files (you flash new
+versions instead). See docs/releasing.md for making a key.

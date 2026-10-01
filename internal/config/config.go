@@ -69,6 +69,15 @@ type Config struct {
 	Uplink   UplinkConfig   `json:"uplink"`
 	VPN      VPNConfig      `json:"vpn"`
 	HTTPS    HTTPSConfig    `json:"https"`
+	Updates  UpdatesConfig  `json:"updates"`
+}
+
+// UpdatesConfig holds the update settings.
+type UpdatesConfig struct {
+	// CheckOnline asks GitHub now and then whether a newer release exists
+	// (off by default; RasBeacon contacts nobody unless you turn it on).
+	// It only shows a link: installing stays manual.
+	CheckOnline bool `json:"checkOnline"`
 }
 
 // HTTPSConfig is the HTTPS setting for the web UI. The certificate and key

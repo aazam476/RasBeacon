@@ -150,6 +150,33 @@ func (p Paths) IPv6Forwarding() string {
 	return p.join("proc", "sys", "net", "ipv6", "conf", "all", "forwarding")
 }
 
+// --- Updates (A/B slots) ---
+
+// UpdateKeysDir holds the public keys (*.pub) that update files must be
+// signed with. They are part of the image.
+func (p Paths) UpdateKeysDir() string { return p.join("usr", "lib", "rasbeacon", "update-keys") }
+
+// BoardFile names the image's board ("pi4" or "pi5"), written at build time.
+func (p Paths) BoardFile() string { return p.join("usr", "lib", "rasbeacon", "board") }
+
+// SlotDevice is a partition of the running ("active") or the other A/B
+// slot, e.g. SlotDevice("other", "system").
+func (p Paths) SlotDevice(slot, part string) string {
+	return p.join("dev", "disk", "by-slot", slot, part)
+}
+
+// TrybootFlag is non-zero when the bootloader started the system "on
+// trial" (tryboot), after an update.
+func (p Paths) TrybootFlag() string {
+	return p.join("proc", "device-tree", "chosen", "bootloader", "tryboot")
+}
+
+// AutobootFile tells the bootloader which slot to start.
+func (p Paths) AutobootFile() string { return filepath.Join(p.BootConfigDir(), "autoboot.txt") }
+
+// UpdatePendingFile remembers an installed update until it is confirmed.
+func (p Paths) UpdatePendingFile() string { return filepath.Join(p.DataDir(), "update-pending.json") }
+
 // --- Read-only system information ---
 
 // SysClassNet lists network interfaces (Linux sysfs).

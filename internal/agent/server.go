@@ -196,6 +196,34 @@ func (a *Agent) Handler() http.Handler {
 		})
 	}
 
+	// The body is the update file itself, streamed (it can be hundreds of
+	// megabytes), so it isn't read with readJSON.
+	mux.HandleFunc("POST /system/update", func(w http.ResponseWriter, r *http.Request) {
+		if err := a.InstallUpdate(r.Body); err != nil {
+			writeError(w, err)
+			return
+		}
+		a.mu.Lock()
+		status := a.updateStatus()
+		a.mu.Unlock()
+		writeJSON(w, http.StatusOK, status)
+	})
+
+	mux.HandleFunc("PUT /settings/updates", func(w http.ResponseWriter, r *http.Request) {
+		var req api.UpdateSettings
+		if !readJSON(w, r, &req) {
+			return
+		}
+		if err := a.UpdateUpdateSettings(req); err != nil {
+			writeError(w, err)
+			return
+		}
+		a.mu.Lock()
+		status := a.updateStatus()
+		a.mu.Unlock()
+		writeJSON(w, http.StatusOK, status)
+	})
+
 	mux.HandleFunc("POST /system/reboot", func(w http.ResponseWriter, r *http.Request) {
 		a.Reboot()
 		w.WriteHeader(http.StatusNoContent)
@@ -270,7 +298,7 @@ func writeError(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusBadRequest, api.ErrorResponse{Error: validation.Message, Field: validation.Field})
 	case errors.Is(err, ErrWrongPassword):
 		writeJSON(w, http.StatusForbidden, api.ErrorResponse{Error: err.Error(), Field: "password"})
-	case errors.Is(err, ErrWrongMode), errors.Is(err, ErrNoWiFiUplink):
+	case errors.Is(err, ErrWrongMode), errors.Is(err, ErrNoWiFiUplink), errors.Is(err, ErrUpdateBusy):
 		writeJSON(w, http.StatusConflict, api.ErrorResponse{Error: err.Error()})
 	default:
 		slog.Error("request failed", "error", err)

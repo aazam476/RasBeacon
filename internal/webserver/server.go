@@ -115,12 +115,16 @@ func (s *Server) Handler() http.Handler {
 		"POST /api/v1/settings/vpn/generate-key":        "/settings/vpn/generate-key",
 		"GET /api/v1/settings/https":                    "/settings/https",
 		"PUT /api/v1/settings/https":                    "/settings/https",
+		"PUT /api/v1/settings/updates":                  "/settings/updates",
 		"POST /api/v1/system/reboot":                    "/system/reboot",
 		"GET /api/v1/diagnostics":                       "/diagnostics",
 	}
 	for route, rbdPath := range forwarded {
 		mux.Handle(route, s.requireLogin(s.forwardTo(rbdPath)))
 	}
+	// Update files are large, so they are streamed to rbd.
+	mux.Handle("POST /api/v1/system/update", s.requireLogin(http.HandlerFunc(s.handleUpdate)))
+
 	// Factory reset also logs everyone out.
 	mux.Handle("POST /api/v1/system/factory-reset", s.requireLogin(s.handleFactoryReset()))
 
@@ -259,6 +263,28 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	}
 	clearSessionCookie(w)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// maxUpdateSize limits update uploads. Real ones are a few hundred MB.
+const maxUpdateSize = 2 << 30
+
+// updateUploadTime is how long an update upload may take (slow Wi-Fi).
+const updateUploadTime = 30 * time.Minute
+
+// handleUpdate streams an uploaded update file to rbd, which checks and
+// installs it (see internal/agent/update.go).
+func (s *Server) handleUpdate(w http.ResponseWriter, r *http.Request) {
+	// The server's normal time limits are far too short for this upload.
+	rc := http.NewResponseController(w)
+	_ = rc.SetReadDeadline(time.Now().Add(updateUploadTime))
+	_ = rc.SetWriteDeadline(time.Now().Add(updateUploadTime + time.Minute))
+
+	status, body, err := s.rbd.Stream("/system/update", http.MaxBytesReader(w, r.Body, maxUpdateSize))
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, api.ErrorResponse{Error: err.Error()})
+		return
+	}
+	writeRaw(w, status, "application/json", body)
 }
 
 // requireJSON only lets through requests with a JSON body type. Other

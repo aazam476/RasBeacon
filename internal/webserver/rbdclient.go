@@ -17,6 +17,8 @@ import (
 // RBDClient sends requests to rbd's local API.
 type RBDClient struct {
 	http *http.Client
+	// stream has no time limit, for uploading update files.
+	stream *http.Client
 	// baseURL is a placeholder host: requests are sent over the Unix socket
 	// no matter what the URL's host says.
 	baseURL string
@@ -32,6 +34,7 @@ func NewRBDClient(socketPath string) *RBDClient {
 	}
 	return &RBDClient{
 		http:    &http.Client{Transport: transport, Timeout: 60 * time.Second},
+		stream:  &http.Client{Transport: transport},
 		baseURL: "http://rbd",
 	}
 }
@@ -39,10 +42,25 @@ func NewRBDClient(socketPath string) *RBDClient {
 // NewRBDClientForHandler sends requests straight to an http.Handler instead
 // of a socket. Tests use it to run rbweb against a real agent in memory.
 func NewRBDClientForHandler(handler http.Handler) *RBDClient {
-	return &RBDClient{
-		http:    &http.Client{Transport: handlerTransport{handler}},
-		baseURL: "http://rbd",
+	client := &http.Client{Transport: handlerTransport{handler}}
+	return &RBDClient{http: client, stream: client, baseURL: "http://rbd"}
+}
+
+// Stream sends a large request body to rbd as it arrives (without reading
+// it into memory first) and returns the status code and response body.
+func (c *RBDClient) Stream(path string, body io.Reader) (int, []byte, error) {
+	req, err := http.NewRequest(http.MethodPost, c.baseURL+path, body)
+	if err != nil {
+		return 0, nil, err
 	}
+	req.Header.Set("Content-Type", "application/octet-stream")
+	resp, err := c.stream.Do(req)
+	if err != nil {
+		return 0, nil, fmt.Errorf("contacting rbd: %w", err)
+	}
+	defer resp.Body.Close()
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	return resp.StatusCode, respBody, err
 }
 
 // Do sends a request to rbd and returns the status code and response body.

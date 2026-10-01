@@ -112,6 +112,7 @@ type Status struct {
 	Uplink        UplinkStatus       `json:"uplink"`
 	VPN           VPNStatus          `json:"vpn"`
 	Portal        PortalStatus       `json:"portal"`
+	Update        UpdateStatus       `json:"update"`
 	Radios        []radio.Radio      `json:"radios"`
 	Clients       []stations.Station `json:"clients"`
 	// Warnings are problems the owner should know about, in plain words.
@@ -171,6 +172,29 @@ type EthernetUplinkStatus struct {
 	// answered on the port: it is probably plugged into a network rather
 	// than a laptop, so it was not connected to the hotspot network.
 	ForeignDHCPServer string `json:"foreignDhcpServer,omitempty"`
+}
+
+// UpdateStatus describes software updates.
+type UpdateStatus struct {
+	// Board is "pi4" or "pi5": update files must be for this board.
+	Board string `json:"board"`
+	// CanInstall is false when the image has no update signing key.
+	CanInstall bool `json:"canInstall"`
+	// Installing is true while an update is being written.
+	Installing bool `json:"installing"`
+	// Message describes the last update, e.g. "Updated to v1.2.0." or why
+	// it failed.
+	Message string `json:"message,omitempty"`
+	// The optional online check (see UpdateSettings).
+	CanCheckOnline bool   `json:"canCheckOnline"`
+	CheckOnline    bool   `json:"checkOnline"`
+	LatestVersion  string `json:"latestVersion,omitempty"`
+	LatestURL      string `json:"latestUrl,omitempty"`
+}
+
+// UpdateSettings is written by the System page.
+type UpdateSettings struct {
+	CheckOnline bool `json:"checkOnline"`
 }
 
 // PortalStatus describes captive portals (login pages of hotel networks).

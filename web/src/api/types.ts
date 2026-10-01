@@ -130,6 +130,21 @@ export interface UplinkStatus {
   ethernet: EthernetUplinkStatus;
 }
 
+/** Software updates (part of Status). */
+export interface UpdateStatus {
+  board: string;
+  /** False when the image has no update signing key. */
+  canInstall: boolean;
+  installing: boolean;
+  /** The last update's result, e.g. "Updated to v1.2.0." */
+  message?: string;
+  /** The optional online check for new releases. */
+  canCheckOnline: boolean;
+  checkOnline: boolean;
+  latestVersion?: string;
+  latestUrl?: string;
+}
+
 /**
  * GET /api/v1/portal (no login needed). A "captive portal" is the login page
  * of a hotel or café network.
@@ -169,6 +184,7 @@ export interface Status {
   uplink: UplinkStatus;
   vpn: VPNStatus;
   portal: PortalStatus;
+  update: UpdateStatus;
   radios: Radio[];
   clients: Client[];
   warnings: string[];

@@ -30,6 +30,8 @@ mmdebstrap:
     - rfkill
     # Shows USB adapters in the diagnostics report
     - usbutils
+    # Decompresses update files while they are installed
+    - zstd
     # Firmware the USB Wi-Fi adapters load when they start: Realtek (e.g.
     # TP-Link Archer T3U/T4U) and MediaTek (e.g. MT7612U, MT7921AU). The
     # kernel has their drivers, but without firmware they don't work.

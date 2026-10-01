@@ -304,3 +304,17 @@ func TestHTTPS_SettingsMoveToHTTPSButTheNoticeStays(t *testing.T) {
 		t.Errorf("portal API over plain HTTP: got %d", rec.Code)
 	}
 }
+
+func TestUpdateUpload_NeedsLoginAndIsStreamedToRBD(t *testing.T) {
+	s, rbd := newTestServer(api.ModeNormal)
+	rec := request(s, "POST", "http://10.87.0.1/api/v1/system/update", "update-bytes", nil, nil)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("without login: got %d, want 401", rec.Code)
+	}
+	cookies, csrf := login(t, s)
+	rec = request(s, "POST", "http://10.87.0.1/api/v1/system/update", "update-bytes",
+		map[string]string{"X-CSRF-Token": csrf, "Content-Type": "application/octet-stream"}, cookies)
+	if rec.Code != http.StatusOK || rbd.lastForwarded != "POST /system/update" {
+		t.Errorf("got %d, forwarded %q", rec.Code, rbd.lastForwarded)
+	}
+}
