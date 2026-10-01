@@ -43,3 +43,20 @@ export function describeUplink(uplink: {
   if (uplink.kind === "ethernet") return "Connected by Ethernet";
   return uplink.wifi.ssid ? `Connected to Wi-Fi "${uplink.wifi.ssid}"` : "Connected by Wi-Fi";
 }
+
+/** Explains a tunnel state to the owner. */
+export function describeVPNState(state: string, killSwitch: boolean): string {
+  switch (state) {
+    case "up":
+      return "Connected: your devices' traffic goes through the VPN.";
+    case "connecting":
+    case "down":
+      return killSwitch
+        ? "Not connected. The kill switch is on, so your devices have no internet until the VPN works."
+        : "Not connected yet. If it stays down for 30 seconds, devices use the internet without the VPN.";
+    case "direct":
+      return "Not connected: your devices are using the internet WITHOUT the VPN (kill switch off).";
+    default:
+      return "Off: your devices use the internet directly.";
+  }
+}
