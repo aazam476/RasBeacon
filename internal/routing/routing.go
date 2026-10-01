@@ -26,6 +26,7 @@ package routing
 import (
 	"fmt"
 	"net/netip"
+	"os"
 	"strconv"
 )
 
@@ -51,6 +52,17 @@ type TunnelSettings struct {
 	DNS []netip.Addr
 	// IPv6 is true when the tunnel carries devices' IPv6 traffic.
 	IPv6 bool
+	// KernelIPv6 is false when IPv6 is switched off in the kernel. The
+	// IPv6 commands are then left out (they would fail, and with no IPv6
+	// at all nothing can leak over it). See KernelHasIPv6.
+	KernelIPv6 bool
+}
+
+// KernelHasIPv6 reports whether the kernel has IPv6 switched on, given the
+// path of /proc/sys/net/ipv6.
+func KernelHasIPv6(procSysNetIPv6 string) bool {
+	_, err := os.Stat(procSysNetIPv6)
+	return err == nil
 }
 
 // TunnelUp returns the commands that configure wg0 and its routes. Run them
@@ -72,13 +84,15 @@ func TunnelUp(s TunnelSettings) [][]string {
 		// Table 51820: everything into the tunnel, or nowhere.
 		[]string{"ip", "-4", "route", "replace", "default", "dev", TunnelInterface, "table", TunnelTable},
 		[]string{"ip", "-4", "route", "replace", "unreachable", "default", "metric", fallbackMetric, "table", TunnelTable},
-		[]string{"ip", "-6", "route", "replace", "unreachable", "default", "metric", fallbackMetric, "table", TunnelTable},
 	)
-	if s.IPv6 {
-		cmds = append(cmds, []string{"ip", "-6", "route", "replace", "default", "dev", TunnelInterface, "table", TunnelTable})
-	} else {
-		// The tunnel has no IPv6: devices' IPv6 traffic must not go anywhere.
-		cmds = append(cmds, []string{"ip", "-6", "route", "flush", "dev", TunnelInterface, "table", TunnelTable})
+	if s.KernelIPv6 {
+		cmds = append(cmds, []string{"ip", "-6", "route", "replace", "unreachable", "default", "metric", fallbackMetric, "table", TunnelTable})
+		if s.IPv6 {
+			cmds = append(cmds, []string{"ip", "-6", "route", "replace", "default", "dev", TunnelInterface, "table", TunnelTable})
+		} else {
+			// The tunnel has no IPv6: devices' IPv6 traffic must not go anywhere.
+			cmds = append(cmds, []string{"ip", "-6", "route", "flush", "dev", TunnelInterface, "table", TunnelTable})
+		}
 	}
 
 	// The VPN's DNS servers: RasBeacon's DNS server (dnsmasq) asks them on
@@ -86,6 +100,9 @@ func TunnelUp(s TunnelSettings) [][]string {
 	// use the main table; this route makes them go through the tunnel. If
 	// the tunnel is down they die inside wg0 instead of leaking out.
 	for _, dns := range s.DNS {
+		if dns.Is6() && !s.KernelIPv6 {
+			continue
+		}
 		cmds = append(cmds, []string{"ip", "route", "replace", hostPrefix(dns), "dev", TunnelInterface})
 	}
 	return cmds
@@ -110,11 +127,14 @@ func TunnelDown() [][]string {
 
 // ClientsThroughTunnel returns the commands that send devices' traffic to
 // table 51820. Run ClientsDirect first so the rule is never added twice.
-func ClientsThroughTunnel(lanInterface string) [][]string {
-	return [][]string{
+func ClientsThroughTunnel(lanInterface string, kernelIPv6 bool) [][]string {
+	cmds := [][]string{
 		{"ip", "-4", "rule", "add", "priority", rulePriority, "iif", lanInterface, "lookup", TunnelTable},
-		{"ip", "-6", "rule", "add", "priority", rulePriority, "iif", lanInterface, "lookup", TunnelTable},
 	}
+	if kernelIPv6 {
+		cmds = append(cmds, []string{"ip", "-6", "rule", "add", "priority", rulePriority, "iif", lanInterface, "lookup", TunnelTable})
+	}
+	return cmds
 }
 
 // ClientsDirect returns the commands that remove RasBeacon's rule, so

@@ -16,6 +16,9 @@ mmdebstrap:
     - dnsmasq-base
     # Joins upstream Wi-Fi networks (the uplink)
     - wpasupplicant
+    # The "wg" tool for the WireGuard VPN (the kernel has WireGuard built in;
+    # RasBeacon doesn't use wg-quick)
+    - wireguard-tools
     # The device's own DNS resolver (127.0.0.53), fed by systemd-networkd
     # with the uplink's DNS servers
     - systemd-resolved

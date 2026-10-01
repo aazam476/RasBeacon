@@ -173,7 +173,7 @@ func startRouter(t *testing.T, settings routerSettings) (leaseFile string) {
 
 	firewall := render.FirewallInput{SSHEnabled: settings.SSHEnabled}
 	if settings.Normal {
-		firewall.Uplinks = []string{"eth0"}
+		firewall.Egress = []string{"eth0"}
 	}
 	rules, err := render.Firewall(firewall)
 	if err != nil {

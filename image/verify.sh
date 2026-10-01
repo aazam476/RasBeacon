@@ -27,7 +27,8 @@ check "rbweb is installed and executable" test -x "$root/usr/bin/rbweb"
 
 # The network programs rbd drives.
 for tool in usr/sbin/hostapd usr/sbin/dnsmasq usr/sbin/nft usr/sbin/iw usr/sbin/rfkill \
-  usr/sbin/wpa_supplicant usr/sbin/wpa_cli usr/bin/networkctl usr/lib/systemd/systemd-resolved; do
+  usr/sbin/wpa_supplicant usr/sbin/wpa_cli usr/bin/networkctl usr/lib/systemd/systemd-resolved \
+  usr/bin/wg usr/bin/timedatectl; do
   check "$tool is installed" test -x "$root/$tool"
 done
 
@@ -46,6 +47,8 @@ check "systemd-networkd runs at boot" sh -c "ls '$root'/etc/systemd/system/*.wan
 check "systemd-resolved runs at boot" sh -c "ls '$root'/etc/systemd/system/*.wants/systemd-resolved.service"
 check "Wi-Fi uplink service is installed" test -f "$root/usr/lib/systemd/system/rasbeacon-wpa@.service"
 check "Debian's wpa_supplicant service is masked" sh -c "[ \"\$(readlink '$root/etc/systemd/system/wpa_supplicant.service')\" = /dev/null ]"
+check "WireGuard is in the kernel (module or built in)" sh -c "find '$root'/usr/lib/modules -name 'wireguard.ko*' | grep -q . || grep -qs wireguard '$root'/usr/lib/modules/*/modules.builtin"
+check "wg-quick is not started at boot" sh -c "! ls '$root'/etc/systemd/system/*.wants/wg-quick@*"
 check "forwarding is off at boot" grep -q "^net.ipv4.ip_forward = 0" "$root/usr/lib/sysctl.d/90-rasbeacon.conf"
 check "SSH is not started at boot" sh -c "! ls '$root'/etc/systemd/system/*.wants/ssh.service"
 check "Debian's hostapd service is masked" sh -c "[ \"\$(readlink '$root/etc/systemd/system/hostapd.service')\" = /dev/null ]"

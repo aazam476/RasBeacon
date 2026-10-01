@@ -53,7 +53,7 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Install network tools
-        run: sudo apt-get update -q && sudo apt-get install -y -q nftables dnsmasq-base busybox iproute2 iputils-ping
+        run: sudo apt-get update -q && sudo apt-get install -y -q nftables dnsmasq-base busybox iproute2 iputils-ping wireguard-tools procps
       - name: Run tests as root
         # RASBEACON_REQUIRE_NETNS=1 makes the tests fail instead of skipping
         # if they can't run.
