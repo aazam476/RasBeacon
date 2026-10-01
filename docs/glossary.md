@@ -135,6 +135,19 @@ point, run by the program *hostapd*.
 **SSID**
 : A Wi-Fi network's name.
 
+**Guest network**
+: A second Wi-Fi network on RasBeacon for visitors. Guests get internet
+  access but can't reach your devices or the settings (milestone 7).
+
+**Metered connection**
+: An internet connection that costs per megabyte or is limited, like a
+  phone's hotspot. Devices told about it hold back big downloads.
+
+**Zero-leak login**
+: Logging in to a hotel's login page from a browser running on RasBeacon
+  itself, shown on your phone as pictures, so none of your devices' traffic
+  leaves the VPN (milestone 7).
+
 **ULA (unique local address)**
 : A private IPv6 address range (starting with `fd`) that each RasBeacon
   picks at random, like 10.x.x.x is for IPv4.

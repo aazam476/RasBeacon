@@ -143,10 +143,26 @@ on, devices can't reach that page either (`internal/agent/portal.go`):
 2. If one blocks the VPN, RasBeacon answers phones' own connectivity checks
    with its notice page (`#portal`), so the phone's "Log in to network"
    sheet opens on it.
-3. Tapping **Start login mode** lets web and DNS traffic (only) go
-   directly to the network for 10 minutes. It ends by itself as soon as the
-   login works, and the firewall cuts any connection still on the old
-   path, so nothing opened during login mode keeps going outside the VPN.
+3. **Zero-leak login** (recommended, `portalbrowser.go`): rbd opens the
+   login page in its own headless Chromium (`internal/browser`, controlled
+   over a pipe), running as the unprivileged user `rbbrowser`, which the
+   firewall only lets reach the uplink. The notice page shows pictures of
+   the page and sends taps and typing back. Devices stay in the tunnel.
+   The browser closes once the login worked, or after 5 idle minutes.
+4. Or **login mode**: web and DNS traffic (only) goes directly to the
+   network for 10 minutes. It ends by itself as soon as the login works,
+   and the firewall cuts any connection still on the old path, so nothing
+   opened during login mode keeps going outside the VPN.
+
+## The guest network
+
+An optional second Wi-Fi network (`internal/agent/guest.go`): a second
+access point (`guest0`) in the same hostapd, on its own bridge `br-guest`
+(10.87.1.0/24). Guests' traffic takes exactly the same path as yours (the
+VPN, kill switch included), but the firewall lets them reach only DHCP and
+DNS on RasBeacon, nothing on `br-lan`, and hostapd keeps guests apart from
+each other. It needs an adapter that can run two access points at once
+(`radio.MaxAPInterfaces`).
 
 ## Updates
 

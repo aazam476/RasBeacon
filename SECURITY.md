@@ -29,7 +29,12 @@ For example:
 - secrets appearing in logs or the diagnostics report;
 - installing an update that wasn't signed with the release key;
 - a WireGuard file or uploaded certificate that runs commands or changes
-  settings it shouldn't.
+  settings it shouldn't;
+- guests reaching your devices, other guests, the web UI or SSH, or
+  getting outside the VPN while the kill switch is on;
+- the zero-leak login browser reaching anything but the uplink (your
+  devices, the web UI, the VPN), reading RasBeacon's files, or keeping
+  data after it closes.
 
 ## Supported versions
 

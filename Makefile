@@ -39,10 +39,15 @@ build: ui
 	go build -trimpath -ldflags "$(LDFLAGS)" -o build/ ./cmd/rbd ./cmd/rbweb
 
 # Simulated device: no Raspberry Pi needed, nothing on this computer changes.
+# DEV_BROWSER: a headless Chromium for the zero-leak login screen (optional;
+# for example Playwright's chromium_headless_shell-*/chrome-linux/headless_shell).
+DEV_BROWSER ?=
+
 dev: build
 	@echo "Open http://127.0.0.1:8080 (press Ctrl+C to stop)"
+	@echo "Simulated hotel login page: http://127.0.0.1:8099/require-login turns it on"
 	rm -rf /tmp/rasbeacon-dev
-	./build/rbd -dev /tmp/rasbeacon-dev & \
+	./build/rbd -dev /tmp/rasbeacon-dev -dev-hotel 127.0.0.1:8099 -dev-browser "$(DEV_BROWSER)" & \
 	sleep 1; ./build/rbweb -listen 127.0.0.1:8080 -rbd-socket /tmp/rasbeacon-dev/run/rbd/api.sock; \
 	kill %1
 
