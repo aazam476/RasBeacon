@@ -164,8 +164,10 @@ stores the whole list at once).
 | `moveUp`, `moveDown`, `remove` | `(index) => void` | Reorder or remove a saved network |
 | `setPassword` | `(index, password) => void` | New password for a saved network ("" keeps it) |
 | `networkErrors` | `{ [index]: string }` | Server errors for a network in the list |
-| `newNetwork`, `setNewNetworkField` | form values, setter | `ssid`, `security` (`"personal"`/`"open"`), `password`, `hidden` |
-| `newNetworkErrors` | `{ ssid?, password? }` | |
+| `newNetwork`, `setNewNetworkField` | form values, setter | `ssid`, `security` (`"personal"`/`"enterprise"`/`"open"`), `password`, `hidden`; Enterprise: `method`, `identity`, `anonymousIdentity`, `serverName`, `allowNoCertificateCheck`, and the chosen files `caCert`, `clientCert`, `clientKey` (`{ name } \| null`) |
+| `setNewNetworkFiles` | `(field, files: File[]) => void` | For the file inputs `caCert` (several files allowed), `clientCert`, `clientKey` |
+| `applyEduroamPreset` | `() => void` | Fills the form for eduroam |
+| `newNetworkErrors` | `{ [input]?: string }` | Per-input messages, including `identity`, `caCert`, `serverName`, `clientCert`, `clientKey` |
 | `addNetwork` | `() => void` | Adds the form to the list (not saved yet) |
 | `scan`, `scanning` | `() => void`, `boolean` | Look for nearby networks (about 5 s) |
 | `nearby` | `NearbyNetwork[] \| null` | `null` = no scan yet; `[]` = nothing found |
@@ -179,13 +181,19 @@ results.
 
 **States to design:** loading, no saved networks, no Wi-Fi radio free
 (`wifiUplinkAvailable` false), scanning, nothing found, unsaved changes,
-per-network error, saved.
+per-network error, saved, the Enterprise form for each login method
+(EAP-TLS asks for certificate files instead of a password), and the
+"don't check the login server" override, which must keep its warning and
+stay tucked away (it is unsafe).
 
 **Wording the test relies on:**
 - buttons "Look for nearby networks", "Add to list", "Save", and one button
   per scan result named after the network
 - "(not saved yet)" next to added networks
-- "needs a username and certificate" (enterprise networks)
+- button "Set up eduroam"; heading/legend "Enterprise login"; labels
+  "Username", "Your password", "CA certificate file (choose several if your
+  institution lists more than one)", "Login server name"
+- "Choose the network's CA certificate file" (error)
 - "Saved. RasBeacon is joining the networks now"
 
 ### Hotspot settings: `screens/HotspotSettings/`
