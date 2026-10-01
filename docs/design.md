@@ -193,9 +193,14 @@ per-device is generated on first boot.
 
 ### 4.2 Uplink management
 - **Priority:** Ethernet with a link, then saved Wi-Fi networks in your order,
-  scanning for any that are in range. `rbd` drives `wpa_supplicant` over its
-  control socket, one network at a time, and switches when the current uplink
-  loses DHCP or connectivity for 20 s.
+  scanning for any that are in range.
+  - *As built in M2:* all saved networks go into `wpa_supplicant.conf` with
+    descending `priority`, and wpa_supplicant itself picks the most preferred
+    one in range and roams. This is simpler than `rbd` driving one network at
+    a time and uses wpa_supplicant's tested selection logic. Ethernet wins by
+    route metric (100 versus 600). If hardware testing shows wpa_supplicant
+    sticking to a network with DHCP but no connectivity, M5's connectivity
+    probes will add the "switch after 20 s" rule.
 - **Enterprise uplinks:** `eap=TTLS` + `phase2="auth=PAP"`, `PEAP` +
   `MSCHAPV2`, or `TLS` with a client cert/key. Fields:
   - `identity` and `anonymous_identity`

@@ -56,6 +56,9 @@ hotspot**, never from the upstream network.
 | `POST /api/v1/settings/hotspot/reveal-password` | `PasswordRequest` (admin password) | `RevealPasswordResponse` | 403 if the admin password is wrong |
 | `GET /api/v1/settings/ssh` | — | `SSHSettings` | |
 | `PUT /api/v1/settings/ssh` | `SSHSettings` | `SSHSettings` | Turning SSH on requires at least one valid public key |
+| `GET /api/v1/settings/uplink` | — | `UplinkSettings` | Ethernet role and saved upstream Wi-Fi networks (most preferred first). Passwords are never returned; `hasPassword` says one is saved. |
+| `PUT /api/v1/settings/uplink` | `UplinkSettings` | `UplinkSettings` | Saves the **whole** list. New networks have `id: ""`. An empty `password` keeps the saved one. Networks left out are forgotten. Errors name the field as `networks.<position>.<input>`, for example `networks.0.password`. |
+| `POST /api/v1/uplink/scan` | — | `ScanResponse` | Nearby Wi-Fi networks, strongest first, without RasBeacon's own hotspot. Takes about 5 s. 409 when no radio is free to join Wi-Fi. |
 | `POST /api/v1/system/reboot` | — | 204 | Restarts about 5 s later |
 | `POST /api/v1/system/factory-reset` | `PasswordRequest` (admin password) | 204 | Erases everything and restarts into setup. Logs everyone out. |
 | `GET /api/v1/diagnostics` | — | text file | Troubleshooting report. Passwords are removed and MAC addresses partly hidden. |

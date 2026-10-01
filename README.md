@@ -12,11 +12,12 @@ hotel login pages.
 - **No telemetry and no cloud.** Everything works offline.
 - **Licensed under Apache-2.0.**
 
-> **Status: milestone 1 of 6.** The image boots, runs the first-boot setup
-> network and web UI, and then runs your hotspot. It does **not** connect to
-> the internet yet: joining an upstream network arrives in milestone 2, and
-> WireGuard and the kill switch in milestone 4. See
-> [docs/design.md](docs/design.md) for the full plan.
+> **Status: milestone 2 of 6.** The image boots, runs the first-boot setup
+> network and web UI, runs your hotspot, and connects it to the internet
+> through an Ethernet cable or an open or password-protected Wi-Fi network.
+> Still to come: eduroam and other WPA-Enterprise networks (milestone 3),
+> WireGuard and the kill switch (milestone 4), and hotel login pages
+> (milestone 5). See [docs/design.md](docs/design.md) for the full plan.
 
 ## What you need
 
@@ -64,6 +65,11 @@ hotel login pages.
 7. After a few seconds the setup network disappears and **your hotspot
    starts**. Join it, then open `http://10.87.0.1` (or
    `http://rasbeacon.lan`) to see the status page.
+8. **Connect RasBeacon to the internet:** plug in an Ethernet cable, or open
+   the **Internet** page, tap *Look for nearby networks*, pick the network,
+   enter its password, *Add to list*, and *Save*. You can save several
+   networks; RasBeacon joins the first one in the list that is in range,
+   and prefers a plugged-in cable.
 
 > **Important:** the setup network closes after 30 minutes if nobody
 > finishes setup. Unplug and replug the power to reopen it. Until setup is
@@ -78,6 +84,8 @@ hotel login pages.
 | No setup network, and the green LED repeats **4 short flashes** | The Pi 4's bootloader (firmware stored on the board) is too old to start RasBeacon's A/B layout. Update it once: in Raspberry Pi Imager choose your Pi 4, then *OS → Misc utility images → Bootloader → SD Card Boot*, write it to any SD card, boot the Pi with it until the green LED blinks steadily (green screen on a monitor), then reflash RasBeacon. Pi 5s ship with a new enough bootloader. |
 | No setup network, and another repeating pattern of long/short flashes | A boot error. Count the long and short flashes and look them up in the [Raspberry Pi LED code table](https://www.raspberrypi.com/documentation/computers/configuration.html#led-warning-flash-codes). |
 | No setup network and no blinking | Check the USB Wi-Fi adapter is plugged in, and power-cycle. If it still doesn't appear, connect the Pi to a TV and keyboard, or see [docs/testing/m1.md](docs/testing/m1.md) for how to collect logs. |
+| Devices on the hotspot say "No internet" | Check the **Internet** section of the Status page. "Not connected": plug in a cable or save a Wi-Fi network on the Internet page. Wi-Fi "Looking for your saved networks": the network is out of range or its password is wrong. If the network shows a login page (hotels), that arrives in milestone 5. |
+| A warning says the Ethernet port "seems to be plugged into a network" | The port is set to *Client port* (for your own laptop), but it's plugged into a network. Set it to *Uplink* on the Internet page if that cable is your internet connection. |
 | The status page warns that the built-in Wi-Fi is running the hotspot | RasBeacon didn't find a USB adapter it can use. Plug one in and restart from the System page. |
 | Nothing works and you want to see why | Put the SD card in a computer and create an empty file named `debug` on the `BOOTCONFIG` drive. Boot the Pi and wait 3 minutes, then unplug it. Back on the computer, open `rasbeacon-debug.txt` from the same drive. It holds the startup logs (no passwords, but device names and MAC addresses, so delete it afterwards). |
 | Forgot the admin password | Factory reset: put the SD card in a computer and create an empty file named `factory-reset` on the `BOOTCONFIG` drive. At the next start, RasBeacon erases all settings and runs first-time setup again. |
