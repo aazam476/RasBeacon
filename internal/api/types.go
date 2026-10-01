@@ -252,6 +252,9 @@ type VPNStatus struct {
 	Endpoint            string `json:"endpoint"`
 	ReceivedBytes       int64  `json:"receivedBytes"`
 	SentBytes           int64  `json:"sentBytes"`
+	// RoutedIPv6Prefix is the public IPv6 network devices get addresses
+	// from, while it is in use (see VPNSettings).
+	RoutedIPv6Prefix string `json:"routedIpv6Prefix,omitempty"`
 }
 
 // VPNSettings is read and written by the VPN page. Addresses are text
@@ -278,6 +281,10 @@ type VPNSettings struct {
 	HasPresharedKey bool   `json:"hasPresharedKey"`
 	// RemovePresharedKey deletes the saved preshared key.
 	RemovePresharedKey bool `json:"removePresharedKey,omitempty"`
+	// RoutedIPv6Prefix is optional: a public IPv6 /64 the WireGuard server
+	// routes to RasBeacon (e.g. "2001:db8:1234:5678::/64"). Devices then
+	// get public IPv6 addresses through the VPN, without NAT. Empty: off.
+	RoutedIPv6Prefix string `json:"routedIpv6Prefix"`
 }
 
 // HTTPSSettings is read and written by the HTTPS page.

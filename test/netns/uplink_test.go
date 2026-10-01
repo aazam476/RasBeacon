@@ -9,6 +9,8 @@ package netns
 
 import (
 	"fmt"
+	"io"
+	"net"
 	"os"
 	"os/exec"
 	"strings"
@@ -155,7 +157,25 @@ func TestNormalMode_IPv6PrivateNetworkWithoutDefaultRoute(t *testing.T) {
 // RB_PROBE_INTERFACE is set, it runs dhcpprobe.Probe on that interface,
 // prints the result and exits. probeInNamespace uses this to run the probe
 // inside a namespace (a running Go program can't easily switch itself).
+//
+// Two more helper modes work on IPv6 where busybox nc might not:
+// RB_GREETER=[address]:port answers every TCP connection with
+// "...-standin", and RB_DIAL=[address]:port connects and prints the answer.
 func TestMain(m *testing.M) {
+	if address := os.Getenv("RB_GREETER"); address != "" {
+		greet(address)
+	}
+	if address := os.Getenv("RB_DIAL"); address != "" {
+		conn, err := net.DialTimeout("tcp", address, 2*time.Second)
+		if err != nil {
+			fmt.Println("error:", err)
+			os.Exit(1)
+		}
+		conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+		answer, _ := io.ReadAll(conn)
+		fmt.Print(string(answer))
+		os.Exit(0)
+	}
 	if iface := os.Getenv("RB_PROBE_INTERFACE"); iface != "" {
 		result, err := dhcpprobe.Probe(iface, 3*time.Second)
 		if err != nil {
@@ -166,6 +186,38 @@ func TestMain(m *testing.M) {
 		os.Exit(0)
 	}
 	os.Exit(m.Run())
+}
+
+// greet runs the RB_GREETER server (see TestMain) until it is stopped.
+func greet(address string) {
+	listener, err := net.Listen("tcp", address)
+	if err != nil {
+		fmt.Println("error:", err)
+		os.Exit(1)
+	}
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			continue
+		}
+		fmt.Fprintln(conn, "greeter-standin")
+		conn.Close()
+	}
+}
+
+// startGreeter runs a TCP server answering "greeter-standin" on address
+// (like "[2001:db8::80]:8082") in namespace ns.
+func startGreeter(t *testing.T, ns, address string) {
+	t.Helper()
+	startBackground(t, ns, "env", "RB_GREETER="+address, os.Args[0])
+	time.Sleep(300 * time.Millisecond)
+}
+
+// tcpConnectsTo is tcpConnects for any address, including IPv6 ones
+// ("[2001:db8::80]:8082"), using the RB_DIAL helper.
+func tcpConnectsTo(ns, address string) bool {
+	out, _ := tryInNS(ns, 4*time.Second, "env", "RB_DIAL="+address, os.Args[0])
+	return strings.Contains(out, "standin")
 }
 
 // probeInNamespace runs the DHCP probe on iface inside namespace ns and

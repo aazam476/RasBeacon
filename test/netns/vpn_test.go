@@ -184,6 +184,7 @@ type routerRules struct {
 	egress      []string
 	upstreamDNS []string
 	portalOnly  bool
+	routedIPv6  netip.Prefix
 }
 
 // renderRouterRules writes rbd's firewall for r to a file and returns its
@@ -195,6 +196,7 @@ func renderRouterRules(t *testing.T, r routerRules) string {
 		TunnelInterface: routing.TunnelInterface,
 		TunnelDNS:       []netip.Addr{netip.MustParseAddr(vpnServerAddress)},
 		PortalOnly:      r.portalOnly,
+		RoutedIPv6:      r.routedIPv6,
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -16,6 +16,11 @@ package agent
 //   - DNS: dnsmasq asks the VPN's DNS servers, which are routed into wg0 and
 //     blocked everywhere else by the firewall's output rule.
 //
+// Optionally, the WireGuard server routes a public IPv6 network to
+// RasBeacon (VPNConfig.RoutedIPv6Prefix). RasBeacon then announces it on the
+// hotspot, so devices get public IPv6 addresses, and the firewall sends
+// their IPv6 traffic through the tunnel without NAT (applyRoutedIPv6).
+//
 // Each of these alone would stop devices' traffic from leaving through the
 // uplink. Only when the kill switch is OFF and the tunnel has been broken
 // for a while ("direct") are they all switched to the uplink.
@@ -106,6 +111,7 @@ func (a *Agent) applyVPNConfig() error {
 			_, _ = a.runner.Run(cmd[0], cmd[1:]...) // errors: already gone
 		}
 		a.vpn = vpnState{}
+		a.applyRoutedIPv6()
 		return a.updateTunnel()
 	}
 
@@ -142,7 +148,56 @@ func (a *Agent) applyVPNConfig() error {
 		}
 	}
 	a.vpn.lastRefresh = a.now()
+	a.applyRoutedIPv6()
 	return a.updateTunnel()
+}
+
+// wantedRoutedIPv6 returns the public IPv6 network that should be on the
+// hotspot now: the one the VPN server routes to RasBeacon, while the VPN
+// is in use. Otherwise it returns an invalid (unset) prefix.
+func (a *Agent) wantedRoutedIPv6() netip.Prefix {
+	if !a.vpnActive() || !routing.KernelHasIPv6(a.paths.ProcSysNetIPv6()) {
+		return netip.Prefix{}
+	}
+	return a.cfg.VPN.RoutedIPv6Prefix
+}
+
+// applyRoutedIPv6 puts RasBeacon's address in the routed IPv6 network on
+// the hotspot bridge (or takes it off). dnsmasq announces every network on
+// the bridge, so devices pick addresses in it; the firewall rule that
+// skips NAT for it follows with the next firewall reload.
+func (a *Agent) applyRoutedIPv6() {
+	want := a.wantedRoutedIPv6()
+	if want == a.routedIPv6 {
+		return
+	}
+	if a.routedIPv6.IsValid() {
+		_, _ = a.runner.Run("ip", "-6", "address", "del", routerAddress(a.routedIPv6).String(), "dev", render.BridgeName)
+	}
+	a.routedIPv6 = netip.Prefix{}
+	if want.IsValid() {
+		if _, err := a.runner.Run("ip", "-6", "address", "replace", routerAddress(want).String(), "dev", render.BridgeName); err != nil {
+			slog.Error("could not add the routed IPv6 network to the hotspot", "error", err)
+			return
+		}
+		a.routedIPv6 = want
+	}
+	slog.Info("routed IPv6 network on the hotspot", "prefix", a.routedIPv6)
+	if a.mode == api.ModeNormal {
+		if err := a.applyFirewall(); err != nil {
+			slog.Error("could not update the firewall for the routed IPv6 network", "error", err)
+		}
+		if err := a.applyDHCP(false); err != nil {
+			slog.Error("could not announce the routed IPv6 network", "error", err)
+		}
+	}
+}
+
+// routerAddress is RasBeacon's own address in a /64: the first one (::1).
+func routerAddress(network netip.Prefix) netip.Prefix {
+	a := network.Masked().Addr().As16()
+	a[15] = 1
+	return netip.PrefixFrom(netip.AddrFrom16(a), network.Bits())
 }
 
 func presharedKeyText(p wireguard.Peer) string {
@@ -269,6 +324,9 @@ func (a *Agent) vpnStatus() api.VPNStatus {
 		ReceivedBytes:       a.vpn.peer.ReceivedBytes,
 		SentBytes:           a.vpn.peer.SentBytes,
 	}
+	if a.routedIPv6.IsValid() {
+		s.RoutedIPv6Prefix = a.routedIPv6.String()
+	}
 	if !a.vpn.peer.LatestHandshake.IsZero() {
 		s.HandshakeAgeSeconds = int(a.now().Sub(a.vpn.peer.LatestHandshake).Seconds())
 	}
@@ -314,6 +372,9 @@ func (a *Agent) VPNSettings() api.VPNSettings {
 		PersistentKeepalive: v.Peer.PersistentKeepalive,
 		HasPresharedKey:     a.secrets.WireGuardPresharedKey != "",
 	}
+	if v.RoutedIPv6Prefix.IsValid() {
+		s.RoutedIPv6Prefix = v.RoutedIPv6Prefix.String()
+	}
 	if key, err := wireguard.ParseKey(a.secrets.WireGuardPrivateKey); err == nil {
 		s.PublicKey = key.PublicKey().String()
 	}
@@ -345,6 +406,12 @@ func (a *Agent) UpdateVPNSettings(req api.VPNSettings) error {
 	}
 	if v.DNS, err = parseAddrs(req.DNS, "dns"); err != nil {
 		return err
+	}
+	v.RoutedIPv6Prefix = netip.Prefix{}
+	if text := strings.TrimSpace(req.RoutedIPv6Prefix); text != "" {
+		if v.RoutedIPv6Prefix, err = netip.ParsePrefix(text); err != nil {
+			return &config.ValidationError{Field: "routedIpv6Prefix", Message: "Must be an IPv6 network like 2001:db8:1234:5678::/64."}
+		}
 	}
 	if req.PrivateKey != "" {
 		if _, err := wireguard.ParseKey(strings.TrimSpace(req.PrivateKey)); err != nil {
@@ -427,6 +494,15 @@ func (a *Agent) saveVPN(newCfg config.Config, newSecrets config.Secrets) error {
 	if configured {
 		if err := wg.Validate(); err != nil {
 			return &config.ValidationError{Field: "conf", Message: err.Error()}
+		}
+	}
+	if p := newCfg.VPN.RoutedIPv6Prefix; p.IsValid() {
+		if err := config.ValidateRoutedIPv6Prefix(p); err != nil {
+			return &config.ValidationError{Field: "routedIpv6Prefix", Message: err.Error()}
+		}
+		if configured && !wg.CarriesIPv6() {
+			return &config.ValidationError{Field: "routedIpv6Prefix",
+				Message: "The VPN must carry IPv6 for this: it needs an IPv6 address and ::/0 in AllowedIPs."}
 		}
 	}
 

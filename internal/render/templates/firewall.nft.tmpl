@@ -132,6 +132,12 @@ table inet rasbeacon {
 	# covers IPv4 and IPv6 ("NAT66").
 	chain postrouting_nat {
 		type nat hook postrouting priority srcnat;
+{{- if .RoutedIPv6}}
+		# Except: devices' public IPv6 addresses, from the network the VPN
+		# server routes to RasBeacon ({{.RoutedIPv6}}), go through the tunnel
+		# unchanged ("accept" here means "no NAT").
+		oifname "{{.TunnelInterface}}" ip6 saddr {{.RoutedIPv6}} accept
+{{- end}}
 		oifname @egress masquerade
 	}
 {{- end}}

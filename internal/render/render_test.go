@@ -372,6 +372,26 @@ func TestFirewall_GuestNetworkIsolated(t *testing.T) {
 	}
 }
 
+func TestFirewall_RoutedIPv6SkipsNATOnlyInTheTunnel(t *testing.T) {
+	routed := netip.MustParsePrefix("2001:db8:1234:5678::/64")
+	got, err := Firewall(FirewallInput{Egress: []string{"wg0"}, TunnelInterface: "wg0", RoutedIPv6: routed})
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkGolden(t, "firewall_routed_ipv6", got)
+	nat := got[strings.Index(got, "chain postrouting_nat"):]
+	exempt := strings.Index(nat, `oifname "wg0" ip6 saddr 2001:db8:1234:5678::/64 accept`)
+	if exempt < 0 || exempt > strings.Index(nat, "masquerade") {
+		t.Errorf("the routed network must be exempted from NAT before masquerading:\n%s", nat)
+	}
+	if _, err := Firewall(FirewallInput{Egress: []string{"wlan0"}, RoutedIPv6: routed}); err == nil {
+		t.Error("a routed network without the tunnel must be refused")
+	}
+	if _, err := Firewall(FirewallInput{TunnelInterface: "wg0", RoutedIPv6: netip.MustParsePrefix("fd00:1::/64")}); err == nil {
+		t.Error("a private network must be refused")
+	}
+}
+
 func TestFirewall_EstablishedOnlyOnCurrentPath(t *testing.T) {
 	got, _ := Firewall(FirewallInput{Egress: []string{"wg0"}})
 	forward := got[strings.Index(got, "chain forward"):strings.Index(got, "chain prerouting_nat")]
