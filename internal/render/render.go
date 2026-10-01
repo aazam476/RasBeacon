@@ -40,11 +40,59 @@ const BridgeName = "br-lan"
 type LAN struct {
 	// Prefix is RasBeacon's address with the network size, e.g. 10.87.0.1/24.
 	Prefix netip.Prefix
+	// IPv6Prefix is RasBeacon's private IPv6 address on the hotspot with the
+	// network size, e.g. fd12:3456:789a:1::1/64 (see ULALANAddress). It is
+	// not set (IsValid() is false) when IPv6 is not used, as in setup mode.
+	IPv6Prefix netip.Prefix
 }
 
 // DefaultLAN is the hotspot network chosen by the owner: 10.87.0.0/24, with
 // RasBeacon at 10.87.0.1.
 var DefaultLAN = LAN{Prefix: netip.MustParsePrefix("10.87.0.1/24")}
+
+// LANCandidates are the hotspot networks RasBeacon can use, in order of
+// preference. It uses the first one that does not overlap the upstream
+// network: if a hotel also used 10.87.0.0/24, devices could not tell
+// RasBeacon's addresses from the hotel's.
+var LANCandidates = []netip.Prefix{
+	netip.MustParsePrefix("10.87.0.1/24"),
+	netip.MustParsePrefix("10.88.0.1/24"),
+	netip.MustParsePrefix("172.31.87.1/24"),
+	netip.MustParsePrefix("192.168.87.1/24"),
+}
+
+// ChooseLANPrefix returns the first of LANCandidates that overlaps none of
+// the upstream networks. If all of them overlap (very unlikely), it returns
+// the first one.
+func ChooseLANPrefix(upstream []netip.Prefix) netip.Prefix {
+	for _, candidate := range LANCandidates {
+		overlaps := false
+		for _, u := range upstream {
+			if u.Masked().Overlaps(candidate.Masked()) {
+				overlaps = true
+				break
+			}
+		}
+		if !overlaps {
+			return candidate
+		}
+	}
+	return LANCandidates[0]
+}
+
+// ULALANAddress turns the device's random IPv6 prefix (a /48 such as
+// fd12:3456:789a::/48, see config.Identity) into RasBeacon's address on the
+// hotspot: the first /64 inside it, address ::1, e.g. fd12:3456:789a:1::1/64.
+func ULALANAddress(ula48 string) (netip.Prefix, error) {
+	prefix, err := netip.ParsePrefix(ula48)
+	if err != nil || !prefix.Addr().Is6() || prefix.Bits() != 48 {
+		return netip.Prefix{}, fmt.Errorf("invalid ULA prefix %q", ula48)
+	}
+	a := prefix.Masked().Addr().As16()
+	a[7] = 1  // subnet number 1 (the 4th group of the address)
+	a[15] = 1 // host ::1
+	return netip.PrefixFrom(netip.AddrFrom16(a), 64), nil
+}
 
 // Address returns RasBeacon's own IP address on the hotspot, e.g. 10.87.0.1.
 func (l LAN) Address() string { return l.Prefix.Addr().String() }
@@ -169,6 +217,15 @@ type DnsmasqInput struct {
 	// Captive is true during first-boot setup: every name points to
 	// RasBeacon so phones open the setup page automatically.
 	Captive bool
+	// Upstream lists the DNS servers that questions about internet names are
+	// passed on to (normally 127.0.0.53, the device's own resolver, which
+	// uses the DNS servers of the current uplink). Ignored when Captive.
+	Upstream []string
+	// IPv6DefaultRoute tells devices that RasBeacon can carry their IPv6
+	// internet traffic. When false, devices still get private IPv6
+	// addresses (if LAN.IPv6Prefix is set) but no IPv6 route to the
+	// internet, so they use IPv4 instead of waiting for IPv6 to time out.
+	IPv6DefaultRoute bool
 }
 
 type dnsmasqData struct {
@@ -180,6 +237,9 @@ type dnsmasqData struct {
 	LeaseFile        string
 	Captive          bool
 	CaptivePortalAPI string
+	Upstream         []string
+	IPv6             bool
+	IPv6DefaultRoute bool
 }
 
 // Dnsmasq produces dnsmasq.conf text.
@@ -194,6 +254,14 @@ func Dnsmasq(in DnsmasqInput) (string, error) {
 		LeaseFile:        in.LeaseFile,
 		Captive:          in.Captive,
 		CaptivePortalAPI: "http://" + in.LAN.Address() + "/api/v1/captive",
+		Upstream:         in.Upstream,
+		IPv6:             in.LAN.IPv6Prefix.IsValid(),
+		IPv6DefaultRoute: in.IPv6DefaultRoute,
+	}
+	for _, server := range in.Upstream {
+		if _, err := netip.ParseAddr(server); err != nil {
+			return "", fmt.Errorf("upstream DNS server %q is not an IP address", server)
+		}
 	}
 	return execute("dnsmasq.conf.tmpl", data)
 }
@@ -203,19 +271,46 @@ func Dnsmasq(in DnsmasqInput) (string, error) {
 // FirewallInput is everything needed to write the firewall rules.
 type FirewallInput struct {
 	SSHEnabled bool
+	// Uplinks are the interfaces that lead to the internet, e.g. "eth0" and
+	// "wlan0". Devices' traffic is forwarded (with NAT) to these interfaces
+	// only. Empty means nothing is forwarded, as during first-boot setup.
+	Uplinks []string
 }
 
 type firewallData struct {
 	Bridge     string
 	SSHEnabled bool
+	Uplinks    []string
 }
 
 // Firewall produces the nftables ruleset.
 func Firewall(in FirewallInput) (string, error) {
+	for _, name := range in.Uplinks {
+		if !isInterfaceName(name) {
+			return "", fmt.Errorf("invalid interface name %q", name)
+		}
+	}
 	return execute("firewall.nft.tmpl", firewallData{
 		Bridge:     BridgeName,
 		SSHEnabled: in.SSHEnabled,
+		Uplinks:    in.Uplinks,
 	})
+}
+
+// isInterfaceName reports whether name is a safe Linux interface name
+// (letters, digits, "-", "_", "."; at most 15 characters), so it can be
+// placed into config files without quoting problems.
+func isInterfaceName(name string) bool {
+	if name == "" || len(name) > 15 {
+		return false
+	}
+	for _, r := range name {
+		ok := r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_' || r == '.'
+		if !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // execute fills in one template.

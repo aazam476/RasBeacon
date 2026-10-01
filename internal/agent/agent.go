@@ -8,6 +8,7 @@
 //
 //	agent.go       startup sequence and switching between modes (this file)
 //	operations.go  actions requested through the API (claim, settings, ...)
+//	uplink.go      the connection to the internet (Ethernet, Wi-Fi)
 //	status.go      the status page and diagnostics export
 //	server.go      the local HTTP API that rbweb talks to
 //
@@ -29,12 +30,14 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/netip"
 	"os"
 	"sync"
 	"time"
 
 	"rasbeacon/internal/api"
 	"rasbeacon/internal/config"
+	"rasbeacon/internal/dhcpprobe"
 	"rasbeacon/internal/identity"
 	"rasbeacon/internal/led"
 	"rasbeacon/internal/paths"
@@ -70,6 +73,9 @@ type Agent struct {
 	// and a controllable fake in tests.
 	afterFunc func(d time.Duration, f func()) *time.Timer
 	now       func() time.Time
+	sleep     func(d time.Duration)
+	// dhcpProbe is dhcpprobe.Probe, or a fake in tests and devsim.
+	dhcpProbe func(iface string, timeout time.Duration) (dhcpprobe.Result, error)
 
 	identity config.Identity
 	cfg      config.Config
@@ -79,6 +85,7 @@ type Agent struct {
 	warnings []string
 	mode     api.Mode
 	lan      render.LAN
+	uplink   uplinkState
 
 	// Setup mode details.
 	setupSecured     bool
@@ -100,6 +107,8 @@ func New(p paths.Paths, runner system.Runner) *Agent {
 		runner:    runner,
 		afterFunc: time.AfterFunc,
 		now:       time.Now,
+		sleep:     time.Sleep,
+		dhcpProbe: dhcpprobe.Probe,
 		lan:       render.DefaultLAN,
 		// USB adapters usually appear within a few seconds of power-on.
 		usbRadioWait: 20 * time.Second,
@@ -144,7 +153,11 @@ func (a *Agent) Start() error {
 	}
 
 	// 3. Firewall first, so the web UI is only reachable from the hotspot.
+	//    Only then may the kernel forward packets between interfaces.
 	if err := a.applyFirewall(); err != nil {
+		return err
+	}
+	if err := a.enableForwarding(); err != nil {
 		return err
 	}
 
@@ -155,7 +168,7 @@ func (a *Agent) Start() error {
 		return nil
 	}
 
-	// 5. Start the setup network or the owner's hotspot.
+	// 5. Start the setup network or the owner's hotspot, and the uplink.
 	if a.cfg.Claimed {
 		return a.startNormalMode()
 	}
@@ -214,6 +227,15 @@ func (a *Agent) loadOrCreateSettings() error {
 	if err != nil {
 		return err
 	}
+	a.cfg.FillDefaults()
+
+	// RasBeacon's private IPv6 address on the hotspot comes from the
+	// device's random IPv6 prefix.
+	if ipv6, err := render.ULALANAddress(a.identity.ULAPrefix); err == nil {
+		a.lan.IPv6Prefix = ipv6
+	} else {
+		slog.Warn("no IPv6 for the hotspot", "error", err)
+	}
 
 	// Secrets: empty until the device is claimed.
 	err = config.ReadJSON(a.paths.SecretsFile(), &a.secrets)
@@ -257,7 +279,7 @@ func (a *Agent) setUpRadios() error {
 		// Not fatal: the radio falls back to the most restrictive rules.
 		a.warnings = append(a.warnings, "Could not set the Wi-Fi country: "+err.Error())
 	}
-	return system.EnsureBridge(a.runner, render.BridgeName, a.lan.Prefix.String())
+	return system.EnsureBridge(a.runner, render.BridgeName, a.lanAddresses()...)
 }
 
 // waitForRadios detects the Wi-Fi radios. When the device boots, USB
@@ -325,6 +347,11 @@ func (a *Agent) startSetupMode() error {
 	if err := a.applyHotspotAndDHCP(hotspot, true); err != nil {
 		return err
 	}
+	// The uplink gives the device itself internet access (for the clock),
+	// but nothing is forwarded for devices until setup is finished.
+	if err := a.applyUplinkConfig(); err != nil {
+		a.warnings = append(a.warnings, "Could not set up the internet connection: "+err.Error())
+	}
 
 	a.mode = api.ModeSetup
 	a.setupDeadline = a.now().Add(SetupWindow)
@@ -361,10 +388,16 @@ func (a *Agent) startNormalMode() error {
 	if err := a.applyHotspotAndDHCP(hotspot, false); err != nil {
 		return err
 	}
-	if err := a.applySSH(); err != nil {
+	// From here on, devices' traffic may be forwarded to the uplinks (the
+	// firewall rules depend on the mode).
+	a.mode = api.ModeNormal
+	if err := a.applySSH(); err != nil { // also reloads the firewall
 		a.warnings = append(a.warnings, "Could not apply SSH settings: "+err.Error())
 	}
-	a.mode = api.ModeNormal
+	if err := a.applyUplinkConfig(); err != nil {
+		a.warnings = append(a.warnings, "Could not set up the internet connection: "+err.Error())
+	}
+	a.checkUplink() // fill in the status page right away
 	slog.Info("hotspot started", "ssid", h.SSID, "band", h.Band)
 	return nil
 }
@@ -376,24 +409,35 @@ func (a *Agent) applyHotspotAndDHCP(hotspot render.HotspotInput, captive bool) e
 	if err != nil {
 		return err
 	}
-	dnsmasqConf, err := render.Dnsmasq(render.DnsmasqInput{
-		LAN:       a.lan,
-		LeaseFile: a.paths.DnsmasqLeases(),
-		Captive:   captive,
-	})
-	if err != nil {
-		return err
-	}
-
 	// hostapd.conf contains the Wi-Fi password, so only root may read it.
 	if err := config.WriteFileAtomic(a.paths.HostapdConfig(), []byte(hostapdConf), 0o600); err != nil {
 		return err
 	}
-	if err := config.WriteFileAtomic(a.paths.DnsmasqConfig(), []byte(dnsmasqConf), 0o644); err != nil {
-		return err
-	}
 	if err := system.ServiceRestart(a.runner, hostapdService); err != nil {
 		return fmt.Errorf("starting the hotspot: %w", err)
+	}
+	return a.applyDHCP(captive)
+}
+
+// applyDHCP writes dnsmasq.conf for the current hotspot network and uplink,
+// and restarts dnsmasq. captive=true is for setup mode (see render.Dnsmasq).
+func (a *Agent) applyDHCP(captive bool) error {
+	input := render.DnsmasqInput{
+		LAN:              a.lan,
+		LeaseFile:        a.paths.DnsmasqLeases(),
+		Captive:          captive,
+		Upstream:         []string{deviceResolver},
+		IPv6DefaultRoute: a.uplink.status.IPv6,
+	}
+	if captive {
+		input.LAN.IPv6Prefix = netip.Prefix{} // no IPv6 for the setup network
+	}
+	dnsmasqConf, err := render.Dnsmasq(input)
+	if err != nil {
+		return err
+	}
+	if err := config.WriteFileAtomic(a.paths.DnsmasqConfig(), []byte(dnsmasqConf), 0o644); err != nil {
+		return err
 	}
 	if err := system.ServiceRestart(a.runner, dnsmasqService); err != nil {
 		return fmt.Errorf("starting DHCP/DNS: %w", err)
@@ -404,7 +448,12 @@ func (a *Agent) applyHotspotAndDHCP(hotspot render.HotspotInput, captive bool) e
 // applyFirewall writes and loads the firewall rules for the current
 // settings.
 func (a *Agent) applyFirewall() error {
-	rules, err := render.Firewall(render.FirewallInput{SSHEnabled: a.cfg.SSH.Enabled})
+	input := render.FirewallInput{SSHEnabled: a.cfg.SSH.Enabled}
+	// Devices' traffic is only forwarded once setup is finished.
+	if a.mode == api.ModeNormal {
+		input.Uplinks = a.uplinkInterfaces()
+	}
+	rules, err := render.Firewall(input)
 	if err != nil {
 		return err
 	}

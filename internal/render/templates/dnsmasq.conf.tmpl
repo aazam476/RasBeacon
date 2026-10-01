@@ -28,6 +28,37 @@ dhcp-authoritative
 domain=lan
 local=/lan/
 address=/rasbeacon.lan/{{.LANAddress}}
+{{- if and (not .Captive) .Upstream}}
+
+# --- DNS: internet names ---
+# Questions about any other name are passed on to these servers.
+# 127.0.0.53 is RasBeacon's own resolver (systemd-resolved), which asks the
+# DNS servers the current uplink (hotel, café, ...) handed out.
+{{- range .Upstream}}
+server={{.}}
+{{- end}}
+{{- end}}
+{{- if .IPv6}}
+
+# --- IPv6 for devices ---
+# RasBeacon announces a private IPv6 network ("router advertisements").
+# Devices pick their own addresses in it (SLAAC); no DHCPv6 is used, which is
+# also what Android requires.
+enable-ra
+dhcp-range=::,constructor:{{.Bridge}},ra-only,64,1h
+# Tell devices to use RasBeacon for DNS over IPv6 too ([::] = this device).
+dhcp-option=option6:dns-server,[::]
+{{- if .IPv6DefaultRoute}}
+# The uplink has IPv6, so devices may send IPv6 internet traffic here.
+# Announce every 60 s; devices keep the route for 30 minutes.
+ra-param={{.Bridge}},60,1800
+{{- else}}
+# No IPv6 internet path right now: "router lifetime 0" means "I am not a
+# router for IPv6". Devices keep their local IPv6 addresses but use IPv4 for
+# the internet instead of waiting for IPv6 to time out.
+ra-param={{.Bridge}},10,0
+{{- end}}
+{{- end}}
 {{- if .Captive}}
 
 # --- Setup mode: send every device to the setup page ---

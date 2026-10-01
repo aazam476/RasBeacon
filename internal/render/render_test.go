@@ -12,6 +12,7 @@ package render
 
 import (
 	"flag"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -127,14 +128,60 @@ func TestDnsmasq_SetupModeIsCaptive(t *testing.T) {
 	}
 }
 
+// lanWithIPv6 is the default hotspot network plus a private IPv6 network.
+var lanWithIPv6 = LAN{
+	Prefix:     DefaultLAN.Prefix,
+	IPv6Prefix: netip.MustParsePrefix("fd12:3456:789a:1::1/64"),
+}
+
 func TestDnsmasq_NormalModeIsNotCaptive(t *testing.T) {
-	got, err := Dnsmasq(DnsmasqInput{LAN: DefaultLAN, LeaseFile: "/run/rbd/dnsmasq.leases", Captive: false})
+	got, err := Dnsmasq(DnsmasqInput{
+		LAN: lanWithIPv6, LeaseFile: "/run/rbd/dnsmasq.leases", Captive: false,
+		Upstream: []string{"127.0.0.53"}, IPv6DefaultRoute: true,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	checkGolden(t, "dnsmasq_normal", got)
 	if strings.Contains(got, "address=/#/") {
 		t.Error("normal mode must not redirect every name")
+	}
+	if !strings.Contains(got, "server=127.0.0.53") {
+		t.Error("normal mode should pass internet names to the device's resolver")
+	}
+	if !strings.Contains(got, "ra-param=br-lan,60,1800") {
+		t.Error("with an IPv6 path, devices should get an IPv6 default route")
+	}
+}
+
+func TestDnsmasq_NoIPv6PathAnnouncesRouterLifetimeZero(t *testing.T) {
+	got, err := Dnsmasq(DnsmasqInput{
+		LAN: lanWithIPv6, LeaseFile: "/run/rbd/dnsmasq.leases",
+		Upstream: []string{"127.0.0.53"}, IPv6DefaultRoute: false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkGolden(t, "dnsmasq_normal_no_ipv6_route", got)
+	if !strings.Contains(got, "ra-param=br-lan,10,0") {
+		t.Error("without an IPv6 path, router lifetime must be 0")
+	}
+}
+
+func TestDnsmasq_SetupModeHasNoUpstreamOrIPv6(t *testing.T) {
+	got, err := Dnsmasq(DnsmasqInput{LAN: DefaultLAN, LeaseFile: "x", Captive: true, Upstream: []string{"127.0.0.53"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(got, "server=") || strings.Contains(got, "enable-ra") {
+		t.Error("setup mode answers every name itself and has no IPv6")
+	}
+}
+
+func TestDnsmasq_RejectsUpstreamThatIsNotAnAddress(t *testing.T) {
+	_, err := Dnsmasq(DnsmasqInput{LAN: DefaultLAN, LeaseFile: "x", Upstream: []string{"1.1.1.1\naddress=/#/1.2.3.4"}})
+	if err == nil {
+		t.Fatal("upstream must be a plain IP address")
 	}
 }
 
@@ -157,6 +204,120 @@ func TestFirewall_SSHOnOnlyFromHotspotSide(t *testing.T) {
 	checkGolden(t, "firewall_ssh_on", got)
 	if !strings.Contains(got, `iifname "br-lan" tcp dport 22 accept`) {
 		t.Error("SSH should be allowed only from the hotspot bridge")
+	}
+}
+
+func TestFirewall_ForwardsAndNATsToUplinks(t *testing.T) {
+	got, err := Firewall(FirewallInput{Uplinks: []string{"eth0", "wlan0"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkGolden(t, "firewall_uplinks", got)
+	for _, want := range []string{
+		`elements = { "eth0", "wlan0" }`,
+		`iifname "br-lan" oifname @uplinks accept`,
+		"oifname @uplinks masquerade",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+}
+
+func TestFirewall_NoUplinksMeansNoForwarding(t *testing.T) {
+	got, err := Firewall(FirewallInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(got, "masquerade") || strings.Contains(got, "oifname") {
+		t.Error("without uplinks nothing may be forwarded")
+	}
+}
+
+func TestFirewall_RejectsStrangeInterfaceNames(t *testing.T) {
+	if _, err := Firewall(FirewallInput{Uplinks: []string{`eth0" accept`}}); err == nil {
+		t.Fatal("interface names with quotes must be rejected")
+	}
+}
+
+func TestWPASupplicant_OpenAndPersonalNetworksInOrder(t *testing.T) {
+	got, err := WPASupplicant(WPAInput{
+		Country: "US",
+		Networks: []WPANetwork{
+			{SSID: "Home", Security: config.UplinkPersonal, Password: `pass "word" 123`},
+			{SSID: "Hotel Guest", Security: config.UplinkOpen},
+			{SSID: "Hidden Lab", Security: config.UplinkPersonal, Password: "correct-horse", Hidden: true},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkGolden(t, "wpa_supplicant", got)
+	// "Home" is first in the list, so it must get the highest priority.
+	homeBlock := got[strings.Index(got, "# Name: Home"):strings.Index(got, "# Name: Hotel Guest")]
+	if !strings.Contains(homeBlock, "priority=3\n") {
+		t.Error(`"Home" should have priority 3 (highest)`)
+	}
+}
+
+func TestWPASupplicant_RejectsPasswordThatCouldInjectSettings(t *testing.T) {
+	_, err := WPASupplicant(WPAInput{Country: "US", Networks: []WPANetwork{
+		{SSID: "x", Security: config.UplinkPersonal, Password: "password123\"\n}\nnetwork={"},
+	}})
+	if err == nil {
+		t.Fatal("a password containing a newline must be rejected")
+	}
+}
+
+func TestNetworkd_UplinkAndUnmanaged(t *testing.T) {
+	uplink, err := NetworkdUplink("eth0", EthernetRouteMetric)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkGolden(t, "networkd_uplink_eth0", uplink)
+
+	unmanaged, err := NetworkdUnmanaged([]string{"br-lan", "ap0"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkGolden(t, "networkd_unmanaged", unmanaged)
+	if !strings.Contains(unmanaged, "Name=br-lan ap0") {
+		t.Error("both interfaces should be matched")
+	}
+}
+
+func TestChooseLANPrefix_AvoidsUpstreamNetwork(t *testing.T) {
+	p := netip.MustParsePrefix
+	tests := []struct {
+		name     string
+		upstream []netip.Prefix
+		want     string
+	}{
+		{"no uplink", nil, "10.87.0.1/24"},
+		{"typical hotel", []netip.Prefix{p("192.168.1.57/24")}, "10.87.0.1/24"},
+		{"same network as ours", []netip.Prefix{p("10.87.0.12/24")}, "10.88.0.1/24"},
+		{"huge 10/8 network", []netip.Prefix{p("10.40.3.9/8")}, "172.31.87.1/24"},
+		{"10/8 and 172.16/12", []netip.Prefix{p("10.1.1.1/8"), p("172.20.0.5/12")}, "192.168.87.1/24"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ChooseLANPrefix(tt.upstream); got.String() != tt.want {
+				t.Errorf("got %s, want %s", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestULALANAddress(t *testing.T) {
+	got, err := ULALANAddress("fd12:3456:789a::/48")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.String() != "fd12:3456:789a:1::1/64" {
+		t.Errorf("got %s", got)
+	}
+	if _, err := ULALANAddress("10.0.0.0/8"); err == nil {
+		t.Error("an IPv4 prefix must be rejected")
 	}
 }
 

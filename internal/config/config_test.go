@@ -1,8 +1,10 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -104,7 +106,7 @@ func TestWriteJSON_ThenReadJSON_RoundTrips(t *testing.T) {
 	if err := ReadJSON(path, &got); err != nil {
 		t.Fatalf("ReadJSON: %v", err)
 	}
-	if got != want {
+	if !reflect.DeepEqual(got, want) {
 		t.Errorf("round trip mismatch:\n got %+v\nwant %+v", got, want)
 	}
 
@@ -133,5 +135,63 @@ func TestReadJSON_MissingFileReturnsErrNotFound(t *testing.T) {
 	err := ReadJSON(filepath.Join(t.TempDir(), "nope.json"), &cfg)
 	if err != ErrNotFound {
 		t.Errorf("got %v, want ErrNotFound", err)
+	}
+}
+
+func TestFillDefaults_OldConfigGetsEthernetUplink(t *testing.T) {
+	// A config.json written by milestone 1 has no "ethernet" section.
+	var cfg Config
+	cfg.FillDefaults()
+	if cfg.Ethernet.Role != EthernetUplink {
+		t.Errorf("Ethernet role = %q, want %q", cfg.Ethernet.Role, EthernetUplink)
+	}
+}
+
+func TestEthernetConfig_Validate(t *testing.T) {
+	for _, role := range []EthernetRole{EthernetUplink, EthernetClientPort} {
+		if err := (EthernetConfig{Role: role}).Validate(); err != nil {
+			t.Errorf("role %q rejected: %v", role, err)
+		}
+	}
+	if err := (EthernetConfig{Role: "bridge"}).Validate(); err == nil {
+		t.Error("unknown role accepted")
+	}
+}
+
+func TestUplinkConfig_Validate(t *testing.T) {
+	open := SavedNetwork{ID: "a", SSID: "Hotel Guest", Security: UplinkOpen}
+	home := SavedNetwork{ID: "b", SSID: "Home", Security: UplinkPersonal}
+	goodPasswords := map[string]string{"b": "correct-horse"}
+
+	tests := []struct {
+		name      string
+		networks  []SavedNetwork
+		passwords map[string]string
+		wantField string // "" means valid
+	}{
+		{"empty list", nil, nil, ""},
+		{"open and personal", []SavedNetwork{open, home}, goodPasswords, ""},
+		{"personal without password", []SavedNetwork{home}, nil, "networks.0.password"},
+		{"short password", []SavedNetwork{home}, map[string]string{"b": "short"}, "networks.0.password"},
+		{"same ID twice", []SavedNetwork{open, {ID: "a", SSID: "Other", Security: UplinkOpen}}, nil, "networks.1.id"},
+		{"missing ID", []SavedNetwork{{SSID: "x", Security: UplinkOpen}}, nil, "networks.0.id"},
+		{"same name twice", []SavedNetwork{open, {ID: "c", SSID: "Hotel Guest", Security: UplinkOpen}}, nil, "networks.1.ssid"},
+		{"empty name", []SavedNetwork{{ID: "a", Security: UplinkOpen}}, nil, "networks.0.ssid"},
+		{"unknown security", []SavedNetwork{{ID: "a", SSID: "x", Security: "wep"}}, nil, "networks.0.security"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := UplinkConfig{Networks: tt.networks}.Validate(tt.passwords)
+			if tt.wantField == "" {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				return
+			}
+			var verr *ValidationError
+			if !errors.As(err, &verr) || verr.Field != tt.wantField {
+				t.Fatalf("got %v, want an error for field %s", err, tt.wantField)
+			}
+		})
 	}
 }

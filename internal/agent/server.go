@@ -99,6 +99,31 @@ func (a *Agent) Handler() http.Handler {
 		writeJSON(w, http.StatusOK, a.SSHSettings())
 	})
 
+	mux.HandleFunc("GET /settings/uplink", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, a.UplinkSettings())
+	})
+
+	mux.HandleFunc("PUT /settings/uplink", func(w http.ResponseWriter, r *http.Request) {
+		var req api.UplinkSettings
+		if !readJSON(w, r, &req) {
+			return
+		}
+		if err := a.UpdateUplinkSettings(req); err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, a.UplinkSettings())
+	})
+
+	mux.HandleFunc("POST /uplink/scan", func(w http.ResponseWriter, r *http.Request) {
+		resp, err := a.ScanNearby()
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, resp)
+	})
+
 	mux.HandleFunc("POST /system/reboot", func(w http.ResponseWriter, r *http.Request) {
 		a.Reboot()
 		w.WriteHeader(http.StatusNoContent)
@@ -173,7 +198,7 @@ func writeError(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusBadRequest, api.ErrorResponse{Error: validation.Message, Field: validation.Field})
 	case errors.Is(err, ErrWrongPassword):
 		writeJSON(w, http.StatusForbidden, api.ErrorResponse{Error: err.Error(), Field: "password"})
-	case errors.Is(err, ErrWrongMode):
+	case errors.Is(err, ErrWrongMode), errors.Is(err, ErrNoWiFiUplink):
 		writeJSON(w, http.StatusConflict, api.ErrorResponse{Error: err.Error()})
 	default:
 		slog.Error("request failed", "error", err)

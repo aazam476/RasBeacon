@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -43,9 +44,10 @@ func (a *Agent) Status() api.Status {
 			Interface:  radio.HotspotInterfaceName,
 			LANAddress: a.lan.Address(),
 		},
+		Uplink:   a.uplink.status,
 		Radios:   a.radios,
 		Clients:  a.connectedClients(),
-		Warnings: a.warnings,
+		Warnings: append(slices.Clone(a.warnings), a.uplinkWarnings()...),
 	}
 	// Empty lists are sent as [] rather than null, which is easier for the UI.
 	if status.Radios == nil {
@@ -107,13 +109,17 @@ func (a *Agent) uptimeSeconds() int {
 var diagnosticCommands = [][]string{
 	{"ip", "-brief", "address"},
 	{"ip", "route"},
+	{"ip", "-6", "route"},
+	{"networkctl", "--no-pager", "list"},
+	{"resolvectl", "--no-pager", "status"},
 	{"iw", "dev"},
 	{"iw", "reg", "get"},
 	{"iw", "dev", "ap0", "station", "dump"},
 	{"nft", "list", "ruleset"},
+	{"cat", "/proc/sys/net/ipv4/ip_forward", "/proc/sys/net/ipv6/conf/all/forwarding"},
 	{"systemctl", "--no-pager", "status", hostapdService, dnsmasqService, "rbd.service", "rbweb.service"},
 	{"journalctl", "--no-pager", "-n", "400", "-u", "rbd.service", "-u", "rbweb.service",
-		"-u", hostapdService, "-u", dnsmasqService},
+		"-u", hostapdService, "-u", dnsmasqService, "-u", "rasbeacon-wpa@*", "-u", "systemd-networkd.service"},
 	{"lsusb"},
 }
 
@@ -125,6 +131,10 @@ func (a *Agent) Diagnostics() string {
 
 	a.mu.Lock()
 	secretsToHide := []string{a.secrets.HotspotPassword, a.setupPassword, a.identity.SuggestedHotspotPassword}
+	for _, password := range a.secrets.UplinkPasswords {
+		secretsToHide = append(secretsToHide, password)
+	}
+	wifiUplink := a.wifiUplinkInterface()
 	a.mu.Unlock()
 
 	var report strings.Builder
@@ -133,6 +143,13 @@ func (a *Agent) Diagnostics() string {
 	fmt.Fprintf(&report, "hotspot: ssid=%q band=%s channel=%d security=%s running=%v clients=%d\n",
 		status.Hotspot.SSID, status.Hotspot.Band, status.Hotspot.Channel, status.Hotspot.Security,
 		status.Hotspot.Running, len(status.Clients))
+	u := status.Uplink
+	fmt.Fprintf(&report, "uplink: connected=%v kind=%s interface=%s address=%s gateway=%s ipv6=%v\n",
+		u.Connected, u.Kind, u.Interface, u.Address, u.Gateway, u.IPv6)
+	fmt.Fprintf(&report, "wifi uplink: interface=%s state=%s ssid=%q band=%s signal=%d\n",
+		u.WiFi.Interface, u.WiFi.State, u.WiFi.SSID, u.WiFi.Band, u.WiFi.SignalDBM)
+	fmt.Fprintf(&report, "ethernet: present=%v role=%s cable=%v foreignDhcp=%s\n",
+		u.Ethernet.Present, u.Ethernet.Role, u.Ethernet.CablePlugged, u.Ethernet.ForeignDHCPServer)
 	for _, r := range status.Radios {
 		fmt.Fprintf(&report, "radio: interface=%s driver=%s usb=%v usbId=%s ap=%v role=%s\n",
 			r.Interface, r.Driver, r.IsUSB, r.USBID, r.SupportsAP, r.Role)
@@ -141,7 +158,11 @@ func (a *Agent) Diagnostics() string {
 		fmt.Fprintf(&report, "warning: %s\n", w)
 	}
 
-	for _, cmd := range diagnosticCommands {
+	commands := diagnosticCommands
+	if wifiUplink != "" {
+		commands = append(slices.Clone(commands), []string{"wpa_cli", "-p", "/run/wpa_supplicant", "-i", wifiUplink, "status"})
+	}
+	for _, cmd := range commands {
 		fmt.Fprintf(&report, "\n===== %s =====\n", strings.Join(cmd, " "))
 		out, err := a.runner.Run(cmd[0], cmd[1:]...)
 		report.WriteString(out)

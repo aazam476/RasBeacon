@@ -89,6 +89,29 @@ func (p Paths) DnsmasqLeases() string { return filepath.Join(p.RunDir(), "dnsmas
 // FirewallRules is the generated nftables ruleset.
 func (p Paths) FirewallRules() string { return filepath.Join(p.RunDir(), "firewall.nft") }
 
+// WPASupplicantConfig is the generated configuration for joining upstream
+// Wi-Fi networks. It holds their passwords, so it is root-only.
+func (p Paths) WPASupplicantConfig() string { return filepath.Join(p.RunDir(), "wpa_supplicant.conf") }
+
+// WPAControlDir holds wpa_supplicant's control sockets (used by wpa_cli).
+func (p Paths) WPAControlDir() string { return p.join("run", "wpa_supplicant") }
+
+// NetworkdDir holds generated systemd-networkd settings. Files here only
+// last until the next reboot, which is what we want: rbd writes them again
+// at every start.
+func (p Paths) NetworkdDir() string { return p.join("run", "systemd", "network") }
+
+// --- Kernel settings ---
+
+// IPv4Forwarding switches routing of IPv4 packets between interfaces on
+// ("1") or off ("0").
+func (p Paths) IPv4Forwarding() string { return p.join("proc", "sys", "net", "ipv4", "ip_forward") }
+
+// IPv6Forwarding is the same for IPv6.
+func (p Paths) IPv6Forwarding() string {
+	return p.join("proc", "sys", "net", "ipv6", "conf", "all", "forwarding")
+}
+
 // --- Read-only system information ---
 
 // SysClassNet lists network interfaces (Linux sysfs).

@@ -70,7 +70,7 @@ func (a *Agent) Claim(req api.ClaimRequest) (api.ClaimResponse, error) {
 	if err := config.ValidateWiFiPassword(req.HotspotPassword); err != nil {
 		return api.ClaimResponse{}, &config.ValidationError{Field: "hotspotPassword", Message: err.Error()}
 	}
-	newCfg := a.cfg
+	newCfg := a.cfg.Clone()
 	newCfg.Hotspot.SSID = req.HotspotSSID
 	newCfg.Hotspot.Band = req.HotspotBand
 	if err := newCfg.Hotspot.Validate(); err != nil {
@@ -170,14 +170,14 @@ func (a *Agent) UpdateHotspotSettings(req api.HotspotSettings) error {
 	if a.mode != api.ModeNormal {
 		return ErrWrongMode
 	}
-	newCfg := a.cfg
+	newCfg := a.cfg.Clone()
 	newCfg.Hotspot = config.HotspotConfig{
 		SSID: req.SSID, Band: req.Band, Channel: req.Channel, Security: req.Security, Country: req.Country,
 	}
 	if err := newCfg.Hotspot.Validate(); err != nil {
 		return err
 	}
-	newSecrets := a.secrets
+	newSecrets := a.secrets.Clone()
 	if req.Password != "" {
 		if err := config.ValidateWiFiPassword(req.Password); err != nil {
 			return &config.ValidationError{Field: "password", Message: err.Error()}
@@ -243,7 +243,7 @@ func (a *Agent) UpdateSSHSettings(req api.SSHSettings) error {
 	if err := config.WriteFileAtomic(keyFile, []byte(keys), 0o600); err != nil {
 		return err
 	}
-	newCfg := a.cfg
+	newCfg := a.cfg.Clone()
 	newCfg.SSH.Enabled = req.Enabled
 	if err := config.WriteJSON(a.paths.ConfigFile(), newCfg, 0o644); err != nil {
 		return err

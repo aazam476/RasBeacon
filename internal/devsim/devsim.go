@@ -3,7 +3,10 @@
 //
 // Start rbd with `-dev /tmp/rasbeacon-dev` and it will:
 //   - keep all its files under that directory instead of /,
-//   - pretend there is a built-in radio and a USB Archer T3U,
+//   - pretend there is a built-in radio, a USB Archer T3U and an Ethernet
+//     port with no cable,
+//   - pretend the built-in radio is connected to a café's Wi-Fi with
+//     internet (IPv4 only), and that a scan finds a few networks,
 //   - log the commands it would run (ip, iw, systemctl, ...) instead of
 //     running them, and answer with made-up output (two connected phones).
 //
@@ -16,7 +19,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"rasbeacon/internal/dhcpprobe"
 	"rasbeacon/internal/paths"
 )
 
@@ -52,6 +57,13 @@ func Setup(root string) (paths.Paths, error) {
 	if err := writeFile(filepath.Join(usbDevice, "idProduct"), "012d"); err != nil {
 		return p, err
 	}
+	// Ethernet port, no cable plugged in.
+	if err := writeFile(filepath.Join(p.SysClassNet(), "eth0", "carrier"), "0"); err != nil {
+		return p, err
+	}
+	if err := writeFile(filepath.Join(p.SysClassNet(), "eth0", "carrier_changes"), "1"); err != nil {
+		return p, err
+	}
 	if err := writeFile(p.DeviceTreeModel(), "Simulated Raspberry Pi (devsim)\x00"); err != nil {
 		return p, err
 	}
@@ -83,6 +95,26 @@ Station 8e:00:11:22:33:44 (on ap0)
 	connected time:	42 seconds
 `
 
+// Made-up uplink: wlan0 is connected to "Corner Café" with 192.168.4.20.
+const (
+	defaultRoutes = `[{"dst":"default","gateway":"192.168.4.1","dev":"wlan0","protocol":"dhcp","metric":600,"flags":[]}]`
+	addresses     = `[{"ifname":"wlan0","addr_info":[{"family":"inet","local":"192.168.4.20","prefixlen":24,"scope":"global"}]}]`
+	wpaStatus     = "bssid=aa:bb:cc:dd:ee:ff\nfreq=2437\nssid=Corner Caf\\xc3\\xa9\nkey_mgmt=WPA2-PSK\nwpa_state=COMPLETED\n"
+	signalPoll    = "RSSI=-58\nLINKSPEED=72\n"
+	scanResults   = "bssid / frequency / signal level / flags / ssid\n" +
+		"aa:bb:cc:dd:ee:ff\t2437\t-58\t[WPA2-PSK-CCMP][ESS]\tCorner Caf\\xc3\\xa9\n" +
+		"aa:bb:cc:dd:ee:01\t5180\t-63\t[ESS]\tHotel Guest\n" +
+		"aa:bb:cc:dd:ee:02\t5500\t-71\t[WPA2-EAP-CCMP][ESS]\teduroam\n" +
+		"aa:bb:cc:dd:ee:03\t2462\t-80\t[RSN-SAE-CCMP][ESS]\tNeighbour 5G\n"
+)
+
+// DHCPProbe pretends no DHCP server answers on the Ethernet port, so the
+// simulated client port connects. Nothing is sent on a real network.
+func DHCPProbe(iface string, timeout time.Duration) (dhcpprobe.Result, error) {
+	slog.Info("devsim: would check for a DHCP server", "interface", iface)
+	return dhcpprobe.Result{}, nil
+}
+
 // Run logs the command and returns made-up output where it matters.
 func (Runner) Run(name string, args ...string) (string, error) {
 	line := strings.TrimSpace(name + " " + strings.Join(args, " "))
@@ -94,6 +126,18 @@ func (Runner) Run(name string, args ...string) (string, error) {
 		return stationDump, nil
 	case strings.HasPrefix(line, "systemctl is-active"):
 		return "active\n", nil
+	case line == "ip -json route show default":
+		return defaultRoutes, nil
+	case line == "ip -json -6 route show default":
+		return "[]", nil
+	case line == "ip -json address show":
+		return addresses, nil
+	case strings.HasPrefix(line, "wpa_cli") && strings.HasSuffix(line, " status"):
+		return wpaStatus, nil
+	case strings.HasPrefix(line, "wpa_cli") && strings.HasSuffix(line, " signal_poll"):
+		return signalPoll, nil
+	case strings.HasPrefix(line, "wpa_cli") && strings.HasSuffix(line, " scan_results"):
+		return scanResults, nil
 	case strings.HasPrefix(line, "ip link show"):
 		return "", fmt.Errorf("devsim: link does not exist")
 	}

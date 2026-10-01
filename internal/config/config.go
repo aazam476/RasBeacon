@@ -57,8 +57,10 @@ type Config struct {
 	// setup.txt-protected) setup network.
 	Claimed bool `json:"claimed"`
 
-	Hotspot HotspotConfig `json:"hotspot"`
-	SSH     SSHConfig     `json:"ssh"`
+	Hotspot  HotspotConfig  `json:"hotspot"`
+	SSH      SSHConfig      `json:"ssh"`
+	Ethernet EthernetConfig `json:"ethernet"`
+	Uplink   UplinkConfig   `json:"uplink"`
 }
 
 // HotspotConfig describes the Wi-Fi network RasBeacon broadcasts for your
@@ -80,6 +82,106 @@ type SSHConfig struct {
 	Enabled bool `json:"enabled"`
 }
 
+// EthernetRole is what the Ethernet port is used for.
+type EthernetRole string
+
+const (
+	// EthernetUplink (the default): the port connects RasBeacon to the
+	// internet, for example a hotel room's wall socket.
+	EthernetUplink EthernetRole = "uplink"
+	// EthernetClientPort: the port is for one of your own devices (a laptop
+	// with a cable). It joins the hotspot's network as if it were on Wi-Fi.
+	EthernetClientPort EthernetRole = "client-port"
+)
+
+// EthernetConfig holds the Ethernet port settings.
+type EthernetConfig struct {
+	Role EthernetRole `json:"role"`
+}
+
+// UplinkSecurity is how a saved upstream Wi-Fi network is protected.
+type UplinkSecurity string
+
+const (
+	// UplinkOpen: no password (many hotels and cafés).
+	UplinkOpen UplinkSecurity = "open"
+	// UplinkPersonal: one shared password, WPA2-Personal or WPA3-Personal.
+	UplinkPersonal UplinkSecurity = "personal"
+)
+
+// UplinkConfig lists the upstream Wi-Fi networks RasBeacon may join.
+type UplinkConfig struct {
+	// Networks are in order of preference: when several are in range, the
+	// first one in the list is joined.
+	Networks []SavedNetwork `json:"networks"`
+}
+
+// SavedNetwork is one upstream Wi-Fi network. Its password (if any) is kept
+// in Secrets.UplinkPasswords under the same ID.
+type SavedNetwork struct {
+	// ID is a random identifier that stays the same when the network is
+	// renamed or reordered. It links the network to its password.
+	ID       string         `json:"id"`
+	SSID     string         `json:"ssid"`
+	Security UplinkSecurity `json:"security"`
+	// Hidden networks don't announce their name, so RasBeacon has to ask
+	// for them by name.
+	Hidden bool `json:"hidden"`
+}
+
+// MaxSavedNetworks keeps the list (and wpa_supplicant's scanning) small.
+const MaxSavedNetworks = 20
+
+// FillDefaults sets values for settings that were added in a later release
+// and are therefore missing from an older config.json.
+func (c *Config) FillDefaults() {
+	if c.Ethernet.Role == "" {
+		c.Ethernet.Role = EthernetUplink
+	}
+}
+
+// Validate checks the Ethernet settings.
+func (e EthernetConfig) Validate() error {
+	if e.Role != EthernetUplink && e.Role != EthernetClientPort {
+		return &ValidationError{Field: "ethernetRole", Message: `Must be "uplink" or "client-port".`}
+	}
+	return nil
+}
+
+// Validate checks the saved networks. passwords maps network IDs to their
+// passwords; every network that needs a password must have a valid one.
+func (u UplinkConfig) Validate(passwords map[string]string) error {
+	if len(u.Networks) > MaxSavedNetworks {
+		return &ValidationError{Field: "networks", Message: fmt.Sprintf("At most %d networks can be saved.", MaxSavedNetworks)}
+	}
+	seenIDs := map[string]bool{}
+	seenSSIDs := map[string]bool{}
+	for i, n := range u.Networks {
+		field := fmt.Sprintf("networks.%d", i)
+		if n.ID == "" || seenIDs[n.ID] {
+			return &ValidationError{Field: field + ".id", Message: "Each network needs its own ID."}
+		}
+		seenIDs[n.ID] = true
+		if err := ValidateSSID(n.SSID); err != nil {
+			return &ValidationError{Field: field + ".ssid", Message: err.Error()}
+		}
+		if seenSSIDs[n.SSID] {
+			return &ValidationError{Field: field + ".ssid", Message: "This network is already in the list."}
+		}
+		seenSSIDs[n.SSID] = true
+		switch n.Security {
+		case UplinkOpen:
+		case UplinkPersonal:
+			if err := ValidateWiFiPassword(passwords[n.ID]); err != nil {
+				return &ValidationError{Field: field + ".password", Message: err.Error()}
+			}
+		default:
+			return &ValidationError{Field: field + ".security", Message: `Must be "open" or "personal".`}
+		}
+	}
+	return nil
+}
+
 // Secrets holds everything that must never be shown in the UI, logs or
 // diagnostics exports.
 type Secrets struct {
@@ -88,6 +190,9 @@ type Secrets struct {
 	// AdminPasswordHash is the argon2id hash of the web UI password (see
 	// internal/auth). The password itself is never stored.
 	AdminPasswordHash string `json:"adminPasswordHash"`
+	// UplinkPasswords holds the passwords of saved upstream Wi-Fi networks,
+	// keyed by SavedNetwork.ID.
+	UplinkPasswords map[string]string `json:"uplinkPasswords,omitempty"`
 }
 
 // Identity holds values generated once, on first boot.
@@ -119,7 +224,8 @@ func DefaultConfig(identity Identity) Config {
 			Channel:  0,
 			Country:  "US",
 		},
-		SSH: SSHConfig{Enabled: false},
+		SSH:      SSHConfig{Enabled: false},
+		Ethernet: EthernetConfig{Role: EthernetUplink},
 	}
 }
 
@@ -219,4 +325,21 @@ func isCountryCode(code string) bool {
 		return false
 	}
 	return strings.ToUpper(code) == code && unicode.IsLetter(rune(code[0])) && unicode.IsLetter(rune(code[1]))
+}
+
+// Clone returns a copy of c that can be changed without affecting c. A plain
+// assignment (copy := c) would share the list of saved networks.
+func (c Config) Clone() Config {
+	c.Uplink.Networks = append([]SavedNetwork(nil), c.Uplink.Networks...)
+	return c
+}
+
+// Clone returns a copy of s that can be changed without affecting s.
+func (s Secrets) Clone() Secrets {
+	passwords := make(map[string]string, len(s.UplinkPasswords))
+	for id, password := range s.UplinkPasswords {
+		passwords[id] = password
+	}
+	s.UplinkPasswords = passwords
+	return s
 }

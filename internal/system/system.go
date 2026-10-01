@@ -88,17 +88,19 @@ func RenameLink(r Runner, from, to string) error {
 	return err
 }
 
-// EnsureBridge creates the bridge (if missing), gives it address (like
+// EnsureBridge creates the bridge (if missing), gives it the addresses (like
 // "10.87.0.1/24") and brings it up. Running it again is harmless.
-func EnsureBridge(r Runner, bridge, address string) error {
+func EnsureBridge(r Runner, bridge string, addresses ...string) error {
 	if !LinkExists(r, bridge) {
 		if _, err := r.Run("ip", "link", "add", "name", bridge, "type", "bridge"); err != nil {
 			return err
 		}
 	}
 	// "replace" adds the address, or does nothing if it is already there.
-	if _, err := r.Run("ip", "address", "replace", address, "dev", bridge); err != nil {
-		return err
+	for _, address := range addresses {
+		if _, err := r.Run("ip", "address", "replace", address, "dev", bridge); err != nil {
+			return err
+		}
 	}
 	_, err := r.Run("ip", "link", "set", "dev", bridge, "up")
 	return err
@@ -118,4 +120,43 @@ func PhyInfo(r Runner, phy string) (string, error) {
 // StationDump returns `iw dev <iface> station dump` output.
 func StationDump(r Runner, iface string) (string, error) {
 	return r.Run("iw", "dev", iface, "station", "dump")
+}
+
+// SetLinkUp brings a network interface up.
+func SetLinkUp(r Runner, name string) error {
+	_, err := r.Run("ip", "link", "set", "dev", name, "up")
+	return err
+}
+
+// AddToBridge makes an interface a port of a bridge, so devices on it share
+// the bridge's network.
+func AddToBridge(r Runner, iface, bridge string) error {
+	_, err := r.Run("ip", "link", "set", "dev", iface, "master", bridge)
+	return err
+}
+
+// RemoveFromBridge takes an interface out of whatever bridge it is in.
+func RemoveFromBridge(r Runner, iface string) error {
+	_, err := r.Run("ip", "link", "set", "dev", iface, "nomaster")
+	return err
+}
+
+// FlushAddresses removes the IP addresses of one family ("-4" or "-6") from
+// an interface.
+func FlushAddresses(r Runner, family, iface string) error {
+	_, err := r.Run("ip", family, "address", "flush", "dev", iface)
+	return err
+}
+
+// ReloadNetworkd makes systemd-networkd re-read its .network files and apply
+// any changes.
+func ReloadNetworkd(r Runner) error {
+	_, err := r.Run("networkctl", "reload")
+	return err
+}
+
+// WPACommand runs a wpa_cli command against the wpa_supplicant controlling
+// iface, for example WPACommand(r, dir, "wlan0", "status").
+func WPACommand(r Runner, controlDir, iface string, args ...string) (string, error) {
+	return r.Run("wpa_cli", append([]string{"-p", controlDir, "-i", iface}, args...)...)
 }

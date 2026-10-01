@@ -34,6 +34,11 @@ table inet rasbeacon {
 		meta l4proto ipv6-icmp accept
 		icmp type { echo-request, destination-unreachable, time-exceeded } accept
 
+		# DHCP answers to RasBeacon's own address requests: on the uplinks,
+		# and for the Ethernet client-port safety check. Only the DHCP client
+		# listens on port 68.
+		udp sport 67 udp dport 68 accept
+
 		# --- From devices on the hotspot ("br-lan") ---
 		# DHCP: devices asking for an IP address.
 		iifname "br-lan" udp dport 67 accept
@@ -47,10 +52,11 @@ table inet rasbeacon {
 	}
 
 	# FORWARD: packets passing THROUGH RasBeacon (from a device to the
-	# internet). Milestone 1 has no internet connection yet, so nothing is
-	# forwarded. Later milestones add the NAT and kill-switch rules here.
+	# internet). Anything not allowed here is dropped.
 	chain forward {
 		type filter hook forward priority filter; policy drop;
+		# No uplink is in use (for example during first-boot setup), so
+		# nothing is forwarded.
 	}
 
 	# OUTPUT: packets RasBeacon itself sends. Allowed.

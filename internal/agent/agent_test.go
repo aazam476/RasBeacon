@@ -19,6 +19,7 @@ import (
 
 	"rasbeacon/internal/api"
 	"rasbeacon/internal/config"
+	"rasbeacon/internal/dhcpprobe"
 	"rasbeacon/internal/paths"
 )
 
@@ -82,6 +83,16 @@ type testEnv struct {
 	runner *fakeRunner
 	timers *fakeTimers
 	agent  *Agent
+
+	// dhcpServer is the address the fake DHCP probe reports ("" = none).
+	dhcpServer string
+	probes     int
+}
+
+// fakeDHCPProbe stands in for dhcpprobe.Probe.
+func (e *testEnv) fakeDHCPProbe(iface string, timeout time.Duration) (dhcpprobe.Result, error) {
+	e.probes++
+	return dhcpprobe.Result{ServerFound: e.dhcpServer != "", ServerAddress: e.dhcpServer}, nil
 }
 
 // newTestEnv creates a fake device with a built-in radio (wlan0) and a USB
@@ -118,7 +129,10 @@ func newTestEnv(t *testing.T) *testEnv {
 	a := New(p, runner)
 	a.afterFunc = timers.afterFunc
 	a.usbRadioWait = 0
-	return &testEnv{t: t, paths: p, runner: runner, timers: timers, agent: a}
+	a.sleep = func(time.Duration) {} // don't really wait in tests
+	e := &testEnv{t: t, paths: p, runner: runner, timers: timers, agent: a}
+	a.dhcpProbe = e.fakeDHCPProbe
+	return e
 }
 
 func mustWrite(t *testing.T, path, content string) {
