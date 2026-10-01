@@ -146,8 +146,8 @@ func (a *Agent) applyUplinkConfig() error {
 	wpaInput := render.WPAInput{Country: a.cfg.Hotspot.Country}
 	for _, n := range a.cfg.Uplink.Networks {
 		wpaInput.Networks = append(wpaInput.Networks, render.WPANetwork{
-			SSID:     n.SSID,
-			Security: n.Security,
+			SSID:       n.SSID,
+			Security:   n.Security,
 			Password:   a.secrets.UplinkPasswords[n.ID],
 			Hidden:     n.Hidden,
 			Enterprise: a.wpaEnterprise(n),
