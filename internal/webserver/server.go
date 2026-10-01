@@ -41,6 +41,29 @@ type Server struct {
 	cachedState  api.SetupState
 	cachedLAN    string
 	stateFetched time.Time
+
+	// httpsOn is true when the HTTPS setting is on (see UseHTTPS).
+	httpsOn bool
+}
+
+// UseHTTPS tells the server that HTTPS is on. The settings pages are then
+// only used over HTTPS: plain-HTTP visits are sent to HTTPS, and logging in
+// over plain HTTP is refused. The setup wizard, the login-page notice and
+// the captive portal API stay on plain HTTP, because phones open them in
+// their "Log in to network" sheet, which doesn't accept self-signed
+// certificates.
+func (s *Server) UseHTTPS() { s.httpsOn = true }
+
+// needsHTTPS reports whether r should have used HTTPS.
+func (s *Server) needsHTTPS(r *http.Request) bool {
+	return s.httpsOn && r.TLS == nil
+}
+
+// refuseOverHTTP answers requests for the settings that came over plain
+// HTTP while HTTPS is on.
+func (s *Server) refuseOverHTTP(w http.ResponseWriter, r *http.Request) {
+	_, lan := s.state()
+	writeJSON(w, http.StatusForbidden, api.ErrorResponse{Error: "HTTPS is on: use https://" + lan + "/"})
 }
 
 const stateCacheTime = 2 * time.Second
@@ -90,6 +113,8 @@ func (s *Server) Handler() http.Handler {
 		"PUT /api/v1/settings/vpn":                      "/settings/vpn",
 		"POST /api/v1/settings/vpn/import":              "/settings/vpn/import",
 		"POST /api/v1/settings/vpn/generate-key":        "/settings/vpn/generate-key",
+		"GET /api/v1/settings/https":                    "/settings/https",
+		"PUT /api/v1/settings/https":                    "/settings/https",
 		"POST /api/v1/system/reboot":                    "/system/reboot",
 		"GET /api/v1/diagnostics":                       "/diagnostics",
 	}
@@ -193,6 +218,10 @@ func (s *Server) handleGetSession(w http.ResponseWriter, r *http.Request) {
 // handleLogin checks the admin password (with rate limiting) and starts a
 // session.
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
+	if s.needsHTTPS(r) {
+		s.refuseOverHTTP(w, r) // never send the admin password unencrypted
+		return
+	}
 	ip := clientIP(r)
 	if allowed, wait := s.limiter.allow(ip); !allowed {
 		w.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
@@ -269,6 +298,10 @@ func (s *Server) handleCaptiveAPI(w http.ResponseWriter, r *http.Request) {
 // requests that change something, a matching CSRF token.
 func (s *Server) requireLogin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s.needsHTTPS(r) {
+			s.refuseOverHTTP(w, r)
+			return
+		}
 		_, sess, ok := s.sessions.fromRequest(r)
 		if !ok {
 			writeJSON(w, http.StatusUnauthorized, api.ErrorResponse{Error: "Please log in."})
@@ -353,6 +386,12 @@ func (s *Server) handleUI(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Header().Set("Cache-Control", "no-store")
 		http.Redirect(w, r, target, http.StatusFound)
+		return
+	}
+	// With HTTPS on, the settings pages move to HTTPS, except while the
+	// setup wizard or the login-page notice may be showing (see UseHTTPS).
+	if s.needsHTTPS(r) && st.Mode != api.ModeSetup && !st.PortalNotice {
+		http.Redirect(w, r, "https://"+r.Host+r.URL.RequestURI(), http.StatusFound)
 		return
 	}
 

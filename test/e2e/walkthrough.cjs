@@ -125,6 +125,15 @@ async function main() {
     await other.close();
   });
 
+  await step("HTTPS can be turned on and shows the certificate fingerprint", async () => {
+    await page.getByRole("button", { name: "HTTPS" }).click();
+    await page.getByLabel("Use HTTPS for these settings pages").click();
+    await page.getByText("HTTPS is on.").waitFor();
+    await page.getByText("SHA-256 fingerprint").waitFor();
+    // (The simulated device doesn't restart its web server, so this browser
+    // stays on plain HTTP for the remaining steps.)
+  });
+
   await step("hotspot settings validate and save", async () => {
     await page.getByRole("button", { name: "Hotspot" }).click();
     await page.getByLabel("Band").selectOption("5GHz");

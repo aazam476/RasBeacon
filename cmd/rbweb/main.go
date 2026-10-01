@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	"rasbeacon/internal/paths"
@@ -21,24 +22,47 @@ import (
 
 func main() {
 	listen := flag.String("listen", ":80", "address and port to listen on")
+	listenHTTPS := flag.String("listen-https", ":443", "address and port for HTTPS (used when HTTPS is on)")
 	socket := flag.String("rbd-socket", paths.Default().APISocket(), "rbd's API socket")
+	tlsDir := flag.String("tls-dir", paths.Default().RunTLSDir(), "where rbd puts the HTTPS certificate (cert.pem, key.pem)")
 	flag.Parse()
 
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	slog.Info("rbweb starting", "version", version.Version, "listen", *listen)
 
 	server := webserver.New(webserver.NewRBDClient(*socket), web.Files())
-	httpServer := &http.Server{
-		Addr:    *listen,
-		Handler: server.Handler(),
-		// Timeouts stop slow or stuck clients from tying up the server.
+
+	// HTTPS is on when rbd has put a certificate here (see agent/https.go).
+	// rbd restarts rbweb whenever the setting changes.
+	certFile := filepath.Join(*tlsDir, "cert.pem")
+	keyFile := filepath.Join(*tlsDir, "key.pem")
+	if _, err := os.Stat(certFile); err == nil {
+		server.UseHTTPS()
+		httpsServer := newHTTPServer(*listenHTTPS, server.Handler())
+		slog.Info("HTTPS on", "listen", *listenHTTPS)
+		go func() {
+			if err := httpsServer.ListenAndServeTLS(certFile, keyFile); err != nil {
+				slog.Error("HTTPS server stopped", "error", err)
+				os.Exit(1)
+			}
+		}()
+	}
+
+	if err := newHTTPServer(*listen, server.Handler()).ListenAndServe(); err != nil {
+		slog.Error("web server stopped", "error", err)
+		os.Exit(1)
+	}
+}
+
+// newHTTPServer makes a server with timeouts, which stop slow or stuck
+// clients from tying up the server.
+func newHTTPServer(addr string, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      90 * time.Second,
 		IdleTimeout:       120 * time.Second,
-	}
-	if err := httpServer.ListenAndServe(); err != nil {
-		slog.Error("web server stopped", "error", err)
-		os.Exit(1)
 	}
 }

@@ -160,6 +160,22 @@ func (a *Agent) Handler() http.Handler {
 		writeJSON(w, http.StatusOK, a.VPNSettings())
 	})
 
+	mux.HandleFunc("GET /settings/https", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, a.HTTPSSettings())
+	})
+
+	mux.HandleFunc("PUT /settings/https", func(w http.ResponseWriter, r *http.Request) {
+		var req api.HTTPSSettings
+		if !readJSON(w, r, &req) {
+			return
+		}
+		if err := a.UpdateHTTPSSettings(req); err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, a.HTTPSSettings())
+	})
+
 	mux.HandleFunc("GET /portal", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, a.PortalStatus())
 	})

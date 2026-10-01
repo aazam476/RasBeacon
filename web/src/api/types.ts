@@ -287,3 +287,19 @@ export interface VPNSettings {
   hasPresharedKey: boolean;
   removePresharedKey?: boolean;
 }
+
+/**
+ * GET/PUT /api/v1/settings/https. The certificate description is read-only;
+ * generateNew, certificate and privateKey are write-only actions.
+ */
+export interface HTTPSSettings {
+  enabled: boolean;
+  uploaded: boolean;
+  subject: string;
+  /** SHA-256, as browsers show it (AB:CD:...). */
+  fingerprint: string;
+  validUntil: string;
+  generateNew?: boolean;
+  certificate?: string;
+  privateKey?: string;
+}

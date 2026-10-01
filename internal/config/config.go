@@ -68,6 +68,16 @@ type Config struct {
 	Ethernet EthernetConfig `json:"ethernet"`
 	Uplink   UplinkConfig   `json:"uplink"`
 	VPN      VPNConfig      `json:"vpn"`
+	HTTPS    HTTPSConfig    `json:"https"`
+}
+
+// HTTPSConfig is the HTTPS setting for the web UI. The certificate and key
+// are files in the data directory (see paths.Paths.TLSDir).
+type HTTPSConfig struct {
+	Enabled bool `json:"enabled"`
+	// Uploaded is true when the owner uploaded their own certificate
+	// (otherwise RasBeacon made one).
+	Uploaded bool `json:"uploaded"`
 }
 
 // VPNConfig holds the WireGuard VPN settings. The private key and the

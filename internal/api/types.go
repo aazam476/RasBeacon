@@ -230,6 +230,20 @@ type VPNSettings struct {
 	RemovePresharedKey bool `json:"removePresharedKey,omitempty"`
 }
 
+// HTTPSSettings is read and written by the HTTPS page.
+type HTTPSSettings struct {
+	Enabled bool `json:"enabled"`
+	// Read-only description of the certificate in use (empty if none).
+	Uploaded    bool   `json:"uploaded"`
+	Subject     string `json:"subject"`
+	Fingerprint string `json:"fingerprint"`
+	ValidUntil  string `json:"validUntil"`
+	// Write-only actions: make a new certificate, or upload one (PEM).
+	GenerateNew bool   `json:"generateNew,omitempty"`
+	Certificate string `json:"certificate,omitempty"`
+	PrivateKey  string `json:"privateKey,omitempty"`
+}
+
 // VPNImportRequest carries a WireGuard .conf file's text.
 type VPNImportRequest struct {
 	Conf string `json:"conf"`

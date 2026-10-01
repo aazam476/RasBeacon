@@ -73,6 +73,13 @@ func (p Paths) FactoryResetFile() string {
 // regularly so the clock never goes backwards across a reboot.
 func (p Paths) ClockFile() string { return filepath.Join(p.DataDir(), "clock") }
 
+// TLSDir holds the web UI's HTTPS certificate and key (cert.pem, key.pem).
+func (p Paths) TLSDir() string { return filepath.Join(p.DataDir(), "tls") }
+
+// RunTLSDir is where rbd puts a copy of the certificate and key for rbweb,
+// readable by rbweb's group. rbweb serves HTTPS only if they exist.
+func (p Paths) RunTLSDir() string { return filepath.Join(p.RunDir(), "tls") }
+
 // CertDir holds the certificates and keys uploaded for WPA-Enterprise
 // networks. Each file name starts with the network's ID.
 func (p Paths) CertDir() string { return filepath.Join(p.DataDir(), "certs") }

@@ -16,6 +16,7 @@ const PAGE_TITLES: Record<Page, string> = {
   vpn: "VPN",
   hotspot: "Hotspot",
   ssh: "SSH",
+  https: "HTTPS",
   system: "System",
 };
 
