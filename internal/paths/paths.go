@@ -105,6 +105,10 @@ func (p Paths) ClientKeyFile(networkID string) string {
 // RunDir holds generated configs and the API socket.
 func (p Paths) RunDir() string { return p.join("run", "rbd") }
 
+// BrowserDir holds the login browser's temporary profiles (see
+// internal/browser), deleted when it closes.
+func (p Paths) BrowserDir() string { return filepath.Join(p.RunDir(), "browser") }
+
 // APISocket is the local socket rbweb uses to talk to rbd.
 func (p Paths) APISocket() string { return filepath.Join(p.RunDir(), "api.sock") }
 

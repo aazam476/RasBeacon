@@ -147,3 +147,19 @@ func TestPortal_ChecksAgainWhenTheUplinkChanges(t *testing.T) {
 		t.Error("a new uplink connection should be checked at once")
 	}
 }
+
+func TestPortal_RecheckRunsTheNextCheckAtOnce(t *testing.T) {
+	e, _, p := newPortalEnv(t)
+	calls := p.calls
+	e.agent.CheckPortal(p.probe)
+	if p.calls != calls {
+		t.Fatal("test setup broken: the check should not be due yet")
+	}
+	if err := e.agent.RecheckPortal(); err != nil {
+		t.Fatal(err)
+	}
+	e.agent.CheckPortal(p.probe)
+	if p.calls != calls+1 {
+		t.Error("after RecheckPortal the next round should check again")
+	}
+}

@@ -13,6 +13,7 @@
 //	vpn.go         the WireGuard VPN and its kill switch
 //	guest.go       the guest network
 //	portal.go      hotel login pages (captive portals) with the VPN on
+//	portalbrowser.go  logging in to them from RasBeacon's own browser
 //	clock.go       keeping the time right without a clock battery
 //	https.go       the HTTPS setting
 //	update.go      installing and confirming updates
@@ -114,6 +115,8 @@ type Agent struct {
 
 	// webGroup is rbweb's group ID (-1 = unknown), for the HTTPS key copy.
 	webGroup int
+	// browser says how to start the login browser (see portalbrowser.go).
+	browser browserSettings
 
 	// usbRadioWait is how long startup waits for a USB Wi-Fi adapter to
 	// appear (see waitForRadios). Tests set it to zero.
@@ -133,6 +136,7 @@ func New(p paths.Paths, runner system.Runner) *Agent {
 		decompress: zstdDecompress,
 		lan:        render.DefaultLAN,
 		webGroup:   -1,
+		browser:    defaultBrowserSettings(),
 		// USB adapters usually appear within a few seconds of power-on.
 		usbRadioWait: 20 * time.Second,
 	}
@@ -508,6 +512,9 @@ func (a *Agent) applyFirewall() error {
 		PortalOnly:      a.mode == api.ModeNormal && a.portal.loginMode,
 		Guest:           a.guestActive(),
 		RoutedIPv6:      a.wantedRoutedIPv6(),
+	}
+	if a.browser.uid > 0 {
+		input.Browser = &render.BrowserRule{UID: a.browser.uid, Uplinks: a.uplinkInterfaces()}
 	}
 	rules, err := render.Firewall(input)
 	if err != nil {

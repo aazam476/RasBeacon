@@ -66,6 +66,10 @@ check "user rasbeacon has no usable password" sh -c "grep -qE '^rasbeacon:[*!]' 
 check "no RasBeacon settings baked into the image" test ! -e "$root/persistent/rasbeacon"
 check "no SSH host keys baked into the image" sh -c "! ls '$root'/etc/ssh/ssh_host_*_key"
 
+# The login browser and its user (the firewall rule needs the user).
+check "the login browser is installed" test -x "$root/usr/bin/chromium-headless-shell"
+check "the login browser has its own user" grep -q "^rbbrowser:" "$root/etc/passwd"
+
 # The optional reset button's overlay is in the boot configuration.
 check "reset button overlay in config.txt" grep -q "dtoverlay=gpio-key,gpio=17" "$root/boot/firmware/config.txt"
 

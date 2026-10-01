@@ -15,7 +15,9 @@ device:
 image:
   layer: image-rota
   boot_part_size: 128M
-  system_part_size: 768M
+  # Each system copy holds Debian, the Wi-Fi firmware and the login
+  # browser (about 300 MB of it), with room to grow.
+  system_part_size: 1536M
   data_part_size: 512M
 
 layer:

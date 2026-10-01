@@ -39,6 +39,9 @@ func (f *fakeRBD) handler() http.Handler {
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		f.lastForwarded = r.Method + " " + r.URL.Path
+		if r.URL.RawQuery != "" {
+			f.lastForwarded += "?" + r.URL.RawQuery
+		}
 		writeJSON(w, http.StatusOK, map[string]string{"ok": "yes"})
 	})
 	return mux
@@ -274,6 +277,27 @@ func TestPortalActions_PublicButJSONOnly(t *testing.T) {
 	rec = request(s, "POST", "http://10.87.0.1/api/v1/portal/start", "a=b", map[string]string{"Content-Type": "application/x-www-form-urlencoded"}, nil)
 	if rec.Code != http.StatusUnsupportedMediaType || rbd.lastForwarded != "" {
 		t.Errorf("form post: got %d, forwarded %q", rec.Code, rbd.lastForwarded)
+	}
+}
+
+func TestPortalBrowser_PublicButJSONOnly(t *testing.T) {
+	s, rbd := newTestServer(api.ModeNormal)
+	json := map[string]string{"Content-Type": "application/json"}
+	for _, action := range []string{"start", "input", "stop"} {
+		rec := request(s, "POST", "http://10.87.0.1/api/v1/portal/browser/"+action, "{}", json, nil)
+		if rec.Code != http.StatusOK || rbd.lastForwarded != "POST /portal/browser/"+action {
+			t.Errorf("%s: got %d, forwarded %q", action, rec.Code, rbd.lastForwarded)
+		}
+	}
+	rbd.lastForwarded = ""
+	form := map[string]string{"Content-Type": "application/x-www-form-urlencoded"}
+	if rec := request(s, "POST", "http://10.87.0.1/api/v1/portal/browser/input", "a=b", form, nil); rec.Code != http.StatusUnsupportedMediaType || rbd.lastForwarded != "" {
+		t.Errorf("form post: got %d, forwarded %q", rec.Code, rbd.lastForwarded)
+	}
+	// The frame request passes on only a clean number.
+	request(s, "GET", "http://10.87.0.1/api/v1/portal/browser/frame?after=41&x=../y", "", nil, nil)
+	if rbd.lastForwarded != "GET /portal/browser/frame?after=41" {
+		t.Errorf("forwarded %q", rbd.lastForwarded)
 	}
 }
 
