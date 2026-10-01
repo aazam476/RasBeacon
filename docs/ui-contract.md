@@ -71,12 +71,12 @@ Shown around the main pages after login.
 
 | Prop | Type | Meaning |
 |---|---|---|
-| `page` | `"status" \| "hotspot" \| "ssh" \| "system"` | Current page |
+| `page` | `"status" \| "internet" \| "hotspot" \| "ssh" \| "system"` | Current page |
 | `setPage` | `(page) => void` | Switch page |
 | `children` | React content | The current page |
 
 **Wording the test relies on:** navigation buttons named "Status",
-"Hotspot", "SSH", "System".
+"Internet", "Hotspot", "SSH", "System".
 
 ### Notice: `screens/Notice/NoticeView.tsx`
 
@@ -131,7 +131,7 @@ It refreshes itself every 10 seconds.
 
 | Prop | Type | Meaning |
 |---|---|---|
-| `status` | `Status \| undefined` | See `web/src/api/types.ts`: hotspot, clients, radios, device, warnings |
+| `status` | `Status \| undefined` | See `web/src/api/types.ts`: internet connection (`uplink`), hotspot, clients, radios, device, warnings |
 | `error` | `string \| null` | Last refresh failed (may appear together with old `status`) |
 | `loading` | `boolean` | A refresh is in progress |
 | `reload` | `() => void` | Refresh now |
@@ -142,9 +142,51 @@ It refreshes itself every 10 seconds.
 - error with old data
 - zero connected devices
 - warnings present, for example "built-in Wi-Fi is running the hotspot"
+- internet: not connected, connected by Ethernet, connected by Wi-Fi (with
+  signal), Wi-Fi searching or with no saved networks, no Wi-Fi radio free
+  (`uplink.wifi.available` false), no Ethernet port
 
-**Wording the test relies on:** heading "Status" and
-"Connected devices (N)".
+`describeUplink` in `shared/format.ts` gives the one-line summary.
+
+**Wording the test relies on:** heading "Status",
+"Connected devices (N)" and `Connected to Wi-Fi "<name>"`.
+
+### Internet (uplink settings): `screens/Uplink/`
+
+Edits are collected on the page and sent together with "Save" (the server
+stores the whole list at once).
+
+| Prop | Type | Meaning |
+|---|---|---|
+| `values` | `UplinkSettings \| undefined` | `ethernetRole`, `networks` (most preferred first), `ethernetPresent`, `wifiUplinkAvailable` |
+| `loadError` | `string \| null` | |
+| `setEthernetRole` | `(role) => void` | `"uplink"` or `"client-port"`. Only show the choice when `ethernetPresent`. |
+| `moveUp`, `moveDown`, `remove` | `(index) => void` | Reorder or remove a saved network |
+| `setPassword` | `(index, password) => void` | New password for a saved network ("" keeps it) |
+| `networkErrors` | `{ [index]: string }` | Server errors for a network in the list |
+| `newNetwork`, `setNewNetworkField` | form values, setter | `ssid`, `security` (`"personal"`/`"open"`), `password`, `hidden` |
+| `newNetworkErrors` | `{ ssid?, password? }` | |
+| `addNetwork` | `() => void` | Adds the form to the list (not saved yet) |
+| `scan`, `scanning` | `() => void`, `boolean` | Look for nearby networks (about 5 s) |
+| `nearby` | `NearbyNetwork[] \| null` | `null` = no scan yet; `[]` = nothing found |
+| `scanError` | `string \| null` | Also used to explain networks that can't be joined yet (eduroam) |
+| `pickNearby` | `(network) => void` | Fill the form from a scan result |
+| `dirty` | `boolean` | There are unsaved changes |
+| `save`, `saving`, `saved`, `saveError` | | |
+
+`describeBand` and `describeSignal` in `shared/format.ts` describe scan
+results.
+
+**States to design:** loading, no saved networks, no Wi-Fi radio free
+(`wifiUplinkAvailable` false), scanning, nothing found, unsaved changes,
+per-network error, saved.
+
+**Wording the test relies on:**
+- buttons "Look for nearby networks", "Add to list", "Save", and one button
+  per scan result named after the network
+- "(not saved yet)" next to added networks
+- "needs a username and certificate" (enterprise networks)
+- "Saved. RasBeacon is joining the networks now"
 
 ### Hotspot settings: `screens/HotspotSettings/`
 

@@ -58,6 +58,11 @@ point, run by the program *hostapd*.
 : Turns names like `rasbeacon.lan` into IP addresses. On the hotspot,
   dnsmasq answers DNS questions.
 
+**Forwarding (routing)**
+: Passing packets from one network interface to another, for example from
+  the hotspot to the uplink. Linux only does it when switched on; RasBeacon
+  switches it on after loading its firewall rules.
+
 **Firewall, nftables**
 : Rules that decide which network packets may reach the device or pass
   through it. RasBeacon uses Linux's *nftables*, and every rule is commented
@@ -72,6 +77,14 @@ point, run by the program *hostapd*.
   VPN tunnel. If the tunnel is down, traffic is blocked rather than sent
   unprotected.
 
+**Masquerade, NAT66**
+: *Masquerade* is the kind of NAT RasBeacon uses: outgoing traffic gets the
+  uplink's current address as its sender. *NAT66* is the same for IPv6.
+
+**Metric (route metric)**
+: A route's cost. When two routes lead to the internet, Linux uses the one
+  with the lower metric. Ethernet's is 100, Wi-Fi's 600, so a cable wins.
+
 **MAC address, private (randomized) MAC**
 : A network card's hardware address. Phones now invent a different one per
   network (and may change it over time) for privacy.
@@ -84,9 +97,19 @@ point, run by the program *hostapd*.
 : An isolated copy of Linux's network stack that acts like a separate
   computer. RasBeacon's tests build small virtual networks out of them.
 
+**MSS clamping**
+: Making new TCP connections agree on packets small enough for every link
+  on the way. Without it, some websites hang on networks with smaller
+  packets (tunnels, some hotel networks).
+
 **PMF (protected management frames, 802.11w)**
 : Encryption for Wi-Fi control messages, so attackers can't easily kick
   devices off. Required by WPA3.
+
+**Router advertisement (RA)**
+: An IPv6 message in which a router says "here is a network prefix, and
+  (optionally) you can reach the internet through me". A *router lifetime*
+  of 0 means "not through me".
 
 **Regulatory country**
 : Which country's radio rules apply: allowed channels and transmit power.

@@ -31,7 +31,12 @@ The reasons behind the big decisions are in [design.md](design.md) and
 - **hostapd** turns the USB Wi-Fi adapter into an *access point*.
 - **dnsmasq** hands out addresses (*DHCP*) and answers name lookups (*DNS*)
   for devices on the hotspot.
-- **nftables** is the Linux firewall.
+- **nftables** is the Linux firewall. It also does the *NAT* that lets all
+  your devices share RasBeacon's one address on the upstream network.
+- **wpa_supplicant** joins upstream Wi-Fi networks with the built-in radio.
+- **systemd-networkd** gets addresses on the uplinks (Ethernet and Wi-Fi)
+  by *DHCP*, and **systemd-resolved** is the device's own DNS resolver
+  (127.0.0.53), using the uplink's DNS servers.
 - **The web UI** (`web/`) is a React app that runs in your browser and only
   talks to the API.
 
@@ -50,11 +55,17 @@ The reasons behind the big decisions are in [design.md](design.md) and
       (`internal/render/templates/firewall.nft.tmpl`).
    4. It finds the Wi-Fi radios (`internal/radio`), waiting up to 20 s for a
       USB adapter to appear. The USB adapter becomes the hotspot and is
-      renamed `ap0`; the built-in radio is kept for the uplink (milestone 2).
-   5. It creates the *bridge* `br-lan` with address `10.87.0.1/24`.
-   6. It starts **setup mode** (if nobody has claimed the device) or
-      **normal mode**.
-3. **rbweb starts** and listens on port 80.
+      renamed `ap0`; the built-in radio joins upstream Wi-Fi (the uplink).
+   5. It creates the *bridge* `br-lan` with address `10.87.0.1/24` and a
+      private IPv6 address.
+   6. It switches on *forwarding* in the kernel (only now, with the firewall
+      in place).
+   7. It starts **setup mode** (if nobody has claimed the device) or
+      **normal mode**, and writes the uplink settings for networkd and
+      wpa_supplicant (`internal/agent/uplink.go`).
+3. **rbd's uplink monitor** checks the connection every 5 seconds (see
+   below).
+4. **rbweb starts** and listens on port 80.
 
 ## Setup mode and normal mode
 
@@ -62,21 +73,43 @@ The reasons behind the big decisions are in [design.md](design.md) and
 |---|---|---|
 | Wi-Fi name | `RasBeacon-Setup-XXXX` | Chosen by the owner |
 | Password | None, or from `setup.txt` | Chosen by the owner (WPA2/WPA3) |
-| DNS | Every name points to 10.87.0.1, so phones open the setup page (*captive portal*) | Local names only (upstream DNS arrives in milestone 2) |
+| DNS | Every name points to 10.87.0.1, so phones open the setup page (*captive portal*) | Passed to the device's resolver, which asks the uplink's DNS servers |
+| Internet for devices | None (nothing is forwarded) | Through the uplink, with NAT |
 | Ends | When someone finishes setup, or after 30 minutes | — |
 
 Finishing setup (`Claim` in `internal/agent/operations.go`) saves the admin
 password *hash* and the hotspot settings, then switches to normal mode 5
 seconds later, so the phone receives the "success" page first.
 
+## The uplink (internet connection)
+
+- **Which uplink:** Ethernet (when set to *Uplink* and a cable is plugged
+  in) wins over Wi-Fi, because its routes have a lower *metric*. Among
+  saved Wi-Fi networks, wpa_supplicant joins the first one in your list
+  that is in range.
+- **Every 5 seconds** (`checkUplink`), rbd:
+  1. runs the Ethernet *client-port* safety check when a cable was plugged
+     in: it sends one DHCP request (`internal/dhcpprobe`), and only connects
+     the port to the hotspot network if no DHCP server answers;
+  2. reads the routes, addresses and Wi-Fi state (`internal/uplink` parses
+     the output of `ip` and `wpa_cli`);
+  3. moves the hotspot to another address range (10.88.0.0/24, ...) if the
+     upstream network uses 10.87.0.0/24 too;
+  4. tells devices whether IPv6 internet is available, through dnsmasq's
+     *router advertisements*.
+- **IPv6:** devices always get a private IPv6 address on the hotspot. They
+  only get an IPv6 route to the internet when the uplink has IPv6; then
+  their traffic is translated like IPv4 (*NAT66*).
+
 ## Where things are stored
 
 | Path | What | Written by |
 |---|---|---|
 | `/persistent/rasbeacon/config.json` | Non-secret settings | rbd |
-| `/persistent/rasbeacon/secrets.json` (mode 0600) | Hotspot password, admin password hash | rbd |
+| `/persistent/rasbeacon/secrets.json` (mode 0600) | Hotspot password, admin password hash, upstream Wi-Fi passwords | rbd |
 | `/persistent/rasbeacon/identity.json` | Device ID, IPv6 prefix, suggested password | rbd, once |
 | `/run/rbd/*.conf`, `firewall.nft` | Generated configs (in memory) | rbd |
+| `/run/systemd/network/00-rasbeacon-*.network` | Generated networkd settings (in memory) | rbd |
 | `/bootfs/setup.txt`, `/bootfs/factory-reset` | Files the owner can create from a computer | the owner |
 
 Every settings write is crash-safe: write a temporary file, flush it, rename
