@@ -69,6 +69,26 @@ func (p Paths) FactoryResetFile() string {
 	return filepath.Join(p.BootConfigDir(), "factory-reset")
 }
 
+// CertDir holds the certificates and keys uploaded for WPA-Enterprise
+// networks. Each file name starts with the network's ID.
+func (p Paths) CertDir() string { return filepath.Join(p.DataDir(), "certs") }
+
+// CACertFile is the CA certificate that a network's login server must be
+// signed by.
+func (p Paths) CACertFile(networkID string) string {
+	return filepath.Join(p.CertDir(), networkID+"-ca.pem")
+}
+
+// ClientCertFile is the owner's personal certificate for EAP-TLS.
+func (p Paths) ClientCertFile(networkID string) string {
+	return filepath.Join(p.CertDir(), networkID+"-client.pem")
+}
+
+// ClientKeyFile is the private key for ClientCertFile (root-only).
+func (p Paths) ClientKeyFile(networkID string) string {
+	return filepath.Join(p.CertDir(), networkID+"-key.pem")
+}
+
 // --- Runtime files (in memory, rebuilt on every boot) ---
 
 // RunDir holds generated configs and the API socket.

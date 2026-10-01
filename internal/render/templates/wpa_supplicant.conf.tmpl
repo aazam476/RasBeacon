@@ -30,6 +30,42 @@ network={
 {{- if eq .Security "open"}}
 	# Open network: no password.
 	key_mgmt=NONE
+{{- else if eq .Security "enterprise"}}
+	# WPA2-Enterprise or WPA3-Enterprise, whichever the network offers.
+	key_mgmt=WPA-EAP WPA-EAP-SHA256
+	ieee80211w=1
+	# Login method: {{.EAP}}{{if .Phase2}}, then {{.Phase2}} inside the encrypted tunnel{{end}}.
+	eap={{.EAP}}
+{{- if .Phase2}}
+	phase2="{{.Phase2}}"
+{{- end}}
+	# Username, outer (anonymous) username and password, in hexadecimal.
+	identity={{.IdentityHex}}
+{{- if .AnonymousIdentityHex}}
+	anonymous_identity={{.AnonymousIdentityHex}}
+{{- end}}
+{{- if and (ne .EAP "TLS") .PasswordHex}}
+	password={{.PasswordHex}}
+{{- end}}
+{{- with .Enterprise}}
+{{- if .CACertFile}}
+	# Only talk to a login server whose certificate is signed by this CA and
+	# whose name is {{.ServerDomain}} or ends in .{{.ServerDomain}}. This stops
+	# a fake network from collecting the password.
+	ca_cert="{{.CACertFile}}"
+	domain_suffix_match="{{.ServerDomain}}"
+{{- else}}
+	# WARNING: the owner turned off checking the login server's certificate.
+{{- end}}
+{{- if .ClientCertFile}}
+	# EAP-TLS: the owner's personal certificate and key.
+	client_cert="{{.ClientCertFile}}"
+	private_key="{{.ClientKeyFile}}"
+{{- end}}
+{{- end}}
+{{- if and (eq .EAP "TLS") .PasswordHex}}
+	private_key_passwd={{.PasswordHex}}
+{{- end}}
 {{- else}}
 	# WPA2-Personal or WPA3-Personal, whichever the network offers (best
 	# first). Protected Management Frames are used when available.
