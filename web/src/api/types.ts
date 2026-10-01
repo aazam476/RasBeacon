@@ -33,6 +33,8 @@ export interface SetupState {
   suggestedHotspotSsid?: string;
   suggestedHotspotPassword?: string;
   setupClosesInSeconds?: number;
+  /** True while devices are shown the "this network needs a login" notice. */
+  portalNotice?: boolean;
 }
 
 /** POST /api/v1/setup/claim */
@@ -128,6 +130,20 @@ export interface UplinkStatus {
   ethernet: EthernetUplinkStatus;
 }
 
+/**
+ * GET /api/v1/portal (no login needed). A "captive portal" is the login page
+ * of a hotel or café network.
+ */
+export interface PortalStatus {
+  detected: boolean;
+  loginUrl?: string;
+  /** Login mode can be started (a login page blocks the VPN). */
+  canStart: boolean;
+  /** Devices may reach the login page directly right now. */
+  loginMode: boolean;
+  secondsLeft: number;
+}
+
 /** Where the WireGuard tunnel is (see internal/tunnel in the Go code). */
 export type VPNState = "off" | "connecting" | "up" | "down" | "direct";
 
@@ -152,6 +168,7 @@ export interface Status {
   hotspot: HotspotStatus;
   uplink: UplinkStatus;
   vpn: VPNStatus;
+  portal: PortalStatus;
   radios: Radio[];
   clients: Client[];
   warnings: string[];

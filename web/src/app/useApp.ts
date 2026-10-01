@@ -19,7 +19,9 @@ export type AppPhase =
   | { kind: "notice"; mode: "setup-closed" | "setup-error" | "no-radio" }
   | { kind: "setup"; setupState: SetupState }
   | { kind: "login" }
-  | { kind: "main" };
+  | { kind: "main" }
+  /** The captive portal notice (#portal); works without logging in. */
+  | { kind: "portal" };
 
 export interface AppLogic {
   phase: AppPhase;
@@ -38,22 +40,23 @@ async function loadStartupInfo() {
 
 export function useApp(): AppLogic {
   const startup = useLoad(loadStartupInfo);
-  const [page, setPageState] = useState<Page>(pageFromHash());
+  // The part of the address after "#", e.g. "hotspot" or "portal". The page
+  // is kept there so reloading stays on it.
+  const [hash, setHash] = useState(currentHash());
 
-  // Keep the page in the address bar (#hotspot) so reloading stays on it.
   const setPage = useCallback((next: Page) => {
     window.location.hash = next;
-    setPageState(next);
+    setHash(next);
   }, []);
   useEffect(() => {
-    const onHashChange = () => setPageState(pageFromHash());
+    const onHashChange = () => setHash(currentHash());
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
 
   return {
-    phase: decidePhase(startup.data, startup.error),
-    page,
+    phase: decidePhase(startup.data, startup.error, hash === "portal"),
+    page: pageFromHash(hash),
     setPage,
     onLoggedIn: startup.reload,
     onLoggedOut: () => {
@@ -65,15 +68,20 @@ export function useApp(): AppLogic {
   };
 }
 
-/** Pure decision logic, exported for unit tests. */
+/**
+ * Pure decision logic, exported for unit tests. wantsPortal is true when
+ * the address is #portal (the notice page phones open by themselves).
+ */
 export function decidePhase(
   data: { setupState: SetupState; loggedIn: boolean } | undefined,
   error: string | null,
+  wantsPortal = false,
 ): AppPhase {
   if (error && !data) return { kind: "unreachable", error };
   if (!data) return { kind: "loading" };
 
   const { setupState, loggedIn } = data;
+  if (wantsPortal && setupState.mode === "normal") return { kind: "portal" };
   switch (setupState.mode) {
     case "setup":
       return { kind: "setup", setupState };
@@ -88,7 +96,10 @@ export function decidePhase(
   return loggedIn ? { kind: "main" } : { kind: "login" };
 }
 
-function pageFromHash(): Page {
-  const hash = window.location.hash.replace("#", "");
+function currentHash(): string {
+  return window.location.hash.replace("#", "");
+}
+
+function pageFromHash(hash: string): Page {
   return (PAGES as readonly string[]).includes(hash) ? (hash as Page) : "status";
 }

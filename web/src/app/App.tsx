@@ -24,6 +24,8 @@ import { SSHSettingsView } from "../screens/SSHSettings/SSHSettingsView";
 import { useSSHSettings } from "../screens/SSHSettings/useSSHSettings";
 import { SystemView } from "../screens/System/SystemView";
 import { useSystem } from "../screens/System/useSystem";
+import { PortalView } from "../screens/Portal/PortalView";
+import { usePortal } from "../screens/Portal/usePortal";
 import type { SetupState } from "../api/types";
 
 export function App() {
@@ -41,6 +43,8 @@ export function App() {
       return <SetupScreen state={phase.setupState} />;
     case "login":
       return <LoginScreen onLoggedIn={app.onLoggedIn} />;
+    case "portal":
+      return <PortalScreen />;
     case "main":
       return (
         <LayoutView page={app.page} setPage={app.setPage}>
@@ -56,6 +60,10 @@ export function App() {
 
 function SetupScreen({ state }: { state: SetupState }) {
   return <SetupView {...useSetup(state)} />;
+}
+
+function PortalScreen() {
+  return <PortalView {...usePortal()} />;
 }
 
 function LoginScreen({ onLoggedIn }: { onLoggedIn: () => void }) {

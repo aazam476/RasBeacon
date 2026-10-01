@@ -116,6 +116,15 @@ async function main() {
     await page.getByText("Connected: your devices' traffic goes through the VPN.").waitFor();
   });
 
+  await step("the login-page notice opens without logging in", async () => {
+    // The simulated network has no login page, so there is nothing to do.
+    const other = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    await other.goto(BASE_URL + "/#portal");
+    await other.getByRole("heading", { name: "This network needs a login" }).waitFor();
+    await other.getByText("Nothing to do").waitFor();
+    await other.close();
+  });
+
   await step("hotspot settings validate and save", async () => {
     await page.getByRole("button", { name: "Hotspot" }).click();
     await page.getByLabel("Band").selectOption("5GHz");
