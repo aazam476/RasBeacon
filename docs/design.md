@@ -464,6 +464,15 @@ off:**
   default, at the cost of RAM, image size, and no automatic login sheet on the
   phone.
 
+**As built in M5:** detection uses the two checks above (not yet
+configurable, and the uplink's own DHCP option 114 isn't read yet); the
+notice, login mode (10 min, extendable to 30), automatic end on a passing
+check, and the conntrack question are implemented. Instead of flushing
+conntrack, the firewall only accepts established connections on the
+*current* egress path, which has the same effect without a race and is
+tested in `test/netns/portal_test.go`. Login mode can be started by any
+device on the hotspot, from the notice, without the admin password.
+
 **Re-login:** portals that expire sessions are detected by the next failed
 tunnel health check plus a portal probe, and the flow repeats.
 

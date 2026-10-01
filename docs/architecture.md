@@ -132,6 +132,22 @@ battery: `internal/agent/clock.go` saves the time regularly, never lets it
 go backwards across a reboot, and falls back to web servers' `Date`
 headers when NTP is blocked.
 
+## Hotel login pages (captive portals)
+
+Many hotel and café networks show a login page before letting anyone
+online, and block everything else, including the VPN. With the kill switch
+on, devices can't reach that page either (`internal/agent/portal.go`):
+
+1. rbd checks for a login page over the uplink, like phones do
+   (`internal/portal`).
+2. If one blocks the VPN, RasBeacon answers phones' own connectivity checks
+   with its notice page (`#portal`), so the phone's "Log in to network"
+   sheet opens on it.
+3. Tapping **Start login mode** lets web and DNS traffic (only) go
+   directly to the network for 10 minutes. It ends by itself as soon as the
+   login works, and the firewall cuts any connection still on the old
+   path, so nothing opened during login mode keeps going outside the VPN.
+
 ## Where things are stored
 
 | Path | What | Written by |

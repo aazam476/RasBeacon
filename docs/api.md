@@ -46,6 +46,23 @@ hotspot**, never from the upstream network.
 | `DELETE /api/v1/session` | — | 204 | Logout |
 | `GET /api/v1/captive` | — | `CaptivePortalInfo` | RFC 8908 captive-portal API (`application/captive+json`). `captive` is true during setup. |
 
+### Captive portal login mode (no login needed)
+
+These are public because the notice opens in a phone's own "Log in to
+network" sheet, before anyone logs in to RasBeacon. The `POST` routes only
+accept a JSON body (`{}`), so other websites can't trigger them.
+
+| Route | Request | Response | Notes |
+|---|---|---|---|
+| `GET /api/v1/portal` | — | `PortalStatus` | `detected`, `loginUrl`, `canStart`, `loginMode`, `secondsLeft` |
+| `POST /api/v1/portal/start` | `{}` | `PortalStatus` | Login mode for 10 minutes: devices' web (TCP 80/443) and DNS go directly to the uplink. 409 unless a login page blocks the VPN. |
+| `POST /api/v1/portal/extend` | `{}` | `PortalStatus` | Adds 10 minutes, up to 30 in total |
+| `POST /api/v1/portal/stop` | `{}` | `PortalStatus` | Ends login mode |
+
+`GET /api/v1/setup` also reports `portalNotice: true` while the notice is
+shown, and `GET /api/v1/captive` (RFC 8908) then answers
+`captive: true` with `user-portal-url` pointing to `/#portal`.
+
 ### Login required
 
 | Method and path | Request | Response | Notes |
