@@ -208,19 +208,43 @@ func TestFirewall_SSHOnOnlyFromHotspotSide(t *testing.T) {
 }
 
 func TestFirewall_ForwardsAndNATsToUplinks(t *testing.T) {
-	got, err := Firewall(FirewallInput{Uplinks: []string{"eth0", "wlan0"}})
+	got, err := Firewall(FirewallInput{Egress: []string{"eth0", "wlan0"}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	checkGolden(t, "firewall_uplinks", got)
 	for _, want := range []string{
 		`elements = { "eth0", "wlan0" }`,
-		`iifname "br-lan" oifname @uplinks accept`,
-		"oifname @uplinks masquerade",
+		`iifname "br-lan" oifname @egress accept`,
+		"oifname @egress masquerade",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q", want)
 		}
+	}
+}
+
+func TestFirewall_TunnelOnlyAndDNSGuard(t *testing.T) {
+	got, err := Firewall(FirewallInput{
+		Egress:          []string{"wg0"},
+		TunnelInterface: "wg0",
+		TunnelDNS:       []netip.Addr{netip.MustParseAddr("10.66.0.1"), netip.MustParseAddr("fd00:66::1")},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkGolden(t, "firewall_tunnel", got)
+	for _, want := range []string{
+		`elements = { "wg0" }`,
+		`ip daddr { 10.66.0.1 } oifname != "wg0" reject`,
+		`ip6 daddr { fd00:66::1 } oifname != "wg0" reject`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	if strings.Contains(got, `"eth0"`) {
+		t.Error("with the VPN in use, nothing may be forwarded to the uplinks")
 	}
 }
 
@@ -235,7 +259,7 @@ func TestFirewall_NoUplinksMeansNoForwarding(t *testing.T) {
 }
 
 func TestFirewall_RejectsStrangeInterfaceNames(t *testing.T) {
-	if _, err := Firewall(FirewallInput{Uplinks: []string{`eth0" accept`}}); err == nil {
+	if _, err := Firewall(FirewallInput{Egress: []string{`eth0" accept`}}); err == nil {
 		t.Fatal("interface names with quotes must be rejected")
 	}
 }
@@ -378,5 +402,28 @@ func TestLAN_Helpers(t *testing.T) {
 	}
 	if DefaultLAN.hostAddress(20) != "10.87.0.20" {
 		t.Errorf("hostAddress(20) = %s", DefaultLAN.hostAddress(20))
+	}
+}
+
+func TestWireGuard(t *testing.T) {
+	got, err := WireGuard(WireGuardInput{
+		PrivateKey:    "yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+		PeerPublicKey: "xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+		Endpoint:      "vpn.example.com:51820",
+		AllowedIPs:    []netip.Prefix{netip.MustParsePrefix("0.0.0.0/0"), netip.MustParsePrefix("::/0")},
+		Keepalive:     25,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkGolden(t, "wg0", got)
+	if strings.Contains(got, "PresharedKey") {
+		t.Error("no preshared key was given")
+	}
+	if !strings.Contains(got, "AllowedIPs = 0.0.0.0/0, ::/0") {
+		t.Error("AllowedIPs missing")
+	}
+	if _, err := WireGuard(WireGuardInput{PrivateKey: "x\nPostUp = rm", PeerPublicKey: "y", Endpoint: "a:1"}); err == nil {
+		t.Error("keys with line breaks must be rejected")
 	}
 }

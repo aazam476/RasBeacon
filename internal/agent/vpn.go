@@ -1,0 +1,495 @@
+package agent
+
+// This file manages the WireGuard VPN and its kill switch.
+//
+//   - applyVPNConfig sets up (or removes) the tunnel when settings change.
+//   - updateTunnel runs with every uplink check (every 5 seconds). It asks
+//     the kill-switch state machine (internal/tunnel) where devices' traffic
+//     should go, and when the answer changes it switches the routing rule,
+//     the firewall and dnsmasq's DNS servers together.
+//
+// The pieces that keep traffic inside the tunnel ("no leaks"):
+//
+//   - Routing (internal/routing): devices' traffic goes to table 51820,
+//     which only leads into wg0 or to "unreachable".
+//   - Firewall: devices' traffic may only be forwarded to wg0.
+//   - DNS: dnsmasq asks the VPN's DNS servers, which are routed into wg0 and
+//     blocked everywhere else by the firewall's output rule.
+//
+// Each of these alone would stop devices' traffic from leaving through the
+// uplink. Only when the kill switch is OFF and the tunnel has been broken
+// for a while ("direct") are they all switched to the uplink.
+
+import (
+	"fmt"
+	"log/slog"
+	"net/netip"
+	"strings"
+	"time"
+
+	"rasbeacon/internal/api"
+	"rasbeacon/internal/config"
+	"rasbeacon/internal/render"
+	"rasbeacon/internal/routing"
+	"rasbeacon/internal/system"
+	"rasbeacon/internal/tunnel"
+	"rasbeacon/internal/wireguard"
+)
+
+// endpointRefreshInterval: while the tunnel isn't working, look up the
+// server's name again this often, in case its address changed (the kernel
+// never does this by itself).
+const endpointRefreshInterval = time.Minute
+
+// vpnState is what rbd knows about the tunnel between checks.
+type vpnState struct {
+	machine tunnel.Machine
+	// applied is the state whose routing, firewall and DNS are in place.
+	applied     tunnel.State
+	peer        wireguard.PeerStatus
+	lastRefresh time.Time
+}
+
+// wireguardConfig builds the tunnel settings from config.json and the
+// secrets. ok is false if no server has been set up yet.
+func (a *Agent) wireguardConfig() (c wireguard.Config, ok bool, err error) {
+	v := a.cfg.VPN
+	if v.Peer.PublicKey == "" || a.secrets.WireGuardPrivateKey == "" {
+		return c, false, nil
+	}
+	if c.PrivateKey, err = wireguard.ParseKey(a.secrets.WireGuardPrivateKey); err != nil {
+		return c, false, fmt.Errorf("saved private key: %w", err)
+	}
+	if c.Peer.PublicKey, err = wireguard.ParseKey(v.Peer.PublicKey); err != nil {
+		return c, false, fmt.Errorf("saved server key: %w", err)
+	}
+	if a.secrets.WireGuardPresharedKey != "" {
+		if c.Peer.PresharedKey, err = wireguard.ParseKey(a.secrets.WireGuardPresharedKey); err != nil {
+			return c, false, fmt.Errorf("saved preshared key: %w", err)
+		}
+		c.Peer.HasPresharedKey = true
+	}
+	c.Addresses, c.DNS, c.MTU = v.Addresses, v.DNS, v.MTU
+	c.Peer.Endpoint, c.Peer.AllowedIPs, c.Peer.PersistentKeepalive = v.Peer.Endpoint, v.Peer.AllowedIPs, v.Peer.PersistentKeepalive
+	return c, true, nil
+}
+
+// vpnActive reports whether the VPN is turned on and set up.
+func (a *Agent) vpnActive() bool {
+	_, ok, err := a.wireguardConfig()
+	return a.cfg.VPN.Enabled && ok && err == nil
+}
+
+// clientsThroughTunnel reports whether devices' traffic must go into the
+// tunnel right now (to be dropped there if it is down).
+//
+// This fails closed: while the VPN is on, only an explicit "direct" from
+// the state machine (kill switch off, tunnel broken for a while) lets
+// traffic out through the uplink. In particular, before the state machine
+// has run at all, traffic is kept in the tunnel.
+func (a *Agent) clientsThroughTunnel() bool {
+	return a.vpnActive() && a.vpn.machine.State() != tunnel.Direct
+}
+
+// applyVPNConfig sets up the tunnel for the current settings, or removes it
+// when the VPN is off.
+func (a *Agent) applyVPNConfig() error {
+	wg, configured, err := a.wireguardConfig()
+	if err != nil {
+		return err
+	}
+	if !a.cfg.VPN.Enabled || !configured {
+		for _, cmd := range routing.TunnelDown() {
+			_, _ = a.runner.Run(cmd[0], cmd[1:]...) // errors: already gone
+		}
+		a.vpn = vpnState{}
+		return a.updateTunnel()
+	}
+
+	conf, err := render.WireGuard(render.WireGuardInput{
+		PrivateKey:    wg.PrivateKey.String(),
+		PeerPublicKey: wg.Peer.PublicKey.String(),
+		PresharedKey:  presharedKeyText(wg.Peer),
+		Endpoint:      wg.Peer.Endpoint,
+		AllowedIPs:    wg.Peer.AllowedIPs,
+		Keepalive:     wg.EffectiveKeepalive(),
+	})
+	if err != nil {
+		return err
+	}
+	if err := config.WriteFileAtomic(a.paths.WireGuardConfig(), []byte(conf), 0o600); err != nil {
+		return err
+	}
+	if !system.LinkExists(a.runner, routing.TunnelInterface) {
+		cmd := routing.CreateTunnel()
+		if _, err := a.runner.Run(cmd[0], cmd[1:]...); err != nil {
+			return fmt.Errorf("creating the WireGuard tunnel: %w", err)
+		}
+	}
+	for _, cmd := range routing.TunnelUp(routing.TunnelSettings{
+		ConfigFile: a.paths.WireGuardConfig(),
+		Addresses:  wg.Addresses,
+		MTU:        wg.EffectiveMTU(),
+		DNS:        wg.DNS,
+		IPv6:       wg.CarriesIPv6(),
+	}) {
+		if _, err := a.runner.Run(cmd[0], cmd[1:]...); err != nil {
+			return fmt.Errorf("setting up the WireGuard tunnel: %w", err)
+		}
+	}
+	a.vpn.lastRefresh = a.now()
+	return a.updateTunnel()
+}
+
+func presharedKeyText(p wireguard.Peer) string {
+	if !p.HasPresharedKey {
+		return ""
+	}
+	return p.PresharedKey.String()
+}
+
+// updateTunnel reads the tunnel's state, runs the kill-switch state
+// machine, and applies the result if it changed. The caller holds a.mu.
+func (a *Agent) updateTunnel() error {
+	active := a.vpnActive()
+	if active {
+		out, _ := a.runner.Run("wg", "show", routing.TunnelInterface, "dump")
+		a.vpn.peer, _ = wireguard.ParseDump(out)
+	}
+	state := a.vpn.machine.Update(tunnel.Inputs{
+		Now:           a.now(),
+		Enabled:       active,
+		KillSwitch:    a.cfg.VPN.KillSwitch,
+		LastHandshake: a.vpn.peer.LatestHandshake,
+	})
+
+	// While the tunnel isn't working, look up the server's address again
+	// now and then (it may have changed, or the uplink's DNS works now).
+	if active && state != tunnel.Up && a.now().Sub(a.vpn.lastRefresh) >= endpointRefreshInterval {
+		a.vpn.lastRefresh = a.now()
+		cmd := routing.SetEndpoint(a.cfg.VPN.Peer.PublicKey, a.cfg.VPN.Peer.Endpoint)
+		if _, err := a.runner.Run(cmd[0], cmd[1:]...); err != nil {
+			slog.Warn("could not look up the VPN server", "endpoint", a.cfg.VPN.Peer.Endpoint, "error", err)
+		}
+	}
+
+	if state == a.vpn.applied {
+		return nil
+	}
+	slog.Info("VPN state changed", "from", a.vpn.applied, "to", state, "killSwitch", a.cfg.VPN.KillSwitch)
+	a.vpn.applied = state
+
+	// 1. Routing: devices' traffic into table 51820 (tunnel) or not.
+	for _, cmd := range routing.ClientsDirect() {
+		_, _ = a.runner.Run(cmd[0], cmd[1:]...) // error: no rule yet
+	}
+	if a.clientsThroughTunnel() {
+		for _, cmd := range routing.ClientsThroughTunnel(render.BridgeName) {
+			if _, err := a.runner.Run(cmd[0], cmd[1:]...); err != nil {
+				return fmt.Errorf("routing devices into the tunnel: %w", err)
+			}
+		}
+	}
+	if a.mode != api.ModeNormal {
+		return nil // the firewall and dnsmasq follow when normal mode starts
+	}
+	// 2. Firewall: where devices' traffic may leave.
+	if err := a.applyFirewall(); err != nil {
+		return err
+	}
+	// 3. DNS servers and IPv6 announcements.
+	return a.applyDHCP(false)
+}
+
+// egressInterfaces lists where devices' traffic may leave RasBeacon (see
+// render.FirewallInput.Egress).
+func (a *Agent) egressInterfaces() []string {
+	switch {
+	case a.mode != api.ModeNormal:
+		return nil // nothing is forwarded before setup is finished
+	case a.clientsThroughTunnel():
+		return []string{routing.TunnelInterface}
+	default:
+		return a.uplinkInterfaces()
+	}
+}
+
+// upstreamDNS returns the DNS servers dnsmasq passes devices' questions to.
+func (a *Agent) upstreamDNS() []string {
+	if !a.clientsThroughTunnel() {
+		return []string{deviceResolver}
+	}
+	var servers []string
+	for _, dns := range a.cfg.VPN.DNS {
+		servers = append(servers, dns.String())
+	}
+	return servers
+}
+
+// devicesHaveIPv6Internet reports whether devices may be told to use IPv6
+// for the internet.
+func (a *Agent) devicesHaveIPv6Internet() bool {
+	if a.clientsThroughTunnel() {
+		wg, _, _ := a.wireguardConfig()
+		return a.vpn.machine.State() == tunnel.Up && wg.CarriesIPv6()
+	}
+	return a.uplink.status.IPv6
+}
+
+// tunnelDNSGuard returns the VPN's DNS servers for the firewall's output
+// rule, which keeps them reachable only through the tunnel.
+func (a *Agent) tunnelDNSGuard() []netip.Addr {
+	if !a.vpnActive() {
+		return nil
+	}
+	return a.cfg.VPN.DNS
+}
+
+// vpnStatus describes the tunnel for the status page.
+func (a *Agent) vpnStatus() api.VPNStatus {
+	s := api.VPNStatus{
+		Enabled:             a.cfg.VPN.Enabled,
+		KillSwitch:          a.cfg.VPN.KillSwitch,
+		State:               string(a.vpn.machine.State()),
+		HandshakeAgeSeconds: -1,
+		Endpoint:            a.vpn.peer.Endpoint,
+		ReceivedBytes:       a.vpn.peer.ReceivedBytes,
+		SentBytes:           a.vpn.peer.SentBytes,
+	}
+	if !a.vpn.peer.LatestHandshake.IsZero() {
+		s.HandshakeAgeSeconds = int(a.now().Sub(a.vpn.peer.LatestHandshake).Seconds())
+	}
+	return s
+}
+
+// vpnWarnings explains VPN problems on the status page.
+func (a *Agent) vpnWarnings() []string {
+	if !a.vpnActive() {
+		if a.cfg.VPN.Enabled {
+			return []string{"The VPN is turned on but not set up yet: import a WireGuard file on the VPN page."}
+		}
+		return nil
+	}
+	switch a.vpn.machine.State() {
+	case tunnel.Connecting, tunnel.Down:
+		if a.cfg.VPN.KillSwitch {
+			return []string{"The VPN tunnel is not working, and the kill switch is on: your devices have no internet until it works again."}
+		}
+	case tunnel.Direct:
+		return []string{"The VPN tunnel is not working, and the kill switch is off: your devices are using the internet WITHOUT the VPN."}
+	}
+	return nil
+}
+
+// --- Settings (called through the API) ---
+
+// VPNSettings returns the VPN page settings (without secrets).
+func (a *Agent) VPNSettings() api.VPNSettings {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	v := a.cfg.VPN
+	s := api.VPNSettings{
+		Enabled:             v.Enabled,
+		KillSwitch:          v.KillSwitch,
+		Configured:          v.Peer.PublicKey != "" && a.secrets.WireGuardPrivateKey != "",
+		Addresses:           prefixStrings(v.Addresses),
+		DNS:                 addrStrings(v.DNS),
+		MTU:                 v.MTU,
+		PeerPublicKey:       v.Peer.PublicKey,
+		Endpoint:            v.Peer.Endpoint,
+		AllowedIPs:          prefixStrings(v.Peer.AllowedIPs),
+		PersistentKeepalive: v.Peer.PersistentKeepalive,
+		HasPresharedKey:     a.secrets.WireGuardPresharedKey != "",
+	}
+	if key, err := wireguard.ParseKey(a.secrets.WireGuardPrivateKey); err == nil {
+		s.PublicKey = key.PublicKey().String()
+	}
+	return s
+}
+
+// UpdateVPNSettings saves settings typed into the VPN page and applies them.
+func (a *Agent) UpdateVPNSettings(req api.VPNSettings) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.mode != api.ModeNormal {
+		return ErrWrongMode
+	}
+
+	newCfg := a.cfg.Clone()
+	newSecrets := a.secrets.Clone()
+	v := &newCfg.VPN
+	v.Enabled, v.KillSwitch, v.MTU = req.Enabled, req.KillSwitch, req.MTU
+	v.Peer.PublicKey = strings.TrimSpace(req.PeerPublicKey)
+	v.Peer.Endpoint = strings.TrimSpace(req.Endpoint)
+	v.Peer.PersistentKeepalive = req.PersistentKeepalive
+
+	var err error
+	if v.Addresses, err = parsePrefixes(req.Addresses, "addresses", true); err != nil {
+		return err
+	}
+	if v.Peer.AllowedIPs, err = parsePrefixes(req.AllowedIPs, "allowedIps", false); err != nil {
+		return err
+	}
+	if v.DNS, err = parseAddrs(req.DNS, "dns"); err != nil {
+		return err
+	}
+	if req.PrivateKey != "" {
+		if _, err := wireguard.ParseKey(strings.TrimSpace(req.PrivateKey)); err != nil {
+			return &config.ValidationError{Field: "privateKey", Message: err.Error()}
+		}
+		newSecrets.WireGuardPrivateKey = strings.TrimSpace(req.PrivateKey)
+	}
+	switch {
+	case req.RemovePresharedKey:
+		newSecrets.WireGuardPresharedKey = ""
+	case req.PresharedKey != "":
+		if _, err := wireguard.ParseKey(strings.TrimSpace(req.PresharedKey)); err != nil {
+			return &config.ValidationError{Field: "presharedKey", Message: err.Error()}
+		}
+		newSecrets.WireGuardPresharedKey = strings.TrimSpace(req.PresharedKey)
+	}
+	return a.saveVPN(newCfg, newSecrets)
+}
+
+// ImportVPNConfig reads a WireGuard .conf file and saves its settings (the
+// "Use VPN" and kill switch choices stay as they are).
+func (a *Agent) ImportVPNConfig(conf string) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.mode != api.ModeNormal {
+		return ErrWrongMode
+	}
+	if len(conf) > 16*1024 {
+		return &config.ValidationError{Field: "conf", Message: "This file is too big to be a WireGuard configuration."}
+	}
+	wg, err := wireguard.ParseConf(conf)
+	if err != nil {
+		return &config.ValidationError{Field: "conf", Message: err.Error()}
+	}
+	newCfg := a.cfg.Clone()
+	newSecrets := a.secrets.Clone()
+	newCfg.VPN.Addresses, newCfg.VPN.DNS, newCfg.VPN.MTU = wg.Addresses, wg.DNS, wg.MTU
+	newCfg.VPN.Peer = config.VPNPeer{
+		PublicKey:           wg.Peer.PublicKey.String(),
+		Endpoint:            wg.Peer.Endpoint,
+		AllowedIPs:          wg.Peer.AllowedIPs,
+		PersistentKeepalive: wg.Peer.PersistentKeepalive,
+	}
+	newSecrets.WireGuardPrivateKey = wg.PrivateKey.String()
+	newSecrets.WireGuardPresharedKey = presharedKeyText(wg.Peer)
+	slog.Info("WireGuard file imported", "endpoint", wg.Peer.Endpoint)
+	return a.saveVPN(newCfg, newSecrets)
+}
+
+// GenerateVPNKey makes a new private key for RasBeacon. The matching public
+// key (shown on the VPN page) must then be added to the WireGuard server.
+func (a *Agent) GenerateVPNKey() error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.mode != api.ModeNormal {
+		return ErrWrongMode
+	}
+	key, err := wireguard.GeneratePrivateKey()
+	if err != nil {
+		return err
+	}
+	newSecrets := a.secrets.Clone()
+	newSecrets.WireGuardPrivateKey = key.String()
+	return a.saveVPN(a.cfg.Clone(), newSecrets)
+}
+
+// saveVPN checks, saves and applies new VPN settings.
+func (a *Agent) saveVPN(newCfg config.Config, newSecrets config.Secrets) error {
+	// A VPN that is set up (or being turned on) must be complete and valid.
+	previous, previousSecrets := a.cfg, a.secrets
+	a.cfg, a.secrets = newCfg, newSecrets
+	wg, configured, err := a.wireguardConfig()
+	a.cfg, a.secrets = previous, previousSecrets
+	if err != nil {
+		return &config.ValidationError{Field: "privateKey", Message: err.Error()}
+	}
+	if newCfg.VPN.Enabled && !configured {
+		return &config.ValidationError{Field: "enabled", Message: "Import a WireGuard file (or enter the server's details and keys) before turning the VPN on."}
+	}
+	if configured {
+		if err := wg.Validate(); err != nil {
+			return &config.ValidationError{Field: "conf", Message: err.Error()}
+		}
+	}
+
+	if err := config.WriteJSON(a.paths.SecretsFile(), newSecrets, 0o600); err != nil {
+		return err
+	}
+	if err := config.WriteJSON(a.paths.ConfigFile(), newCfg, 0o644); err != nil {
+		return err
+	}
+	a.cfg, a.secrets = newCfg, newSecrets
+	slog.Info("VPN settings saved", "enabled", newCfg.VPN.Enabled, "killSwitch", newCfg.VPN.KillSwitch)
+	// Start the state machine again from "connecting" so the new settings
+	// are judged on their own.
+	a.vpn.machine = tunnel.Machine{}
+	a.vpn.applied = ""
+	return a.applyVPNConfig()
+}
+
+// --- Small helpers for text <-> addresses ---
+
+func prefixStrings(prefixes []netip.Prefix) []string {
+	out := []string{}
+	for _, p := range prefixes {
+		out = append(out, p.String())
+	}
+	return out
+}
+
+func addrStrings(addrs []netip.Addr) []string {
+	out := []string{}
+	for _, a := range addrs {
+		out = append(out, a.String())
+	}
+	return out
+}
+
+// parsePrefixes reads addresses like "10.66.0.2/32". A bare address counts
+// as a single address. keepHost keeps host bits (for tunnel addresses).
+func parsePrefixes(items []string, field string, keepHost bool) ([]netip.Prefix, error) {
+	var out []netip.Prefix
+	for _, item := range items {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		if !strings.Contains(item, "/") {
+			addr, err := netip.ParseAddr(item)
+			if err != nil {
+				return nil, &config.ValidationError{Field: field, Message: fmt.Sprintf("%q is not an IP address.", item)}
+			}
+			item = fmt.Sprintf("%s/%d", addr, addr.BitLen())
+		}
+		p, err := netip.ParsePrefix(item)
+		if err != nil {
+			return nil, &config.ValidationError{Field: field, Message: fmt.Sprintf("%q is not an address with network size, like 10.66.0.2/32.", item)}
+		}
+		if !keepHost {
+			p = p.Masked()
+		}
+		out = append(out, p)
+	}
+	return out, nil
+}
+
+func parseAddrs(items []string, field string) ([]netip.Addr, error) {
+	var out []netip.Addr
+	for _, item := range items {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		addr, err := netip.ParseAddr(item)
+		if err != nil {
+			return nil, &config.ValidationError{Field: field, Message: fmt.Sprintf("%q is not an IP address.", item)}
+		}
+		out = append(out, addr)
+	}
+	return out, nil
+}

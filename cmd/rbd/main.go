@@ -13,8 +13,10 @@ import (
 	"flag"
 	"log/slog"
 	"os"
+	"os/signal"
 	"os/user"
 	"strconv"
+	"syscall"
 
 	"rasbeacon/internal/agent"
 	"rasbeacon/internal/devsim"
@@ -60,6 +62,20 @@ func main() {
 	}
 	// Watch the internet connection in the background (see agent/uplink.go).
 	go a.RunUplinkMonitor()
+	if *devRoot == "" {
+		// Keep the clock right (see agent/clock.go). Not on the simulated
+		// device: it would ask real web servers for the time.
+		go a.RunClockMonitor()
+	}
+	// When the device shuts down, save the time for the next boot.
+	go func() {
+		stop := make(chan os.Signal, 1)
+		signal.Notify(stop, syscall.SIGTERM, os.Interrupt)
+		<-stop
+		a.SaveClock()
+		slog.Info("rbd stopping")
+		os.Exit(0)
+	}()
 
 	if err := a.ListenUnix(p.APISocket(), lookupGroupID(*webGroup)); err != nil {
 		slog.Error("API server stopped", "error", err)

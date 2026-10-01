@@ -69,6 +69,10 @@ func (p Paths) FactoryResetFile() string {
 	return filepath.Join(p.BootConfigDir(), "factory-reset")
 }
 
+// ClockFile holds the last known time (seconds since 1970), saved
+// regularly so the clock never goes backwards across a reboot.
+func (p Paths) ClockFile() string { return filepath.Join(p.DataDir(), "clock") }
+
 // CertDir holds the certificates and keys uploaded for WPA-Enterprise
 // networks. Each file name starts with the network's ID.
 func (p Paths) CertDir() string { return filepath.Join(p.DataDir(), "certs") }
@@ -115,6 +119,10 @@ func (p Paths) WPASupplicantConfig() string { return filepath.Join(p.RunDir(), "
 
 // WPAControlDir holds wpa_supplicant's control sockets (used by wpa_cli).
 func (p Paths) WPAControlDir() string { return p.join("run", "wpa_supplicant") }
+
+// WireGuardConfig is the generated WireGuard tunnel configuration. It holds
+// the private key, so it is root-only.
+func (p Paths) WireGuardConfig() string { return filepath.Join(p.RunDir(), "wg0.conf") }
 
 // NetworkdDir holds generated systemd-networkd settings. Files here only
 // last until the next reboot, which is what we want: rbd writes them again

@@ -121,6 +121,26 @@ func ParseWPAStatus(out string) WiFiStatus {
 	return s
 }
 
+// --- wpa_cli list_networks ---
+
+// ParseTempDisabled reads `wpa_cli list_networks` and returns the names of
+// saved networks that wpa_supplicant has paused after failed logins (wrong
+// password, or for Enterprise networks also a rejected certificate). It
+// tries them again after a pause that grows with each failure.
+//
+//	network id / ssid / bssid / flags
+//	0	eduroam	any	[TEMP-DISABLED]
+func ParseTempDisabled(out string) []string {
+	var names []string
+	for _, line := range strings.Split(out, "\n") {
+		fields := strings.Split(line, "\t")
+		if len(fields) >= 4 && strings.Contains(fields[3], "[TEMP-DISABLED]") {
+			names = append(names, DecodeSSID(fields[1]))
+		}
+	}
+	return names
+}
+
 // --- wpa_cli scan_results ---
 
 // Security values for nearby networks found by a scan.

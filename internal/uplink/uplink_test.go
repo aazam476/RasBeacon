@@ -139,3 +139,11 @@ func TestParseWPAStatus_LoginFailed(t *testing.T) {
 		t.Errorf("got %+v, want a failed login", s)
 	}
 }
+
+func TestParseTempDisabled(t *testing.T) {
+	out := "network id / ssid / bssid / flags\n0\teduroam\tany\t[TEMP-DISABLED]\n1\tHome\tany\t[CURRENT]\n"
+	got := ParseTempDisabled(out)
+	if len(got) != 1 || got[0] != "eduroam" {
+		t.Errorf("got %v", got)
+	}
+}

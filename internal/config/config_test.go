@@ -268,3 +268,17 @@ func TestClone_CopiesEnterpriseSettings(t *testing.T) {
 		t.Error("changing the copy changed the original")
 	}
 }
+
+func TestFillDefaults_OldConfigGetsKillSwitchOn(t *testing.T) {
+	cfg := Config{Version: 1}
+	cfg.FillDefaults()
+	if !cfg.VPN.KillSwitch || cfg.Version != CurrentVersion {
+		t.Errorf("got %+v", cfg)
+	}
+	// A current config keeps the owner's choice.
+	cfg.VPN.KillSwitch = false
+	cfg.FillDefaults()
+	if cfg.VPN.KillSwitch {
+		t.Error("the owner's kill switch choice was overwritten")
+	}
+}

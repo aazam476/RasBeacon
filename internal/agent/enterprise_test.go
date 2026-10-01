@@ -159,10 +159,14 @@ func TestObserveWiFi_ReportsFailedLogin(t *testing.T) {
 	if err := e.agent.UpdateUplinkSettings(eduroamRequest(testCACert(t), "wrong")); err != nil {
 		t.Fatal(err)
 	}
-	e.runner.outputs["wpa_cli -p "+e.paths.WPAControlDir()+" -i wlan0 status"] =
-		"wpa_state=ASSOCIATED\nssid=eduroam\nSupplicant PAE state=HELD\n"
+	// What wpa_supplicant reports after a rejected login: not connected,
+	// and the network paused.
+	e.runner.outputs["wpa_cli -p "+e.paths.WPAControlDir()+" -i wlan0 status"] = "wpa_state=DISCONNECTED\n"
+	e.runner.outputs["wpa_cli -p "+e.paths.WPAControlDir()+" -i wlan0 list_networks"] =
+		"network id / ssid / bssid / flags\n0\teduroam\tany\t[TEMP-DISABLED]\n"
 	e.check()
-	if got := e.agent.Status().Uplink.WiFi.State; got != "login-failed" {
-		t.Errorf("state = %q, want login-failed", got)
+	wifi := e.agent.Status().Uplink.WiFi
+	if wifi.State != "login-failed" || wifi.SSID != "eduroam" {
+		t.Errorf("got %+v, want login-failed for eduroam", wifi)
 	}
 }
