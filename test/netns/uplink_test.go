@@ -108,11 +108,11 @@ func TestNormalMode_DNSIsPassedUpstreamAndOtherServersAreRedirected(t *testing.T
 	}
 }
 
-// phoneIPv6 returns the phone's IPv6 addresses and routes.
-func phoneIPv6() string {
-	addrs, _ := tryInNS(phoneNS, 2*time.Second, "ip", "-6", "address", "show", "dev", "eth0")
-	routes, _ := tryInNS(phoneNS, 2*time.Second, "ip", "-6", "route", "show")
-	return addrs + routes
+// phoneIPv6 returns the phone's IPv6 addresses and its IPv6 routes.
+func phoneIPv6() (addresses, routes string) {
+	addresses, _ = tryInNS(phoneNS, 2*time.Second, "ip", "-6", "address", "show", "dev", "eth0")
+	routes, _ = tryInNS(phoneNS, 2*time.Second, "ip", "-6", "route", "show")
+	return addresses, routes
 }
 
 func TestNormalMode_IPv6PrivateNetworkWithoutDefaultRoute(t *testing.T) {
@@ -130,21 +130,24 @@ func TestNormalMode_IPv6PrivateNetworkWithoutDefaultRoute(t *testing.T) {
 
 	// Wait up to 15 s for the phone to pick an address in RasBeacon's
 	// private IPv6 network (fd12:3456:789a:1::/64).
-	var state string
+	var addresses, routes string
 	for i := 0; i < 30; i++ {
-		state = phoneIPv6()
-		if strings.Contains(state, "fd12:3456:789a:1:") {
+		addresses, routes = phoneIPv6()
+		if strings.Contains(addresses, "fd12:3456:789a:1:") {
 			break
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
-	if !strings.Contains(state, "fd12:3456:789a:1:") {
-		t.Fatalf("the phone should get a private IPv6 address:\n%s", state)
+	if !strings.Contains(addresses, "fd12:3456:789a:1:") {
+		t.Fatalf("the phone should get a private IPv6 address:\n%s", addresses)
 	}
 	// The uplink has no IPv6, so RasBeacon announces "router lifetime 0":
-	// the phone must not get an IPv6 default route.
-	if strings.Contains(state, "default") {
-		t.Errorf("without IPv6 internet the phone must not get an IPv6 default route:\n%s", state)
+	// the phone must not get an IPv6 default route. (A route line starting
+	// with "default" would be one.)
+	for _, line := range strings.Split(routes, "\n") {
+		if strings.HasPrefix(line, "default") {
+			t.Errorf("without IPv6 internet the phone must not get an IPv6 default route:\n%s", routes)
+		}
 	}
 }
 
