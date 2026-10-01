@@ -8,6 +8,9 @@
 //   - pretend the built-in radio is connected to a café's Wi-Fi with
 //     internet (IPv4 only), and that a scan finds a few networks,
 //   - pretend a WireGuard tunnel, once set up, works,
+//   - optionally run a simulated hotel login page (StartHotel) and use a
+//     real headless Chromium as the login browser (see cmd/rbd's -dev-hotel
+//     and -dev-browser options),
 //   - log the commands it would run (ip, iw, systemctl, ...) instead of
 //     running them, and answer with made-up output (two connected phones).
 //
@@ -17,10 +20,14 @@ package devsim
 import (
 	"context"
 	"fmt"
+	"html"
 	"log/slog"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"rasbeacon/internal/dhcpprobe"
@@ -124,11 +131,76 @@ func DHCPProbe(iface string, timeout time.Duration) (dhcpprobe.Result, error) {
 	return dhcpprobe.Result{}, nil
 }
 
-// PortalProbe stands in for the captive portal check: the simulated
-// network has no login page.
+// PortalProbe stands in for the captive portal check. The simulated
+// network has no login page, unless the simulated hotel (StartHotel) was
+// told to require one.
 func PortalProbe(ctx context.Context) portal.Result {
+	hotel.mu.Lock()
+	defer hotel.mu.Unlock()
+	if hotel.loginRequired {
+		return portal.Result{State: portal.Portal, LoginURL: "http://" + hotel.address + "/"}
+	}
 	return portal.Result{State: portal.Open}
 }
+
+// hotel is the simulated hotel network's login page (see StartHotel).
+var hotel struct {
+	mu            sync.Mutex
+	address       string
+	loginRequired bool
+}
+
+// StartHotel runs a simulated hotel login page on address (for example
+// 127.0.0.1:8099), for trying the login browser without a real hotel:
+//
+//	GET /require-login   from now on, the network "needs a login"
+//	GET /                the login page (a room number and a button)
+//	GET /login?room=...  logs in: the network is open again
+func StartHotel(address string) error {
+	listener, err := net.Listen("tcp", address)
+	if err != nil {
+		return err
+	}
+	hotel.mu.Lock()
+	hotel.address = listener.Addr().String()
+	hotel.mu.Unlock()
+
+	setRequired := func(required bool) {
+		hotel.mu.Lock()
+		hotel.loginRequired = required
+		hotel.mu.Unlock()
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /require-login", func(w http.ResponseWriter, r *http.Request) {
+		setRequired(true)
+		fmt.Fprintln(w, "the simulated hotel network now needs a login")
+	})
+	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, hotelLoginPage)
+	})
+	mux.HandleFunc("GET /login", func(w http.ResponseWriter, r *http.Request) {
+		setRequired(false)
+		fmt.Fprintf(w, hotelWelcomePage, html.EscapeString(r.URL.Query().Get("room")))
+	})
+	slog.Info("devsim: simulated hotel login page", "address", hotel.address)
+	go http.Serve(listener, mux)
+	return nil
+}
+
+const hotelLoginPage = `<!doctype html>
+<meta name="viewport" content="width=device-width">
+<title>Grand Hotel Wi-Fi</title>
+<style>body{font-family:sans-serif;margin:24px} input,button{font-size:20px;width:100%;margin:8px 0;padding:8px}</style>
+<h1>Grand Hotel Wi-Fi</h1>
+<form action="/login">
+<label>Room number <input name="room" id="room" autocomplete="off"></label>
+<button>Connect</button>
+</form>`
+
+const hotelWelcomePage = `<!doctype html>
+<meta name="viewport" content="width=device-width">
+<title>Connected</title>
+<h1>You are online</h1><p>Enjoy your stay, room %s.</p>`
 
 // Run logs the command and returns made-up output where it matters.
 func (Runner) Run(name string, args ...string) (string, error) {

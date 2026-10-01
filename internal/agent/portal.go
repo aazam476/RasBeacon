@@ -53,6 +53,13 @@ type portalState struct {
 	loginMode    bool
 	loginStarted time.Time
 	loginUntil   time.Time
+
+	// The login browser (portalbrowser.go).
+	browser          loginBrowser
+	browserStarting  bool
+	browserStarted   time.Time
+	browserUsed      time.Time
+	browserSawPortal bool
 }
 
 // noticeActive reports whether devices should be shown the "login needed"
@@ -71,6 +78,8 @@ func (a *Agent) portalStatus() api.PortalStatus {
 		LoginURL:  a.portal.result.LoginURL,
 		LoginMode: a.portal.loginMode,
 		CanStart:  a.noticeActive(),
+		CanBrowse: a.canBrowse(),
+		Browsing:  a.portal.browser != nil,
 	}
 	if a.portal.loginMode {
 		s.SecondsLeft = max(0, int(a.portal.loginUntil.Sub(a.now()).Seconds()))
@@ -81,7 +90,7 @@ func (a *Agent) portalStatus() api.PortalStatus {
 // portalCheckInterval is how long to wait between checks.
 func (a *Agent) portalCheckInterval() time.Duration {
 	switch {
-	case a.portal.loginMode:
+	case a.portal.loginMode, a.portal.browser != nil:
 		return 5 * time.Second // notice the login quickly
 	case a.vpnActive() && a.vpn.machine.State() != tunnel.Up:
 		return time.Minute // a portal may be why the tunnel is down
@@ -141,10 +150,22 @@ func (a *Agent) CheckPortal(probe func(context.Context) portal.Result) {
 			a.endLoginMode("time is up")
 		}
 	}
+	a.checkBrowser()
 	if a.noticeActive() != wasNotice {
 		slog.Info("captive portal notice", "shown", a.noticeActive())
 		a.applyClientPath()
 	}
+}
+
+// RecheckPortal makes the next check for a login page happen within a few
+// seconds (for "Check again" on the notice page, for example after logging
+// in some other way).
+func (a *Agent) RecheckPortal() error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.portal.probedAt = time.Time{}
+	a.portal.probedUplinkSince = time.Time{}
+	return nil
 }
 
 // StartLoginMode lets devices reach the network's login page for

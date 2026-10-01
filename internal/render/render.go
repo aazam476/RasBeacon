@@ -402,13 +402,26 @@ type FirewallInput struct {
 	// yours, but reach nothing else (not your devices, not RasBeacon's
 	// settings, only its DHCP and DNS).
 	Guest bool
+	// Browser confines the login browser (see internal/browser) to the
+	// uplinks. nil when there is no browser user.
+	Browser *BrowserRule
 	// RoutedIPv6 is the public IPv6 network the VPN server routes to
 	// RasBeacon (see config.VPNConfig.RoutedIPv6Prefix). Devices' traffic
 	// from it leaves through the tunnel without NAT. Needs TunnelInterface.
 	RoutedIPv6 netip.Prefix
 }
 
+// BrowserRule says which user runs the login browser and where it may go.
+type BrowserRule struct {
+	// UID is the browser user's number (the firewall matches on it).
+	UID int
+	// Uplinks are the only interfaces it may use (the hotel network).
+	// Empty means it may reach nothing.
+	Uplinks []string
+}
+
 type firewallData struct {
+	Browser         *BrowserRule
 	RoutedIPv6      string
 	PortalOnly      bool
 	Guest           bool
@@ -439,6 +452,17 @@ func Firewall(in FirewallInput) (string, error) {
 	}
 	if len(in.TunnelDNS) > 0 && in.TunnelInterface == "" {
 		return "", fmt.Errorf("tunnel DNS servers need a tunnel interface")
+	}
+	if b := in.Browser; b != nil {
+		if b.UID <= 0 {
+			return "", fmt.Errorf("the login browser can't run as root")
+		}
+		for _, name := range b.Uplinks {
+			if !isInterfaceName(name) {
+				return "", fmt.Errorf("invalid interface name %q", name)
+			}
+		}
+		data.Browser = b
 	}
 	if in.RoutedIPv6.IsValid() {
 		if in.TunnelInterface == "" {

@@ -236,6 +236,51 @@ type PortalStatus struct {
 	// LoginMode is true while devices may reach the login page directly.
 	LoginMode   bool `json:"loginMode"`
 	SecondsLeft int  `json:"secondsLeft"`
+	// CanBrowse is true when the login page can be opened in RasBeacon's
+	// own browser (zero-leak login, see PortalBrowserFrame): the browser is
+	// installed and a login page is (or may be) in the way.
+	CanBrowse bool `json:"canBrowse"`
+	// Browsing is true while that browser is open.
+	Browsing bool `json:"browsing"`
+}
+
+// PortalBrowserStart opens RasBeacon's own browser on the network's login
+// page. Width and Height are the phone screen's size in CSS pixels; the
+// page is laid out for that size.
+type PortalBrowserStart struct {
+	Width  int `json:"width"`
+	Height int `json:"height"`
+}
+
+// PortalBrowserFrame is a picture of the login page in RasBeacon's own
+// browser.
+type PortalBrowserFrame struct {
+	// Running is false when the browser is closed (for example after the
+	// login worked); the other fields are then empty.
+	Running bool `json:"running"`
+	// Seq goes up with every new picture: ask for the next one with
+	// GET .../frame?after=<seq>.
+	Seq int64 `json:"seq"`
+	// Image is the picture, a base64-encoded JPEG, Width x Height.
+	Image  string `json:"image"`
+	Width  int    `json:"width"`
+	Height int    `json:"height"`
+	URL    string `json:"url"`
+	Title  string `json:"title"`
+}
+
+// PortalBrowserInput is something the owner did on the picture.
+type PortalBrowserInput struct {
+	// Action is "click" (X, Y), "scroll" (X, Y, DeltaY), "type" (Text),
+	// "key" (Key: "Enter", "Backspace", "Tab" or "Escape"), "back",
+	// "reload" or "navigate" (URL, http or https only).
+	Action string  `json:"action"`
+	X      float64 `json:"x,omitempty"`
+	Y      float64 `json:"y,omitempty"`
+	DeltaY float64 `json:"deltaY,omitempty"`
+	Text   string  `json:"text,omitempty"`
+	Key    string  `json:"key,omitempty"`
+	URL    string  `json:"url,omitempty"`
 }
 
 // VPNStatus describes the WireGuard tunnel.

@@ -392,6 +392,31 @@ func TestFirewall_RoutedIPv6SkipsNATOnlyInTheTunnel(t *testing.T) {
 	}
 }
 
+func TestFirewall_LoginBrowserOnlyReachesUplinks(t *testing.T) {
+	got, err := Firewall(FirewallInput{Egress: []string{"wg0"}, TunnelInterface: "wg0",
+		Browser: &BrowserRule{UID: 997, Uplinks: []string{"eth0", "wlan0"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkGolden(t, "firewall_browser", got)
+	output := got[strings.Index(got, "chain output"):]
+	for _, want := range []string{
+		`meta skuid 997 oifname "lo" ip daddr 127.0.0.53 meta l4proto { tcp, udp } th dport 53 accept`,
+		`meta skuid 997 oifname != { "eth0", "wlan0" } reject`,
+	} {
+		if !strings.Contains(output, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	none, _ := Firewall(FirewallInput{Browser: &BrowserRule{UID: 997}})
+	if !strings.Contains(none, "meta skuid 997 reject") {
+		t.Error("without uplinks the browser may reach nothing")
+	}
+	if _, err := Firewall(FirewallInput{Browser: &BrowserRule{UID: 0}}); err == nil {
+		t.Error("root must never be the browser user")
+	}
+}
+
 func TestFirewall_EstablishedOnlyOnCurrentPath(t *testing.T) {
 	got, _ := Firewall(FirewallInput{Egress: []string{"wg0"}})
 	forward := got[strings.Index(got, "chain forward"):strings.Index(got, "chain prerouting_nat")]

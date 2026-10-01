@@ -37,9 +37,16 @@ mmdebstrap:
     # kernel has their drivers, but without firmware they don't work.
     - firmware-realtek
     - firmware-mediatek
+    # The login browser for hotel networks (zero-leak login, see
+    # internal/browser): Chromium without a window, and a font for it
+    - chromium-headless-shell
+    - fonts-dejavu-core
   customize-hooks:
     # rbweb runs as its own unprivileged user.
     - chroot $1 useradd --system --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin rbweb
+    # The login browser runs as its own unprivileged user; the firewall
+    # only lets it reach the uplink.
+    - chroot $1 useradd --system --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin rbbrowser
     # The programs are copied in by the overlay; make sure they can run.
     - chmod 0755 $1/usr/bin/rbd $1/usr/bin/rbweb
     # Start the early firewall, rbd and rbweb at boot. hostapd and dnsmasq

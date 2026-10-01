@@ -78,7 +78,7 @@ As built in milestone 1, this uses rpi-image-gen's `image-rota` layout
 |---|---|---|---|
 | `BOOTCONFIG` | FAT | 32 MB | A/B boot selection (`autoboot.txt`), plus the user-visible files `setup.txt` and `factory-reset` (section 5). Mounted at `/bootfs`. |
 | `boot_a`, `boot_b` | FAT | 128 MB each | Firmware and kernel for each slot |
-| `system_a`, `system_b` | erofs, **read-only** | 768 MB each | The operating system for each slot |
+| `system_a`, `system_b` | erofs, **read-only** | 1536 MB each (768 MB before milestone 7) | The operating system for each slot |
 | `persistent` | ext4 | 512 MB | `/persistent`: RasBeacon settings in `/persistent/rasbeacon`, SSH host keys, per-slot `/var` |
 
 - `/var/log`, `/tmp` and `/run` are tmpfs, and journald is `Storage=volatile`.

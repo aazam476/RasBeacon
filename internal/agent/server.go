@@ -10,16 +10,23 @@ package agent
 // require the admin password in the request, checked here.
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
 	"net"
 	"net/http"
 	"os"
+	"strconv"
+	"time"
 
 	"rasbeacon/internal/api"
 	"rasbeacon/internal/config"
 )
+
+// frameWait is how long a request for the login browser's next picture
+// waits when the page hasn't changed.
+const frameWait = 10 * time.Second
 
 // Handler returns the HTTP routes for the agent's API.
 func (a *Agent) Handler() http.Handler {
@@ -201,6 +208,7 @@ func (a *Agent) Handler() http.Handler {
 		"POST /portal/start":  a.StartLoginMode,
 		"POST /portal/extend": a.ExtendLoginMode,
 		"POST /portal/stop":   a.StopLoginMode,
+		"POST /portal/check":  a.RecheckPortal,
 	}
 	for route, action := range portalActions {
 		mux.HandleFunc(route, func(w http.ResponseWriter, r *http.Request) {
@@ -211,6 +219,41 @@ func (a *Agent) Handler() http.Handler {
 			writeJSON(w, http.StatusOK, a.PortalStatus())
 		})
 	}
+
+	// The login browser (zero-leak login, see portalbrowser.go).
+	mux.HandleFunc("POST /portal/browser/start", func(w http.ResponseWriter, r *http.Request) {
+		var req api.PortalBrowserStart
+		if !readJSON(w, r, &req) {
+			return
+		}
+		if err := a.StartPortalBrowser(req); err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, a.PortalStatus())
+	})
+	mux.HandleFunc("POST /portal/browser/stop", func(w http.ResponseWriter, r *http.Request) {
+		a.StopPortalBrowser()
+		writeJSON(w, http.StatusOK, a.PortalStatus())
+	})
+	mux.HandleFunc("POST /portal/browser/input", func(w http.ResponseWriter, r *http.Request) {
+		var req api.PortalBrowserInput
+		if !readJSON(w, r, &req) {
+			return
+		}
+		if err := a.PortalBrowserInput(req); err != nil {
+			writeError(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+	// Waits up to frameWait for a picture newer than ?after=.
+	mux.HandleFunc("GET /portal/browser/frame", func(w http.ResponseWriter, r *http.Request) {
+		after, _ := strconv.ParseInt(r.URL.Query().Get("after"), 10, 64)
+		ctx, cancel := context.WithTimeout(r.Context(), frameWait)
+		defer cancel()
+		writeJSON(w, http.StatusOK, a.PortalBrowserFrame(ctx, after))
+	})
 
 	// The body is the update file itself, streamed (it can be hundreds of
 	// megabytes), so it isn't read with readJSON.

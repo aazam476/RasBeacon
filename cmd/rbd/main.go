@@ -30,6 +30,8 @@ func main() {
 	debug := flag.Bool("debug", false, "log every command that is run")
 	devRoot := flag.String("dev", "", "run as a simulated device under this directory, without touching "+
 		"the real network (for web UI development; see CONTRIBUTING.md)")
+	devHotel := flag.String("dev-hotel", "", "with -dev: run a simulated hotel login page on this address (e.g. 127.0.0.1:8099)")
+	devBrowser := flag.String("dev-browser", "", "with -dev: the headless Chromium to use as the login browser")
 	flag.Parse()
 
 	level := slog.LevelInfo
@@ -53,6 +55,16 @@ func main() {
 	a := agent.New(p, runner)
 	if *devRoot != "" {
 		a.SetDHCPProbe(devsim.DHCPProbe)
+		// The simulated device runs the browser as the current user, and
+		// without Chromium's sandbox, which many development machines
+		// and CI runners can't provide.
+		a.SetBrowser(*devBrowser, true)
+		if *devHotel != "" {
+			if err := devsim.StartHotel(*devHotel); err != nil {
+				slog.Error("could not start the simulated hotel", "error", err)
+				os.Exit(1)
+			}
+		}
 	}
 	a.SetWebGroup(lookupGroupID(*webGroup))
 	if err := a.Start(); err != nil {
