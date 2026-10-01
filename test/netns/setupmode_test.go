@@ -30,8 +30,13 @@ import (
 	"testing"
 	"time"
 
+	"net/netip"
+
 	"rasbeacon/internal/render"
 )
+
+// routerULA is the router's private IPv6 address on the hotspot in tests.
+var routerULA = netip.MustParsePrefix("fd12:3456:789a:1::1/64")
 
 // Namespace names. The "rb-" prefix makes leftovers easy to spot.
 const (
@@ -141,13 +146,36 @@ func buildNetwork(t *testing.T) {
 // which ports the firewall lets through.
 func startRouterServices(t *testing.T, sshEnabled bool) (leaseFile string) {
 	t.Helper()
+	return startRouter(t, routerSettings{SSHEnabled: sshEnabled})
+}
+
+// routerSettings chooses which of rbd's configurations the router runs.
+type routerSettings struct {
+	SSHEnabled bool
+	// Normal is true for the owner's hotspot (after setup): devices'
+	// traffic is forwarded to the uplink "eth0" and DNS is passed to
+	// UpstreamDNS. False means first-boot setup mode.
+	Normal      bool
+	UpstreamDNS string
+	// IPv6 gives the hotspot a private IPv6 network (normal mode only).
+	IPv6 bool
+}
+
+// startRouter applies rbd's firewall and starts dnsmasq with rbd's config,
+// plus the stand-in servers described at startRouterServices.
+func startRouter(t *testing.T, settings routerSettings) (leaseFile string) {
+	t.Helper()
 	dir := t.TempDir()
 	// Same permissions as rbd uses for /run/rbd.
 	if err := os.Chmod(dir, 0o711); err != nil {
 		t.Fatal(err)
 	}
 
-	rules, err := render.Firewall(render.FirewallInput{SSHEnabled: sshEnabled})
+	firewall := render.FirewallInput{SSHEnabled: settings.SSHEnabled}
+	if settings.Normal {
+		firewall.Uplinks = []string{"eth0"}
+	}
+	rules, err := render.Firewall(firewall)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +184,15 @@ func startRouterServices(t *testing.T, sshEnabled bool) (leaseFile string) {
 	inNS(t, routerNS, "nft", "-f", rulesFile)
 
 	leaseFile = filepath.Join(dir, "dnsmasq.leases")
-	conf, err := render.Dnsmasq(render.DnsmasqInput{LAN: render.DefaultLAN, LeaseFile: leaseFile, Captive: true})
+	dnsmasqInput := render.DnsmasqInput{LAN: render.DefaultLAN, LeaseFile: leaseFile, Captive: !settings.Normal}
+	if settings.Normal {
+		dnsmasqInput.Upstream = []string{settings.UpstreamDNS}
+	}
+	if settings.IPv6 {
+		dnsmasqInput.LAN.IPv6Prefix = routerULA
+		inNS(t, routerNS, "ip", "address", "add", routerULA.String(), "dev", render.BridgeName)
+	}
+	conf, err := render.Dnsmasq(dnsmasqInput)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -299,7 +335,7 @@ func TestFirewall_UpstreamCannotReachWebUIOrDNS(t *testing.T) {
 	}
 }
 
-func TestFirewall_NothingIsForwardedInMilestone1(t *testing.T) {
+func TestFirewall_NothingIsForwardedInSetupMode(t *testing.T) {
 	requireRoot(t)
 	buildNetwork(t)
 	startRouterServices(t, false)
@@ -310,7 +346,7 @@ func TestFirewall_NothingIsForwardedInMilestone1(t *testing.T) {
 	if _, ok := tryInNS(routerNS, 3*time.Second, "ping", "-c", "1", "-W", "1", "10.99.0.2"); !ok {
 		t.Fatal("test network is broken: router cannot reach upstream")
 	}
-	// The phone must not get through the router (no internet until M2).
+	// The phone must not get through the router before setup is finished.
 	if out, ok := tryInNS(phoneNS, 3*time.Second, "ping", "-c", "1", "-W", "1", "10.99.0.2"); ok {
 		t.Errorf("phone traffic must not be forwarded upstream:\n%s", out)
 	}
