@@ -148,6 +148,7 @@ It refreshes itself every 10 seconds.
 
 `describeUplink` in `shared/format.ts` gives the one-line summary.
 
+A login-page banner appears at the top when `status.portal.detected`.
 The VPN section uses `describeVPNState` from `shared/format.ts`; design the
 "no internet because of the kill switch" and "using the internet WITHOUT
 the VPN" states so they stand out.
@@ -155,6 +156,27 @@ the VPN" states so they stand out.
 **Wording the test relies on:** heading "Status",
 "Connected devices (N)", `Connected to Wi-Fi "<name>"` and "Connected: your
 devices' traffic goes through the VPN."
+
+### Login-page notice: `screens/Portal/`
+
+Shown at `/#portal`, **without logging in** (it opens in the phone's own
+"Log in to network" sheet). It is a full page, not inside the frame. It
+refreshes every 5 seconds.
+
+| Prop | Type | Meaning |
+|---|---|---|
+| `status` | `PortalStatus \| undefined` | `detected`, `canStart`, `loginMode`, `secondsLeft` |
+| `loadError` | `string \| null` | |
+| `loginUrl` | `string` | The network's login page (or a plain-HTTP fallback) |
+| `start`, `extend`, `stop` | `() => void` | `start` also goes to `loginUrl` after 2 seconds |
+| `busy`, `actionError` | | |
+
+**States to design:** loading, can start (explain the bypass clearly: web
+and DNS from all devices skip the VPN until the login works), login mode
+with countdown, nothing to do.
+
+**Wording the test relies on:** heading "This network needs a login",
+"Nothing to do".
 
 ### VPN: `screens/VPN/`
 

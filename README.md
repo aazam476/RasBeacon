@@ -12,13 +12,14 @@ hotel login pages.
 - **No telemetry and no cloud.** Everything works offline.
 - **Licensed under Apache-2.0.**
 
-> **Status: milestone 4 of 6.** The image boots, runs the first-boot setup
+> **Status: milestone 5 of 6.** The image boots, runs the first-boot setup
 > network and web UI, runs your hotspot, connects it to the internet through
 > Ethernet or Wi-Fi (open, password, or WPA-Enterprise such as eduroam,
-> [guide](docs/eduroam.md)), and can send everything through your own
-> WireGuard VPN with a kill switch ([server guide](docs/wireguard-server.md)).
-> Still to come: hotel login pages with the VPN on (milestone 5) and signed
-> updates (milestone 6). See [docs/design.md](docs/design.md) for the plan.
+> [guide](docs/eduroam.md)), can send everything through your own WireGuard
+> VPN with a kill switch ([server guide](docs/wireguard-server.md)), and
+> lets you log in to hotel login pages without turning the kill switch off.
+> Still to come: signed updates and final hardening (milestone 6). See
+> [docs/design.md](docs/design.md) for the plan.
 
 ## What you need
 
@@ -89,6 +90,7 @@ hotel login pages.
 | No setup network, and another repeating pattern of long/short flashes | A boot error. Count the long and short flashes and look them up in the [Raspberry Pi LED code table](https://www.raspberrypi.com/documentation/computers/configuration.html#led-warning-flash-codes). |
 | No setup network and no blinking | Check the USB Wi-Fi adapter is plugged in, and power-cycle. If it still doesn't appear, connect the Pi to a TV and keyboard, or see [docs/testing/m1.md](docs/testing/m1.md) for how to collect logs. |
 | Devices on the hotspot say "No internet" | Check the **Internet** section of the Status page. "Not connected": plug in a cable or save a Wi-Fi network on the Internet page. Wi-Fi "Looking for your saved networks": the network is out of range or its password is wrong. If the network shows a login page (hotels), that arrives in milestone 5. |
+| Hotel or café Wi-Fi with a login page, and the VPN's kill switch is on | Your phone should show RasBeacon's *This network needs a login* page by itself (or open `http://10.87.0.1/#portal`). Tap **Start login mode**, log in on the network's page, and RasBeacon turns the VPN back on. During login mode (at most 10 minutes, extendable to 30), web traffic from your devices skips the VPN. |
 | A warning says the Ethernet port "seems to be plugged into a network" | The port is set to *Client port* (for your own laptop), but it's plugged into a network. Set it to *Uplink* on the Internet page if that cable is your internet connection. |
 | The status page warns that the built-in Wi-Fi is running the hotspot | RasBeacon didn't find a USB adapter it can use. Plug one in and restart from the System page. |
 | Nothing works and you want to see why | Put the SD card in a computer and create an empty file named `debug` on the `BOOTCONFIG` drive. Boot the Pi and wait 3 minutes, then unplug it. Back on the computer, open `rasbeacon-debug.txt` from the same drive. It holds the startup logs (no passwords, but device names and MAC addresses, so delete it afterwards). |
