@@ -9,6 +9,7 @@ in the code is hard to follow, that is a bug worth reporting.
 ```
 cmd/rbd/            rbd: privileged background program (network agent)
 cmd/rbweb/          rbweb: web server for the settings pages
+cmd/rbsign/         release tool: makes the update signing key, signs update files
 internal/agent/     rbd's logic: boot sequence, modes, settings, API
 internal/webserver/ rbweb's logic: sessions, login, forwarding to rbd
 internal/render/    config generators; templates/ holds the commented config templates
@@ -17,7 +18,8 @@ internal/...        small focused packages (radio detection, setup.txt, ...)
 internal/devsim/    simulated device for development without a Pi
 web/                the web UI (React + TypeScript)
 image/              Raspberry Pi image definition (rpi-image-gen layers, systemd units)
-test/netns/         tests with real firewall/DHCP/DNS in network namespaces
+test/netns/         tests with real firewall/DHCP/DNS/WireGuard in network namespaces
+test/hwsim/         WPA-Enterprise logins with simulated Wi-Fi radios
 test/e2e/           browser walkthrough of the web UI
 docs/               design, architecture, API, UI contract, glossary, test plans
 ```
@@ -40,8 +42,17 @@ make e2e      # browser walkthrough against a simulated device
 make pi       # build both programs for the Raspberry Pi (64-bit ARM)
 ```
 
-- **Network namespace tests** (Linux, needs root):
-  `sudo -E go test ./test/netns/ -v`
+- **Network namespace tests** (Linux, needs root, plus `nftables`,
+  `dnsmasq`, `busybox` and `wireguard-tools`):
+  `sudo -E go test ./test/netns/ -v`. The VPN tests need WireGuard in the
+  kernel; where it is missing (some containers), they use `wireguard-go`
+  if it is on the `PATH` (`go install golang.zx2c4.com/wireguard@latest`,
+  then name the binary `wireguard-go`).
+- **Simulated Wi-Fi tests** (Linux, needs root, `hostapd`, `wpasupplicant`
+  and the `mac80211_hwsim` module):
+  `sudo modprobe mac80211_hwsim radios=2 && sudo -E go test ./test/hwsim/ -v`.
+  CI runs them in a small virtual machine because GitHub's kernel lacks
+  the module (see `.github/workflows/ci.yml`).
 - **Browser test:** it needs Playwright's Chromium once:
   `cd test/e2e && npm ci && npx playwright install chromium`.
 
