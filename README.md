@@ -78,6 +78,7 @@ hotel login pages.
 | No `RasBeacon-Setup-…` network after 2 minutes, and the green LED blinks **3 short, 1 long**, repeating | `setup.txt` exists but can't be used. Common causes: the password is shorter than 8 or longer than 63 characters, or has accented letters or emoji; the line doesn't start with `setup_password=`; or there is something else in the file. Fix or delete the file on the `BOOTCONFIG` drive and power-cycle. |
 | No setup network and no blinking | Check the USB Wi-Fi adapter is plugged in, and power-cycle. If it still doesn't appear, connect the Pi to a TV and keyboard, or see [docs/testing/m1.md](docs/testing/m1.md) for how to collect logs. |
 | The status page warns that the built-in Wi-Fi is running the hotspot | RasBeacon didn't find a USB adapter it can use. Plug one in and restart from the System page. |
+| Nothing works and you want to see why | Put the SD card in a computer and create an empty file named `debug` on the `BOOTCONFIG` drive. Boot the Pi and wait 3 minutes, then unplug it. Back on the computer, open `rasbeacon-debug.txt` from the same drive. It holds the startup logs (no passwords, but device names and MAC addresses, so delete it afterwards). |
 | Forgot the admin password | Factory reset: put the SD card in a computer and create an empty file named `factory-reset` on the `BOOTCONFIG` drive. At the next start, RasBeacon erases all settings and runs first-time setup again. |
 
 ## Checking your download

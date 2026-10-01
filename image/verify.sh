@@ -40,6 +40,7 @@ check "Built-in Wi-Fi firmware (Pi 4/5)" sh -c "ls '$root'/usr/lib/firmware/brcm
 check "lockdown firewall runs at boot" test -L "$root/etc/systemd/system/sysinit.target.wants/rasbeacon-firewall-early.service"
 check "rbd runs at boot" test -L "$root/etc/systemd/system/multi-user.target.wants/rbd.service"
 check "rbweb runs at boot" test -L "$root/etc/systemd/system/multi-user.target.wants/rbweb.service"
+check "opt-in debug log is available" test -L "$root/etc/systemd/system/sysinit.target.wants/rasbeacon-debug-log.service"
 check "SSH is not started at boot" sh -c "! ls '$root'/etc/systemd/system/*.wants/ssh.service"
 check "Debian's hostapd service is masked" sh -c "[ \"\$(readlink '$root/etc/systemd/system/hostapd.service')\" = /dev/null ]"
 check "iwd is not installed" test ! -e "$root/usr/libexec/iwd"
