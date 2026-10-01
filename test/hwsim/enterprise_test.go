@@ -172,10 +172,11 @@ func startCampus(t *testing.T, apInterface, staInterface string) campus {
 	c.rogueCAFile = write("rogue-ca.pem", rogue.certPEM)
 
 	// Who may log in, and how. "*" accepts any outer (anonymous) identity
-	// for the tunnelled methods; [2] lines are checked inside the tunnel.
+	// for the tunnelled methods; the [2] line is checked inside the tunnel.
+	// hostapd uses the first line that matches a name, so all of alice's
+	// inner methods must be on one line.
 	users := write("eap_users", "*\tTTLS,PEAP,TLS\n"+
-		`"`+userIdentity+`"`+"\tTTLS-PAP\t\""+userPassword+"\"\t[2]\n"+
-		`"`+userIdentity+`"`+"\tMSCHAPV2\t\""+userPassword+"\"\t[2]\n")
+		`"`+userIdentity+`"`+"\tTTLS-PAP,MSCHAPV2\t\""+userPassword+"\"\t[2]\n")
 	conf := write("hostapd.conf", strings.Join([]string{
 		"interface=" + apInterface,
 		"driver=nl80211",
