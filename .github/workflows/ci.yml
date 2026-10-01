@@ -67,17 +67,25 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-      - name: Install Wi-Fi tools and the simulated radio driver
+      # GitHub's runners use a cloud kernel without the simulated Wi-Fi
+      # driver (mac80211_hwsim). So the test runs in a small virtual machine
+      # with Ubuntu's standard kernel, which has it. virtme-ng starts that
+      # kernel with the runner's own files, so the installed tools work.
+      - name: Install Wi-Fi tools, a standard kernel and virtme-ng
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q hostapd wpasupplicant "linux-modules-extra-$(uname -r)"
-          # Stop the distribution's own services so they don't grab the radios.
-          sudo systemctl stop hostapd wpa_supplicant 2>/dev/null || true
-          sudo modprobe mac80211_hwsim radios=2
-      - name: Run tests as root
+          sudo apt-get install -y -q hostapd wpasupplicant iw virtme-ng qemu-system-x86 linux-image-generic
+          sudo chmod 666 /dev/kvm
+      - name: Build the test program
+        run: go test -c -o "$RUNNER_TEMP/hwsim.test" ./test/hwsim/
+      - name: Run the tests in the virtual machine
         # RASBEACON_REQUIRE_HWSIM=1 makes the tests fail instead of skipping
         # if they can't run.
-        run: sudo -E env "PATH=$PATH" RASBEACON_REQUIRE_HWSIM=1 go test -count=1 -v ./test/hwsim/
+        run: |
+          kernel="$(ls /boot/vmlinuz-*-generic | sort -V | tail -n 1)"
+          echo "Using kernel $kernel"
+          sudo vng --run "$kernel" --user root --memory 2G --exec \
+            "modprobe mac80211_hwsim radios=2 && cd '$GITHUB_WORKSPACE/test/hwsim' && RASBEACON_REQUIRE_HWSIM=1 '$RUNNER_TEMP/hwsim.test' -test.v -test.count=1"
 
   e2e:
     name: Browser end-to-end test (simulated device)
