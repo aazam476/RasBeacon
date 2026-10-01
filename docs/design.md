@@ -800,7 +800,7 @@ wins.
 6. **Hardening + docs:** A/B updates, signing, factory reset paths,
    diagnostics, compatibility table, redistribution, README 15-minute path.
 7. **Stretch:** guest SSID, metered toggle, zero-leak portal login (remote
-   browser), routed IPv6 prefix instead of NAT66.
+   browser), routed IPv6 prefix instead of NAT66. Built; see 11b.
 
 ## 11a. As built in M6
 
@@ -823,6 +823,50 @@ wins.
   web UI), and the zero-leak remote-browser portal login.
 - **Source code:** each release lists its packages with source versions;
   see `docs/source-code.md`.
+
+## 11b. As built in M7
+
+- **Guest network:** a second BSS (`guest0`) in the same hostapd, on its
+  own bridge `br-guest` with the /24 after the hotspot's (10.87.1.0/24;
+  `ChooseLANPrefix` checks both, so they move together). It needs a radio
+  that can run two APs, read from `iw phy` "valid interface combinations"
+  (`radio.MaxAPInterfaces`); its BSSID is the radio's MAC with the
+  locally administered bit set. Guests follow the owner's devices' path
+  exactly (routing rule 101 `iif br-guest`, the `lans` set in the
+  firewall), so the kill switch covers them. Isolation: input from
+  `br-guest` only for DHCP and DNS (everything else `reject`, so phones
+  don't wait), no forwarding between `br-lan` and `br-guest`, and
+  `ap_isolate=1`. IPv4 only. Same security mode as the hotspot; its own
+  password (must differ). Tested in `test/netns/guest_test.go` and on
+  simulated radios in `test/hwsim/guest_test.go`.
+- **Metered:** `dhcp-option=43,ANDROID_METERED`, which Android reads.
+  No hint exists for Apple or Windows devices, so the UI tells the owner
+  what to set there. Changing only this setting restarts dnsmasq, not
+  hostapd.
+- **Routed IPv6:** only through the VPN. When the WireGuard server routes a
+  public /64 to RasBeacon (`VPNConfig.RoutedIPv6Prefix`), rbd adds `::1`
+  of it to `br-lan` while the VPN is in use; dnsmasq's
+  `constructor:br-lan` announces it with the ULA. A rule in
+  `postrouting_nat` exempts it from NAT on `wg0` only, so in direct mode
+  or login mode it is still NATed on the uplink. Not built: DHCPv6 prefix
+  delegation from the uplink. Travel networks almost never delegate, and
+  with the VPN on, addresses from the hotel's prefix couldn't be used in
+  the tunnel anyway.
+- **Zero-leak login:** Debian's `chromium-headless-shell`, driven over
+  `--remote-debugging-pipe` by `internal/browser` (a small CDP client, no
+  network port). It runs as the system user `rbbrowser` with a temporary
+  profile under `/run/rbd/browser`, deleted afterwards; Chromium's sandbox
+  is used when the kernel allows it (rbd retries without it and logs a
+  warning otherwise). The firewall's output chain only lets that user
+  reach `127.0.0.53:53` and the uplink interfaces. The page is laid out
+  for the phone's screen size; pictures are `Page.startScreencast` JPEGs,
+  long-polled by the UI; taps and typing become CDP input events. It
+  closes when the portal check passes (after having seen the portal), after
+  5 minutes without input, or after 30 minutes. It is offered on the
+  notice page (`canBrowse`: a portal is detected, or the VPN is on and its
+  tunnel isn't up) before login mode, and is public to the hotspot like
+  login mode. The image grew by about 300 MB, so the system slots are now
+  1536 MB; devices on older images must be flashed once.
 
 ## 12. Requirements I'd change
 1. **Battery:** the goal of 12 h on a common bank becomes **about 12 h on a

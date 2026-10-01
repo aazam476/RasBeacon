@@ -12,14 +12,15 @@ hotel login pages.
 - **No telemetry and no cloud.** Everything works offline.
 - **Licensed under Apache-2.0.**
 
-> **Status: all six milestones are built and tested in CI; hardware
+> **Status: all seven milestones are built and tested in CI; hardware
 > testing is in progress** (see [docs/testing/](docs/testing/)). RasBeacon
-> runs your hotspot, connects it to the internet through Ethernet or Wi-Fi
-> (open, password, or WPA-Enterprise such as eduroam,
-> [guide](docs/eduroam.md)), can send everything through your own WireGuard
-> VPN with a kill switch ([server guide](docs/wireguard-server.md)), lets
-> you log in to hotel login pages without turning the kill switch off, and
-> installs signed updates with automatic rollback.
+> runs your hotspot (plus an optional guest network), connects it to the
+> internet through Ethernet or Wi-Fi (open, password, or WPA-Enterprise
+> such as eduroam, [guide](docs/eduroam.md)), can send everything through
+> your own WireGuard VPN with a kill switch
+> ([server guide](docs/wireguard-server.md)), lets you log in to hotel login
+> pages without anything leaving the VPN, and installs signed updates with
+> automatic rollback.
 
 ## What you need
 
@@ -89,8 +90,8 @@ hotel login pages.
 | No setup network, and the green LED repeats **4 short flashes** | The Pi 4's bootloader (firmware stored on the board) is too old to start RasBeacon's A/B layout. Update it once: in Raspberry Pi Imager choose your Pi 4, then *OS → Misc utility images → Bootloader → SD Card Boot*, write it to any SD card, boot the Pi with it until the green LED blinks steadily (green screen on a monitor), then reflash RasBeacon. Pi 5s ship with a new enough bootloader. |
 | No setup network, and another repeating pattern of long/short flashes | A boot error. Count the long and short flashes and look them up in the [Raspberry Pi LED code table](https://www.raspberrypi.com/documentation/computers/configuration.html#led-warning-flash-codes). |
 | No setup network and no blinking | Check the USB Wi-Fi adapter is plugged in, and power-cycle. If it still doesn't appear, connect the Pi to a TV and keyboard, or see [docs/testing/m1.md](docs/testing/m1.md) for how to collect logs. |
-| Devices on the hotspot say "No internet" | Check the **Internet** section of the Status page. "Not connected": plug in a cable or save a Wi-Fi network on the Internet page. Wi-Fi "Looking for your saved networks": the network is out of range or its password is wrong. If the network shows a login page (hotels), that arrives in milestone 5. |
-| Hotel or café Wi-Fi with a login page, and the VPN's kill switch is on | Your phone should show RasBeacon's *This network needs a login* page by itself (or open `http://10.87.0.1/#portal`). Tap **Start login mode**, log in on the network's page, and RasBeacon turns the VPN back on. During login mode (at most 10 minutes, extendable to 30), web traffic from your devices skips the VPN. |
+| Devices on the hotspot say "No internet" | Check the **Internet** section of the Status page. "Not connected": plug in a cable or save a Wi-Fi network on the Internet page. Wi-Fi "Looking for your saved networks": the network is out of range or its password is wrong. If the network shows a login page (hotels), see the next row. |
+| Hotel or café Wi-Fi with a login page | Your phone should show RasBeacon's *This network needs a login* page by itself (or open `http://10.87.0.1/#portal`). Tap **Open the login page here**: RasBeacon opens the hotel's page itself and shows it to you; tap and type on it as usual. Nothing from your devices leaves the VPN, and it closes by itself once you're logged in. If a page doesn't work that way, **Start login mode** instead: for at most 10 minutes (extendable to 30), web traffic from your devices skips the VPN so they can reach the page directly. |
 | A warning says the Ethernet port "seems to be plugged into a network" | The port is set to *Client port* (for your own laptop), but it's plugged into a network. Set it to *Uplink* on the Internet page if that cable is your internet connection. |
 | The status page warns that the built-in Wi-Fi is running the hotspot | RasBeacon didn't find a USB adapter it can use. Plug one in and restart from the System page. |
 | Nothing works and you want to see why | Put the SD card in a computer and create an empty file named `debug` on the `BOOTCONFIG` drive. Boot the Pi and wait 3 minutes, then unplug it. Back on the computer, open `rasbeacon-debug.txt` from the same drive. It holds the startup logs (no passwords, but device names and MAC addresses, so delete it afterwards). |
@@ -117,6 +118,18 @@ on a check for new versions there; it is off by default.)
 
 ## Optional extras
 
+- **Guest network** for visitors: the **Guests** page. Guests get the
+  internet (through your VPN, if it is on) but can't reach your devices,
+  each other, or the settings. It needs a USB adapter that can broadcast
+  two networks at once (MediaTek MT7612U adapters can; the page tells you
+  if yours can't).
+- **Metered connection** (on a phone's hotspot or a paid plan): tick it on
+  the **Hotspot** page. Android devices then hold back big downloads; on
+  iPhones and Macs turn on *Low Data Mode* for the hotspot in Wi-Fi
+  settings.
+- **Public IPv6 through the VPN:** if your WireGuard server routes a public
+  IPv6 /64 to RasBeacon, enter it on the **VPN** page (under *Server
+  details*); devices then get their own public IPv6 addresses.
 - **HTTPS** for the settings pages: the **HTTPS** page. Your browser warns
   about RasBeacon's own certificate the first time; compare the
   fingerprint shown on that page.

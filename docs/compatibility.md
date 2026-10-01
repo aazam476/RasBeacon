@@ -28,6 +28,11 @@ Sources for figures not measured by us are listed in
 minutes with no drops, plus power draw at idle and under `iperf3` load. See
 [testing/m1.md](testing/m1.md).
 
+The guest network needs an adapter whose driver can run two access points
+at once. RasBeacon reads this from the driver (`iw phy` "valid interface
+combinations") and the Guests page says when it can't. MediaTek (mt76)
+drivers generally can; please report what the Realtek adapters show.
+
 | Adapter | Chip (Linux driver) | USB ID | Status | Max clients | Throughput | Power | Notes |
 |---|---|---|---|---|---|---|---|
 | Alfa AWUS036ACM | MT7612U (mt76x2u) | 0e8d:7612 | Untested (reference) | Driver table 128; 10 unverified | 400+ Mb/s AP on 5 GHz/80 MHz (Pi 4B, iperf3, third-party) | About 380 mA heavy load (third-party); idle unmeasured | WPA3-SAE supported |

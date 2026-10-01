@@ -56,6 +56,16 @@ cd web && npm run dev   # open the address it prints
 
 - **To see the setup wizard again,** stop everything, delete
   `/tmp/rasbeacon-dev`, and start again.
+- **To see the login-page notice and the zero-leak login** (`/#portal`):
+  start with a headless Chromium, `make dev
+  DEV_BROWSER=/path/to/headless_shell` (Playwright's
+  `chromium_headless_shell-*/chrome-linux/headless_shell` works; `npx
+  playwright install chromium` in `test/e2e` downloads it). Then open
+  <http://127.0.0.1:8099/require-login> once: the simulated network now
+  shows a hotel login page. On `/#portal`, press "Check again", then
+  "Open the login page here". Entering any room number logs in.
+- **To see the guest network,** nothing special: the simulated adapter
+  can run it.
 - **Checks to run before handing work back:** `cd web && npm run typecheck
   && npm run lint && npm test`, then `make e2e` from the repository root.
 
@@ -71,12 +81,12 @@ Shown around the main pages after login.
 
 | Prop | Type | Meaning |
 |---|---|---|
-| `page` | `"status" \| "internet" \| "vpn" \| "hotspot" \| "ssh" \| "https" \| "system"` | Current page |
+| `page` | `"status" \| "internet" \| "vpn" \| "hotspot" \| "guest" \| "ssh" \| "https" \| "system"` | Current page |
 | `setPage` | `(page) => void` | Switch page |
 | `children` | React content | The current page |
 
 **Wording the test relies on:** navigation buttons named "Status",
-"Internet", "VPN", "Hotspot", "SSH", "HTTPS", "System".
+"Internet", "VPN", "Hotspot", "Guests", "SSH", "HTTPS", "System".
 
 ### Notice: `screens/Notice/NoticeView.tsx`
 
@@ -148,14 +158,23 @@ It refreshes itself every 10 seconds.
 
 `describeUplink` in `shared/format.ts` gives the one-line summary.
 
-A login-page banner appears at the top when `status.portal.detected`.
+A login-page banner appears at the top when `status.portal.detected`
+(with a link to `/#portal`, which says whether RasBeacon's own browser is
+already open there).
+
+Also shown (since milestone 7): the guest network (`status.guest`: off, or
+name, running, number of guests), the metered setting
+(`status.hotspot.metered`), and public IPv6 through the VPN
+(`status.vpn.routedIpv6Prefix`).
 The VPN section uses `describeVPNState` from `shared/format.ts`; design the
 "no internet because of the kill switch" and "using the internet WITHOUT
 the VPN" states so they stand out.
 
 **Wording the test relies on:** heading "Status",
-"Connected devices (N)", `Connected to Wi-Fi "<name>"` and "Connected: your
-devices' traffic goes through the VPN."
+"Connected devices (N)", `Connected to Wi-Fi "<name>"`, "Connected: your
+devices' traffic goes through the VPN.", heading "Guest network", the
+guest network's name, and "On (Android follows it" for the metered
+setting.
 
 ### Login-page notice: `screens/Portal/`
 
@@ -165,18 +184,58 @@ refreshes every 5 seconds.
 
 | Prop | Type | Meaning |
 |---|---|---|
-| `status` | `PortalStatus \| undefined` | `detected`, `canStart`, `loginMode`, `secondsLeft` |
+| `status` | `PortalStatus \| undefined` | `detected`, `canStart` (login mode possible), `loginMode`, `secondsLeft`, `canBrowse` (zero-leak login possible), `browsing` (RasBeacon's browser is open) |
 | `loadError` | `string \| null` | |
 | `loginUrl` | `string` | The network's login page (or a plain-HTTP fallback) |
-| `start`, `extend`, `stop` | `() => void` | `start` also goes to `loginUrl` after 2 seconds |
+| `start`, `extend`, `stop` | `() => void` | Login mode. `start` also goes to `loginUrl` after 2 seconds |
+| `check` | `() => void` | "Check again": look for a login page again right away |
+| `browser` | `PortalBrowserLogic` | The zero-leak login, see below |
 | `busy`, `actionError` | | |
 
-**States to design:** loading, can start (explain the bypass clearly: web
-and DNS from all devices skip the VPN until the login works), login mode
-with countdown, nothing to do.
+The page offers up to two ways to log in, and the **zero-leak login comes
+first** (it is the safe one):
+- **Zero-leak login** (`status.canBrowse`): `browser.open()` opens the
+  login page in RasBeacon's own browser. While `status.browsing`, show
+  `PortalBrowserView` instead of everything else.
+- **Login mode** (`status.canStart`): explain the bypass clearly: web and
+  DNS from all devices skip the VPN until the login works.
+
+**States to design:** loading; both ways offered; only one of them; the
+browser open (picture loading, picture shown, an error from the browser);
+login mode with countdown; nothing to do. "Check again" is on every state
+except the open browser.
 
 **Wording the test relies on:** heading "This network needs a login",
-"Nothing to do".
+"Nothing to do", buttons "Check again" and "Open the login page here".
+
+#### The zero-leak login: `screens/Portal/PortalBrowserView.tsx`
+
+Pictures of the login page as RasBeacon's browser shows it, about one per
+change. The person taps and swipes **on the picture** as if it were the
+real page; text is typed into a box below it, because a picture can't open
+the phone's keyboard.
+
+| Prop | Type | Meaning |
+|---|---|---|
+| `frame` | `PortalBrowserFrame \| undefined` | `title`, `url`, `width`, `height` (the page's size in CSS pixels) |
+| `imageSrc` | `string` | The picture for an `<img>` (`""` until the first one) |
+| `pointerDown`, `pointerUp` | `(spot) => void`, `(spot, box) => void` | Pass `{ clientX, clientY }` from pointer events, and the `<img>`'s `getBoundingClientRect()` on pointer up. The hook decides tap or swipe and converts the position (`browserGestures.ts`). |
+| `wheel` | `(spot, box, deltaY) => void` | Mouse wheel over the picture |
+| `text`, `setText`, `sendText` | | The typing box; `sendText` types its text into the focused field on the page |
+| `pressKey` | `("Enter" \| "Backspace" \| "Tab") => void` | Special keys |
+| `back`, `reload`, `close` | `() => void` | |
+| `open`, `busy` | | Used by `PortalView` to open the browser |
+| `error` | `string \| null` | |
+
+Design constraints: the picture must keep its aspect ratio (any size is
+fine, the hook scales taps), must not scroll or zoom the outer page while
+the finger is on it (`touch-action: none`), and its accessible name must
+contain "login page". Say plainly that the page runs on RasBeacon and that
+devices stay offline until the login works.
+
+**Wording the test relies on:** the picture's name containing "login
+page", label "Tap a field on the page, then type here", buttons "Type it"
+and "Enter".
 
 ### VPN: `screens/VPN/`
 
@@ -187,7 +246,7 @@ with countdown, nothing to do.
 | `importText`, `setImportText` | `string`, setter | The pasted `.conf` text |
 | `setImportFile` | `(file \| null) => void` | Reads a chosen `.conf` file into `importText` |
 | `importConf`, `importing`, `importError` | | Import the file (the server checks it) |
-| `form`, `setField` | `VPNForm`, setter | `enabled`, `killSwitch` (checkboxes); text inputs `endpoint`, `peerPublicKey`, `addresses`, `dns`, `allowedIps` (comma-separated), `persistentKeepalive`, `mtu`, `presharedKey`, `privateKey` |
+| `form`, `setField` | `VPNForm`, setter | `enabled`, `killSwitch` (checkboxes); text inputs `endpoint`, `peerPublicKey`, `addresses`, `dns`, `allowedIps` (comma-separated), `persistentKeepalive`, `mtu`, `presharedKey`, `privateKey`, `routedIpv6Prefix` (optional, advanced: a public IPv6 /64 the server routes to RasBeacon) |
 | `save`, `saving`, `saveError` | | |
 | `errorField` | `string \| null` | Which input the last server error was about |
 | `generateKey` | `() => void` | Asks for confirmation itself |
@@ -250,12 +309,12 @@ stay tucked away (it is unsafe).
 
 | Prop | Type | Meaning |
 |---|---|---|
-| `values` | `HotspotSettings \| undefined` | `ssid, band, channel, security, country, password` (password empty = keep current) |
+| `values` | `HotspotSettings \| undefined` | `ssid, band, channel, security, country, metered, password` (password empty = keep current) |
 | `setField` | `(field, value) => void` | Changing `band` resets `channel` to 0 (default) |
 | `errors` | `{ [field]?: string }` | Per-field messages |
 | `loadError`, `saveError` | `string \| null` | |
 | `saving`, `saved` | `boolean` | Show "Saved" after success |
-| `save` | `() => void` | Saving restarts the hotspot, so warn that devices reconnect |
+| `save` | `() => void` | Saving restarts the hotspot, so warn that devices reconnect (except when only `metered` changed) |
 | `revealAdminPassword`, `setRevealAdminPassword` | `string`, setter | Admin password box for "show current Wi-Fi password" |
 | `revealedPassword` | `string \| null` | Show it when set |
 | `revealError` | `string \| null` | |
@@ -263,11 +322,41 @@ stay tucked away (it is unsafe).
 
 Channel choices per band come from `CHANNELS` in `shared/validation.ts`.
 
+`metered` is a checkbox. Explain that only Android follows it by itself,
+and what to set on iPhones, Macs and Windows (Low Data Mode, metered
+connection).
+
 **Wording the test relies on:**
-- labels "Band" and "New Wi-Fi password (leave empty to keep the current
-  one)"
+- labels "Band", "New Wi-Fi password (leave empty to keep the current
+  one)" and "Metered connection (for example a phone's hotspot or a paid
+  plan)"
 - button "Save"
-- "Saved. The hotspot has restarted."
+- "Saved." (exactly)
+
+### Guest network: `screens/Guest/`
+
+A second Wi-Fi network for visitors.
+
+| Prop | Type | Meaning |
+|---|---|---|
+| `values` | `GuestSettings \| undefined` | `enabled`, `ssid`, `password` (empty = keep), `hasPassword`, `supported` (false: this adapter can't run two networks) |
+| `setField` | `(field, value) => void` | `"enabled"`, `"ssid"` or `"password"` |
+| `errors` | `{ enabled?, ssid?, password? }` | Per-field messages |
+| `loadError`, `saveError` | `string \| null` | |
+| `saving`, `saved` | `boolean` | |
+| `save` | `() => void` | Saving restarts the hotspot |
+
+**States to design:** loading, off, on, not supported by the adapter (the
+switch is disabled and the reason shown), first time (a password is
+required), saved.
+
+Explain what guests can and can't do: internet (through the VPN if it is
+on), but not your devices, each other, or these settings.
+
+**Wording the test relies on:** checkbox "Turn on the guest network",
+labels "Guest network name" and "Guest password" (or "New guest password
+(leave empty to keep the current one)" once one is saved), "Choose a
+password for the guest network.", "Saved. The hotspot has restarted."
 
 ### SSH settings: `screens/SSHSettings/`
 
