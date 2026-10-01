@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -280,5 +281,23 @@ func TestFillDefaults_OldConfigGetsKillSwitchOn(t *testing.T) {
 	cfg.FillDefaults()
 	if cfg.VPN.KillSwitch {
 		t.Error("the owner's kill switch choice was overwritten")
+	}
+}
+
+func TestValidateRoutedIPv6Prefix(t *testing.T) {
+	good := []string{"2001:db8:1234:5678::/64", "2a01:4f8:1:2::/64"}
+	bad := []string{"10.0.0.0/24", "2001:db8::/48", "2001:db8:1234:5678::1/64", "fd12:3456:789a:1::/64", "fe80::/64", "::ffff:10.0.0.0/120"}
+	for _, text := range good {
+		if err := ValidateRoutedIPv6Prefix(netip.MustParsePrefix(text)); err != nil {
+			t.Errorf("%s: %v", text, err)
+		}
+	}
+	for _, text := range bad {
+		if err := ValidateRoutedIPv6Prefix(netip.MustParsePrefix(text)); err == nil {
+			t.Errorf("%s should be refused", text)
+		}
+	}
+	if err := ValidateRoutedIPv6Prefix(netip.Prefix{}); err != nil {
+		t.Errorf("no prefix is fine: %v", err)
 	}
 }

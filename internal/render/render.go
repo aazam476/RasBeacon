@@ -402,9 +402,14 @@ type FirewallInput struct {
 	// yours, but reach nothing else (not your devices, not RasBeacon's
 	// settings, only its DHCP and DNS).
 	Guest bool
+	// RoutedIPv6 is the public IPv6 network the VPN server routes to
+	// RasBeacon (see config.VPNConfig.RoutedIPv6Prefix). Devices' traffic
+	// from it leaves through the tunnel without NAT. Needs TunnelInterface.
+	RoutedIPv6 netip.Prefix
 }
 
 type firewallData struct {
+	RoutedIPv6      string
 	PortalOnly      bool
 	Guest           bool
 	GuestBridge     string
@@ -434,6 +439,15 @@ func Firewall(in FirewallInput) (string, error) {
 	}
 	if len(in.TunnelDNS) > 0 && in.TunnelInterface == "" {
 		return "", fmt.Errorf("tunnel DNS servers need a tunnel interface")
+	}
+	if in.RoutedIPv6.IsValid() {
+		if in.TunnelInterface == "" {
+			return "", fmt.Errorf("a routed IPv6 network needs a tunnel interface")
+		}
+		if err := config.ValidateRoutedIPv6Prefix(in.RoutedIPv6); err != nil {
+			return "", fmt.Errorf("routed IPv6 network: %w", err)
+		}
+		data.RoutedIPv6 = in.RoutedIPv6.String()
 	}
 	for _, dns := range in.TunnelDNS {
 		if dns.Is4() {

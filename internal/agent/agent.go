@@ -97,8 +97,11 @@ type Agent struct {
 	lan      render.LAN
 	uplink   uplinkState
 	vpn      vpnState
-	portal   portalState
-	update   updateState
+	// routedIPv6 is the public IPv6 network currently on the hotspot bridge
+	// (see vpn.go, applyRoutedIPv6).
+	routedIPv6 netip.Prefix
+	portal     portalState
+	update     updateState
 	// decompress is zstdDecompress, or a stand-in in tests.
 	decompress func(io.Reader) (io.Reader, func() error, error)
 
@@ -504,6 +507,7 @@ func (a *Agent) applyFirewall() error {
 		TunnelInterface: routing.TunnelInterface,
 		PortalOnly:      a.mode == api.ModeNormal && a.portal.loginMode,
 		Guest:           a.guestActive(),
+		RoutedIPv6:      a.wantedRoutedIPv6(),
 	}
 	rules, err := render.Firewall(input)
 	if err != nil {

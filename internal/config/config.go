@@ -107,6 +107,34 @@ type VPNConfig struct {
 	// MTU is 0 for the default (wireguard.DefaultMTU).
 	MTU  int     `json:"mtu"`
 	Peer VPNPeer `json:"peer"`
+	// RoutedIPv6Prefix is an optional public IPv6 network (a /64) that the
+	// WireGuard server routes to RasBeacon. Devices then get real IPv6
+	// addresses from it and their IPv6 traffic goes through the tunnel
+	// without NAT. Unset (IsValid() false) means devices use RasBeacon's
+	// private IPv6 network with NAT, as without this setting.
+	RoutedIPv6Prefix netip.Prefix `json:"routedIpv6Prefix"`
+}
+
+// ValidateRoutedIPv6Prefix checks VPNConfig.RoutedIPv6Prefix: a public
+// IPv6 network of exactly 64 bits (the size devices need to pick their own
+// addresses), written as the network, like 2001:db8:1234:5678::/64.
+func ValidateRoutedIPv6Prefix(p netip.Prefix) error {
+	if !p.IsValid() {
+		return nil // not used
+	}
+	if !p.Addr().Is6() || p.Addr().Is4In6() {
+		return errors.New("Must be an IPv6 network, like 2001:db8:1234:5678::/64.")
+	}
+	if p.Bits() != 64 {
+		return errors.New("Must be a /64 network: devices pick their own addresses in it, which needs 64 bits.")
+	}
+	if p.Masked() != p {
+		return errors.New("Write the network itself, ending in ::/64.")
+	}
+	if !p.Addr().IsGlobalUnicast() || p.Addr().IsPrivate() {
+		return errors.New("Must be a public IPv6 network (starting with 2 or 3), not a private (fd..) or local one.")
+	}
+	return nil
 }
 
 // VPNPeer is the WireGuard server.

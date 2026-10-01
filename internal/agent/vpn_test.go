@@ -211,3 +211,56 @@ func TestVPN_GenerateKey(t *testing.T) {
 		t.Error("a public key should be shown after generating a key")
 	}
 }
+
+func TestVPN_RoutedIPv6Network(t *testing.T) {
+	e, _ := newVPNEnv(t, true)
+	// The tests' fake device has IPv6 switched on.
+	mustWrite(t, e.paths.ProcSysNetIPv6()+"/conf/all/forwarding", "1")
+
+	settings := e.agent.VPNSettings()
+	settings.RoutedIPv6Prefix = "2001:db8:1234:5678::/64"
+	var ve *config.ValidationError
+	if err := e.agent.UpdateVPNSettings(settings); !errors.As(err, &ve) || ve.Field != "routedIpv6Prefix" {
+		t.Fatalf("a VPN without IPv6 can't carry a routed IPv6 network, got %v", err)
+	}
+
+	ipv6Conf := strings.Replace(testWireGuardConf, "Address = 10.66.0.2/32", "Address = 10.66.0.2/32, fd66::2/128", 1)
+	if err := e.agent.ImportVPNConfig(ipv6Conf); err != nil {
+		t.Fatal(err)
+	}
+	settings = e.agent.VPNSettings()
+	settings.RoutedIPv6Prefix = "2001:db8:1234:5678::/64"
+	if err := e.agent.UpdateVPNSettings(settings); err != nil {
+		t.Fatal(err)
+	}
+	if !e.runner.ran("ip -6 address replace 2001:db8:1234:5678::1/64 dev br-lan") {
+		t.Error("RasBeacon should take the first address of the routed network on the hotspot")
+	}
+	if !strings.Contains(e.readFile(e.paths.FirewallRules()), `oifname "wg0" ip6 saddr 2001:db8:1234:5678::/64 accept`) {
+		t.Error("the routed network must not be NATed in the tunnel")
+	}
+	if got := e.agent.Status().VPN.RoutedIPv6Prefix; got != "2001:db8:1234:5678::/64" {
+		t.Errorf("status shows %q", got)
+	}
+
+	// Turning the VPN off takes the network off the hotspot again.
+	settings = e.agent.VPNSettings()
+	settings.Enabled = false
+	if err := e.agent.UpdateVPNSettings(settings); err != nil {
+		t.Fatal(err)
+	}
+	if !e.runner.ran("ip -6 address del 2001:db8:1234:5678::1/64 dev br-lan") {
+		t.Error("the routed network should be removed when the VPN is off")
+	}
+	if strings.Contains(e.readFile(e.paths.FirewallRules()), "2001:db8") {
+		t.Error("no routed-network rule without the VPN")
+	}
+
+	// Bad values are explained.
+	for _, text := range []string{"2001:db8::/48", "fd00:1:2:3::/64", "not a network"} {
+		settings.RoutedIPv6Prefix = text
+		if err := e.agent.UpdateVPNSettings(settings); !errors.As(err, &ve) || ve.Field != "routedIpv6Prefix" {
+			t.Errorf("%s: got %v", text, err)
+		}
+	}
+}
