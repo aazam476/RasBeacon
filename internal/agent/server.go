@@ -160,6 +160,26 @@ func (a *Agent) Handler() http.Handler {
 		writeJSON(w, http.StatusOK, a.VPNSettings())
 	})
 
+	mux.HandleFunc("GET /portal", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, a.PortalStatus())
+	})
+
+	// Login mode for captive portals. Each answers with the new status.
+	portalActions := map[string]func() error{
+		"POST /portal/start":  a.StartLoginMode,
+		"POST /portal/extend": a.ExtendLoginMode,
+		"POST /portal/stop":   a.StopLoginMode,
+	}
+	for route, action := range portalActions {
+		mux.HandleFunc(route, func(w http.ResponseWriter, r *http.Request) {
+			if err := action(); err != nil {
+				writeError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, a.PortalStatus())
+		})
+	}
+
 	mux.HandleFunc("POST /system/reboot", func(w http.ResponseWriter, r *http.Request) {
 		a.Reboot()
 		w.WriteHeader(http.StatusNoContent)

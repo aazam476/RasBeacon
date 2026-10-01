@@ -59,6 +59,18 @@ ra-param={{.Bridge}},60,1800
 ra-param={{.Bridge}},10,0
 {{- end}}
 {{- end}}
+{{- if .NoticeHostnames}}
+
+# --- The uplink needs a login (captive portal) ---
+# Devices' own "is there internet?" checks get RasBeacon's address, so their
+# "Log in to network" sheet opens RasBeacon's notice page, where the owner
+# can start login mode.
+{{- range .NoticeHostnames}}
+address=/{{.}}/{{$.LANAddress}}
+{{- end}}
+# RFC 8910: tell devices directly where the notice page is.
+dhcp-option=114,"{{.CaptivePortalAPI}}"
+{{- end}}
 {{- if .Captive}}
 
 # --- Setup mode: send every device to the setup page ---

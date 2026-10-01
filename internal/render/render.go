@@ -222,6 +222,10 @@ type DnsmasqInput struct {
 	// passed on to (normally 127.0.0.53, the device's own resolver, which
 	// uses the DNS servers of the current uplink). Ignored when Captive.
 	Upstream []string
+	// NoticeHostnames, when set, are answered with RasBeacon's own address,
+	// so devices' connectivity checks open RasBeacon's "this network needs
+	// a login" notice (see internal/agent/portal.go). Ignored when Captive.
+	NoticeHostnames []string
 	// IPv6DefaultRoute tells devices that RasBeacon can carry their IPv6
 	// internet traffic. When false, devices still get private IPv6
 	// addresses (if LAN.IPv6Prefix is set) but no IPv6 route to the
@@ -241,6 +245,7 @@ type dnsmasqData struct {
 	Upstream         []string
 	IPv6             bool
 	IPv6DefaultRoute bool
+	NoticeHostnames  []string
 }
 
 // Dnsmasq produces dnsmasq.conf text.
@@ -258,6 +263,14 @@ func Dnsmasq(in DnsmasqInput) (string, error) {
 		Upstream:         in.Upstream,
 		IPv6:             in.LAN.IPv6Prefix.IsValid(),
 		IPv6DefaultRoute: in.IPv6DefaultRoute,
+	}
+	if !in.Captive {
+		data.NoticeHostnames = in.NoticeHostnames
+	}
+	for _, name := range data.NoticeHostnames {
+		if strings.ContainsAny(name, "/\n\r ") || name == "" {
+			return "", fmt.Errorf("invalid host name %q", name)
+		}
 	}
 	for _, server := range in.Upstream {
 		if _, err := netip.ParseAddr(server); err != nil {
@@ -282,9 +295,13 @@ type FirewallInput struct {
 	// uplink, even if a route is missing.
 	TunnelDNS       []netip.Addr
 	TunnelInterface string
+	// PortalOnly limits forwarding to web and DNS (TCP 80/443, port 53),
+	// for logging in to a captive portal while the VPN can't connect.
+	PortalOnly bool
 }
 
 type firewallData struct {
+	PortalOnly      bool
 	Bridge          string
 	SSHEnabled      bool
 	Egress          []string
@@ -305,6 +322,7 @@ func Firewall(in FirewallInput) (string, error) {
 		SSHEnabled:      in.SSHEnabled,
 		Egress:          in.Egress,
 		TunnelInterface: in.TunnelInterface,
+		PortalOnly:      in.PortalOnly,
 	}
 	if len(in.TunnelDNS) > 0 && in.TunnelInterface == "" {
 		return "", fmt.Errorf("tunnel DNS servers need a tunnel interface")

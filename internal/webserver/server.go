@@ -65,6 +65,15 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/v1/session", s.handleLogout)
 	mux.HandleFunc("GET /api/v1/captive", s.handleCaptiveAPI)
 
+	// Captive portal login mode: public, because the notice page opens in a
+	// phone's "Log in to network" sheet, before anyone has logged in to
+	// RasBeacon. Any device on the hotspot may use it (it only opens web
+	// and DNS for a few minutes, and only when a login page is detected).
+	mux.Handle("GET /api/v1/portal", s.forwardTo("/portal"))
+	for _, action := range []string{"start", "extend", "stop"} {
+		mux.Handle("POST /api/v1/portal/"+action, requireJSON(s.forwardTo("/portal/"+action)))
+	}
+
 	// --- Login required: forwarded to rbd unchanged ---
 	// Each entry maps a public API route to rbd's internal route.
 	forwarded := map[string]string{
@@ -223,13 +232,31 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// requireJSON only lets through requests with a JSON body type. Other
+// websites can make a browser send form posts to RasBeacon without asking,
+// but not JSON (that needs permission, which rbweb never gives), so this
+// stops them from using public actions.
+func requireJSON(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
+			writeJSON(w, http.StatusUnsupportedMediaType, api.ErrorResponse{Error: "requests must be JSON"})
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // handleCaptiveAPI answers RFC 8908 captive-portal queries. During setup it
-// tells phones to open the setup page.
+// tells phones to open the setup page, and while the "this network needs a
+// login" notice is up, the notice page.
 func (s *Server) handleCaptiveAPI(w http.ResponseWriter, r *http.Request) {
 	st, lan := s.state()
-	info := api.CaptivePortalInfo{Captive: st.Mode == api.ModeSetup}
-	if info.Captive {
+	info := api.CaptivePortalInfo{Captive: st.Mode == api.ModeSetup || st.PortalNotice}
+	switch {
+	case st.Mode == api.ModeSetup:
 		info.UserPortalURL = "http://" + lan + "/"
+	case st.PortalNotice:
+		info.UserPortalURL = "http://" + lan + "/#portal"
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	body, _ := json.Marshal(info)
@@ -316,9 +343,16 @@ func (s *Server) handleUI(w http.ResponseWriter, r *http.Request) {
 		host = h
 	}
 	isDevice := host == lan || host == hostName || host == "localhost" || host == "127.0.0.1"
-	if st.Mode == api.ModeSetup && !isDevice {
+	if !isDevice && (st.Mode == api.ModeSetup || st.PortalNotice) {
+		// A phone's connectivity check (captive.apple.com, ...) reached us
+		// because our DNS answered it: send it to the setup page or to the
+		// "this network needs a login" notice.
+		target := "http://" + lan + "/"
+		if st.Mode != api.ModeSetup {
+			target += "#portal"
+		}
 		w.Header().Set("Cache-Control", "no-store")
-		http.Redirect(w, r, "http://"+lan+"/", http.StatusFound)
+		http.Redirect(w, r, target, http.StatusFound)
 		return
 	}
 

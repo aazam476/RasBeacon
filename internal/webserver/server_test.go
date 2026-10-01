@@ -19,6 +19,7 @@ import (
 // what was forwarded to it.
 type fakeRBD struct {
 	mode          api.Mode
+	portalNotice  bool
 	adminPassword string
 	lastForwarded string
 }
@@ -26,7 +27,7 @@ type fakeRBD struct {
 func (f *fakeRBD) handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /state", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, api.SetupState{Mode: f.mode, LANAddress: "10.87.0.1"})
+		writeJSON(w, http.StatusOK, api.SetupState{Mode: f.mode, LANAddress: "10.87.0.1", PortalNotice: f.portalNotice})
 	})
 	mux.HandleFunc("POST /verify-password", func(w http.ResponseWriter, r *http.Request) {
 		var req api.PasswordRequest
@@ -242,5 +243,36 @@ func TestLoginLimiter_GlobalLockoutAndRecovery(t *testing.T) {
 	now = now.Add(globalLockout + time.Second)
 	if ok, _ := l.allow("10.87.0.200"); !ok {
 		t.Error("logins should work again after the lockout")
+	}
+}
+
+func TestPortalNotice_RedirectsChecksAndAnswersCaptiveAPI(t *testing.T) {
+	s, rbd := newTestServer(api.ModeNormal)
+	rbd.portalNotice = true
+
+	rec := request(s, "GET", "http://captive.apple.com/hotspot-detect.html", "", nil, nil)
+	if rec.Code != http.StatusFound || rec.Header().Get("Location") != "http://10.87.0.1/#portal" {
+		t.Errorf("got %d to %q, want a redirect to the notice", rec.Code, rec.Header().Get("Location"))
+	}
+	rec = request(s, "GET", "http://10.87.0.1/api/v1/captive", "", nil, nil)
+	var info api.CaptivePortalInfo
+	_ = json.Unmarshal(rec.Body.Bytes(), &info)
+	if !info.Captive || info.UserPortalURL != "http://10.87.0.1/#portal" {
+		t.Errorf("captive API = %+v", info)
+	}
+}
+
+func TestPortalActions_PublicButJSONOnly(t *testing.T) {
+	s, rbd := newTestServer(api.ModeNormal)
+	// No login needed...
+	rec := request(s, "POST", "http://10.87.0.1/api/v1/portal/start", "{}", map[string]string{"Content-Type": "application/json"}, nil)
+	if rec.Code != http.StatusOK || rbd.lastForwarded != "POST /portal/start" {
+		t.Fatalf("got %d, forwarded %q", rec.Code, rbd.lastForwarded)
+	}
+	// ...but a form post (which any website could make a browser send) is refused.
+	rbd.lastForwarded = ""
+	rec = request(s, "POST", "http://10.87.0.1/api/v1/portal/start", "a=b", map[string]string{"Content-Type": "application/x-www-form-urlencoded"}, nil)
+	if rec.Code != http.StatusUnsupportedMediaType || rbd.lastForwarded != "" {
+		t.Errorf("form post: got %d, forwarded %q", rec.Code, rbd.lastForwarded)
 	}
 }

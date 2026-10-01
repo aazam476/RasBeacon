@@ -58,6 +58,10 @@ type SetupState struct {
 	SuggestedHotspotPassword string `json:"suggestedHotspotPassword,omitempty"`
 	// SetupClosesInSeconds counts down the 30-minute setup window.
 	SetupClosesInSeconds int `json:"setupClosesInSeconds,omitempty"`
+	// PortalNotice is true while devices are shown the "this network needs
+	// a login" notice (see PortalStatus). rbweb then sends phones'
+	// connectivity checks to the notice page.
+	PortalNotice bool `json:"portalNotice,omitempty"`
 }
 
 // ClaimRequest finishes first-time setup.
@@ -107,6 +111,7 @@ type Status struct {
 	Hotspot       HotspotStatus      `json:"hotspot"`
 	Uplink        UplinkStatus       `json:"uplink"`
 	VPN           VPNStatus          `json:"vpn"`
+	Portal        PortalStatus       `json:"portal"`
 	Radios        []radio.Radio      `json:"radios"`
 	Clients       []stations.Station `json:"clients"`
 	// Warnings are problems the owner should know about, in plain words.
@@ -166,6 +171,21 @@ type EthernetUplinkStatus struct {
 	// answered on the port: it is probably plugged into a network rather
 	// than a laptop, so it was not connected to the hotspot network.
 	ForeignDHCPServer string `json:"foreignDhcpServer,omitempty"`
+}
+
+// PortalStatus describes captive portals (login pages of hotel networks).
+// It is public: the notice page shows it before anyone logs in.
+type PortalStatus struct {
+	// Detected is true when the uplink shows a login page.
+	Detected bool `json:"detected"`
+	// LoginURL is where the network sends visitors, when known.
+	LoginURL string `json:"loginUrl,omitempty"`
+	// CanStart is true when login mode can be started (a login page is in
+	// the way and the VPN's kill switch keeps devices offline).
+	CanStart bool `json:"canStart"`
+	// LoginMode is true while devices may reach the login page directly.
+	LoginMode   bool `json:"loginMode"`
+	SecondsLeft int  `json:"secondsLeft"`
 }
 
 // VPNStatus describes the WireGuard tunnel.

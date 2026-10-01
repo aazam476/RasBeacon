@@ -87,8 +87,11 @@ func (a *Agent) vpnActive() bool {
 // the state machine (kill switch off, tunnel broken for a while) lets
 // traffic out through the uplink. In particular, before the state machine
 // has run at all, traffic is kept in the tunnel.
+//
+// Login mode (portal.go) also sends traffic outside the tunnel, limited to
+// web and DNS by the firewall.
 func (a *Agent) clientsThroughTunnel() bool {
-	return a.vpnActive() && a.vpn.machine.State() != tunnel.Direct
+	return a.vpnActive() && a.vpn.machine.State() != tunnel.Direct && !a.portal.loginMode
 }
 
 // applyVPNConfig sets up the tunnel for the current settings, or removes it
@@ -179,8 +182,21 @@ func (a *Agent) updateTunnel() error {
 	}
 	slog.Info("VPN state changed", "from", a.vpn.applied, "to", state, "killSwitch", a.cfg.VPN.KillSwitch)
 	a.vpn.applied = state
+	return a.applyClientPath()
+}
 
-	// 1. Routing: devices' traffic into table 51820 (tunnel) or not.
+// applyClientPath makes the firewall, routing and DNS match where devices'
+// traffic should go now (tunnel, uplink, or login mode). The firewall comes
+// first: it is the guarantee, so when traffic must move into the tunnel the
+// uplink is closed before anything else changes.
+func (a *Agent) applyClientPath() error {
+	// 1. Firewall: where devices' traffic may leave.
+	if a.mode == api.ModeNormal {
+		if err := a.applyFirewall(); err != nil {
+			return err
+		}
+	}
+	// 2. Routing: devices' traffic into table 51820 (tunnel) or not.
 	for _, cmd := range routing.ClientsDirect() {
 		_, _ = a.runner.Run(cmd[0], cmd[1:]...) // error: no rule yet
 	}
@@ -192,13 +208,9 @@ func (a *Agent) updateTunnel() error {
 		}
 	}
 	if a.mode != api.ModeNormal {
-		return nil // the firewall and dnsmasq follow when normal mode starts
+		return nil // dnsmasq follows when normal mode starts
 	}
-	// 2. Firewall: where devices' traffic may leave.
-	if err := a.applyFirewall(); err != nil {
-		return err
-	}
-	// 3. DNS servers and IPv6 announcements.
+	// 3. DNS servers, IPv6 announcements and the login notice.
 	return a.applyDHCP(false)
 }
 

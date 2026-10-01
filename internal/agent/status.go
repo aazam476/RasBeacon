@@ -46,6 +46,7 @@ func (a *Agent) Status() api.Status {
 		},
 		Uplink:   a.uplink.status,
 		VPN:      a.vpnStatus(),
+		Portal:   a.portalStatus(),
 		Radios:   a.radios,
 		Clients:  a.connectedClients(),
 		Warnings: slices.Concat(a.warnings, a.vpnWarnings(), a.uplinkWarnings(), a.enterpriseWarnings()),
