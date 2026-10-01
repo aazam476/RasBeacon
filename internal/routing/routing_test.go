@@ -20,6 +20,7 @@ func TestTunnelUp(t *testing.T) {
 		Addresses:  []netip.Prefix{netip.MustParsePrefix("10.66.0.2/32")},
 		MTU:        1380,
 		DNS:        []netip.Addr{netip.MustParseAddr("10.66.0.1")},
+		KernelIPv6: true,
 	}))
 	for _, want := range []string{
 		"wg setconf wg0 /run/rbd/wg0.conf",
@@ -40,10 +41,20 @@ func TestTunnelUp(t *testing.T) {
 }
 
 func TestClientRules(t *testing.T) {
-	if got := joined(ClientsThroughTunnel("br-lan")); !strings.Contains(got, "ip -4 rule add priority 100 iif br-lan lookup 51820") {
+	if got := joined(ClientsThroughTunnel("br-lan", true)); !strings.Contains(got, "ip -4 rule add priority 100 iif br-lan lookup 51820") {
 		t.Errorf("got:\n%s", got)
 	}
 	if got := joined(TunnelDown()); !strings.Contains(got, "ip link delete dev wg0") || !strings.Contains(got, "rule delete priority 100") {
 		t.Errorf("got:\n%s", got)
+	}
+}
+
+func TestNoIPv6CommandsWithoutKernelIPv6(t *testing.T) {
+	got := joined(append(TunnelUp(TunnelSettings{
+		ConfigFile: "x", MTU: 1380, IPv6: true,
+		DNS: []netip.Addr{netip.MustParseAddr("fd00::1")},
+	}), ClientsThroughTunnel("br-lan", false)...))
+	if strings.Contains(got, "-6") || strings.Contains(got, "fd00::1") {
+		t.Errorf("IPv6 commands with IPv6 off in the kernel:\n%s", got)
 	}
 }

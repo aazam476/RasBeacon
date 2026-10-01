@@ -135,6 +135,9 @@ func (p Paths) NetworkdDir() string { return p.join("run", "systemd", "network")
 // ("1") or off ("0").
 func (p Paths) IPv4Forwarding() string { return p.join("proc", "sys", "net", "ipv4", "ip_forward") }
 
+// ProcSysNetIPv6 exists only when the kernel has IPv6 switched on.
+func (p Paths) ProcSysNetIPv6() string { return p.join("proc", "sys", "net", "ipv6") }
+
 // IPv6Forwarding is the same for IPv6.
 func (p Paths) IPv6Forwarding() string {
 	return p.join("proc", "sys", "net", "ipv6", "conf", "all", "forwarding")

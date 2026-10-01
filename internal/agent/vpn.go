@@ -132,6 +132,7 @@ func (a *Agent) applyVPNConfig() error {
 		MTU:        wg.EffectiveMTU(),
 		DNS:        wg.DNS,
 		IPv6:       wg.CarriesIPv6(),
+		KernelIPv6: routing.KernelHasIPv6(a.paths.ProcSysNetIPv6()),
 	}) {
 		if _, err := a.runner.Run(cmd[0], cmd[1:]...); err != nil {
 			return fmt.Errorf("setting up the WireGuard tunnel: %w", err)
@@ -184,7 +185,7 @@ func (a *Agent) updateTunnel() error {
 		_, _ = a.runner.Run(cmd[0], cmd[1:]...) // error: no rule yet
 	}
 	if a.clientsThroughTunnel() {
-		for _, cmd := range routing.ClientsThroughTunnel(render.BridgeName) {
+		for _, cmd := range routing.ClientsThroughTunnel(render.BridgeName, routing.KernelHasIPv6(a.paths.ProcSysNetIPv6())) {
 			if _, err := a.runner.Run(cmd[0], cmd[1:]...); err != nil {
 				return fmt.Errorf("routing devices into the tunnel: %w", err)
 			}
