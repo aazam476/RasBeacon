@@ -86,6 +86,7 @@ func (c *echoConnection) echoes(text string) bool {
 }
 
 func TestPathChange_StopsConnectionsOnTheOldPath(t *testing.T) {
+	requireRoot(t)
 	buildNetwork(t)
 	startRouter(t, routerSettings{Normal: true, UpstreamDNS: "10.99.0.2"})
 	inNS(t, routerNS, "ip", "route", "add", "default", "via", "10.99.0.2")
