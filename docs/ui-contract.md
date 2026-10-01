@@ -71,12 +71,12 @@ Shown around the main pages after login.
 
 | Prop | Type | Meaning |
 |---|---|---|
-| `page` | `"status" \| "internet" \| "vpn" \| "hotspot" \| "ssh" \| "system"` | Current page |
+| `page` | `"status" \| "internet" \| "vpn" \| "hotspot" \| "ssh" \| "https" \| "system"` | Current page |
 | `setPage` | `(page) => void` | Switch page |
 | `children` | React content | The current page |
 
 **Wording the test relies on:** navigation buttons named "Status",
-"Internet", "VPN", "Hotspot", "SSH", "System".
+"Internet", "VPN", "Hotspot", "SSH", "HTTPS", "System".
 
 ### Notice: `screens/Notice/NoticeView.tsx`
 
@@ -279,10 +279,32 @@ Channel choices per band come from `CHANNELS` in `shared/validation.ts`.
 | `saving`, `saved` | `boolean` | |
 | `save` | `() => void` | |
 
+### HTTPS: `screens/HTTPS/`
+
+| Prop | Type | Meaning |
+|---|---|---|
+| `settings` | `HTTPSSettings \| undefined` | `enabled`, `uploaded`, `subject`, `fingerprint`, `validUntil` |
+| `loadError`, `error`, `message` | `string \| null` | |
+| `httpsAddress` | `string` | e.g. `https://10.87.0.1/` |
+| `onHTTPS` | `boolean` | This page itself is on HTTPS |
+| `setEnabled` | `(on) => void` | Saves at once |
+| `generateNew` | `() => void` | Asks for confirmation itself |
+| `certificateText`, `setCertificateText`, `keyText`, `setKeyText`, `setFile` | | Upload your own certificate and key |
+| `upload`, `busy` | | |
+
+Show the fingerprint prominently: owners compare it with the browser's
+warning. **Wording the test relies on:** checkbox "Use HTTPS for these
+settings pages", "HTTPS is on.", "SHA-256 fingerprint".
+
 ### System: `screens/System/`
 
 | Prop | Type | Meaning |
 |---|---|---|
+| `version` | `string` | Running version |
+| `update` | `UpdateStatus \| undefined` | `board`, `canInstall`, `installing`, `message`, `canCheckOnline`, `checkOnline`, `latestVersion`, `latestUrl` |
+| `updateFile`, `setUpdateFile` | `File \| null`, setter | The chosen `.rbupdate` file |
+| `installUpdate`, `installing` | | Asks for confirmation itself; uploading takes minutes |
+| `setCheckOnline` | `(on) => void` | The optional online check |
 | `diagnosticsUrl` | `string` | Link target for "Download diagnostics" (a file download) |
 | `message`, `error` | `string \| null` | Result of the last action |
 | `reboot` | `() => void` | Asks for confirmation itself |
