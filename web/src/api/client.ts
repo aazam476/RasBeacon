@@ -7,8 +7,12 @@ import type {
   ClaimRequest,
   ClaimResponse,
   ErrorResponse,
+  GuestSettings,
   HotspotSettings,
   HTTPSSettings,
+  PortalBrowserFrame,
+  PortalBrowserInput,
+  PortalBrowserStart,
   PortalStatus,
   RevealPasswordResponse,
   ScanResponse,
@@ -137,6 +141,14 @@ export function revealHotspotPassword(adminPassword: string): Promise<RevealPass
   return request("POST", "/settings/hotspot/reveal-password", { password: adminPassword });
 }
 
+export function getGuestSettings(): Promise<GuestSettings> {
+  return request("GET", "/settings/guest");
+}
+
+export function updateGuestSettings(settings: GuestSettings): Promise<GuestSettings> {
+  return request("PUT", "/settings/guest", settings);
+}
+
 export function getSSHSettings(): Promise<SSHSettings> {
   return request("GET", "/settings/ssh");
 }
@@ -190,10 +202,36 @@ export function getPortalStatus(): Promise<PortalStatus> {
   return request("GET", "/portal");
 }
 
-/** Starts login mode, extends it by 10 minutes, or stops it. */
-export function portalAction(action: "start" | "extend" | "stop"): Promise<PortalStatus> {
+/**
+ * Starts login mode, extends it by 10 minutes, or stops it; "check" checks
+ * for a login page again right away.
+ */
+export function portalAction(action: "start" | "extend" | "stop" | "check"): Promise<PortalStatus> {
   // An empty JSON body: rbweb only accepts JSON for these public actions.
   return request("POST", `/portal/${action}`, {});
+}
+
+// --- Zero-leak login: RasBeacon's own browser (no login needed) ---
+
+/** Opens the login page in RasBeacon's browser, laid out for this screen size. */
+export function startPortalBrowser(size: PortalBrowserStart): Promise<PortalStatus> {
+  return request("POST", "/portal/browser/start", size);
+}
+
+export function stopPortalBrowser(): Promise<PortalStatus> {
+  return request("POST", "/portal/browser/stop", {});
+}
+
+/**
+ * Waits (up to about 10 seconds) for a picture newer than `after`, then
+ * returns the newest one.
+ */
+export function getPortalBrowserFrame(after: number): Promise<PortalBrowserFrame> {
+  return request("GET", `/portal/browser/frame?after=${after}`);
+}
+
+export function sendPortalBrowserInput(input: PortalBrowserInput): Promise<void> {
+  return request("POST", "/portal/browser/input", input);
 }
 
 /**

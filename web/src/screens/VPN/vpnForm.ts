@@ -17,6 +17,8 @@ export interface VPNForm {
   /** New keys (empty = keep the saved one). */
   privateKey: string;
   presharedKey: string;
+  /** Optional public IPv6 /64 routed to RasBeacon by the server. */
+  routedIpv6Prefix: string;
 }
 
 /** Fills the form from the saved settings. */
@@ -33,6 +35,7 @@ export function toForm(s: VPNSettings): VPNForm {
     mtu: s.mtu ? String(s.mtu) : "",
     privateKey: "",
     presharedKey: "",
+    routedIpv6Prefix: s.routedIpv6Prefix,
   };
 }
 
@@ -59,5 +62,6 @@ export function fromForm(form: VPNForm, saved: VPNSettings): VPNSettings {
     mtu: Number(form.mtu) || 0,
     privateKey: form.privateKey.trim(),
     presharedKey: form.presharedKey.trim(),
+    routedIpv6Prefix: form.routedIpv6Prefix.trim(),
   };
 }

@@ -28,7 +28,9 @@ export function StatusView({ status, error, loading, reload }: StatusViewProps) 
             <a href="#portal">
               Login mode is on ({formatDuration(status.portal.secondsLeft)} left)
             </a>
-          ) : status.portal.canStart ? (
+          ) : status.portal.browsing ? (
+            <a href="#portal">RasBeacon&apos;s browser is open on the login page</a>
+          ) : status.portal.canStart || status.portal.canBrowse ? (
             <a href="#portal">Log in to it</a>
           ) : (
             <a href={status.portal.loginUrl || "http://neverssl.com/"}>Open the login page</a>
@@ -55,7 +57,13 @@ export function StatusView({ status, error, loading, reload }: StatusViewProps) 
             <dt>Address on that network</dt>
             <dd>{uplink.address || "waiting for address"}</dd>
             <dt>IPv6 for your devices</dt>
-            <dd>{uplink.ipv6 ? "Yes" : "No (IPv4 only)"}</dd>
+            <dd>
+              {vpn.routedIpv6Prefix
+                ? `Public addresses through the VPN (${vpn.routedIpv6Prefix})`
+                : uplink.ipv6
+                  ? "Yes"
+                  : "No (IPv4 only)"}
+            </dd>
           </>
         )}
         {uplink.wifi.available && (
@@ -112,7 +120,27 @@ export function StatusView({ status, error, loading, reload }: StatusViewProps) 
         <dd>{hotspot.security === "wpa2-wpa3" ? "WPA2/WPA3" : "WPA2 only"}</dd>
         <dt>Address</dt>
         <dd>{hotspot.lanAddress}</dd>
+        <dt>Metered connection</dt>
+        <dd>
+          {hotspot.metered
+            ? "On (Android follows it; set Low Data Mode on iPhones and Macs yourself)"
+            : "Off"}
+        </dd>
       </dl>
+
+      <h3>Guest network</h3>
+      {status.guest.enabled ? (
+        <dl>
+          <dt>Network name</dt>
+          <dd>{status.guest.ssid}</dd>
+          <dt>State</dt>
+          <dd>{status.guest.running ? "Running" : "Not running"}</dd>
+          <dt>Guests connected</dt>
+          <dd>{status.guest.clients.length}</dd>
+        </dl>
+      ) : (
+        <p>Off.</p>
+      )}
 
       <h3>Connected devices ({status.clients.length})</h3>
       {status.clients.length === 0 ? (

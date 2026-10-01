@@ -13,6 +13,9 @@ const { chromium } = require("playwright");
 
 const BASE_URL = process.env.RASBEACON_URL ?? "http://127.0.0.1:8080";
 const SCREENSHOT_DIR = process.env.SCREENSHOT_DIR ?? "";
+// The simulated hotel login page (run.sh sets this when a headless
+// Chromium is available for the simulated device's own browser).
+const HOTEL_URL = process.env.RASBEACON_E2E_HOTEL ?? "";
 
 // A WireGuard file with the WireGuard documentation's example keys.
 const WIREGUARD_CONF = `[Interface]
@@ -125,6 +128,35 @@ async function main() {
     await other.close();
   });
 
+  if (HOTEL_URL) {
+    await step("zero-leak login: the hotel's page opens in RasBeacon's own browser", async () => {
+      // From now on the simulated network shows a login page.
+      await fetch(HOTEL_URL + "/require-login");
+      const phone = await browser.newPage({ viewport: { width: 390, height: 844 } });
+      phone.on("pageerror", (error) => pageErrors.push(error.message));
+      await phone.goto(BASE_URL + "/#portal");
+      await phone.getByRole("button", { name: "Check again" }).click();
+      await phone.getByRole("button", { name: "Open the login page here" }).click({ timeout: 20000 });
+      await phone.getByText("Grand Hotel Wi-Fi", { exact: true }).waitFor({ timeout: 20000 });
+      if (SCREENSHOT_DIR) await phone.screenshot({ path: `${SCREENSHOT_DIR}/zero-leak-login.png` });
+
+      // Tap the room field on the picture (it sits at 24..324 x 120..160 on
+      // the 390-pixel-wide page), type the room number, press Enter.
+      const picture = phone.getByRole("img", { name: /login page/ });
+      const box = await picture.boundingBox();
+      const natural = await picture.evaluate((img) => ({ w: img.naturalWidth, h: img.naturalHeight }));
+      await phone.mouse.click(box.x + (170 * box.width) / natural.w, box.y + (140 * box.height) / natural.h);
+      await phone.getByLabel("Tap a field on the page, then type here").fill("412");
+      await phone.getByRole("button", { name: "Type it" }).click();
+      await phone.getByRole("button", { name: "Enter" }).click();
+
+      // The hotel lets RasBeacon in; the next check notices and the
+      // browser closes by itself.
+      await phone.getByText("Nothing to do").waitFor({ timeout: 30000 });
+      await phone.close();
+    });
+  }
+
   await step("HTTPS can be turned on and shows the certificate fingerprint", async () => {
     await page.getByRole("button", { name: "HTTPS" }).click();
     await page.getByLabel("Use HTTPS for these settings pages").click();
@@ -143,7 +175,29 @@ async function main() {
     await page.getByText("Must be 8 to 63 characters long.").waitFor();
     await passwordBox.fill("");
     await page.getByRole("button", { name: "Save" }).click();
+    await page.getByText("Saved.", { exact: true }).waitFor();
+  });
+
+  await step("the metered setting saves and shows on the status page", async () => {
+    await page.getByLabel("Metered connection (for example a phone's hotspot or a paid plan)").check();
+    await page.getByRole("button", { name: "Save" }).click();
+    await page.getByText("Saved.", { exact: true }).waitFor();
+    await page.getByRole("button", { name: "Status" }).click();
+    await page.getByText("On (Android follows it").waitFor();
+  });
+
+  await step("the guest network needs a password, then runs", async () => {
+    await page.getByRole("button", { name: "Guests" }).click();
+    await page.getByLabel("Turn on the guest network").check();
+    await page.getByLabel("Guest network name").fill("Ali's Guests");
+    await page.getByRole("button", { name: "Save" }).click();
+    await page.getByText("Choose a password for the guest network.").waitFor();
+    await page.getByLabel("Guest password").fill("visitors-welcome");
+    await page.getByRole("button", { name: "Save" }).click();
     await page.getByText("Saved. The hotspot has restarted.").waitFor();
+    await page.getByRole("button", { name: "Status" }).click();
+    await page.getByRole("heading", { name: "Guest network" }).waitFor();
+    await page.getByText("Ali's Guests").waitFor();
   });
 
   await step("log out, then a wrong password is refused", async () => {

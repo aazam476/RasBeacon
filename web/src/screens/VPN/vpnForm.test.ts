@@ -16,6 +16,7 @@ const saved: VPNSettings = {
   persistentKeepalive: 25,
   publicKey: "HIgo9xNzJMWLKASShiTqIybxZ0U3wGLiUeJ1PKf8ykw=",
   hasPresharedKey: false,
+  routedIpv6Prefix: "2001:db8:1234:5678::/64",
 };
 
 describe("VPN form", () => {

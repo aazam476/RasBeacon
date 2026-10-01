@@ -190,7 +190,12 @@ func StartHotel(address string) error {
 const hotelLoginPage = `<!doctype html>
 <meta name="viewport" content="width=device-width">
 <title>Grand Hotel Wi-Fi</title>
-<style>body{font-family:sans-serif;margin:24px} input,button{font-size:20px;width:100%;margin:8px 0;padding:8px}</style>
+<style>
+body{font-family:sans-serif;margin:24px}
+h1{margin:0;font-size:28px}
+#room{position:absolute;left:24px;top:120px;width:300px;height:40px;font-size:20px}
+button{position:absolute;left:24px;top:180px;font-size:20px}
+</style>
 <h1>Grand Hotel Wi-Fi</h1>
 <form action="/login">
 <label>Room number <input name="room" id="room" autocomplete="off"></label>

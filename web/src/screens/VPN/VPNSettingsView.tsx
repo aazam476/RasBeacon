@@ -99,6 +99,16 @@ export function VPNSettingsView(props: VPNSettingsViewProps) {
           <TextField {...props} field="mtu" label="MTU (empty = 1380)" />
           <TextField
             {...props}
+            field="routedIpv6Prefix"
+            label="Public IPv6 network your server routes to RasBeacon (optional, a /64)"
+          />
+          <p>
+            Only if your WireGuard server routes a public IPv6 /64 to RasBeacon (for example
+            2001:db8:1234:5678::/64): devices then get their own public IPv6 addresses through the
+            VPN, without NAT. Leave it empty otherwise.
+          </p>
+          <TextField
+            {...props}
             field="presharedKey"
             label={`New preshared key (optional${saved.hasPresharedKey ? "; one is saved" : ""})`}
           />
