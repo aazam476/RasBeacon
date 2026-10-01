@@ -72,10 +72,20 @@ point, run by the program *hostapd*.
 : A one-way function: easy to compute from the input, practically impossible
   to reverse. Passwords are stored as hashes.
 
+**Handshake (WireGuard)**
+: The short exchange in which the device and the server agree on fresh
+  keys. It happens every 2 minutes while traffic flows; RasBeacon treats a
+  handshake older than 3 minutes as "the tunnel is not working".
+
 **Kill switch**
-: (Milestone 4.) When on, your devices' traffic may only leave through the
-  VPN tunnel. If the tunnel is down, traffic is blocked rather than sent
-  unprotected.
+: When on, your devices' traffic may only leave through the VPN tunnel. If
+  the tunnel is down, traffic is blocked rather than sent unprotected.
+
+**Policy routing, routing table**
+: Linux can keep several routing tables and choose one by rules (for
+  example "traffic from the hotspot uses table 51820"). RasBeacon uses
+  this to send devices' traffic into the VPN while its own traffic uses
+  the uplink.
 
 **Masquerade, NAT66**
 : *Masquerade* is the kind of NAT RasBeacon uses: outgoing traffic gets the

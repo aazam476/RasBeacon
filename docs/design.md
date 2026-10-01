@@ -247,6 +247,18 @@ main:        default via <uplink gw> (networkd, metric by uplink priority)
     re-resolve.
   - `PersistentKeepalive=25` is the default so the tunnel survives NAT and
     uplink roaming.
+- **As built in M4:**
+  - Rule 90 and the fwmark are not needed: only traffic *arriving on
+    br-lan* is sent to table 51820, and WireGuard's own UDP packets are
+    created by the device itself, so they always use `main`.
+  - In `DIRECT`, rule 100 is deleted rather than swapped (same effect).
+  - The `TIME_SYNC` state is not separate: the tunnel simply doesn't
+    handshake until the clock is right, which the state machine already
+    treats as "not working". The time floor and HTTP `Date` fallback (4.7)
+    are implemented.
+  - The health check is the handshake age (at most 180 s, with keepalive
+    25 s); probes through the tunnel are left for later if hardware
+    testing shows a need.
 - **MTU/MSS:** `wg0` MTU defaults to **1380** (decided; it tolerates PPPoE and
   tunneled hotel uplinks at about 3% cost), is configurable and honours `MTU=`
   from the `.conf`. SYN MSS is clamped to `rt mtu` on `wg0` and the uplinks.
