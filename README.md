@@ -22,15 +22,14 @@ hotel login pages.
 
 | Part | Notes |
 |---|---|
-| Raspberry Pi 4 or 5 | The Pi Zero 2 W should also work (same image as the Pi 4) but is untested. See [docs/compatibility.md](docs/compatibility.md). |
+| Raspberry Pi 4 or 5 | A Pi 4 may need a one-time bootloader update first (see [Troubleshooting](#troubleshooting): 4 short flashes). The Pi Zero 2 W and older boards don't work with the current image. See [docs/compatibility.md](docs/compatibility.md). |
 | A USB Wi-Fi adapter that can run a hotspot | Recommended: one with a **MediaTek MT7612U** chip (e.g. Alfa AWUS036ACM). A TP-Link Archer T3U also works in principle. The Pi's built-in Wi-Fi alone holds only about 8 devices. |
 | microSD card, 8 GB or larger | |
 | USB power bank, about 20,000 mAh for a full day on a Pi 4/5 | Or any 5 V / 3 A USB-C supply |
 
 ## Set up (about 15 minutes)
 
-1. **Download** `rasbeacon-pi4-<version>.img.xz` (for a Pi 4, 400 or
-   Zero 2 W) or `rasbeacon-pi5-<version>.img.xz` (for a Pi 5) from the
+1. **Download** `rasbeacon-pi4-<version>.img.xz` (for a Pi 4 or 400) or `rasbeacon-pi5-<version>.img.xz` (for a Pi 5) from the
    [Releases](../../releases) page. Also download `SHA256SUMS` if you want to
    check the file (see [Checking your download](#checking-your-download)).
 2. **Flash** it with [Raspberry Pi Imager](https://www.raspberrypi.com/software/):
@@ -76,6 +75,8 @@ hotel login pages.
 | What you see | What it means and what to do |
 |---|---|
 | No `RasBeacon-Setup-…` network after 2 minutes, and the green LED blinks **3 short, 1 long**, repeating | `setup.txt` exists but can't be used. Common causes: the password is shorter than 8 or longer than 63 characters, or has accented letters or emoji; the line doesn't start with `setup_password=`; or there is something else in the file. Fix or delete the file on the `BOOTCONFIG` drive and power-cycle. |
+| No setup network, and the green LED repeats **4 short flashes** | The Pi 4's bootloader (firmware stored on the board) is too old to start RasBeacon's A/B layout. Update it once: in Raspberry Pi Imager choose your Pi 4, then *OS → Misc utility images → Bootloader → SD Card Boot*, write it to any SD card, boot the Pi with it until the green LED blinks steadily (green screen on a monitor), then reflash RasBeacon. Pi 5s ship with a new enough bootloader. |
+| No setup network, and another repeating pattern of long/short flashes | A boot error. Count the long and short flashes and look them up in the [Raspberry Pi LED code table](https://www.raspberrypi.com/documentation/computers/configuration.html#led-warning-flash-codes). |
 | No setup network and no blinking | Check the USB Wi-Fi adapter is plugged in, and power-cycle. If it still doesn't appear, connect the Pi to a TV and keyboard, or see [docs/testing/m1.md](docs/testing/m1.md) for how to collect logs. |
 | The status page warns that the built-in Wi-Fi is running the hotspot | RasBeacon didn't find a USB adapter it can use. Plug one in and restart from the System page. |
 | Nothing works and you want to see why | Put the SD card in a computer and create an empty file named `debug` on the `BOOTCONFIG` drive. Boot the Pi and wait 3 minutes, then unplug it. Back on the computer, open `rasbeacon-debug.txt` from the same drive. It holds the startup logs (no passwords, but device names and MAC addresses, so delete it afterwards). |
