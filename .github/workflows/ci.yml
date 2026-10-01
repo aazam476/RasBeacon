@@ -59,6 +59,26 @@ jobs:
         # if they can't run.
         run: sudo -E env "PATH=$PATH" RASBEACON_REQUIRE_NETNS=1 go test -count=1 -v ./test/netns/
 
+  hwsim:
+    name: Simulated Wi-Fi tests (WPA-Enterprise logins)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Install Wi-Fi tools and the simulated radio driver
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q hostapd wpasupplicant "linux-modules-extra-$(uname -r)"
+          # Stop the distribution's own services so they don't grab the radios.
+          sudo systemctl stop hostapd wpa_supplicant 2>/dev/null || true
+          sudo modprobe mac80211_hwsim radios=2
+      - name: Run tests as root
+        # RASBEACON_REQUIRE_HWSIM=1 makes the tests fail instead of skipping
+        # if they can't run.
+        run: sudo -E env "PATH=$PATH" RASBEACON_REQUIRE_HWSIM=1 go test -count=1 -v ./test/hwsim/
+
   e2e:
     name: Browser end-to-end test (simulated device)
     runs-on: ubuntu-24.04
