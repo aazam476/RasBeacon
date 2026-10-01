@@ -179,24 +179,45 @@ func buildVPNNetwork(t *testing.T) vpnNetwork {
 	return n
 }
 
-// applyRouterRules loads rbd's firewall and starts dnsmasq, as for normal
-// mode with the given egress interfaces and upstream DNS servers.
-func (n vpnNetwork) applyRouterRules(t *testing.T, egress []string, upstreamDNS []string) {
+// routerRules chooses a firewall and DNS setup for the router.
+type routerRules struct {
+	egress      []string
+	upstreamDNS []string
+	portalOnly  bool
+}
+
+// renderRouterRules writes rbd's firewall for r to a file and returns its
+// path.
+func renderRouterRules(t *testing.T, r routerRules) string {
 	t.Helper()
 	rules, err := render.Firewall(render.FirewallInput{
-		Egress:          egress,
+		Egress:          r.egress,
 		TunnelInterface: routing.TunnelInterface,
 		TunnelDNS:       []netip.Addr{netip.MustParseAddr(vpnServerAddress)},
+		PortalOnly:      r.portalOnly,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	rulesFile := filepath.Join(n.dir, "firewall.nft")
+	rulesFile := filepath.Join(t.TempDir(), "firewall.nft")
 	writeFile(t, rulesFile, rules)
-	inNS(t, routerNS, "nft", "-f", rulesFile)
+	return rulesFile
+}
+
+// applyRouterRules loads rbd's firewall and starts dnsmasq, as for normal
+// mode with the given egress interfaces and upstream DNS servers.
+func (n vpnNetwork) applyRouterRules(t *testing.T, egress []string, upstreamDNS []string) {
+	t.Helper()
+	n.applyRouterRulesWith(t, routerRules{egress: egress, upstreamDNS: upstreamDNS})
+}
+
+// applyRouterRulesWith is applyRouterRules with all options.
+func (n vpnNetwork) applyRouterRulesWith(t *testing.T, r routerRules) {
+	t.Helper()
+	inNS(t, routerNS, "nft", "-f", renderRouterRules(t, r))
 
 	dnsmasqConf, err := render.Dnsmasq(render.DnsmasqInput{
-		LAN: render.DefaultLAN, LeaseFile: filepath.Join(n.dir, "leases"), Upstream: upstreamDNS,
+		LAN: render.DefaultLAN, LeaseFile: filepath.Join(n.dir, "leases"), Upstream: r.upstreamDNS,
 	})
 	if err != nil {
 		t.Fatal(err)
