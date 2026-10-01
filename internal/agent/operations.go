@@ -15,11 +15,13 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 
 	"rasbeacon/internal/api"
 	"rasbeacon/internal/auth"
+	"rasbeacon/internal/button"
 	"rasbeacon/internal/config"
 	"rasbeacon/internal/setupfile"
 	"rasbeacon/internal/system"
@@ -303,4 +305,42 @@ func (a *Agent) FactoryReset(adminPassword string) error {
 func (a *Agent) Reboot() {
 	slog.Info("reboot requested from the web UI")
 	a.afterFunc(switchDelay, func() { _, _ = a.runner.Run("systemctl", "reboot") })
+}
+
+// ResetHold is how long the reset button must be held for a factory reset.
+const ResetHold = 10 * time.Second
+
+// RunResetButton watches the optional factory-reset button (see
+// internal/button). Holding it for ResetHold erases all settings and
+// restarts into first-time setup, like the factory-reset file. cmd/rbd
+// starts it on the device.
+func (a *Agent) RunResetButton() {
+	for {
+		devices := button.FindDevices(a.paths.SysClassInput(), a.paths.DevInput(), button.KeyRestart)
+		if len(devices) == 0 {
+			time.Sleep(time.Minute) // no button configured; look again later
+			continue
+		}
+		events, err := os.Open(devices[0])
+		if err != nil {
+			slog.Warn("can't watch the reset button", "error", err)
+			time.Sleep(time.Minute)
+			continue
+		}
+		_ = button.Watch(events, button.KeyRestart, ResetHold, a.resetFromButton)
+		events.Close()
+		time.Sleep(5 * time.Second)
+	}
+}
+
+// resetFromButton runs when the reset button was held long enough.
+func (a *Agent) resetFromButton() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	slog.Warn("reset button held: erasing all settings")
+	if err := a.wipeData(); err != nil {
+		slog.Error("factory reset failed", "error", err)
+		return
+	}
+	_, _ = a.runner.Run("systemctl", "reboot")
 }

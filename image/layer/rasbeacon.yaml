@@ -55,6 +55,16 @@ mmdebstrap:
     - chroot $1 systemctl mask ssh.socket
     # Debian's own hostapd service must not start with the default config.
     - chroot $1 systemctl mask hostapd.service
+    # Optional factory-reset button between GPIO 17 (pin 11) and ground
+    # (pin 9): the kernel reports it as the RESTART key, and rbd erases all
+    # settings when it is held for 10 seconds. Without a button nothing
+    # happens (the pin is pulled up internally).
+    - |-
+      cat >> $1/boot/firmware/config.txt <<'EOF'
+
+      # RasBeacon: optional factory-reset button (GPIO 17 to ground, hold 10 s)
+      dtoverlay=gpio-key,gpio=17,active_low=1,gpio_pull=up,keycode=0x198,label=rasbeacon-reset
+      EOF
     # Debian's own wpa_supplicant service must not grab the radios either;
     # rbd starts rasbeacon-wpa@<radio>.service instead.
     - chroot $1 systemctl mask wpa_supplicant.service

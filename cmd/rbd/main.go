@@ -71,6 +71,8 @@ func main() {
 		go a.RunPortalMonitor(agent.ProbeInternet)
 		// The optional check for new releases (off unless turned on).
 		go a.RunUpdateCheck()
+		// The optional factory-reset button (see internal/button).
+		go a.RunResetButton()
 	}
 	if *devRoot != "" {
 		go a.RunPortalMonitor(devsim.PortalProbe)
