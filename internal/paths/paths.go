@@ -182,6 +182,12 @@ func (p Paths) UpdatePendingFile() string { return filepath.Join(p.DataDir(), "u
 // SysClassNet lists network interfaces (Linux sysfs).
 func (p Paths) SysClassNet() string { return p.join("sys", "class", "net") }
 
+// SysClassInput lists input devices (used to find the reset button).
+func (p Paths) SysClassInput() string { return p.join("sys", "class", "input") }
+
+// DevInput holds the input devices' event files.
+func (p Paths) DevInput() string { return p.join("dev", "input") }
+
 // SysClassLeds lists the board's LEDs (used to blink error codes).
 func (p Paths) SysClassLeds() string { return p.join("sys", "class", "leds") }
 

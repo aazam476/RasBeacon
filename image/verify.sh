@@ -66,6 +66,9 @@ check "user rasbeacon has no usable password" sh -c "grep -qE '^rasbeacon:[*!]' 
 check "no RasBeacon settings baked into the image" test ! -e "$root/persistent/rasbeacon"
 check "no SSH host keys baked into the image" sh -c "! ls '$root'/etc/ssh/ssh_host_*_key"
 
+# The optional reset button's overlay is in the boot configuration.
+check "reset button overlay in config.txt" grep -q "dtoverlay=gpio-key,gpio=17" "$root/boot/firmware/config.txt"
+
 # Updates: the image knows its board; report whether it can check updates.
 check "the image knows its board" test -s "$root/usr/lib/rasbeacon/board"
 keys="$(ls "$root"/usr/lib/rasbeacon/update-keys/*.pub 2>/dev/null | wc -l)"
