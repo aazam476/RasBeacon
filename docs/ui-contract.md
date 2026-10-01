@@ -42,6 +42,19 @@ restyled screens drop back in without breaking anything.
 6. **Phone first.** Most use is from a phone on the hotspot. Inputs need a
    font size of at least 16px so iOS doesn't zoom in on focus.
 
+## The design gallery (no device needed)
+
+`cd web && npm install && npm run gallery` opens `gallery.html`: every
+screen in its important states, filled with sample data from
+`web/src/gallery/samples.tsx`, each in a phone-sized frame. Pick a state
+from the list, or tick *Show all*. It uses the real views and
+`styles.css`, so restyled views show up there at once. Buttons do nothing
+there, and nothing talks to a device. The gallery is not part of the
+app that ships on the device.
+
+When a view gets new props, its samples must be updated (TypeScript
+points at them).
+
 ## How to run the UI while designing
 
 No Raspberry Pi is needed. From the repository root:

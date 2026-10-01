@@ -1,0 +1,38 @@
+/* Only for the design gallery's own controls and phone frames. The app's
+   look comes from ../styles.css (and the views), loaded before this. */
+.gallery-controls {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #f4f4f4;
+  border-bottom: 1px solid #ccc;
+  padding: 0.5rem;
+  margin: -1rem -1rem 1rem;
+  font-size: 0.9rem;
+}
+.gallery-controls select {
+  display: inline-block;
+  width: auto;
+  max-width: 100%;
+}
+.gallery-all {
+  display: inline;
+}
+.gallery-sample {
+  margin: 0 0 2rem;
+}
+.gallery-sample figcaption {
+  font: 0.8rem monospace;
+  color: #666;
+  margin-bottom: 0.25rem;
+}
+.gallery-phone {
+  width: 390px;
+  max-width: 100%;
+  min-height: 300px;
+  border: 1px solid #999;
+  border-radius: 12px;
+  padding: 1rem;
+  box-sizing: border-box;
+  overflow: hidden;
+}
