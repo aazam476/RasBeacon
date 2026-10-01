@@ -1,0 +1,16 @@
+# Opt-in troubleshooting: if a file named "debug" exists on the SD card's
+# BOOTCONFIG partition, save startup logs there (see save-debug-log). Starts
+# as early as possible so it works even if RasBeacon itself doesn't start.
+[Unit]
+Description=RasBeacon debug log to SD card (only when /bootfs/debug exists)
+DefaultDependencies=no
+After=local-fs.target
+RequiresMountsFor=/bootfs
+ConditionPathExists=/bootfs/debug
+
+[Service]
+Type=simple
+ExecStart=/usr/lib/rasbeacon/save-debug-log
+
+[Install]
+WantedBy=sysinit.target

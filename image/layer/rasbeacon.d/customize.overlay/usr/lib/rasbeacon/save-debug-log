@@ -1,0 +1,36 @@
+#!/bin/bash
+# Saves RasBeacon's startup logs onto the SD card's BOOTCONFIG partition, so
+# you can read them on a computer when something doesn't work.
+#
+# It only runs if you created a file named "debug" on that partition (see
+# README "Troubleshooting"). It updates /bootfs/rasbeacon-debug.txt every 10
+# seconds for the first 10 minutes after power-on.
+#
+# Logs normally stay in memory only (no history is kept on the card), so
+# this is opt-in. The log doesn't contain passwords, but it does contain
+# device names and MAC addresses, so delete it when you're done.
+
+out=/bootfs/rasbeacon-debug.txt
+
+for round in $(seq 1 60); do
+  {
+    echo "RasBeacon debug log, round $round of 60, $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+    echo "uptime: $(cut -d' ' -f1 /proc/uptime) s"
+    echo
+    echo "===== failed services ====="; systemctl --no-pager --failed
+    echo
+    echo "===== RasBeacon services ====="
+    systemctl --no-pager status rasbeacon-firewall-early.service rbd.service rbweb.service \
+      rasbeacon-hostapd.service rasbeacon-dnsmasq.service 2>&1
+    echo
+    echo "===== network ====="; ip -brief link; ip -brief address
+    echo; echo "===== Wi-Fi ====="; iw dev 2>&1; rfkill 2>&1
+    echo; echo "===== USB ====="; lsusb 2>&1
+    echo; echo "===== kernel messages (Wi-Fi, USB, errors) ====="
+    dmesg 2>&1 | grep -i -E 'brcm|rtw|mt76|usb|wlan|error|fail' | tail -n 80
+    echo; echo "===== log (this boot) ====="; journalctl -b --no-pager -n 1500 2>&1
+  } > "$out.tmp" 2>&1
+  mv -f "$out.tmp" "$out"
+  sync
+  sleep 10
+done
