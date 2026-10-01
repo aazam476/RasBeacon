@@ -284,7 +284,7 @@ func TestCheckUplink_MovesHotspotNetworkWhenUpstreamUsesIt(t *testing.T) {
 	if !e.runner.ran("ip address replace 10.88.0.1/24 dev br-lan") {
 		t.Error("the bridge should get the new address")
 	}
-	if !strings.Contains(e.readFile(e.paths.DnsmasqConfig()), "dhcp-range=10.88.0.20,10.88.0.250") {
+	if !strings.Contains(e.readFile(e.paths.DnsmasqConfig()), "dhcp-range=set:lan,10.88.0.20,10.88.0.250") {
 		t.Error("DHCP should hand out addresses in the new network")
 	}
 	if !strings.Contains(strings.Join(e.agent.Status().Warnings, " "), "http://10.88.0.1/") {

@@ -159,6 +159,8 @@ type routerSettings struct {
 	UpstreamDNS string
 	// IPv6 gives the hotspot a private IPv6 network (normal mode only).
 	IPv6 bool
+	// Guest adds the guest network (normal mode only; see buildGuest).
+	Guest bool
 }
 
 // startRouter applies rbd's firewall and starts dnsmasq with rbd's config,
@@ -171,7 +173,7 @@ func startRouter(t *testing.T, settings routerSettings) (leaseFile string) {
 		t.Fatal(err)
 	}
 
-	firewall := render.FirewallInput{SSHEnabled: settings.SSHEnabled}
+	firewall := render.FirewallInput{SSHEnabled: settings.SSHEnabled, Guest: settings.Guest}
 	if settings.Normal {
 		firewall.Egress = []string{"eth0"}
 	}
@@ -187,6 +189,10 @@ func startRouter(t *testing.T, settings routerSettings) (leaseFile string) {
 	dnsmasqInput := render.DnsmasqInput{LAN: render.DefaultLAN, LeaseFile: leaseFile, Captive: !settings.Normal}
 	if settings.Normal {
 		dnsmasqInput.Upstream = []string{settings.UpstreamDNS}
+	}
+	if settings.Guest {
+		guest := render.DefaultLAN.Guest()
+		dnsmasqInput.Guest = &guest
 	}
 	if settings.IPv6 {
 		dnsmasqInput.LAN.IPv6Prefix = routerULA

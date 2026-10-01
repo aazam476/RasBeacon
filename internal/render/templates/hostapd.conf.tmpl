@@ -82,3 +82,36 @@ ieee80211w=0
 {{- end}}
 wpa_passphrase={{.Password}}
 {{- end}}
+{{- if .Guest}}
+
+# ===== Guest network =====
+# A second network name on the same radio, for visitors. Everything above
+# (band, channel, country) also applies here; the settings below only
+# change what differs. hostapd creates the interface "{{.GuestInterface}}".
+bss={{.GuestInterface}}
+# Its own MAC address (every network on a radio needs one).
+bssid={{.Guest.BSSID}}
+# A separate bridge with its own addresses. The firewall lets guests reach
+# the internet and RasBeacon's DHCP and DNS, nothing else.
+bridge={{.GuestBridge}}
+ctrl_interface=/run/hostapd
+ctrl_interface_group=0
+# Name: {{.GuestSSIDForComment}}
+ssid2={{.GuestSSIDHex}}
+utf8_ssid=1
+# Guests can't talk to each other.
+ap_isolate=1
+auth_algs=1
+wpa=2
+rsn_pairwise=CCMP
+{{- if eq .Security "wpa2-wpa3"}}
+wpa_key_mgmt=WPA-PSK SAE
+ieee80211w=1
+sae_require_mfp=1
+sae_pwe=2
+{{- else}}
+wpa_key_mgmt=WPA-PSK
+ieee80211w=0
+{{- end}}
+wpa_passphrase={{.Guest.Password}}
+{{- end}}

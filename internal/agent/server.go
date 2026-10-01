@@ -83,6 +83,22 @@ func (a *Agent) Handler() http.Handler {
 		writeJSON(w, http.StatusOK, api.RevealPasswordResponse{HotspotPassword: password})
 	})
 
+	mux.HandleFunc("GET /settings/guest", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, a.GuestSettings())
+	})
+
+	mux.HandleFunc("PUT /settings/guest", func(w http.ResponseWriter, r *http.Request) {
+		var req api.GuestSettings
+		if !readJSON(w, r, &req) {
+			return
+		}
+		if err := a.UpdateGuestSettings(req); err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, a.GuestSettings())
+	})
+
 	mux.HandleFunc("GET /settings/ssh", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, a.SSHSettings())
 	})

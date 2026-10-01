@@ -18,6 +18,13 @@ table inet rasbeacon
 delete table inet rasbeacon
 
 table inet rasbeacon {
+	# The networks devices connect to: your hotspot ("br-lan"). Both may reach the
+	# internet the same way; only yours may reach RasBeacon's settings.
+	set lans {
+		type ifname
+		elements = { "br-lan" }
+	}
+
 	# INPUT: packets addressed to RasBeacon itself.
 	chain input {
 		type filter hook input priority filter; policy drop;

@@ -11,6 +11,7 @@
 // "rules". RasBeacon adds:
 //
 //	rule 100:  traffic arriving from the hotspot (iif br-lan) -> table 51820
+//	rule 101:  traffic arriving from the guest network (iif br-guest) -> same
 //	table 51820:  default route through wg0
 //	              "unreachable" default route as a fallback
 //
@@ -35,8 +36,9 @@ const (
 	TunnelInterface = "wg0"
 	// TunnelTable is the routing table for devices' traffic.
 	TunnelTable = "51820"
-	// rulePriority places RasBeacon's rule before the main table (32766).
-	rulePriority = "100"
+	// firstRulePriority places RasBeacon's rules before the main table
+	// (32766): 100 for the hotspot, 101 for the guest network.
+	firstRulePriority = 100
 	// fallbackMetric makes the "unreachable" route lose to the wg0 route.
 	fallbackMetric = "4096"
 )
@@ -125,26 +127,40 @@ func TunnelDown() [][]string {
 	)
 }
 
-// ClientsThroughTunnel returns the commands that send devices' traffic to
-// table 51820. Run ClientsDirect first so the rule is never added twice.
-func ClientsThroughTunnel(lanInterface string, kernelIPv6 bool) [][]string {
-	cmds := [][]string{
-		{"ip", "-4", "rule", "add", "priority", rulePriority, "iif", lanInterface, "lookup", TunnelTable},
-	}
-	if kernelIPv6 {
-		cmds = append(cmds, []string{"ip", "-6", "rule", "add", "priority", rulePriority, "iif", lanInterface, "lookup", TunnelTable})
+// LANInterfaces are the networks whose devices' traffic goes into the
+// tunnel: the hotspot and the guest network. The guest network's rule is
+// added even while it is off (a rule for a missing interface matches
+// nothing), so turning it on can never skip the tunnel.
+var LANInterfaces = []string{"br-lan", "br-guest"}
+
+// ClientsThroughTunnel returns the commands that send devices' traffic
+// (arriving on LANInterfaces) to table 51820. Run ClientsDirect first so
+// the rules are never added twice.
+func ClientsThroughTunnel(kernelIPv6 bool) [][]string {
+	var cmds [][]string
+	for i, lan := range LANInterfaces {
+		priority := strconv.Itoa(firstRulePriority + i)
+		cmds = append(cmds, []string{"ip", "-4", "rule", "add", "priority", priority, "iif", lan, "lookup", TunnelTable})
+		if kernelIPv6 {
+			cmds = append(cmds, []string{"ip", "-6", "rule", "add", "priority", priority, "iif", lan, "lookup", TunnelTable})
+		}
 	}
 	return cmds
 }
 
-// ClientsDirect returns the commands that remove RasBeacon's rule, so
-// devices' traffic uses the main table (the uplink). Errors mean the rule
+// ClientsDirect returns the commands that remove RasBeacon's rules, so
+// devices' traffic uses the main table (the uplink). Errors mean a rule
 // was not there.
 func ClientsDirect() [][]string {
-	return [][]string{
-		{"ip", "-4", "rule", "delete", "priority", rulePriority},
-		{"ip", "-6", "rule", "delete", "priority", rulePriority},
+	var cmds [][]string
+	for i := range LANInterfaces {
+		priority := strconv.Itoa(firstRulePriority + i)
+		cmds = append(cmds,
+			[]string{"ip", "-4", "rule", "delete", "priority", priority},
+			[]string{"ip", "-6", "rule", "delete", "priority", priority},
+		)
 	}
+	return cmds
 }
 
 // SetEndpoint returns the command that (re)sets the server's address. The

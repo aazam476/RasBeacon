@@ -43,14 +43,16 @@ func (a *Agent) Status() api.Status {
 			Security:   h.Security,
 			Interface:  radio.HotspotInterfaceName,
 			LANAddress: a.lan.Address(),
+			Metered:    h.Metered,
 		},
+		Guest:    a.guestStatus(),
 		Uplink:   a.uplink.status,
 		VPN:      a.vpnStatus(),
 		Portal:   a.portalStatus(),
 		Update:   a.updateStatus(),
 		Radios:   a.radios,
 		Clients:  a.connectedClients(),
-		Warnings: slices.Concat(a.warnings, a.vpnWarnings(), a.uplinkWarnings(), a.enterpriseWarnings()),
+		Warnings: slices.Concat(a.warnings, a.vpnWarnings(), a.uplinkWarnings(), a.enterpriseWarnings(), a.guestWarnings()),
 	}
 	// Empty lists are sent as [] rather than null, which is easier for the UI.
 	if status.Radios == nil {
@@ -64,7 +66,13 @@ func (a *Agent) Status() api.Status {
 
 // connectedClients lists devices associated with the hotspot right now.
 func (a *Agent) connectedClients() []stations.Station {
-	dump, err := system.StationDump(a.runner, radio.HotspotInterfaceName)
+	return a.stationsOn(radio.HotspotInterfaceName)
+}
+
+// stationsOn lists devices associated with one of the hotspot radio's
+// networks (ap0, or the guest network's interface).
+func (a *Agent) stationsOn(iface string) []stations.Station {
+	dump, err := system.StationDump(a.runner, iface)
 	if err != nil {
 		return []stations.Station{}
 	}
@@ -122,6 +130,7 @@ var diagnosticCommands = [][]string{
 	{"iw", "dev"},
 	{"iw", "reg", "get"},
 	{"iw", "dev", "ap0", "station", "dump"},
+	{"iw", "dev", "guest0", "station", "dump"},
 	{"nft", "list", "ruleset"},
 	{"cat", "/proc/sys/net/ipv4/ip_forward", "/proc/sys/net/ipv6/conf/all/forwarding"},
 	{"systemctl", "--no-pager", "status", hostapdService, dnsmasqService, "rbd.service", "rbweb.service"},
@@ -137,7 +146,7 @@ func (a *Agent) Diagnostics() string {
 	status := a.Status()
 
 	a.mu.Lock()
-	secretsToHide := []string{a.secrets.HotspotPassword, a.setupPassword, a.identity.SuggestedHotspotPassword}
+	secretsToHide := []string{a.secrets.HotspotPassword, a.secrets.GuestPassword, a.setupPassword, a.identity.SuggestedHotspotPassword}
 	secretsToHide = append(secretsToHide, a.secrets.WireGuardPrivateKey, a.secrets.WireGuardPresharedKey)
 	for _, password := range a.secrets.UplinkPasswords {
 		secretsToHide = append(secretsToHide, password)
@@ -159,9 +168,11 @@ func (a *Agent) Diagnostics() string {
 	var report strings.Builder
 	fmt.Fprintf(&report, "RasBeacon diagnostics\n")
 	fmt.Fprintf(&report, "version: %s\nboard: %s\nmode: %s\nuptime: %ds\n", status.Version, status.BoardModel, status.Mode, status.UptimeSeconds)
-	fmt.Fprintf(&report, "hotspot: ssid=%q band=%s channel=%d security=%s running=%v clients=%d\n",
+	fmt.Fprintf(&report, "hotspot: ssid=%q band=%s channel=%d security=%s running=%v clients=%d metered=%v\n",
 		status.Hotspot.SSID, status.Hotspot.Band, status.Hotspot.Channel, status.Hotspot.Security,
-		status.Hotspot.Running, len(status.Clients))
+		status.Hotspot.Running, len(status.Clients), status.Hotspot.Metered)
+	fmt.Fprintf(&report, "guest: enabled=%v running=%v ssid=%q clients=%d\n",
+		status.Guest.Enabled, status.Guest.Running, status.Guest.SSID, len(status.Guest.Clients))
 	u := status.Uplink
 	fmt.Fprintf(&report, "uplink: connected=%v kind=%s interface=%s address=%s gateway=%s ipv6=%v\n",
 		u.Connected, u.Kind, u.Interface, u.Address, u.Gateway, u.IPv6)
@@ -170,8 +181,8 @@ func (a *Agent) Diagnostics() string {
 	fmt.Fprintf(&report, "ethernet: present=%v role=%s cable=%v foreignDhcp=%s\n",
 		u.Ethernet.Present, u.Ethernet.Role, u.Ethernet.CablePlugged, u.Ethernet.ForeignDHCPServer)
 	for _, r := range status.Radios {
-		fmt.Fprintf(&report, "radio: interface=%s driver=%s usb=%v usbId=%s ap=%v role=%s\n",
-			r.Interface, r.Driver, r.IsUSB, r.USBID, r.SupportsAP, r.Role)
+		fmt.Fprintf(&report, "radio: interface=%s driver=%s usb=%v usbId=%s ap=%v maxAps=%d role=%s\n",
+			r.Interface, r.Driver, r.IsUSB, r.USBID, r.SupportsAP, r.MaxAPs, r.Role)
 	}
 	for _, w := range status.Warnings {
 		fmt.Fprintf(&report, "warning: %s\n", w)

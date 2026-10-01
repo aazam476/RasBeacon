@@ -8,6 +8,10 @@
 
 # --- Only serve the hotspot side, never the upstream network ---
 interface={{.Bridge}}
+{{- if .GuestBridge}}
+# The guest network (its devices get addresses and DNS, nothing else).
+interface={{.GuestBridge}}
+{{- end}}
 bind-interfaces
 # Don't read /etc/resolv.conf or /etc/hosts: everything is configured here.
 no-resolv
@@ -16,13 +20,28 @@ no-hosts
 # --- DHCP: addresses for connected devices ---
 # Leases last 1 hour, so devices using private/rotating MAC addresses free
 # their old address quickly.
-dhcp-range={{.DHCPStart}},{{.DHCPEnd}},{{.Netmask}},1h
+# "set:lan" labels these devices so the options below can be per network.
+dhcp-range=set:lan,{{.DHCPStart}},{{.DHCPEnd}},{{.Netmask}},1h
 dhcp-leasefile={{.LeaseFile}}
 # Tell devices to use RasBeacon as their router and DNS server.
-dhcp-option=option:router,{{.LANAddress}}
-dhcp-option=option:dns-server,{{.LANAddress}}
+dhcp-option=tag:lan,option:router,{{.LANAddress}}
+dhcp-option=tag:lan,option:dns-server,{{.LANAddress}}
+{{- if .GuestBridge}}
+# Guests: their own network, with RasBeacon's guest-side address as router
+# and DNS server.
+dhcp-range=set:guest,{{.GuestDHCPStart}},{{.GuestDHCPEnd}},{{.GuestNetmask}},1h
+dhcp-option=tag:guest,option:router,{{.GuestAddress}}
+dhcp-option=tag:guest,option:dns-server,{{.GuestAddress}}
+{{- end}}
 # Answer DHCP requests immediately even for devices we have not seen before.
 dhcp-authoritative
+{{- if .Metered}}
+# "Metered connection": the owner said this internet connection is limited
+# (for example a phone's hotspot). Android devices read this hint (DHCP
+# option 43, "vendor information") and hold back big downloads and backups.
+# Other systems ignore it; the status page reminds the owner to set them.
+dhcp-option=43,ANDROID_METERED
+{{- end}}
 
 # --- DNS: local names ---
 domain=lan

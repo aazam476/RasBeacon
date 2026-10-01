@@ -104,6 +104,8 @@ func (s *Server) Handler() http.Handler {
 		"GET /api/v1/settings/hotspot":                  "/settings/hotspot",
 		"PUT /api/v1/settings/hotspot":                  "/settings/hotspot",
 		"POST /api/v1/settings/hotspot/reveal-password": "/settings/hotspot/reveal-password",
+		"GET /api/v1/settings/guest":                    "/settings/guest",
+		"PUT /api/v1/settings/guest":                    "/settings/guest",
 		"GET /api/v1/settings/ssh":                      "/settings/ssh",
 		"PUT /api/v1/settings/ssh":                      "/settings/ssh",
 		"GET /api/v1/settings/uplink":                   "/settings/uplink",

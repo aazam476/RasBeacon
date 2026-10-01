@@ -16,6 +16,7 @@ import (
 	"embed"
 	"encoding/hex"
 	"fmt"
+	"net"
 	"net/netip"
 	"slices"
 	"strings"
@@ -33,8 +34,17 @@ var templateFiles embed.FS
 var templates = template.Must(template.ParseFS(templateFiles, "templates/*.tmpl"))
 
 // BridgeName is the network bridge that holds the hotspot's IP address.
-// The hotspot radio (and, later, a wired client port) are attached to it.
+// The hotspot radio (and the Ethernet port in client-port mode) are
+// attached to it.
 const BridgeName = "br-lan"
+
+// The guest network (see config.GuestConfig) has its own radio interface,
+// which hostapd creates, and its own bridge holding RasBeacon's guest-side
+// address. Nothing else is ever attached to the guest bridge.
+const (
+	GuestInterface  = "guest0"
+	GuestBridgeName = "br-guest"
+)
 
 // LAN describes the hotspot-side network: RasBeacon's own address and the
 // range of addresses handed to devices.
@@ -63,13 +73,14 @@ var LANCandidates = []netip.Prefix{
 }
 
 // ChooseLANPrefix returns the first of LANCandidates that overlaps none of
-// the upstream networks. If all of them overlap (very unlikely), it returns
-// the first one.
+// the upstream networks, counting the guest network that goes with it (see
+// GuestPrefixFor). If all of them overlap (very unlikely), it returns the
+// first one.
 func ChooseLANPrefix(upstream []netip.Prefix) netip.Prefix {
 	for _, candidate := range LANCandidates {
 		overlaps := false
 		for _, u := range upstream {
-			if u.Masked().Overlaps(candidate.Masked()) {
+			if u.Masked().Overlaps(candidate.Masked()) || u.Masked().Overlaps(GuestPrefixFor(candidate).Masked()) {
 				overlaps = true
 				break
 			}
@@ -79,6 +90,20 @@ func ChooseLANPrefix(upstream []netip.Prefix) netip.Prefix {
 		}
 	}
 	return LANCandidates[0]
+}
+
+// GuestPrefixFor returns the guest network that goes with a hotspot
+// network: the next /24, e.g. 10.87.1.1/24 for 10.87.0.1/24.
+func GuestPrefixFor(lan netip.Prefix) netip.Prefix {
+	a := lan.Addr().As4()
+	a[2]++
+	return netip.PrefixFrom(netip.AddrFrom4(a), lan.Bits())
+}
+
+// Guest returns the guest network that goes with this hotspot network
+// (IPv4 only: guests get no IPv6).
+func (l LAN) Guest() LAN {
+	return LAN{Prefix: GuestPrefixFor(l.Prefix)}
 }
 
 // ULALANAddress turns the device's random IPv6 prefix (a /48 such as
@@ -127,6 +152,37 @@ type HotspotInput struct {
 	// no setup.txt was provided.
 	Open     bool
 	Password string // ignored when Open is true
+	// Guest adds the guest network on the same radio (nil: no guest
+	// network). The radio must support two access points (see
+	// radio.MaxAPInterfaces).
+	Guest *GuestNetwork
+}
+
+// GuestNetwork is the guest network's part of hostapd.conf. It uses the
+// main network's band, channel, country and security setting.
+type GuestNetwork struct {
+	SSID     string
+	Password string
+	// BSSID is the guest network's own MAC address (see GuestBSSID).
+	BSSID string
+}
+
+// GuestBSSID makes a MAC address for the guest network from the hotspot
+// radio's address. Every network on a radio needs its own; this one sets
+// the "locally administered" bit (or, if the radio's address already has
+// it, changes the last bit), so it can't clash with a real device.
+func GuestBSSID(radioMAC string) (string, error) {
+	hw, err := net.ParseMAC(radioMAC)
+	if err != nil || len(hw) != 6 {
+		return "", fmt.Errorf("invalid MAC address %q", radioMAC)
+	}
+	guest := slices.Clone(hw)
+	if guest[0]&0x02 == 0 {
+		guest[0] |= 0x02
+	} else {
+		guest[5] ^= 0x01
+	}
+	return guest.String(), nil
 }
 
 // hostapdData is what the hostapd template actually sees: the input plus a
@@ -136,6 +192,11 @@ type hostapdData struct {
 	Bridge         string
 	SSIDHex        string
 	SSIDForComment string
+	// The guest network, if any.
+	GuestInterface      string
+	GuestBridge         string
+	GuestSSIDHex        string
+	GuestSSIDForComment string
 	// VHT80 is true when the 5 GHz channel can be part of an 80 MHz block.
 	VHT80            bool
 	VHTCenterChannel int
@@ -158,6 +219,20 @@ func Hostapd(in HotspotInput) (string, error) {
 	if err := config.ValidateSSID(in.SSID); err != nil {
 		return "", fmt.Errorf("hotspot name: %w", err)
 	}
+	if g := in.Guest; g != nil {
+		if in.Open {
+			return "", fmt.Errorf("the open setup network has no guest network")
+		}
+		if err := config.ValidateWiFiPassword(g.Password); err != nil {
+			return "", fmt.Errorf("guest network password: %w", err)
+		}
+		if err := config.ValidateSSID(g.SSID); err != nil {
+			return "", fmt.Errorf("guest network name: %w", err)
+		}
+		if _, err := net.ParseMAC(g.BSSID); err != nil {
+			return "", fmt.Errorf("guest network address: %w", err)
+		}
+	}
 
 	data := hostapdData{
 		HotspotInput:     in,
@@ -167,6 +242,12 @@ func Hostapd(in HotspotInput) (string, error) {
 		VHTCenterChannel: vhtCenterChannel(in.Channel),
 		VHT80:            vhtCenterChannel(in.Channel) != in.Channel,
 		HT40Direction:    ht40Direction(in.Channel),
+	}
+	if g := in.Guest; g != nil {
+		data.GuestInterface = GuestInterface
+		data.GuestBridge = GuestBridgeName
+		data.GuestSSIDHex = hex.EncodeToString([]byte(g.SSID))
+		data.GuestSSIDForComment = commentSafe(g.SSID)
 	}
 	return execute("hostapd.conf.tmpl", data)
 }
@@ -231,9 +312,20 @@ type DnsmasqInput struct {
 	// addresses (if LAN.IPv6Prefix is set) but no IPv6 route to the
 	// internet, so they use IPv4 instead of waiting for IPv6 to time out.
 	IPv6DefaultRoute bool
+	// Guest is the guest network, if it is on (see LAN.Guest).
+	Guest *LAN
+	// Metered tells Android devices the connection is limited (see
+	// config.HotspotConfig.Metered).
+	Metered bool
 }
 
 type dnsmasqData struct {
+	Metered          bool
+	GuestBridge      string
+	GuestAddress     string
+	GuestNetmask     string
+	GuestDHCPStart   string
+	GuestDHCPEnd     string
 	Bridge           string
 	LANAddress       string
 	Netmask          string
@@ -266,6 +358,14 @@ func Dnsmasq(in DnsmasqInput) (string, error) {
 	}
 	if !in.Captive {
 		data.NoticeHostnames = in.NoticeHostnames
+		data.Metered = in.Metered
+		if g := in.Guest; g != nil {
+			data.GuestBridge = GuestBridgeName
+			data.GuestAddress = g.Address()
+			data.GuestNetmask = g.Netmask()
+			data.GuestDHCPStart = g.hostAddress(20)
+			data.GuestDHCPEnd = g.hostAddress(250)
+		}
 	}
 	for _, name := range data.NoticeHostnames {
 		if strings.ContainsAny(name, "/\n\r ") || name == "" {
@@ -298,10 +398,16 @@ type FirewallInput struct {
 	// PortalOnly limits forwarding to web and DNS (TCP 80/443, port 53),
 	// for logging in to a captive portal while the VPN can't connect.
 	PortalOnly bool
+	// Guest adds the guest network: its devices may use the internet like
+	// yours, but reach nothing else (not your devices, not RasBeacon's
+	// settings, only its DHCP and DNS).
+	Guest bool
 }
 
 type firewallData struct {
 	PortalOnly      bool
+	Guest           bool
+	GuestBridge     string
 	Bridge          string
 	SSHEnabled      bool
 	Egress          []string
@@ -323,6 +429,8 @@ func Firewall(in FirewallInput) (string, error) {
 		Egress:          in.Egress,
 		TunnelInterface: in.TunnelInterface,
 		PortalOnly:      in.PortalOnly,
+		Guest:           in.Guest,
+		GuestBridge:     GuestBridgeName,
 	}
 	if len(in.TunnelDNS) > 0 && in.TunnelInterface == "" {
 		return "", fmt.Errorf("tunnel DNS servers need a tunnel interface")

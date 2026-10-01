@@ -176,7 +176,7 @@ func (a *Agent) applyUplinkConfig() error {
 // networkd if any of them changed.
 func (a *Agent) applyNetworkdConfig() error {
 	files := map[string]string{}
-	unmanaged := []string{render.BridgeName, radio.HotspotInterfaceName}
+	unmanaged := []string{render.BridgeName, radio.HotspotInterfaceName, render.GuestBridgeName, render.GuestInterface}
 
 	if a.hasEthernet() {
 		if a.cfg.Ethernet.Role == config.EthernetUplink {
@@ -492,6 +492,9 @@ func (a *Agent) moveLAN(prefix netip.Prefix) {
 	}
 	if err := system.EnsureBridge(a.runner, render.BridgeName, a.lanAddresses()...); err != nil {
 		slog.Error("could not set the new hotspot address", "error", err)
+	}
+	if a.guestActive() {
+		a.applyGuestBridge(true)
 	}
 	if err := a.applyDHCP(false); err != nil {
 		slog.Error("could not restart DHCP for the new hotspot network", "error", err)

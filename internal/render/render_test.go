@@ -107,6 +107,48 @@ func TestHostapd_5GHzChannelPairsAndChannel165(t *testing.T) {
 	}
 }
 
+func TestHostapd_GuestNetwork(t *testing.T) {
+	in := HotspotInput{
+		Interface: "ap0", SSID: "RasBeacon-4F2A", Band: config.Band2GHz,
+		Country: "US", Security: config.SecurityWPA2WPA3, Password: "kq7m-2xvd-h8pt-rn4w",
+		Guest: &GuestNetwork{SSID: "RasBeacon-4F2A-Guest", Password: "visitors-welcome", BSSID: "52:3e:aa:12:34:56"},
+	}
+	got, err := Hostapd(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkGolden(t, "hostapd_guest", got)
+	guest := got[strings.Index(got, "bss=guest0"):]
+	for _, want := range []string{"bridge=br-guest", "ap_isolate=1", "wpa_passphrase=visitors-welcome", "bssid=52:3e:aa:12:34:56"} {
+		if !strings.Contains(guest, want) {
+			t.Errorf("guest section lacks %q", want)
+		}
+	}
+
+	in.Guest.Password = "short"
+	if _, err := Hostapd(in); err == nil {
+		t.Error("a too-short guest password must be refused")
+	}
+	in.Guest.Password = "visitors-welcome\nwpa=0"
+	if _, err := Hostapd(in); err == nil {
+		t.Error("a guest password with a line break must be refused")
+	}
+}
+
+func TestGuestBSSID(t *testing.T) {
+	for radio, want := range map[string]string{
+		"50:3e:aa:12:34:56": "52:3e:aa:12:34:56", // sets the locally administered bit
+		"52:3e:aa:12:34:56": "52:3e:aa:12:34:57", // already set: change the last bit
+	} {
+		if got, err := GuestBSSID(radio); err != nil || got != want {
+			t.Errorf("GuestBSSID(%s) = %s, %v; want %s", radio, got, err, want)
+		}
+	}
+	if _, err := GuestBSSID("not-a-mac"); err == nil {
+		t.Error("expected an error")
+	}
+}
+
 func TestHostapd_RejectsPasswordThatCouldInjectSettings(t *testing.T) {
 	_, err := Hostapd(HotspotInput{
 		Interface: "ap0", SSID: "x", Band: config.Band2GHz, Country: "US",
@@ -197,6 +239,32 @@ func TestDnsmasq_PortalNoticeAnswersProbeNames(t *testing.T) {
 	}
 }
 
+func TestDnsmasq_GuestNetworkAndMetered(t *testing.T) {
+	guest := DefaultLAN.Guest()
+	got, err := Dnsmasq(DnsmasqInput{
+		LAN: DefaultLAN, LeaseFile: "/run/rbd/dnsmasq.leases", Upstream: []string{"127.0.0.53"},
+		Guest: &guest, Metered: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkGolden(t, "dnsmasq_guest_metered", got)
+	for _, want := range []string{
+		"interface=br-guest",
+		"dhcp-range=set:guest,10.87.1.20,10.87.1.250,255.255.255.0,1h",
+		"dhcp-option=tag:guest,option:router,10.87.1.1",
+		"dhcp-option=43,ANDROID_METERED",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	setup, _ := Dnsmasq(DnsmasqInput{LAN: DefaultLAN, Captive: true, Guest: &guest, Metered: true})
+	if strings.Contains(setup, "br-guest") || strings.Contains(setup, "METERED") {
+		t.Error("the setup network has no guest network and no metered hint")
+	}
+}
+
 func TestDnsmasq_RejectsUpstreamThatIsNotAnAddress(t *testing.T) {
 	_, err := Dnsmasq(DnsmasqInput{LAN: DefaultLAN, LeaseFile: "x", Upstream: []string{"1.1.1.1\naddress=/#/1.2.3.4"}})
 	if err == nil {
@@ -234,7 +302,8 @@ func TestFirewall_ForwardsAndNATsToUplinks(t *testing.T) {
 	checkGolden(t, "firewall_uplinks", got)
 	for _, want := range []string{
 		`elements = { "eth0", "wlan0" }`,
-		`iifname "br-lan" oifname @egress accept`,
+		`iifname @lans oifname @egress accept`,
+		`elements = { "br-lan" }`,
 		"oifname @egress masquerade",
 	} {
 		if !strings.Contains(got, want) {
@@ -278,6 +347,28 @@ func TestFirewall_PortalOnlyAllowsWebAndDNS(t *testing.T) {
 	}
 	if !strings.Contains(got, "tcp dport { 80, 443 } accept") {
 		t.Error("login mode must allow web traffic")
+	}
+}
+
+func TestFirewall_GuestNetworkIsolated(t *testing.T) {
+	got, err := Firewall(FirewallInput{Egress: []string{"wlan0"}, Guest: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkGolden(t, "firewall_guest", got)
+	if !strings.Contains(got, `elements = { "br-lan", "br-guest" }`) {
+		t.Error("guests must be able to use the internet")
+	}
+	input := got[strings.Index(got, "chain input"):strings.Index(got, "chain forward")]
+	if !strings.Contains(input, `iifname "br-guest" reject`) {
+		t.Error("guests must not reach the web UI or SSH")
+	}
+	if strings.Contains(input, `iifname "br-guest" tcp dport`) {
+		t.Error("no TCP port may be opened for guests")
+	}
+	without, _ := Firewall(FirewallInput{Egress: []string{"wlan0"}})
+	if strings.Contains(without, "br-guest") {
+		t.Error("no guest rules without a guest network")
 	}
 }
 
@@ -409,6 +500,7 @@ func TestChooseLANPrefix_AvoidsUpstreamNetwork(t *testing.T) {
 		{"no uplink", nil, "10.87.0.1/24"},
 		{"typical hotel", []netip.Prefix{p("192.168.1.57/24")}, "10.87.0.1/24"},
 		{"same network as ours", []netip.Prefix{p("10.87.0.12/24")}, "10.88.0.1/24"},
+		{"same network as our guests", []netip.Prefix{p("10.87.1.30/24")}, "10.88.0.1/24"},
 		{"huge 10/8 network", []netip.Prefix{p("10.40.3.9/8")}, "172.31.87.1/24"},
 		{"10/8 and 172.16/12", []netip.Prefix{p("10.1.1.1/8"), p("172.20.0.5/12")}, "192.168.87.1/24"},
 	}

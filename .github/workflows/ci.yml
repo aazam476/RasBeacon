@@ -60,7 +60,7 @@ jobs:
         run: sudo -E env "PATH=$PATH" RASBEACON_REQUIRE_NETNS=1 go test -count=1 -v ./test/netns/
 
   hwsim:
-    name: Simulated Wi-Fi tests (WPA-Enterprise logins)
+    name: Simulated Wi-Fi tests (Enterprise logins, guest network)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7

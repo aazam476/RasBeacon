@@ -152,3 +152,39 @@ func TestAssignRoles_NoAPCapableRadio(t *testing.T) {
 		t.Error("expected a warning")
 	}
 }
+
+func TestMaxAPInterfaces(t *testing.T) {
+	modes := "\tSupported interface modes:\n\t\t * managed\n\t\t * AP\n\t\t * monitor\n"
+	cases := []struct {
+		name string
+		info string
+		want int
+	}{
+		{"no AP mode", "\tSupported interface modes:\n\t\t * managed\n", 0},
+		{"AP, no combinations listed", modes, 1},
+		{
+			// mac80211_hwsim (the simulated radios in test/hwsim).
+			"hwsim", modes + "\tvalid interface combinations:\n" +
+				"\t\t * #{ managed } <= 2048, #{ AP, mesh point } <= 2048, #{ P2P-client, P2P-GO } <= 2048, #{ P2P-device } <= 1,\n" +
+				"\t\t   total <= 2048, #channels <= 1, STA/AP BI must match\n" +
+				"\tHT Capability overrides:\n", 2048,
+		},
+		{
+			// The Raspberry Pi's built-in radio (brcmfmac).
+			"brcmfmac", modes + "\tvalid interface combinations:\n" +
+				"\t\t * #{ managed } <= 1, #{ P2P-device } <= 1, #{ P2P-client, P2P-GO } <= 1,\n" +
+				"\t\t   total <= 3, #channels <= 2\n" +
+				"\t\t * #{ managed } <= 1, #{ AP } <= 1, #{ P2P-client } <= 1, #{ P2P-device } <= 1,\n" +
+				"\t\t   total <= 4, #channels <= 1\n", 1,
+		},
+		{
+			"limited by total", modes + "\tvalid interface combinations:\n" +
+				"\t\t * #{ managed } <= 1, #{ AP } <= 4,\n\t\t   total <= 2, #channels <= 1\n", 2,
+		},
+	}
+	for _, c := range cases {
+		if got := MaxAPInterfaces(c.info); got != c.want {
+			t.Errorf("%s: got %d, want %d", c.name, got, c.want)
+		}
+	}
+}

@@ -60,6 +60,10 @@ func Setup(root string) (paths.Paths, error) {
 	if err := writeFile(filepath.Join(usbDevice, "idProduct"), "012d"); err != nil {
 		return p, err
 	}
+	// The hotspot radio's MAC address (after rbd renames it to ap0).
+	if err := writeFile(filepath.Join(p.SysClassNet(), "ap0", "address"), "50:3e:aa:12:34:56"); err != nil {
+		return p, err
+	}
 	// Ethernet port, no cable plugged in.
 	if err := writeFile(filepath.Join(p.SysClassNet(), "eth0", "carrier"), "0"); err != nil {
 		return p, err
@@ -88,7 +92,9 @@ func Setup(root string) (paths.Paths, error) {
 // Runner pretends to run commands: it logs them and returns canned output.
 type Runner struct{}
 
-const iwPhyInfo = "Wiphy phy1\n\tSupported interface modes:\n\t\t * managed\n\t\t * AP\n\t\t * monitor\n"
+// The simulated adapter can broadcast two networks (for the guest network).
+const iwPhyInfo = "Wiphy phy1\n\tSupported interface modes:\n\t\t * managed\n\t\t * AP\n\t\t * monitor\n" +
+	"\tvalid interface combinations:\n\t\t * #{ managed } <= 1, #{ AP } <= 2,\n\t\t   total <= 2, #channels <= 1\n"
 
 const stationDump = `Station 3a:1f:22:aa:bb:cc (on ap0)
 	signal:  	-48 [-50, -52] dBm

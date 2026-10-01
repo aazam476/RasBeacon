@@ -201,7 +201,7 @@ func (a *Agent) applyClientPath() error {
 		_, _ = a.runner.Run(cmd[0], cmd[1:]...) // error: no rule yet
 	}
 	if a.clientsThroughTunnel() {
-		for _, cmd := range routing.ClientsThroughTunnel(render.BridgeName, routing.KernelHasIPv6(a.paths.ProcSysNetIPv6())) {
+		for _, cmd := range routing.ClientsThroughTunnel(routing.KernelHasIPv6(a.paths.ProcSysNetIPv6())) {
 			if _, err := a.runner.Run(cmd[0], cmd[1:]...); err != nil {
 				return fmt.Errorf("routing devices into the tunnel: %w", err)
 			}
