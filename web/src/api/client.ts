@@ -8,6 +8,7 @@ import type {
   ClaimResponse,
   ErrorResponse,
   HotspotSettings,
+  PortalStatus,
   RevealPasswordResponse,
   ScanResponse,
   SessionInfo,
@@ -168,6 +169,18 @@ export function importVPNConfig(conf: string): Promise<VPNSettings> {
 /** Makes a new key pair for RasBeacon; the public key is in the answer. */
 export function generateVPNKey(): Promise<VPNSettings> {
   return request("POST", "/settings/vpn/generate-key");
+}
+
+// --- Captive portal login mode (no login needed) ---
+
+export function getPortalStatus(): Promise<PortalStatus> {
+  return request("GET", "/portal");
+}
+
+/** Starts login mode, extends it by 10 minutes, or stops it. */
+export function portalAction(action: "start" | "extend" | "stop"): Promise<PortalStatus> {
+  // An empty JSON body: rbweb only accepts JSON for these public actions.
+  return request("POST", `/portal/${action}`, {});
 }
 
 export function reboot(): Promise<void> {

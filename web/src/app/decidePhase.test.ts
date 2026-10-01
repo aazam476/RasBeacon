@@ -42,4 +42,15 @@ describe("decidePhase", () => {
   it("shows the main pages when logged in", () => {
     expect(decidePhase({ setupState: base, loggedIn: true }, null)).toEqual({ kind: "main" });
   });
+
+  it("shows the captive portal notice at #portal, even when logged out", () => {
+    expect(decidePhase({ setupState: base, loggedIn: false }, null, true)).toEqual({
+      kind: "portal",
+    });
+  });
+
+  it("ignores #portal during setup", () => {
+    const setupState = { ...base, mode: "setup" as const, claimed: false };
+    expect(decidePhase({ setupState, loggedIn: false }, null, true).kind).toBe("setup");
+  });
 });

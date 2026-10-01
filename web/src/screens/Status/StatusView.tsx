@@ -21,6 +21,21 @@ export function StatusView({ status, error, loading, reload }: StatusViewProps) 
       <h2>Status</h2>
       {error && <p role="alert">Last refresh failed: {error}</p>}
 
+      {status.portal.detected && (
+        <p role="alert">
+          This network shows a login page.{" "}
+          {status.portal.loginMode ? (
+            <a href="#portal">
+              Login mode is on ({formatDuration(status.portal.secondsLeft)} left)
+            </a>
+          ) : status.portal.canStart ? (
+            <a href="#portal">Log in to it</a>
+          ) : (
+            <a href={status.portal.loginUrl || "http://neverssl.com/"}>Open the login page</a>
+          )}
+        </p>
+      )}
+
       {status.warnings.length > 0 && (
         <ul>
           {status.warnings.map((warning) => (
