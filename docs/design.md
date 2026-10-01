@@ -802,6 +802,28 @@ wins.
 7. **Stretch:** guest SSID, metered toggle, zero-leak portal login (remote
    browser), routed IPv6 prefix instead of NAT66.
 
+## 11a. As built in M6
+
+- **Updates:** rpi-image-gen's `<image>.update.tar.zst` (boot and system as
+  Android sparse images) is wrapped in a `.rbupdate` tar with a manifest
+  and an Ed25519 signature over the manifest (which holds the bundle's
+  SHA-256). rbd verifies the signature and board first, streams the bundle
+  through `zstd` into `/dev/disk/by-slot/other/*`, verifies the SHA-256,
+  then `systemctl reboot "0 tryboot"`. On a tryboot start, rbd confirms
+  after 60 s of normal running by writing `rpi-slot-tryboot`'s output to
+  `autoboot.txt`, or forces a plain reboot (back to the old slot) after
+  5 minutes. Keys: `cmd/rbsign`, the `RASBEACON_UPDATE_SIGNING_KEY`
+  secret, and `/usr/lib/rasbeacon/update-keys/*.pub` in the image.
+- **HTTPS:** as specified (generated or uploaded certificate). Setup, the
+  portal notice and RFC 8908 stay on HTTP; logins over HTTP are refused
+  while HTTPS is on.
+- **Reset button:** GPIO 17 via the `gpio-key` overlay (KEY_RESTART), 10 s
+  hold.
+- **Not built:** API tokens for a future app (sessions are enough for the
+  web UI), and the zero-leak remote-browser portal login.
+- **Source code:** each release lists its packages with source versions;
+  see `docs/source-code.md`.
+
 ## 12. Requirements I'd change
 1. **Battery:** the goal of 12 h on a common bank becomes **about 12 h on a
    20,000 mAh bank (Pi 4)**, as you chose. The README states this plainly.

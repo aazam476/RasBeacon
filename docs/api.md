@@ -80,6 +80,10 @@ shown, and `GET /api/v1/captive` (RFC 8908) then answers
 | `PUT /api/v1/settings/vpn` | `VPNSettings` | `VPNSettings` | Saves typed-in settings. `privateKey`/`presharedKey` are write-only (empty keeps the saved key; `removePresharedKey` deletes it). Turning the VPN on needs a complete server. Errors name the field (`enabled`, `dns`, `privateKey`, ...) or `conf` for problems with the whole configuration. |
 | `POST /api/v1/settings/vpn/import` | `{ conf }` | `VPNSettings` | Reads a WireGuard `.conf`. Refuses `PostUp`/`PreUp`/`PostDown`/`PreDown`, `Table`, `FwMark`, `SaveConfig`, split tunnels, more than one peer and files without `DNS`. Keeps the "use the VPN" and kill switch settings. |
 | `POST /api/v1/settings/vpn/generate-key` | — | `VPNSettings` | Makes a new private key; the answer's `publicKey` goes to the WireGuard server. |
+| `GET /api/v1/settings/https` | — | `HTTPSSettings` | HTTPS on/off and the certificate: `subject`, `fingerprint` (SHA-256), `validUntil`, `uploaded` |
+| `PUT /api/v1/settings/https` | `HTTPSSettings` | `HTTPSSettings` | Set `enabled`; `generateNew: true` makes a new certificate; `certificate` + `privateKey` (PEM) upload your own. rbweb restarts about 2 s later. With HTTPS on, login and all routes in this table refuse plain HTTP (403). |
+| `POST /api/v1/system/update` | the `.rbupdate` file itself (`application/octet-stream`) | `UpdateStatus` | Checks the signature and board, writes the other slot, checks the SHA-256, then restarts into it on trial. Errors are 400 with `field: "update"` and a readable message. Up to 2 GB, 30 minutes. |
+| `PUT /api/v1/settings/updates` | `{ checkOnline }` | `UpdateStatus` | The optional online check for new releases |
 | `POST /api/v1/system/reboot` | — | 204 | Restarts about 5 s later |
 | `POST /api/v1/system/factory-reset` | `PasswordRequest` (admin password) | 204 | Erases everything and restarts into setup. Logs everyone out. |
 | `GET /api/v1/diagnostics` | — | text file | Troubleshooting report. Passwords are removed and MAC addresses partly hidden. |

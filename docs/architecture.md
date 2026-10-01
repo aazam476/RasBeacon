@@ -148,6 +148,34 @@ on, devices can't reach that page either (`internal/agent/portal.go`):
    login works, and the firewall cuts any connection still on the old
    path, so nothing opened during login mode keeps going outside the VPN.
 
+## Updates
+
+Updates use the two copies ("slots", A and B) of the system on the SD card
+(`internal/update`, `internal/agent/update.go`):
+
+1. The owner uploads a `.rbupdate` file on the System page. Its manifest
+   is signed with the release key (Ed25519); the public key is built into
+   the image. Nothing is written until the signature and board check out.
+2. rbd streams the new boot and system partitions into the slot that isn't
+   running, then checks the SHA-256 of everything against the signed one.
+3. The device restarts into the new slot **on trial** (the bootloader's
+   "tryboot"). If rbd runs normally for a minute, the new slot becomes the
+   default; otherwise, the next start (forced after 5 minutes) is the old
+   slot again.
+
+Settings live on the shared `/persistent` partition, so they carry over.
+
+## HTTPS and the reset button
+
+- **HTTPS** (`internal/agent/https.go`, `internal/tlscert`): rbd makes or
+  checks the certificate and gives rbweb a readable copy; rbweb serves
+  port 443 when the copy exists. The setup wizard and the login-page notice
+  stay on plain HTTP, because phones' login sheets refuse self-signed
+  certificates.
+- **Reset button** (`internal/button`): a button on GPIO 17 appears to
+  Linux as a key (via the `gpio-key` overlay in `config.txt`); holding it
+  10 seconds erases all settings, like the `factory-reset` file.
+
 ## Where things are stored
 
 | Path | What | Written by |
@@ -155,6 +183,9 @@ on, devices can't reach that page either (`internal/agent/portal.go`):
 | `/persistent/rasbeacon/config.json` | Non-secret settings | rbd |
 | `/persistent/rasbeacon/secrets.json` (mode 0600) | Hotspot password, admin password hash, upstream Wi-Fi passwords, WireGuard keys | rbd |
 | `/persistent/rasbeacon/clock` | Last known time (the "time floor") | rbd |
+| `/persistent/rasbeacon/tls/` | HTTPS certificate and key (key root-only) | rbd |
+| `/persistent/rasbeacon/update-pending.json` | An installed update until it's confirmed | rbd |
+| `/usr/lib/rasbeacon/update-keys/*.pub`, `/usr/lib/rasbeacon/board` | Update signing keys and the board name, built into the image | the build |
 | `/persistent/rasbeacon/certs/` (directory 0700) | Certificates and keys for WPA-Enterprise networks, named after each network's ID | rbd |
 | `/persistent/rasbeacon/identity.json` | Device ID, IPv6 prefix, suggested password | rbd, once |
 | `/run/rbd/*.conf`, `firewall.nft` | Generated configs (in memory) | rbd |

@@ -12,14 +12,14 @@ hotel login pages.
 - **No telemetry and no cloud.** Everything works offline.
 - **Licensed under Apache-2.0.**
 
-> **Status: milestone 5 of 6.** The image boots, runs the first-boot setup
-> network and web UI, runs your hotspot, connects it to the internet through
-> Ethernet or Wi-Fi (open, password, or WPA-Enterprise such as eduroam,
+> **Status: all six milestones are built and tested in CI; hardware
+> testing is in progress** (see [docs/testing/](docs/testing/)). RasBeacon
+> runs your hotspot, connects it to the internet through Ethernet or Wi-Fi
+> (open, password, or WPA-Enterprise such as eduroam,
 > [guide](docs/eduroam.md)), can send everything through your own WireGuard
-> VPN with a kill switch ([server guide](docs/wireguard-server.md)), and
-> lets you log in to hotel login pages without turning the kill switch off.
-> Still to come: signed updates and final hardening (milestone 6). See
-> [docs/design.md](docs/design.md) for the plan.
+> VPN with a kill switch ([server guide](docs/wireguard-server.md)), lets
+> you log in to hotel login pages without turning the kill switch off, and
+> installs signed updates with automatic rollback.
 
 ## What you need
 
@@ -94,7 +94,8 @@ hotel login pages.
 | A warning says the Ethernet port "seems to be plugged into a network" | The port is set to *Client port* (for your own laptop), but it's plugged into a network. Set it to *Uplink* on the Internet page if that cable is your internet connection. |
 | The status page warns that the built-in Wi-Fi is running the hotspot | RasBeacon didn't find a USB adapter it can use. Plug one in and restart from the System page. |
 | Nothing works and you want to see why | Put the SD card in a computer and create an empty file named `debug` on the `BOOTCONFIG` drive. Boot the Pi and wait 3 minutes, then unplug it. Back on the computer, open `rasbeacon-debug.txt` from the same drive. It holds the startup logs (no passwords, but device names and MAC addresses, so delete it afterwards). |
-| Forgot the admin password | Factory reset: put the SD card in a computer and create an empty file named `factory-reset` on the `BOOTCONFIG` drive. At the next start, RasBeacon erases all settings and runs first-time setup again. |
+| Forgot the admin password | Factory reset: put the SD card in a computer and create an empty file named `factory-reset` on the `BOOTCONFIG` drive. At the next start, RasBeacon erases all settings and runs first-time setup again. (Or hold the optional reset button for 10 seconds.) |
+| An update didn't install | The System page says why. "not signed by a key this RasBeacon trusts": use update files from the official Releases page; images built before signing was set up can't install updates, so flash the new image once. "for pi5, but this is a pi4": download the file for your board. |
 
 ## Checking your download
 
@@ -103,8 +104,26 @@ Each release lists the SHA-256 checksum of every image in `SHA256SUMS`.
 - **macOS/Linux:** `shasum -a 256 rasbeacon-pi4-v0.1.0.img.xz`
 - **Windows PowerShell:** `Get-FileHash rasbeacon-pi4-v0.1.0.img.xz`
 
-The result must match the line in `SHA256SUMS`. (Signed releases and
-in-place updates come in milestone 6; until then, update by reflashing.)
+The result must match the line in `SHA256SUMS`.
+
+## Updating
+
+On the **System** page, choose the release's `rasbeacon-<board>-<version>.rbupdate`
+file and tap **Install update**. RasBeacon checks that the file was signed
+by the RasBeacon release key, installs it next to the running version,
+and restarts into it. If the new version doesn't start correctly, it goes
+back to the old one by itself. Your settings are kept. (You can also turn
+on a check for new versions there; it is off by default.)
+
+## Optional extras
+
+- **HTTPS** for the settings pages: the **HTTPS** page. Your browser warns
+  about RasBeacon's own certificate the first time; compare the
+  fingerprint shown on that page.
+- **SSH** for advanced users: the **SSH** page (keys only, hotspot side
+  only).
+- **Factory-reset button:** connect a push button between pin 11 (GPIO 17)
+  and pin 9 (ground). Holding it for 10 seconds erases all settings.
 
 ## For contributors
 
@@ -116,10 +135,14 @@ in-place updates come in milestone 6; until then, update by reflashing.)
   [docs/decisions/](docs/decisions/).
 - **Web UI and API:** [docs/api.md](docs/api.md) and
   [docs/ui-contract.md](docs/ui-contract.md).
+- **Releases and update signing:** [docs/releasing.md](docs/releasing.md).
+- **Security problems:** please report them privately, see
+  [SECURITY.md](SECURITY.md).
 
 ## License
 
 Apache-2.0, see [LICENSE](LICENSE). The images also contain Debian and
 Raspberry Pi OS packages under their own licenses (GPL, LGPL, MIT and others)
 and binary Wi-Fi firmware. See
-[LICENSES/THIRD_PARTY.md](LICENSES/THIRD_PARTY.md).
+[LICENSES/THIRD_PARTY.md](LICENSES/THIRD_PARTY.md) and, for getting their
+source code, [docs/source-code.md](docs/source-code.md).
