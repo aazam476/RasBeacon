@@ -71,12 +71,12 @@ Shown around the main pages after login.
 
 | Prop | Type | Meaning |
 |---|---|---|
-| `page` | `"status" \| "internet" \| "hotspot" \| "ssh" \| "system"` | Current page |
+| `page` | `"status" \| "internet" \| "vpn" \| "hotspot" \| "ssh" \| "system"` | Current page |
 | `setPage` | `(page) => void` | Switch page |
 | `children` | React content | The current page |
 
 **Wording the test relies on:** navigation buttons named "Status",
-"Internet", "Hotspot", "SSH", "System".
+"Internet", "VPN", "Hotspot", "SSH", "System".
 
 ### Notice: `screens/Notice/NoticeView.tsx`
 
@@ -148,8 +148,36 @@ It refreshes itself every 10 seconds.
 
 `describeUplink` in `shared/format.ts` gives the one-line summary.
 
+The VPN section uses `describeVPNState` from `shared/format.ts`; design the
+"no internet because of the kill switch" and "using the internet WITHOUT
+the VPN" states so they stand out.
+
 **Wording the test relies on:** heading "Status",
-"Connected devices (N)" and `Connected to Wi-Fi "<name>"`.
+"Connected devices (N)", `Connected to Wi-Fi "<name>"` and "Connected: your
+devices' traffic goes through the VPN."
+
+### VPN: `screens/VPN/`
+
+| Prop | Type | Meaning |
+|---|---|---|
+| `saved` | `VPNSettings \| undefined` | What is saved: `configured`, `publicKey` (RasBeacon's, to show), `hasPresharedKey` |
+| `loadError` | `string \| null` | |
+| `importText`, `setImportText` | `string`, setter | The pasted `.conf` text |
+| `setImportFile` | `(file \| null) => void` | Reads a chosen `.conf` file into `importText` |
+| `importConf`, `importing`, `importError` | | Import the file (the server checks it) |
+| `form`, `setField` | `VPNForm`, setter | `enabled`, `killSwitch` (checkboxes); text inputs `endpoint`, `peerPublicKey`, `addresses`, `dns`, `allowedIps` (comma-separated), `persistentKeepalive`, `mtu`, `presharedKey`, `privateKey` |
+| `save`, `saving`, `saveError` | | |
+| `errorField` | `string \| null` | Which input the last server error was about |
+| `generateKey` | `() => void` | Asks for confirmation itself |
+| `message` | `string \| null` | Confirmation after import, save or new key |
+
+**States to design:** loading, not set up yet, set up but off, on with the
+kill switch on/off, import error (the server's message names the line),
+keys hidden (only the public key is ever shown).
+
+**Wording the test relies on:** label "Or paste its contents", buttons
+"Import" and "Save", checkbox "Use the VPN", the messages "never runs
+commands" (import refused), "WireGuard file imported" and "Saved."
 
 ### Internet (uplink settings): `screens/Uplink/`
 

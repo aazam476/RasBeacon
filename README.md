@@ -12,12 +12,13 @@ hotel login pages.
 - **No telemetry and no cloud.** Everything works offline.
 - **Licensed under Apache-2.0.**
 
-> **Status: milestone 3 of 6.** The image boots, runs the first-boot setup
-> network and web UI, runs your hotspot, and connects it to the internet
-> through an Ethernet cable or a Wi-Fi network: open, password-protected,
-> or WPA-Enterprise such as eduroam ([guide](docs/eduroam.md)). Still to
-> come: WireGuard and the kill switch (milestone 4) and hotel login pages
-> (milestone 5). See [docs/design.md](docs/design.md) for the full plan.
+> **Status: milestone 4 of 6.** The image boots, runs the first-boot setup
+> network and web UI, runs your hotspot, connects it to the internet through
+> Ethernet or Wi-Fi (open, password, or WPA-Enterprise such as eduroam,
+> [guide](docs/eduroam.md)), and can send everything through your own
+> WireGuard VPN with a kill switch ([server guide](docs/wireguard-server.md)).
+> Still to come: hotel login pages with the VPN on (milestone 5) and signed
+> updates (milestone 6). See [docs/design.md](docs/design.md) for the plan.
 
 ## What you need
 
@@ -70,6 +71,9 @@ hotel login pages.
    enter its password, *Add to list*, and *Save*. You can save several
    networks; RasBeacon joins the first one in the list that is in range,
    and prefers a plugged-in cable.
+9. **Optional, your VPN:** on the **VPN** page, import your WireGuard
+   `.conf` file and tick *Use the VPN*. Keep the *Kill switch* on so nothing
+   is ever sent outside the VPN.
 
 > **Important:** the setup network closes after 30 minutes if nobody
 > finishes setup. Unplug and replug the power to reopen it. Until setup is

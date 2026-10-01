@@ -34,6 +34,9 @@ The reasons behind the big decisions are in [design.md](design.md) and
 - **nftables** is the Linux firewall. It also does the *NAT* that lets all
   your devices share RasBeacon's one address on the upstream network.
 - **wpa_supplicant** joins upstream Wi-Fi networks with the built-in radio.
+- **WireGuard** (`wg0`, set up with the `wg` and `ip` tools) is the VPN
+  tunnel. rbd reads the `.conf` file itself (`internal/wireguard`) and never
+  runs wg-quick.
 - **systemd-networkd** gets addresses on the uplinks (Ethernet and Wi-Fi)
   by *DHCP*, and **systemd-resolved** is the device's own DNS resolver
   (127.0.0.53), using the uplink's DNS servers.
@@ -106,12 +109,36 @@ seconds later, so the phone receives the "success" page first.
   only get an IPv6 route to the internet when the uplink has IPv6; then
   their traffic is translated like IPv4 (*NAT66*).
 
+## The VPN and the kill switch
+
+When the VPN is on, three independent things keep devices' traffic inside
+the tunnel (`internal/agent/vpn.go`):
+
+1. **Routing** (`internal/routing`): traffic from the hotspot is looked up
+   in table 51820, which only has "into wg0" and "unreachable".
+2. **Firewall**: devices' traffic may only be forwarded to `wg0`.
+3. **DNS**: dnsmasq asks only the VPN's DNS servers; they are routed into
+   `wg0`, and an output rule blocks them everywhere else.
+
+Every 5 seconds a small state machine (`internal/tunnel`) looks at the
+tunnel's last handshake and decides between *connecting*, *up*, *down* and
+*direct*. Only *direct* (kill switch off, tunnel broken for 30 s) switches
+all three to the uplink; before the first check, traffic stays in the
+tunnel. `test/netns/vpn_test.go` checks this against a real WireGuard
+server, including deleting `wg0` while devices are using it.
+
+The clock matters for WireGuard and certificates, and the Pi has no clock
+battery: `internal/agent/clock.go` saves the time regularly, never lets it
+go backwards across a reboot, and falls back to web servers' `Date`
+headers when NTP is blocked.
+
 ## Where things are stored
 
 | Path | What | Written by |
 |---|---|---|
 | `/persistent/rasbeacon/config.json` | Non-secret settings | rbd |
-| `/persistent/rasbeacon/secrets.json` (mode 0600) | Hotspot password, admin password hash, upstream Wi-Fi passwords | rbd |
+| `/persistent/rasbeacon/secrets.json` (mode 0600) | Hotspot password, admin password hash, upstream Wi-Fi passwords, WireGuard keys | rbd |
+| `/persistent/rasbeacon/clock` | Last known time (the "time floor") | rbd |
 | `/persistent/rasbeacon/certs/` (directory 0700) | Certificates and keys for WPA-Enterprise networks, named after each network's ID | rbd |
 | `/persistent/rasbeacon/identity.json` | Device ID, IPv6 prefix, suggested password | rbd, once |
 | `/run/rbd/*.conf`, `firewall.nft` | Generated configs (in memory) | rbd |
