@@ -16,6 +16,7 @@ import type {
   SetupState,
   SSHSettings,
   Status,
+  UpdateStatus,
   UplinkSettings,
   VPNSettings,
 } from "./types";
@@ -41,10 +42,13 @@ export class ApiError extends Error {
 let csrfToken = "";
 
 /** Sends one request and returns the parsed JSON response (or undefined for 204). */
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+async function request<T>(method: string, path: string, body?: unknown, file?: Blob): Promise<T> {
   const headers: Record<string, string> = {};
   if (body !== undefined) {
     headers["Content-Type"] = "application/json";
+  }
+  if (file !== undefined) {
+    headers["Content-Type"] = "application/octet-stream";
   }
   if (method !== "GET" && csrfToken) {
     headers["X-CSRF-Token"] = csrfToken;
@@ -55,7 +59,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     response = await fetch(`/api/v1${path}`, {
       method,
       headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: file ?? (body === undefined ? undefined : JSON.stringify(body)),
       credentials: "same-origin",
     });
   } catch {
@@ -190,6 +194,19 @@ export function getPortalStatus(): Promise<PortalStatus> {
 export function portalAction(action: "start" | "extend" | "stop"): Promise<PortalStatus> {
   // An empty JSON body: rbweb only accepts JSON for these public actions.
   return request("POST", `/portal/${action}`, {});
+}
+
+/**
+ * Uploads an update file (.rbupdate). RasBeacon checks its signature,
+ * installs it, then restarts. Takes a few minutes.
+ */
+export function installUpdate(file: File): Promise<UpdateStatus> {
+  return request("POST", "/system/update", undefined, file);
+}
+
+/** Turns the online check for new releases on or off. */
+export function setCheckOnline(checkOnline: boolean): Promise<UpdateStatus> {
+  return request("PUT", "/settings/updates", { checkOnline });
 }
 
 export function reboot(): Promise<void> {

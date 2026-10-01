@@ -69,6 +69,8 @@ func main() {
 		go a.RunClockMonitor()
 		// Watch for hotel login pages (see agent/portal.go).
 		go a.RunPortalMonitor(agent.ProbeInternet)
+		// The optional check for new releases (off unless turned on).
+		go a.RunUpdateCheck()
 	}
 	if *devRoot != "" {
 		go a.RunPortalMonitor(devsim.PortalProbe)

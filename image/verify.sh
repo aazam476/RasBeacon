@@ -28,7 +28,7 @@ check "rbweb is installed and executable" test -x "$root/usr/bin/rbweb"
 # The network programs rbd drives.
 for tool in usr/sbin/hostapd usr/sbin/dnsmasq usr/sbin/nft usr/sbin/iw usr/sbin/rfkill \
   usr/sbin/wpa_supplicant usr/sbin/wpa_cli usr/bin/networkctl usr/lib/systemd/systemd-resolved \
-  usr/bin/wg usr/bin/timedatectl; do
+  usr/bin/wg usr/bin/timedatectl usr/bin/zstd usr/bin/rpi-slot-tryboot; do
   check "$tool is installed" test -x "$root/$tool"
 done
 
@@ -65,6 +65,15 @@ check "user rasbeacon has no usable password" sh -c "grep -qE '^rasbeacon:[*!]' 
 # No leftover secrets or per-device material baked into the image.
 check "no RasBeacon settings baked into the image" test ! -e "$root/persistent/rasbeacon"
 check "no SSH host keys baked into the image" sh -c "! ls '$root'/etc/ssh/ssh_host_*_key"
+
+# Updates: the image knows its board; report whether it can check updates.
+check "the image knows its board" test -s "$root/usr/lib/rasbeacon/board"
+keys="$(ls "$root"/usr/lib/rasbeacon/update-keys/*.pub 2>/dev/null | wc -l)"
+echo "INFO  update signing keys in the image: $keys (0 means update files can't be installed)"
+
+# Licenses: every installed package ships its copyright file, including
+# the Wi-Fi firmware.
+check "firmware licenses are included" sh -c "ls '$root'/usr/share/doc/firmware-realtek/copyright '$root'/usr/share/doc/firmware-mediatek/copyright"
 
 if [ "$failures" -gt 0 ]; then
   echo "$failures check(s) failed."

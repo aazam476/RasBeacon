@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -65,12 +66,18 @@ func (ft *fakeTimers) afterFunc(d time.Duration, f func()) *time.Timer {
 	return nil
 }
 
-// runAll runs every scheduled function (as if their time had come).
+// runAll runs every scheduled function (as if their time had come), the
+// shortest delay first, as real time would.
 func (ft *fakeTimers) runAll() {
-	funcs := ft.pending
-	ft.pending = nil
-	for _, f := range funcs {
-		f()
+	funcs, delays := ft.pending, ft.delays
+	ft.pending, ft.delays = nil, nil
+	order := make([]int, len(funcs))
+	for i := range order {
+		order[i] = i
+	}
+	sort.SliceStable(order, func(a, b int) bool { return delays[order[a]] < delays[order[b]] })
+	for _, i := range order {
+		funcs[i]()
 	}
 }
 

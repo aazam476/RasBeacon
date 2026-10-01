@@ -68,6 +68,10 @@ jobs:
           sudo ../rpi-image-gen/install_deps.sh
 
       - name: Build image
+        env:
+          # Signs the update file. Stored as a repository secret (see
+          # docs/releasing.md); without it, no update file is made.
+          RASBEACON_UPDATE_SIGNING_KEY: ${{ secrets.RASBEACON_UPDATE_SIGNING_KEY }}
         run: image/build.sh ${{ matrix.board }} ${{ steps.version.outputs.version }}
 
       - uses: actions/upload-artifact@v7
@@ -94,5 +98,7 @@ jobs:
         with:
           files: |
             dist/*.img.xz
+            dist/*.rbupdate
+            dist/*.packages.txt
             dist/SHA256SUMS
           draft: true

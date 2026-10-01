@@ -10,7 +10,10 @@
 
 # Version shown in the web UI; release builds pass VERSION=v0.1.0.
 VERSION ?= dev
-LDFLAGS := -s -w -X rasbeacon/internal/version.Version=$(VERSION)
+# REPOSITORY (owner/name on GitHub) is where the optional update check looks
+# for new releases; empty turns the check off.
+REPOSITORY ?=
+LDFLAGS := -s -w -X rasbeacon/internal/version.Version=$(VERSION) -X rasbeacon/internal/version.Repository=$(REPOSITORY)
 
 .PHONY: help ui test lint build dev e2e pi clean
 
