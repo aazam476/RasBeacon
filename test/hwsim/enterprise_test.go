@@ -34,6 +34,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -214,10 +215,22 @@ func startCampus(t *testing.T, apInterface, staInterface string) campus {
 	return c
 }
 
+// loginResult is how a login attempt ended.
+type loginResult struct {
+	status uplink.WiFiStatus
+	// attempted is true if the login server was reached and the login
+	// actually ran (and failed or succeeded), as opposed to never finding
+	// the network.
+	attempted bool
+	// paused is true if wpa_supplicant paused the network after a failure,
+	// which is what RasBeacon shows as "the network rejected the login".
+	paused bool
+}
+
 // login runs wpa_supplicant with RasBeacon's configuration for one
-// Enterprise network and reports the final status: connected, or not within
+// Enterprise network and reports how it ended: connected, or not within
 // wait.
-func (c campus) login(t *testing.T, network render.WPANetwork, wait time.Duration) uplink.WiFiStatus {
+func (c campus) login(t *testing.T, network render.WPANetwork, wait time.Duration) loginResult {
 	t.Helper()
 	conf, err := render.WPASupplicant(render.WPAInput{Country: "US", Networks: []render.WPANetwork{network}})
 	if err != nil {
@@ -234,25 +247,46 @@ func (c campus) login(t *testing.T, network render.WPANetwork, wait time.Duratio
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("starting wpa_supplicant: %v", err)
 	}
-	defer func() {
-		cmd.Process.Kill()
-		cmd.Wait()
-		time.Sleep(500 * time.Millisecond) // let the radio settle before the next test
-	}()
+	defer c.stopSupplicant(cmd)
 
-	var status uplink.WiFiStatus
+	var result loginResult
 	deadline := time.Now().Add(wait)
 	for time.Now().Before(deadline) {
 		out, _ := exec.Command("wpa_cli", "-p", wpaControlDir, "-i", c.staInterface, "status").Output()
-		status = uplink.ParseWPAStatus(string(out))
-		if status.Connected() {
-			return status
+		result.status = uplink.ParseWPAStatus(string(out))
+		if result.status.Connected() {
+			break
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
+	networks, _ := exec.Command("wpa_cli", "-p", wpaControlDir, "-i", c.staInterface, "list_networks").Output()
+	result.paused = len(uplink.ParseTempDisabled(string(networks))) > 0
+
 	data, _ := os.ReadFile(logFile)
-	t.Logf("wpa_supplicant log (last lines):\n%s", tail(string(data), 25))
-	return status
+	logText := string(data)
+	result.attempted = strings.Contains(logText, "CTRL-EVENT-EAP-SUCCESS") || strings.Contains(logText, "CTRL-EVENT-EAP-FAILURE")
+	if !result.status.Connected() {
+		t.Logf("wpa_supplicant log (last lines):\n%s", tail(logText, 25))
+	}
+	return result
+}
+
+// stopSupplicant stops wpa_supplicant cleanly and resets the radio, so the
+// next test starts fresh. (Killing it outright can leave the radio "busy"
+// and unable to scan.)
+func (c campus) stopSupplicant(cmd *exec.Cmd) {
+	cmd.Process.Signal(syscall.SIGTERM)
+	done := make(chan struct{})
+	go func() { cmd.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		cmd.Process.Kill()
+		<-done
+	}
+	exec.Command("ip", "link", "set", "dev", c.staInterface, "down").Run()
+	exec.Command("ip", "link", "set", "dev", c.staInterface, "up").Run()
+	time.Sleep(time.Second)
 }
 
 func tail(text string, lines int) string {
@@ -289,10 +323,26 @@ func TestEnterpriseLogin(t *testing.T) {
 	// Each method must log in.
 	for _, method := range []config.EAPMethod{config.EAPTTLSPAP, config.EAPPEAP, config.EAPTLS} {
 		t.Run(string(method), func(t *testing.T) {
-			if s := c.login(t, c.network(method, userPassword), connectTimeout); !s.Connected() {
-				t.Errorf("%s login should succeed, final state %+v", method, s)
+			if r := c.login(t, c.network(method, userPassword), connectTimeout); !r.status.Connected() {
+				t.Errorf("%s login should succeed, final state %+v", method, r.status)
 			}
 		})
+	}
+
+	// expectRefused checks that a login was attempted and rejected: the
+	// device reached the network but did not connect, and the network is
+	// paused (shown as "the network rejected the login").
+	expectRefused := func(t *testing.T, r loginResult) {
+		t.Helper()
+		if r.status.Connected() {
+			t.Fatal("connected, but this login must be refused")
+		}
+		if !r.attempted {
+			t.Fatal("the login was never attempted (the network was not found), so this proves nothing")
+		}
+		if !r.paused {
+			t.Error("wpa_supplicant should pause the network, which RasBeacon reports as a rejected login")
+		}
 	}
 
 	// RasBeacon must refuse servers it should not trust, so a fake
@@ -300,24 +350,14 @@ func TestEnterpriseLogin(t *testing.T) {
 	t.Run("wrong server name is refused", func(t *testing.T) {
 		n := c.network(config.EAPTTLSPAP, userPassword)
 		n.Enterprise.ServerDomain = "other.test"
-		if s := c.login(t, n, refuseWait); s.Connected() {
-			t.Error("connected to a server whose name does not match")
-		}
+		expectRefused(t, c.login(t, n, refuseWait))
 	})
 	t.Run("server signed by another CA is refused", func(t *testing.T) {
 		n := c.network(config.EAPTTLSPAP, userPassword)
 		n.Enterprise.CACertFile = c.rogueCAFile
-		if s := c.login(t, n, refuseWait); s.Connected() {
-			t.Error("connected to a server signed by an untrusted CA")
-		}
+		expectRefused(t, c.login(t, n, refuseWait))
 	})
-	t.Run("wrong password is reported as a failed login", func(t *testing.T) {
-		s := c.login(t, c.network(config.EAPPEAP, "wrong-password"), refuseWait)
-		if s.Connected() {
-			t.Fatal("connected with a wrong password")
-		}
-		if !s.LoginFailed {
-			t.Errorf("the status should show a failed login, got %+v", s)
-		}
+	t.Run("wrong password is refused", func(t *testing.T) {
+		expectRefused(t, c.login(t, c.network(config.EAPPEAP, "wrong-password"), refuseWait))
 	})
 }
