@@ -58,6 +58,23 @@ async function main() {
     await page.getByText("Connected devices (2)").waitFor();
   });
 
+  await step("status page shows the internet connection", async () => {
+    await page.getByText('Connected to Wi-Fi "Corner Café"').waitFor();
+  });
+
+  await step("internet page finds nearby networks and saves one", async () => {
+    await page.getByRole("button", { name: "Internet" }).click();
+    await page.getByRole("button", { name: "Look for nearby networks" }).click();
+    // eduroam needs WPA-Enterprise, which arrives in the next milestone.
+    await page.getByRole("button", { name: "eduroam" }).click();
+    await page.getByText("needs a username and certificate").waitFor();
+    await page.getByRole("button", { name: "Hotel Guest" }).click();
+    await page.getByRole("button", { name: "Add to list" }).click();
+    await page.getByText("(not saved yet)").waitFor();
+    await page.getByRole("button", { name: "Save" }).click();
+    await page.getByText("Saved. RasBeacon is joining the networks now").waitFor();
+  });
+
   await step("hotspot settings validate and save", async () => {
     await page.getByRole("button", { name: "Hotspot" }).click();
     await page.getByLabel("Band").selectOption("5GHz");

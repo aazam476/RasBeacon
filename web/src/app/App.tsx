@@ -16,6 +16,8 @@ import { StatusView } from "../screens/Status/StatusView";
 import { useStatus } from "../screens/Status/useStatus";
 import { HotspotSettingsView } from "../screens/HotspotSettings/HotspotSettingsView";
 import { useHotspotSettings } from "../screens/HotspotSettings/useHotspotSettings";
+import { UplinkSettingsView } from "../screens/Uplink/UplinkSettingsView";
+import { useUplinkSettings } from "../screens/Uplink/useUplinkSettings";
 import { SSHSettingsView } from "../screens/SSHSettings/SSHSettingsView";
 import { useSSHSettings } from "../screens/SSHSettings/useSSHSettings";
 import { SystemView } from "../screens/System/SystemView";
@@ -62,6 +64,8 @@ function MainPage({ page, onLoggedOut }: { page: Page; onLoggedOut: () => void }
   switch (page) {
     case "status":
       return <StatusScreen />;
+    case "internet":
+      return <InternetScreen />;
     case "hotspot":
       return <HotspotScreen />;
     case "ssh":
@@ -73,6 +77,10 @@ function MainPage({ page, onLoggedOut }: { page: Page; onLoggedOut: () => void }
 
 function StatusScreen() {
   return <StatusView {...useStatus()} />;
+}
+
+function InternetScreen() {
+  return <UplinkSettingsView {...useUplinkSettings()} />;
 }
 
 function HotspotScreen() {
