@@ -155,6 +155,8 @@ function describeWiFiState(state: string): string {
       return "Connecting…";
     case "searching":
       return "Looking for your saved networks";
+    case "login-failed":
+      return "The network rejected the login: check the username, password, certificate and server name on the Internet page";
     case "not-configured":
       return "No networks saved (add one on the Internet page)";
     default:

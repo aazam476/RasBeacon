@@ -65,14 +65,28 @@ async function main() {
   await step("internet page finds nearby networks and saves one", async () => {
     await page.getByRole("button", { name: "Internet" }).click();
     await page.getByRole("button", { name: "Look for nearby networks" }).click();
-    // eduroam needs WPA-Enterprise, which arrives in the next milestone.
+    // Picking eduroam opens the Enterprise login fields.
     await page.getByRole("button", { name: "eduroam" }).click();
-    await page.getByText("needs a username and certificate").waitFor();
+    await page.getByText("Enterprise login").waitFor();
     await page.getByRole("button", { name: "Hotel Guest" }).click();
     await page.getByRole("button", { name: "Add to list" }).click();
     await page.getByText("(not saved yet)").waitFor();
     await page.getByRole("button", { name: "Save" }).click();
     await page.getByText("Saved. RasBeacon is joining the networks now").waitFor();
+  });
+
+  await step("eduroam needs a CA certificate, then saves", async () => {
+    await page.getByRole("button", { name: "Set up eduroam" }).click();
+    await page.getByLabel("Username", { exact: true }).fill("NetID@example.edu");
+    await page.getByLabel("Your password").fill("campus-password");
+    await page.getByRole("button", { name: "Add to list" }).click();
+    await page.getByText("Choose the network's CA certificate file").waitFor();
+    // A test certificate (fixtures/test-campus-ca.pem; certificate only, no key).
+    await page.getByLabel("CA certificate file (choose several if your institution lists more than one)").setInputFiles(__dirname + "/fixtures/test-campus-ca.pem");
+    await page.getByLabel("Login server name").fill("*.example.edu");
+    await page.getByRole("button", { name: "Add to list" }).click();
+    await page.getByRole("button", { name: "Save" }).click();
+    await page.getByText("RasBeacon Test Campus CA (valid until").waitFor();
   });
 
   await step("hotspot settings validate and save", async () => {

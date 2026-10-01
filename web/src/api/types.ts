@@ -91,7 +91,8 @@ export interface HotspotStatus {
 }
 
 /** What the Wi-Fi uplink radio is doing. */
-export type WiFiUplinkState = "connected" | "connecting" | "searching" | "not-configured" | "off";
+export type WiFiUplinkState =
+  "connected" | "connecting" | "searching" | "login-failed" | "not-configured" | "off";
 
 export interface WiFiUplinkStatus {
   /** False when there is no second radio for joining Wi-Fi networks. */
@@ -164,7 +165,31 @@ export interface SSHSettings {
   authorizedKeys: string;
 }
 
-export type UplinkSecurity = "open" | "personal";
+export type UplinkSecurity = "open" | "personal" | "enterprise";
+
+/** How RasBeacon logs in to an Enterprise network. */
+export type EAPMethod = "ttls-pap" | "peap-mschapv2" | "tls";
+
+/**
+ * Login settings of an Enterprise network. Certificates and the key are
+ * uploaded as PEM text or base64-encoded DER and are write-only (empty =
+ * keep the saved file); the summaries describe what is saved.
+ */
+export interface EnterpriseSettings {
+  method: EAPMethod;
+  identity: string;
+  anonymousIdentity: string;
+  /** As the institution publishes it, e.g. "*.ruw.rutgers.edu". */
+  serverName: string;
+  /** Turns off checking the login server. Unsafe; the UI must warn. */
+  allowNoCertificateCheck: boolean;
+  caCert?: string;
+  caCertSummary: string;
+  clientCert?: string;
+  clientCertSummary: string;
+  clientKey?: string;
+  hasClientKey: boolean;
+}
 
 /**
  * One saved upstream Wi-Fi network. `password` is never returned; in a PUT,
@@ -176,7 +201,9 @@ export interface SavedNetwork {
   security: UplinkSecurity;
   hidden: boolean;
   hasPassword: boolean;
+  /** Network password, Enterprise password, or EAP-TLS key passphrase. */
   password?: string;
+  enterprise?: EnterpriseSettings;
 }
 
 /** GET/PUT /api/v1/settings/uplink */
@@ -194,8 +221,10 @@ export interface NearbyNetwork {
   ssid: string;
   signalDbm: number;
   frequencyMhz: number;
-  /** "enterprise" (e.g. eduroam) arrives in milestone 3; "other" is not supported. */
+  /** "other" (WEP, Enhanced Open) is not supported. */
   security: "open" | "personal" | "enterprise" | "other";
+  /** The exact kind, e.g. "WPA2/WPA3-Enterprise". */
+  label: string;
 }
 
 /** POST /api/v1/uplink/scan */
