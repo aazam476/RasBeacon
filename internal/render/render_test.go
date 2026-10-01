@@ -269,6 +269,54 @@ func TestWPASupplicant_RejectsPasswordThatCouldInjectSettings(t *testing.T) {
 	}
 }
 
+func TestWPASupplicant_EnterpriseMethods(t *testing.T) {
+	got, err := WPASupplicant(WPAInput{
+		Country: "US",
+		Networks: []WPANetwork{
+			{SSID: "eduroam", Security: config.UplinkEnterprise, Password: `p"w`, Enterprise: &WPAEnterprise{
+				Method: config.EAPTTLSPAP, Identity: "NetID@rutgers.edu", AnonymousIdentity: "anonymous@rutgers.edu",
+				ServerDomain: "ruw.rutgers.edu", CACertFile: "/persistent/rasbeacon/certs/a1-ca.pem",
+			}},
+			{SSID: "CorpNet", Security: config.UplinkEnterprise, Password: "secret", Enterprise: &WPAEnterprise{
+				Method: config.EAPPEAP, Identity: "alice", ServerDomain: "radius.corp.example",
+				CACertFile: "/persistent/rasbeacon/certs/b2-ca.pem",
+			}},
+			{SSID: "LabNet", Security: config.UplinkEnterprise, Password: "key-passphrase", Enterprise: &WPAEnterprise{
+				Method: config.EAPTLS, Identity: "bob", ServerDomain: "lab.example",
+				CACertFile: "/c/ca.pem", ClientCertFile: "/c/client.pem", ClientKeyFile: "/c/key.pem",
+			}},
+			{SSID: "NoCheck", Security: config.UplinkEnterprise, Password: "pw", Enterprise: &WPAEnterprise{
+				Method: config.EAPPEAP, Identity: "carol",
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkGolden(t, "wpa_supplicant_enterprise", got)
+	for _, want := range []string{
+		"eap=TTLS", `phase2="auth=PAP"`, `domain_suffix_match="ruw.rutgers.edu"`,
+		"eap=PEAP", `phase2="auth=MSCHAPV2"`,
+		"eap=TLS", `private_key="/c/key.pem"`, "private_key_passwd=6b65792d70617373706872617365",
+		"identity=4e6574494440727574676572732e656475",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+}
+
+func TestWPASupplicant_EnterpriseRejectsUnsafeValues(t *testing.T) {
+	_, err := WPASupplicant(WPAInput{Country: "US", Networks: []WPANetwork{
+		{SSID: "x", Security: config.UplinkEnterprise, Password: "pw", Enterprise: &WPAEnterprise{
+			Method: config.EAPPEAP, Identity: "a", ServerDomain: "evil\"\nca_cert=\"/x", CACertFile: "/c/ca.pem",
+		}},
+	}})
+	if err == nil {
+		t.Fatal("a server name with quotes and newlines must be rejected")
+	}
+}
+
 func TestNetworkd_UplinkAndUnmanaged(t *testing.T) {
 	uplink, err := NetworkdUplink("eth0", EthernetRouteMetric)
 	if err != nil {

@@ -148,8 +148,9 @@ func (a *Agent) applyUplinkConfig() error {
 		wpaInput.Networks = append(wpaInput.Networks, render.WPANetwork{
 			SSID:     n.SSID,
 			Security: n.Security,
-			Password: a.secrets.UplinkPasswords[n.ID],
-			Hidden:   n.Hidden,
+			Password:   a.secrets.UplinkPasswords[n.ID],
+			Hidden:     n.Hidden,
+			Enterprise: a.wpaEnterprise(n),
 		})
 	}
 	wpaConf, err := render.WPASupplicant(wpaInput)
@@ -384,6 +385,9 @@ func (a *Agent) observeWiFi(iface string) api.WiFiUplinkStatus {
 		s.SignalDBM = uplink.ParseSignalPoll(poll)
 	case len(a.cfg.Uplink.Networks) == 0:
 		s.State = "not-configured"
+	case wpa.LoginFailed:
+		s.State = "login-failed"
+		s.SSID = wpa.SSID
 	case wpa.State == "SCANNING" || wpa.State == "DISCONNECTED" || wpa.State == "INACTIVE":
 		s.State = "searching"
 	default:
@@ -514,6 +518,7 @@ func (a *Agent) UplinkSettings() api.UplinkSettings {
 			Security:    n.Security,
 			Hidden:      n.Hidden,
 			HasPassword: a.secrets.UplinkPasswords[n.ID] != "",
+			Enterprise:  a.enterpriseSettings(n),
 		})
 	}
 	return settings
@@ -539,6 +544,8 @@ func (a *Agent) UpdateUplinkSettings(req api.UplinkSettings) error {
 
 	newCfg.Uplink.Networks = nil
 	newSecrets.UplinkPasswords = map[string]string{}
+	credentials := map[string]config.NetworkCredentials{}
+	uploads := map[string]certUploads{}
 	for i, n := range req.Networks {
 		id := n.ID
 		if id == "" {
@@ -546,21 +553,48 @@ func (a *Agent) UpdateUplinkSettings(req api.UplinkSettings) error {
 		} else if !a.isSavedNetworkID(id) {
 			return &config.ValidationError{Field: fmt.Sprintf("networks.%d.id", i), Message: "This network is not saved (reload the page)."}
 		}
-		newCfg.Uplink.Networks = append(newCfg.Uplink.Networks, config.SavedNetwork{
-			ID: id, SSID: n.SSID, Security: n.Security, Hidden: n.Hidden,
-		})
-		if n.Security == config.UplinkPersonal {
+		saved := config.SavedNetwork{ID: id, SSID: n.SSID, Security: n.Security, Hidden: n.Hidden}
+
+		if n.Security == config.UplinkEnterprise && n.Enterprise != nil {
+			e := n.Enterprise
+			saved.Enterprise = &config.EnterpriseConfig{
+				Method:                  e.Method,
+				Identity:                e.Identity,
+				AnonymousIdentity:       e.AnonymousIdentity,
+				ServerName:              e.ServerName,
+				AllowNoCertificateCheck: e.AllowNoCertificateCheck,
+			}
+			parsed, err := parseCertUploads(i, e)
+			if err != nil {
+				return err
+			}
+			uploads[id] = parsed
+		}
+
+		if n.Security == config.UplinkPersonal || n.Security == config.UplinkEnterprise {
 			password := n.Password
 			if password == "" {
 				password = a.secrets.UplinkPasswords[id] // keep the saved one
 			}
-			newSecrets.UplinkPasswords[id] = password
+			if password != "" {
+				newSecrets.UplinkPasswords[id] = password
+			}
 		}
+		credentials[id] = a.credentialsFor(id, newSecrets.UplinkPasswords[id], uploads[id])
+		newCfg.Uplink.Networks = append(newCfg.Uplink.Networks, saved)
 	}
-	if err := newCfg.Uplink.Validate(newSecrets.UplinkPasswords); err != nil {
+	if err := newCfg.Uplink.Validate(credentials); err != nil {
 		return err
 	}
 
+	// Save certificates first, then secrets, then config.json (which is
+	// what makes the new networks "exist"). A power cut in between leaves
+	// at worst some unused certificate files.
+	for id, u := range uploads {
+		if err := a.saveCertUploads(id, u); err != nil {
+			return err
+		}
+	}
 	if err := config.WriteJSON(a.paths.SecretsFile(), newSecrets, 0o600); err != nil {
 		return err
 	}
@@ -569,6 +603,7 @@ func (a *Agent) UpdateUplinkSettings(req api.UplinkSettings) error {
 	}
 	a.cfg = newCfg
 	a.secrets = newSecrets
+	a.removeUnusedCerts()
 	slog.Info("uplink settings saved", "ethernetRole", newCfg.Ethernet.Role, "wifiNetworks", len(newCfg.Uplink.Networks))
 
 	// The firewall's list of uplinks changes with the Ethernet role.

@@ -47,7 +47,7 @@ func (a *Agent) Status() api.Status {
 		Uplink:   a.uplink.status,
 		Radios:   a.radios,
 		Clients:  a.connectedClients(),
-		Warnings: append(slices.Clone(a.warnings), a.uplinkWarnings()...),
+		Warnings: slices.Concat(a.warnings, a.uplinkWarnings(), a.enterpriseWarnings()),
 	}
 	// Empty lists are sent as [] rather than null, which is easier for the UI.
 	if status.Radios == nil {
@@ -134,6 +134,17 @@ func (a *Agent) Diagnostics() string {
 	for _, password := range a.secrets.UplinkPasswords {
 		secretsToHide = append(secretsToHide, password)
 	}
+	// Enterprise usernames are personal: show only a masked form.
+	identities := map[string]string{}
+	for _, n := range a.cfg.Uplink.Networks {
+		if e := n.Enterprise; e != nil {
+			for _, identity := range []string{e.Identity, e.AnonymousIdentity} {
+				if identity != "" {
+					identities[identity] = MaskIdentity(identity)
+				}
+			}
+		}
+	}
 	wifiUplink := a.wifiUplinkInterface()
 	a.mu.Unlock()
 
@@ -160,7 +171,7 @@ func (a *Agent) Diagnostics() string {
 
 	commands := diagnosticCommands
 	if wifiUplink != "" {
-		commands = append(slices.Clone(commands), []string{"wpa_cli", "-p", "/run/wpa_supplicant", "-i", wifiUplink, "status"})
+		commands = append(slices.Clone(commands), []string{"wpa_cli", "-p", a.paths.WPAControlDir(), "-i", wifiUplink, "status"})
 	}
 	for _, cmd := range commands {
 		fmt.Fprintf(&report, "\n===== %s =====\n", strings.Join(cmd, " "))
@@ -171,7 +182,11 @@ func (a *Agent) Diagnostics() string {
 		}
 	}
 
-	return Redact(report.String(), secretsToHide)
+	text := report.String()
+	for identity, masked := range identities {
+		text = strings.ReplaceAll(text, identity, masked)
+	}
+	return Redact(text, secretsToHide)
 }
 
 // macAddress matches MAC addresses like 3a:1f:22:aa:bb:cc.

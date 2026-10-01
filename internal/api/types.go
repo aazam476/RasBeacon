@@ -146,7 +146,9 @@ type WiFiUplinkStatus struct {
 	// (for example when the built-in radio has to run the hotspot).
 	Available bool   `json:"available"`
 	Interface string `json:"interface"`
-	// State is "connected", "connecting", "searching" or "off".
+	// State is "connected", "connecting", "searching", "login-failed"
+	// (an Enterprise network rejected the login), "not-configured" (no
+	// saved networks) or "off".
 	State     string `json:"state"`
 	SSID      string `json:"ssid"`
 	Band      string `json:"band"`
@@ -185,8 +187,30 @@ type SavedNetwork struct {
 	// HasPassword is true when a password is saved (it is never returned).
 	HasPassword bool `json:"hasPassword"`
 	// Password is write-only: set it to add or change the password, leave it
-	// empty to keep the saved one.
+	// empty to keep the saved one. For Enterprise networks it is the user's
+	// password (TTLS, PEAP) or the client key's passphrase (TLS).
 	Password string `json:"password,omitempty"`
+	// Enterprise is set for Enterprise networks only.
+	Enterprise *EnterpriseSettings `json:"enterprise,omitempty"`
+}
+
+// EnterpriseSettings are the login settings of a WPA-Enterprise network.
+// Certificates are uploaded as PEM text or base64-encoded DER; they are
+// write-only (an empty value keeps the saved file) and described by the
+// read-only summaries.
+type EnterpriseSettings struct {
+	Method                  config.EAPMethod `json:"method"`
+	Identity                string           `json:"identity"`
+	AnonymousIdentity       string           `json:"anonymousIdentity"`
+	ServerName              string           `json:"serverName"`
+	AllowNoCertificateCheck bool             `json:"allowNoCertificateCheck"`
+
+	CACert            string `json:"caCert,omitempty"`
+	CACertSummary     string `json:"caCertSummary"`
+	ClientCert        string `json:"clientCert,omitempty"`
+	ClientCertSummary string `json:"clientCertSummary"`
+	ClientKey         string `json:"clientKey,omitempty"`
+	HasClientKey      bool   `json:"hasClientKey"`
 }
 
 // ScanResponse lists the Wi-Fi networks RasBeacon can see.

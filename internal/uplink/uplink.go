@@ -85,6 +85,10 @@ type WiFiStatus struct {
 	FrequencyMHz int
 	// KeyMgmt is the security in use, e.g. "WPA2-PSK", "SAE" or "NONE".
 	KeyMgmt string
+	// LoginFailed is true when an Enterprise network rejected the login
+	// (wrong username or password, or the server failed RasBeacon's
+	// certificate check). wpa_supplicant then waits before trying again.
+	LoginFailed bool
 }
 
 // Connected reports whether the Wi-Fi uplink has joined a network.
@@ -107,6 +111,11 @@ func ParseWPAStatus(out string) WiFiStatus {
 			s.FrequencyMHz, _ = strconv.Atoi(value)
 		case "key_mgmt":
 			s.KeyMgmt = value
+		case "Supplicant PAE state":
+			// HELD means "the last login failed, waiting before retrying".
+			s.LoginFailed = s.LoginFailed || value == "HELD"
+		case "EAP state":
+			s.LoginFailed = s.LoginFailed || value == "FAILURE"
 		}
 	}
 	return s
@@ -129,6 +138,8 @@ type NearbyNetwork struct {
 	SignalDBM    int    `json:"signalDbm"`
 	FrequencyMHz int    `json:"frequencyMhz"`
 	Security     string `json:"security"`
+	// Label names the exact kind of security, e.g. "WPA2/WPA3-Personal".
+	Label string `json:"label"`
 }
 
 // ParseScanResults reads `wpa_cli scan_results` output. Each network name
@@ -152,7 +163,10 @@ func ParseScanResults(out string) []NearbyNetwork {
 		if err1 != nil || err2 != nil || ssid == "" {
 			continue
 		}
-		n := NearbyNetwork{SSID: ssid, SignalDBM: signal, FrequencyMHz: frequency, Security: securityFromFlags(fields[3])}
+		n := NearbyNetwork{
+			SSID: ssid, SignalDBM: signal, FrequencyMHz: frequency,
+			Security: securityFromFlags(fields[3]), Label: securityLabel(fields[3]),
+		}
 		if existing, seen := best[ssid]; !seen || n.SignalDBM > existing.SignalDBM {
 			best[ssid] = n
 		}
@@ -183,6 +197,64 @@ func securityFromFlags(flags string) string {
 	default:
 		return SecurityOpen
 	}
+}
+
+// securityLabel names the security in scan flags the way phones do, e.g.
+// "[WPA2-PSK-CCMP][RSN-SAE-CCMP][ESS]" is "WPA2/WPA3-Personal".
+//
+// In the flags, WPA3 shows up as SAE (personal) or EAP-SHA256 / EAP-SUITE-B
+// (enterprise); WPA2 as PSK or plain EAP.
+func securityLabel(flags string) string {
+	kind := "Personal"
+	switch securityFromFlags(flags) {
+	case SecurityOpen:
+		return "Open"
+	case SecurityOther:
+		if strings.Contains(flags, "OWE") {
+			return "Enhanced Open (OWE)"
+		}
+		return "WEP (not supported)"
+	case SecurityEnterprise:
+		kind = "Enterprise"
+	}
+	wpa2, wpa3 := false, false
+	for _, method := range keyManagementMethods(flags) {
+		switch method {
+		case "PSK", "EAP", "FT/PSK", "FT/EAP", "PSK-SHA256":
+			wpa2 = true
+		case "SAE", "FT/SAE", "EAP-SHA256", "EAP-SUITE-B", "EAP-SUITE-B-192", "FT/EAP-SHA384":
+			wpa3 = true
+		}
+	}
+	switch {
+	case wpa2 && wpa3:
+		return "WPA2/WPA3-" + kind
+	case wpa3:
+		return "WPA3-" + kind
+	default:
+		return "WPA2-" + kind
+	}
+}
+
+// keyManagementMethods lists the key management methods in scan flags.
+// Each flag looks like [protocol-methods-ciphers], with methods joined by
+// "+", e.g. "[RSN-PSK+SAE-CCMP]" holds "PSK" and "SAE". Method names can
+// contain "-" themselves (EAP-SHA256), so the cipher part is everything
+// after the last "-".
+func keyManagementMethods(flags string) []string {
+	var methods []string
+	for _, flag := range strings.Split(flags, "[") {
+		flag = strings.TrimSuffix(flag, "]")
+		protocol, rest, ok := strings.Cut(flag, "-")
+		if !ok || (protocol != "WPA" && protocol != "WPA2" && protocol != "RSN") {
+			continue
+		}
+		if last := strings.LastIndex(rest, "-"); last >= 0 {
+			rest = rest[:last] // drop the ciphers, e.g. "-CCMP"
+		}
+		methods = append(methods, strings.Split(rest, "+")...)
+	}
+	return methods
 }
 
 // DecodeSSID undoes the escaping wpa_cli uses for network names: \xNN for

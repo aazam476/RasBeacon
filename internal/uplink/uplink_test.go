@@ -74,10 +74,10 @@ func TestParseScanResults(t *testing.T) {
 		"aa:00:00:00:00:06\t2462\t-40\t[WPA2-PSK-CCMP][ESS]\t\n" // hidden
 	got := ParseScanResults(out)
 	want := []NearbyNetwork{
-		{SSID: "Home", SignalDBM: -52, FrequencyMHz: 5180, Security: SecurityPersonal},
-		{SSID: "Hotel Guest", SignalDBM: -60, FrequencyMHz: 2412, Security: SecurityOpen},
-		{SSID: "eduroam", SignalDBM: -66, FrequencyMHz: 5500, Security: SecurityEnterprise},
-		{SSID: "Café", SignalDBM: -80, FrequencyMHz: 2462, Security: SecurityPersonal},
+		{SSID: "Home", SignalDBM: -52, FrequencyMHz: 5180, Security: SecurityPersonal, Label: "WPA2-Personal"},
+		{SSID: "Hotel Guest", SignalDBM: -60, FrequencyMHz: 2412, Security: SecurityOpen, Label: "Open"},
+		{SSID: "eduroam", SignalDBM: -66, FrequencyMHz: 5500, Security: SecurityEnterprise, Label: "WPA2-Enterprise"},
+		{SSID: "Café", SignalDBM: -80, FrequencyMHz: 2462, Security: SecurityPersonal, Label: "WPA3-Personal"},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("got %d networks, want %d: %+v", len(got), len(want), got)
@@ -110,5 +110,32 @@ func TestParseSignalPoll(t *testing.T) {
 	}
 	if got := ParseSignalPoll("FAIL\n"); got != 0 {
 		t.Errorf("got %d, want 0", got)
+	}
+}
+
+func TestSecurityLabel(t *testing.T) {
+	tests := map[string]string{
+		"[ESS]":                           "Open",
+		"[WPA2-PSK-CCMP][ESS]":            "WPA2-Personal",
+		"[WPA2-PSK+SAE-CCMP][ESS]":        "WPA2/WPA3-Personal",
+		"[RSN-PSK+SAE-CCMP][ESS]":         "WPA2/WPA3-Personal",
+		"[RSN-SAE-CCMP][ESS]":             "WPA3-Personal",
+		"[WPA2-EAP-CCMP][ESS]":            "WPA2-Enterprise",
+		"[WPA2-EAP+EAP-SHA256-CCMP][ESS]": "WPA2/WPA3-Enterprise",
+		"[RSN-EAP-SHA256-CCMP][ESS]":      "WPA3-Enterprise",
+		"[WEP][ESS]":                      "WEP (not supported)",
+		"[RSN-OWE-CCMP][ESS]":             "Enhanced Open (OWE)",
+	}
+	for flags, want := range tests {
+		if got := securityLabel(flags); got != want {
+			t.Errorf("securityLabel(%q) = %q, want %q", flags, got, want)
+		}
+	}
+}
+
+func TestParseWPAStatus_LoginFailed(t *testing.T) {
+	s := ParseWPAStatus("wpa_state=ASSOCIATED\nSupplicant PAE state=HELD\nEAP state=FAILURE\n")
+	if !s.LoginFailed || s.Connected() {
+		t.Errorf("got %+v, want a failed login", s)
 	}
 }

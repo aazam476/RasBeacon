@@ -107,7 +107,56 @@ const (
 	UplinkOpen UplinkSecurity = "open"
 	// UplinkPersonal: one shared password, WPA2-Personal or WPA3-Personal.
 	UplinkPersonal UplinkSecurity = "personal"
+	// UplinkEnterprise: a personal username and password (or certificate),
+	// WPA2-Enterprise or WPA3-Enterprise. Used by eduroam, universities and
+	// companies. See EnterpriseConfig.
+	UplinkEnterprise UplinkSecurity = "enterprise"
 )
+
+// EAPMethod is how RasBeacon proves who you are to an Enterprise network.
+// Your university or company tells you which one to use.
+type EAPMethod string
+
+const (
+	// EAPTTLSPAP: username and password inside an encrypted tunnel
+	// (EAP-TTLS with PAP). eduroam often uses this.
+	EAPTTLSPAP EAPMethod = "ttls-pap"
+	// EAPPEAP: username and password with PEAP and MSCHAPv2 (common in
+	// Windows-based networks).
+	EAPPEAP EAPMethod = "peap-mschapv2"
+	// EAPTLS: a personal certificate and key instead of a password.
+	EAPTLS EAPMethod = "tls"
+)
+
+// EnterpriseConfig holds the settings of a WPA-Enterprise network. The
+// password (or the client key's passphrase, for EAP-TLS) is kept in
+// Secrets.UplinkPasswords; the certificates are files in the certificates
+// directory (see paths.Paths).
+type EnterpriseConfig struct {
+	Method EAPMethod `json:"method"`
+	// Identity is your username, e.g. "NetID@rutgers.edu".
+	Identity string `json:"identity"`
+	// AnonymousIdentity is sent before the encrypted tunnel is set up, so
+	// your real username is not visible to the hotspot, e.g.
+	// "anonymous@rutgers.edu". Optional.
+	AnonymousIdentity string `json:"anonymousIdentity"`
+	// ServerName is the name in the login server's certificate, as your
+	// institution publishes it, e.g. "*.ruw.rutgers.edu". RasBeacon only
+	// talks to a server whose certificate matches it (see ServerDomain).
+	ServerName string `json:"serverName"`
+	// AllowNoCertificateCheck turns off checking the login server's
+	// certificate. Anyone could then pretend to be the network and collect
+	// your password, so this is off by default and the UI warns about it.
+	AllowNoCertificateCheck bool `json:"allowNoCertificateCheck"`
+}
+
+// ServerDomain turns the server name as institutions publish it into the
+// domain RasBeacon requires in the server's certificate: "*.ruw.rutgers.edu"
+// becomes "ruw.rutgers.edu", which matches that name and every name ending
+// in ".ruw.rutgers.edu".
+func (e EnterpriseConfig) ServerDomain() string {
+	return strings.ToLower(strings.TrimPrefix(strings.TrimSpace(e.ServerName), "*."))
+}
 
 // UplinkConfig lists the upstream Wi-Fi networks RasBeacon may join.
 type UplinkConfig struct {
@@ -127,6 +176,17 @@ type SavedNetwork struct {
 	// Hidden networks don't announce their name, so RasBeacon has to ask
 	// for them by name.
 	Hidden bool `json:"hidden"`
+	// Enterprise is set only when Security is UplinkEnterprise.
+	Enterprise *EnterpriseConfig `json:"enterprise,omitempty"`
+}
+
+// NetworkCredentials says which secrets and certificates a saved network
+// has. Validate needs it because they are stored outside config.json.
+type NetworkCredentials struct {
+	Password      string
+	HasCACert     bool
+	HasClientCert bool
+	HasClientKey  bool
 }
 
 // MaxSavedNetworks keeps the list (and wpa_supplicant's scanning) small.
@@ -148,9 +208,9 @@ func (e EthernetConfig) Validate() error {
 	return nil
 }
 
-// Validate checks the saved networks. passwords maps network IDs to their
-// passwords; every network that needs a password must have a valid one.
-func (u UplinkConfig) Validate(passwords map[string]string) error {
+// Validate checks the saved networks. credentials maps network IDs to their
+// passwords and certificates; every network must have what it needs.
+func (u UplinkConfig) Validate(credentials map[string]NetworkCredentials) error {
 	if len(u.Networks) > MaxSavedNetworks {
 		return &ValidationError{Field: "networks", Message: fmt.Sprintf("At most %d networks can be saved.", MaxSavedNetworks)}
 	}
@@ -172,11 +232,18 @@ func (u UplinkConfig) Validate(passwords map[string]string) error {
 		switch n.Security {
 		case UplinkOpen:
 		case UplinkPersonal:
-			if err := ValidateWiFiPassword(passwords[n.ID]); err != nil {
+			if err := ValidateWiFiPassword(credentials[n.ID].Password); err != nil {
 				return &ValidationError{Field: field + ".password", Message: err.Error()}
 			}
+		case UplinkEnterprise:
+			if err := n.validateEnterprise(credentials[n.ID]); err != nil {
+				return &ValidationError{Field: field + "." + err.Field, Message: err.Message}
+			}
 		default:
-			return &ValidationError{Field: field + ".security", Message: `Must be "open" or "personal".`}
+			return &ValidationError{Field: field + ".security", Message: `Must be "open", "personal" or "enterprise".`}
+		}
+		if n.Security != UplinkEnterprise && n.Enterprise != nil {
+			return &ValidationError{Field: field + ".enterprise", Message: "Only Enterprise networks have these settings."}
 		}
 	}
 	return nil
@@ -331,6 +398,12 @@ func isCountryCode(code string) bool {
 // assignment (copy := c) would share the list of saved networks.
 func (c Config) Clone() Config {
 	c.Uplink.Networks = append([]SavedNetwork(nil), c.Uplink.Networks...)
+	for i, n := range c.Uplink.Networks {
+		if n.Enterprise != nil {
+			copied := *n.Enterprise
+			c.Uplink.Networks[i].Enterprise = &copied
+		}
+	}
 	return c
 }
 
@@ -342,4 +415,93 @@ func (s Secrets) Clone() Secrets {
 	}
 	s.UplinkPasswords = passwords
 	return s
+}
+
+// validateEnterprise checks an Enterprise network's settings. The returned
+// error's Field is relative to the network, e.g. "enterprise.identity".
+func (n SavedNetwork) validateEnterprise(c NetworkCredentials) *ValidationError {
+	e := n.Enterprise
+	if e == nil {
+		return &ValidationError{Field: "enterprise", Message: "Enterprise networks need a username and login method."}
+	}
+	switch e.Method {
+	case EAPTTLSPAP, EAPPEAP:
+		if c.Password == "" {
+			return &ValidationError{Field: "password", Message: "Enter your password for this network."}
+		}
+	case EAPTLS:
+		if !c.HasClientCert || !c.HasClientKey {
+			return &ValidationError{Field: "enterprise.clientCert", Message: "EAP-TLS needs your personal certificate and its key."}
+		}
+	default:
+		return &ValidationError{Field: "enterprise.method", Message: `Must be "ttls-pap", "peap-mschapv2" or "tls".`}
+	}
+	if err := checkEAPText(e.Identity, true); err != nil {
+		return &ValidationError{Field: "enterprise.identity", Message: err.Error()}
+	}
+	if err := checkEAPText(e.AnonymousIdentity, false); err != nil {
+		return &ValidationError{Field: "enterprise.anonymousIdentity", Message: err.Error()}
+	}
+	if err := checkEAPText(c.Password, false); err != nil {
+		return &ValidationError{Field: "password", Message: err.Error()}
+	}
+
+	// The server's certificate must be checked unless the owner explicitly
+	// turned that off: without the check, anyone nearby could set up a fake
+	// "eduroam" and collect the password.
+	if e.AllowNoCertificateCheck {
+		return nil
+	}
+	if !c.HasCACert {
+		return &ValidationError{Field: "enterprise.caCert", Message: "Upload the network's CA certificate (your institution publishes it), so RasBeacon can check it is talking to the real network."}
+	}
+	// A CA certificate alone is not enough: public CAs sign certificates
+	// for millions of servers. The server name narrows it down to yours.
+	if e.ServerName == "" {
+		return &ValidationError{Field: "enterprise.serverName", Message: "Enter the login server's name (your institution publishes it, e.g. *.ruw.rutgers.edu)."}
+	}
+	if !isDomainName(e.ServerDomain()) {
+		return &ValidationError{Field: "enterprise.serverName", Message: "Must be a server name like radius.example.edu or *.example.edu."}
+	}
+	return nil
+}
+
+// checkEAPText checks a username or password for an Enterprise network:
+// at most 253 bytes of valid text with no control characters (such as
+// line breaks).
+func checkEAPText(text string, required bool) error {
+	if required && text == "" {
+		return errors.New("This is required.")
+	}
+	if len(text) > 253 {
+		return errors.New("Must be at most 253 bytes long.")
+	}
+	if !utf8.ValidString(text) {
+		return errors.New("Must be valid text.")
+	}
+	for _, r := range text {
+		if unicode.IsControl(r) {
+			return errors.New("Must not contain control characters.")
+		}
+	}
+	return nil
+}
+
+// isDomainName reports whether name looks like a DNS name such as
+// "ruw.rutgers.edu": dot-separated labels of letters, digits and hyphens.
+func isDomainName(name string) bool {
+	if name == "" || len(name) > 253 {
+		return false
+	}
+	for _, label := range strings.Split(name, ".") {
+		if label == "" || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for _, r := range label {
+			if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-') {
+				return false
+			}
+		}
+	}
+	return true
 }

@@ -161,18 +161,18 @@ func TestEthernetConfig_Validate(t *testing.T) {
 func TestUplinkConfig_Validate(t *testing.T) {
 	open := SavedNetwork{ID: "a", SSID: "Hotel Guest", Security: UplinkOpen}
 	home := SavedNetwork{ID: "b", SSID: "Home", Security: UplinkPersonal}
-	goodPasswords := map[string]string{"b": "correct-horse"}
+	goodPasswords := map[string]NetworkCredentials{"b": {Password: "correct-horse"}}
 
 	tests := []struct {
 		name      string
 		networks  []SavedNetwork
-		passwords map[string]string
+		passwords map[string]NetworkCredentials
 		wantField string // "" means valid
 	}{
 		{"empty list", nil, nil, ""},
 		{"open and personal", []SavedNetwork{open, home}, goodPasswords, ""},
 		{"personal without password", []SavedNetwork{home}, nil, "networks.0.password"},
-		{"short password", []SavedNetwork{home}, map[string]string{"b": "short"}, "networks.0.password"},
+		{"short password", []SavedNetwork{home}, map[string]NetworkCredentials{"b": {Password: "short"}}, "networks.0.password"},
 		{"same ID twice", []SavedNetwork{open, {ID: "a", SSID: "Other", Security: UplinkOpen}}, nil, "networks.1.id"},
 		{"missing ID", []SavedNetwork{{SSID: "x", Security: UplinkOpen}}, nil, "networks.0.id"},
 		{"same name twice", []SavedNetwork{open, {ID: "c", SSID: "Hotel Guest", Security: UplinkOpen}}, nil, "networks.1.ssid"},
@@ -193,5 +193,78 @@ func TestUplinkConfig_Validate(t *testing.T) {
 				t.Fatalf("got %v, want an error for field %s", err, tt.wantField)
 			}
 		})
+	}
+}
+
+func TestUplinkConfig_ValidateEnterprise(t *testing.T) {
+	eduroam := func(change func(*EnterpriseConfig)) SavedNetwork {
+		e := &EnterpriseConfig{
+			Method: EAPTTLSPAP, Identity: "NetID@rutgers.edu", AnonymousIdentity: "anonymous@rutgers.edu",
+			ServerName: "*.ruw.rutgers.edu",
+		}
+		if change != nil {
+			change(e)
+		}
+		return SavedNetwork{ID: "e", SSID: "eduroam", Security: UplinkEnterprise, Enterprise: e}
+	}
+	withCA := NetworkCredentials{Password: "pw", HasCACert: true}
+
+	tests := []struct {
+		name      string
+		network   SavedNetwork
+		creds     NetworkCredentials
+		wantField string
+	}{
+		{"complete TTLS", eduroam(nil), withCA, ""},
+		{"no CA certificate", eduroam(nil), NetworkCredentials{Password: "pw"}, "networks.0.enterprise.caCert"},
+		{"no server name", eduroam(func(e *EnterpriseConfig) { e.ServerName = "" }), withCA, "networks.0.enterprise.serverName"},
+		{"bad server name", eduroam(func(e *EnterpriseConfig) { e.ServerName = "ruw rutgers" }), withCA, "networks.0.enterprise.serverName"},
+		{"check turned off on purpose", eduroam(func(e *EnterpriseConfig) { e.AllowNoCertificateCheck = true; e.ServerName = "" }),
+			NetworkCredentials{Password: "pw"}, ""},
+		{"no password", eduroam(nil), NetworkCredentials{HasCACert: true}, "networks.0.password"},
+		{"no username", eduroam(func(e *EnterpriseConfig) { e.Identity = "" }), withCA, "networks.0.enterprise.identity"},
+		{"newline in username", eduroam(func(e *EnterpriseConfig) { e.Identity = "a\nb" }), withCA, "networks.0.enterprise.identity"},
+		{"TLS without key", eduroam(func(e *EnterpriseConfig) { e.Method = EAPTLS }),
+			NetworkCredentials{HasCACert: true, HasClientCert: true}, "networks.0.enterprise.clientCert"},
+		{"TLS complete", eduroam(func(e *EnterpriseConfig) { e.Method = EAPTLS }),
+			NetworkCredentials{HasCACert: true, HasClientCert: true, HasClientKey: true}, ""},
+		{"unknown method", eduroam(func(e *EnterpriseConfig) { e.Method = "leap" }), withCA, "networks.0.enterprise.method"},
+		{"missing settings", SavedNetwork{ID: "e", SSID: "x", Security: UplinkEnterprise}, withCA, "networks.0.enterprise"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := UplinkConfig{Networks: []SavedNetwork{tt.network}}.Validate(map[string]NetworkCredentials{"e": tt.creds})
+			if tt.wantField == "" {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				return
+			}
+			var verr *ValidationError
+			if !errors.As(err, &verr) || verr.Field != tt.wantField {
+				t.Fatalf("got %v, want an error for %s", err, tt.wantField)
+			}
+		})
+	}
+}
+
+func TestServerDomain(t *testing.T) {
+	for in, want := range map[string]string{
+		"*.ruw.rutgers.edu":    "ruw.rutgers.edu",
+		"radius.example.edu":   "radius.example.edu",
+		" RADIUS.Example.EDU ": "radius.example.edu",
+	} {
+		if got := (EnterpriseConfig{ServerName: in}).ServerDomain(); got != want {
+			t.Errorf("ServerDomain(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestClone_CopiesEnterpriseSettings(t *testing.T) {
+	c := Config{Uplink: UplinkConfig{Networks: []SavedNetwork{{Enterprise: &EnterpriseConfig{Identity: "a"}}}}}
+	copied := c.Clone()
+	copied.Uplink.Networks[0].Enterprise.Identity = "b"
+	if c.Uplink.Networks[0].Enterprise.Identity != "a" {
+		t.Error("changing the copy changed the original")
 	}
 }

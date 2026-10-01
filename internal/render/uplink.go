@@ -21,8 +21,29 @@ import (
 type WPANetwork struct {
 	SSID     string
 	Security config.UplinkSecurity
-	Password string // ignored for open networks
+	// Password is the network password (personal), the user's password
+	// (enterprise TTLS/PEAP) or the client key's passphrase (enterprise
+	// TLS). Ignored for open networks.
+	Password string
 	Hidden   bool
+	// Enterprise is set for enterprise networks.
+	Enterprise *WPAEnterprise
+}
+
+// WPAEnterprise holds an enterprise network's login settings.
+type WPAEnterprise struct {
+	Method            config.EAPMethod
+	Identity          string
+	AnonymousIdentity string
+	// ServerDomain is required in the server certificate's name, e.g.
+	// "ruw.rutgers.edu" (see config.EnterpriseConfig.ServerDomain). Empty
+	// only when the certificate check was turned off.
+	ServerDomain string
+	// Files written by rbd. CACertFile is empty only when the certificate
+	// check was turned off; the client files are for EAP-TLS.
+	CACertFile     string
+	ClientCertFile string
+	ClientKeyFile  string
 }
 
 // WPAInput is everything needed to write wpa_supplicant.conf.
@@ -37,6 +58,13 @@ type wpaNetworkData struct {
 	SSIDHex        string
 	SSIDForComment string
 	Priority       int
+	// Enterprise values, written in hexadecimal so that no character in
+	// them can change the meaning of the file.
+	EAP                  string // "TTLS", "PEAP" or "TLS"
+	Phase2               string // e.g. "auth=PAP"
+	IdentityHex          string
+	AnonymousIdentityHex string
+	PasswordHex          string
 }
 
 type wpaData struct {
@@ -59,10 +87,14 @@ func WPASupplicant(in WPAInput) (string, error) {
 			if err := config.ValidateWiFiPassword(n.Password); err != nil {
 				return "", fmt.Errorf("network %q password: %w", n.SSID, err)
 			}
+		case config.UplinkEnterprise:
+			if err := checkEnterprise(n); err != nil {
+				return "", fmt.Errorf("network %q: %w", n.SSID, err)
+			}
 		default:
 			return "", fmt.Errorf("network %q: unknown security %q", n.SSID, n.Security)
 		}
-		data.Networks = append(data.Networks, wpaNetworkData{
+		network := wpaNetworkData{
 			WPANetwork:     n,
 			SSIDHex:        hex.EncodeToString([]byte(n.SSID)),
 			SSIDForComment: commentSafe(n.SSID),
@@ -70,9 +102,55 @@ func WPASupplicant(in WPAInput) (string, error) {
 			// number among those in range, so the first network in the list
 			// gets the highest number.
 			Priority: len(in.Networks) - i,
-		})
+		}
+		if e := n.Enterprise; e != nil && n.Security == config.UplinkEnterprise {
+			network.EAP, network.Phase2 = eapNames(e.Method)
+			network.IdentityHex = hex.EncodeToString([]byte(e.Identity))
+			network.AnonymousIdentityHex = hex.EncodeToString([]byte(e.AnonymousIdentity))
+			network.PasswordHex = hex.EncodeToString([]byte(n.Password))
+		}
+		data.Networks = append(data.Networks, network)
 	}
 	return execute("wpa_supplicant.conf.tmpl", data)
+}
+
+// eapNames returns wpa_supplicant's names for a login method: the outer
+// method and, for tunnelled methods, the inner ("phase 2") one.
+func eapNames(method config.EAPMethod) (eap, phase2 string) {
+	switch method {
+	case config.EAPTTLSPAP:
+		return "TTLS", "auth=PAP"
+	case config.EAPPEAP:
+		return "PEAP", "auth=MSCHAPV2"
+	default:
+		return "TLS", ""
+	}
+}
+
+// checkEnterprise re-checks the values that are written into the file as
+// they are (method, server domain, file paths).
+func checkEnterprise(n WPANetwork) error {
+	e := n.Enterprise
+	if e == nil {
+		return fmt.Errorf("missing enterprise settings")
+	}
+	switch e.Method {
+	case config.EAPTTLSPAP, config.EAPPEAP, config.EAPTLS:
+	default:
+		return fmt.Errorf("unknown login method %q", e.Method)
+	}
+	if e.Method == config.EAPTLS && (e.ClientCertFile == "" || e.ClientKeyFile == "") {
+		return fmt.Errorf("EAP-TLS needs a client certificate and key")
+	}
+	for _, value := range []string{e.ServerDomain, e.CACertFile, e.ClientCertFile, e.ClientKeyFile} {
+		if strings.ContainsAny(value, "\"\n\r\\") {
+			return fmt.Errorf("unsafe value %q", value)
+		}
+	}
+	if e.CACertFile != "" && e.ServerDomain == "" {
+		return fmt.Errorf("a CA certificate needs a server name")
+	}
+	return nil
 }
 
 // --- systemd-networkd (addresses on the uplinks) ---
