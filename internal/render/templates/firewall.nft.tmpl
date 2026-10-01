@@ -74,14 +74,28 @@ table inet rasbeacon {
 		# networks and tunnels that use smaller packets.
 		tcp flags syn tcp option maxseg size set rt mtu
 
-		# Replies to connections that devices started are allowed back.
-		ct state established,related accept
 		ct state invalid drop
+
+		# Connections devices already started may continue, but only on the
+		# current path. When the path changes (for example from login mode
+		# back to the VPN), connections on the old path stop at once instead
+		# of carrying on outside the tunnel.
+		iifname "{{.Bridge}}" oifname @egress ct state established,related accept
+		iifname @egress oifname "{{.Bridge}}" ct state established,related accept
+{{- if .PortalOnly}}
+
+		# LOGIN MODE (captive portal): for a few minutes, devices may reach
+		# the network's login page directly: web (TCP 80 and 443) and DNS
+		# only. Everything else stays blocked.
+		iifname "{{.Bridge}}" oifname @egress tcp dport { 80, 443 } accept
+		iifname "{{.Bridge}}" oifname @egress meta l4proto { tcp, udp } th dport 53 accept
+{{- else}}
 
 		# Devices on the hotspot may reach the internet, only through the
 		# interfaces in "egress". Nothing from outside may start a
 		# connection to a device.
 		iifname "{{.Bridge}}" oifname @egress accept
+{{- end}}
 {{- else}}
 		# Nothing is forwarded (for example during first-boot setup).
 {{- end}}

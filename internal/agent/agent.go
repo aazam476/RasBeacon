@@ -11,6 +11,7 @@
 //	uplink.go      the connection to the internet (Ethernet, Wi-Fi)
 //	enterprise.go  certificates for eduroam and other Enterprise networks
 //	vpn.go         the WireGuard VPN and its kill switch
+//	portal.go      hotel login pages (captive portals) with the VPN on
 //	clock.go       keeping the time right without a clock battery
 //	status.go      the status page and diagnostics export
 //	server.go      the local HTTP API that rbweb talks to
@@ -44,6 +45,7 @@ import (
 	"rasbeacon/internal/identity"
 	"rasbeacon/internal/led"
 	"rasbeacon/internal/paths"
+	"rasbeacon/internal/portal"
 	"rasbeacon/internal/radio"
 	"rasbeacon/internal/render"
 	"rasbeacon/internal/routing"
@@ -91,6 +93,7 @@ type Agent struct {
 	lan      render.LAN
 	uplink   uplinkState
 	vpn      vpnState
+	portal   portalState
 
 	// Setup mode details.
 	setupSecured     bool
@@ -442,6 +445,9 @@ func (a *Agent) applyDHCP(captive bool) error {
 		Upstream:         a.upstreamDNS(),
 		IPv6DefaultRoute: a.devicesHaveIPv6Internet(),
 	}
+	if a.noticeActive() {
+		input.NoticeHostnames = portal.ProbeHostnames
+	}
 	if captive {
 		input.LAN.IPv6Prefix = netip.Prefix{} // no IPv6 for the setup network
 	}
@@ -466,6 +472,7 @@ func (a *Agent) applyFirewall() error {
 		Egress:          a.egressInterfaces(),
 		TunnelDNS:       a.tunnelDNSGuard(),
 		TunnelInterface: routing.TunnelInterface,
+		PortalOnly:      a.mode == api.ModeNormal && a.portal.loginMode,
 	}
 	rules, err := render.Firewall(input)
 	if err != nil {

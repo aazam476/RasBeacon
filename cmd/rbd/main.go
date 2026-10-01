@@ -63,9 +63,14 @@ func main() {
 	// Watch the internet connection in the background (see agent/uplink.go).
 	go a.RunUplinkMonitor()
 	if *devRoot == "" {
-		// Keep the clock right (see agent/clock.go). Not on the simulated
-		// device: it would ask real web servers for the time.
+		// Keep the clock right (see agent/clock.go). These two are not run
+		// on the simulated device: they would contact real web servers.
 		go a.RunClockMonitor()
+		// Watch for hotel login pages (see agent/portal.go).
+		go a.RunPortalMonitor(agent.ProbeInternet)
+	}
+	if *devRoot != "" {
+		go a.RunPortalMonitor(devsim.PortalProbe)
 	}
 	// When the device shuts down, save the time for the next boot.
 	go func() {

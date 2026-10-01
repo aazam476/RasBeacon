@@ -15,6 +15,7 @@
 package devsim
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -24,6 +25,7 @@ import (
 
 	"rasbeacon/internal/dhcpprobe"
 	"rasbeacon/internal/paths"
+	"rasbeacon/internal/portal"
 )
 
 // Setup prepares a fake device under root and returns its paths.
@@ -114,6 +116,12 @@ const (
 func DHCPProbe(iface string, timeout time.Duration) (dhcpprobe.Result, error) {
 	slog.Info("devsim: would check for a DHCP server", "interface", iface)
 	return dhcpprobe.Result{}, nil
+}
+
+// PortalProbe stands in for the captive portal check: the simulated
+// network has no login page.
+func PortalProbe(ctx context.Context) portal.Result {
+	return portal.Result{State: portal.Open}
 }
 
 // Run logs the command and returns made-up output where it matters.

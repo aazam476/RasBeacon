@@ -43,6 +43,7 @@ func (a *Agent) SetupState() api.SetupState {
 		SetupNetworkSecured: a.setupSecured,
 		DeviceShortID:       a.identity.ShortID,
 		LANAddress:          a.lan.Address(),
+		PortalNotice:        a.noticeActive(),
 	}
 	if a.mode == api.ModeSetup {
 		state.SuggestedHotspotSSID = a.cfg.Hotspot.SSID

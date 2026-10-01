@@ -178,6 +178,25 @@ func TestDnsmasq_SetupModeHasNoUpstreamOrIPv6(t *testing.T) {
 	}
 }
 
+func TestDnsmasq_PortalNoticeAnswersProbeNames(t *testing.T) {
+	got, err := Dnsmasq(DnsmasqInput{
+		LAN: DefaultLAN, LeaseFile: "x", Upstream: []string{"10.66.0.1"},
+		NoticeHostnames: []string{"captive.apple.com", "connectivitycheck.gstatic.com"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkGolden(t, "dnsmasq_portal_notice", got)
+	for _, want := range []string{"address=/captive.apple.com/10.87.0.1", `dhcp-option=114,"http://10.87.0.1/api/v1/captive"`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	if strings.Contains(got, "address=/#/") {
+		t.Error("only the probe names may be answered locally")
+	}
+}
+
 func TestDnsmasq_RejectsUpstreamThatIsNotAnAddress(t *testing.T) {
 	_, err := Dnsmasq(DnsmasqInput{LAN: DefaultLAN, LeaseFile: "x", Upstream: []string{"1.1.1.1\naddress=/#/1.2.3.4"}})
 	if err == nil {
@@ -245,6 +264,28 @@ func TestFirewall_TunnelOnlyAndDNSGuard(t *testing.T) {
 	}
 	if strings.Contains(got, `"eth0"`) {
 		t.Error("with the VPN in use, nothing may be forwarded to the uplinks")
+	}
+}
+
+func TestFirewall_PortalOnlyAllowsWebAndDNS(t *testing.T) {
+	got, err := Firewall(FirewallInput{Egress: []string{"wlan0"}, PortalOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkGolden(t, "firewall_portal", got)
+	if strings.Contains(got, `iifname "br-lan" oifname @egress accept`) {
+		t.Error("login mode must not allow all traffic")
+	}
+	if !strings.Contains(got, "tcp dport { 80, 443 } accept") {
+		t.Error("login mode must allow web traffic")
+	}
+}
+
+func TestFirewall_EstablishedOnlyOnCurrentPath(t *testing.T) {
+	got, _ := Firewall(FirewallInput{Egress: []string{"wg0"}})
+	forward := got[strings.Index(got, "chain forward"):strings.Index(got, "chain prerouting_nat")]
+	if strings.Contains(forward, "\t\tct state established,related accept") {
+		t.Error("forwarded replies must be tied to the current egress, not accepted everywhere")
 	}
 }
 
