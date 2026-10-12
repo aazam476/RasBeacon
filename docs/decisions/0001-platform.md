@@ -2,6 +2,9 @@
 
 - Status: **Accepted** (2026-09-30), with the owner's amendments below
 - Date: 2026-09-30
+- Amended 2026-10-12: **RasBeacon has no battery requirement.** It runs from
+  a USB-C power supply or a power bank, as the owner chooses. The battery
+  estimates below are kept as the record of how the platform was chosen.
 
 ## 0. Owner decisions (amend sections 1 to 9)
 

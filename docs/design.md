@@ -17,12 +17,12 @@ eduroam, and says which milestone checks them.
 | Part | Role | Notes |
 |---|---|---|
 | Raspberry Pi 4B (2 GB or more) or Pi 5 | Board (reference) | arm64. Pi 5 has an RTC (needs its optional battery to keep time while off). |
-| Raspberry Pi Zero 2 W | Board (**supported**, lower throughput) | 512 MB RAM. Onboard radio is 2.4 GHz only (about 33 Mbps measured), so the Wi-Fi uplink ceiling is about 30 Mbps through the tunnel. No Ethernet. The adapter plugs in through a micro-USB OTG adapter. Best battery life (ADR §5, config A). |
+| Raspberry Pi Zero 2 W | Board (**supported**, lower throughput) | 512 MB RAM. Onboard radio is 2.4 GHz only (about 33 Mbps measured), so the Wi-Fi uplink ceiling is about 30 Mbps through the tunnel. No Ethernet. The adapter plugs in through a micro-USB OTG adapter. Lowest power draw (ADR §5, config A). |
 | Onboard CYW43455 (Pi 4/5) or BCM43436 (Zero 2 W), brcmfmac | **Wi-Fi uplink** | WPA2-Personal/Enterprise, open. WPA3 depends on firmware (M3 checks this). |
 | Built-in Gigabit Ethernet (Pi 4/5), or a USB Ethernet adapter | **Role setting:** *Uplink* (default) or *Client port* (4.1) | |
 | USB adapter with MT7612U (mt76x2u), e.g. Alfa AWUS036ACM | **Hotspot** (reference): 2.4 GHz default, 5 GHz optional | 128-entry station table. SAE and MFP supported. 2 AP interfaces (main + guest). |
 | TP-Link "AC1300" USB adapters (Realtek, rtw88 driver) | **Hotspot** (supported, **at risk**) | TP-Link sells several AC1300 models with different chips: **Archer T3U, T3U Plus and T4U v3 use RTL8812BU**; **Archer T4U v1/v2 use RTL8812AU**. Both drivers are in the Raspberry Pi kernel (6.18, `CONFIG_RTW88_8822BU` and `CONFIG_RTW88_8812AU`), with a 32-entry station table and MFP (needed for WPA3). **Known risk:** users have reported the RTL8812BU dropping clients in AP mode ("failed to download beacon", "timed out to flush queue"). The ≥10-client M1 gate runs on this adapter too. Run `lsusb` to identify yours: `2357:012d`, `2357:0138` and `2357:0115` are RTL8812BU; `2357:0101`, `2357:0103` and `2357:010d` are RTL8812AU. **The owner's test adapter is an Archer T3U (RTL8812BU, expected ID `2357:012d`).** If it fails the M1 gate, `rbd` first tries the reported mitigation (a longer beacon interval, plus a driver reload on beacon errors), and the fallback is an MT7612U adapter. |
-| USB power bank | Power | About 20,000 mAh for about 12 h on a Pi 4/5 (ADR §0); a Zero 2 W gets about 12 to 14 h from 10,000 mAh (estimate). Each bank's auto-off threshold and pass-through behavior are documented per model. |
+| 5 V / 3 A USB-C supply, or a USB power bank | Power | The owner's choice: RasBeacon has no battery and no battery-life target. Power banks that people test are listed in `docs/compatibility.md` (auto-off threshold, pass-through charging). |
 
 Roles are assigned automatically:
 - A mac80211 USB adapter that supports AP mode becomes `ap0`.
@@ -902,8 +902,9 @@ wins.
   allow use on routers.
 
 ## 12. Requirements I'd change
-1. **Battery:** the goal of 12 h on a common bank becomes **about 12 h on a
-   20,000 mAh bank (Pi 4)**, as you chose. The README states this plainly.
+1. **Power:** there is no battery target. RasBeacon runs from a USB-C
+   supply or a power bank, as the owner chooses (the earlier "12 hours on a
+   common bank" goal was dropped).
 2. **"No leaks during mode switches" gets one documented exception:**
    user-initiated portal mode, time-limited and restricted to 80/443/53. It
    can't be leak-free while still letting phones' own portal sheets appear.
