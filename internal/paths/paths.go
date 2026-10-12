@@ -200,3 +200,35 @@ func (p Paths) DeviceTreeModel() string { return p.join("proc", "device-tree", "
 
 // ProcUptime holds the seconds since the device booted.
 func (p Paths) ProcUptime() string { return p.join("proc", "uptime") }
+
+// --- Hardware readings (see internal/readings) ---
+
+// ProcStat holds the processor's time counters.
+func (p Paths) ProcStat() string { return p.join("proc", "stat") }
+
+// ProcMeminfo describes memory and swap.
+func (p Paths) ProcMeminfo() string { return p.join("proc", "meminfo") }
+
+// ProcCPUInfo describes the processor cores.
+func (p Paths) ProcCPUInfo() string { return p.join("proc", "cpuinfo") }
+
+// ProcMounts lists mounted filesystems.
+func (p Paths) ProcMounts() string { return p.join("proc", "mounts") }
+
+// KernelRelease holds the kernel version, e.g. "6.12.34+rpt-rpi-v8".
+func (p Paths) KernelRelease() string { return p.join("proc", "sys", "kernel", "osrelease") }
+
+// SysClassThermal holds the temperature sensors and cooling devices.
+func (p Paths) SysClassThermal() string { return p.join("sys", "class", "thermal") }
+
+// ThrottledFlags holds the Raspberry Pi firmware's throttling flags.
+func (p Paths) ThrottledFlags() string {
+	return p.join("sys", "devices", "platform", "soc", "soc:firmware", "get_throttled")
+}
+
+// SysClassBlock describes disks and partitions (sizes in 512-byte sectors).
+func (p Paths) SysClassBlock() string { return p.join("sys", "class", "block") }
+
+// NetworkdLeases holds systemd-networkd's DHCP leases, one file per
+// interface number.
+func (p Paths) NetworkdLeases() string { return p.join("run", "systemd", "netif", "leases") }

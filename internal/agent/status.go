@@ -53,6 +53,14 @@ func (a *Agent) Status() api.Status {
 		Radios:   a.radios,
 		Clients:  a.connectedClients(),
 		Warnings: slices.Concat(a.warnings, a.vpnWarnings(), a.uplinkWarnings(), a.enterpriseWarnings(), a.guestWarnings()),
+
+		Throughput:          a.readings.traffic,
+		System:              a.systemStats(),
+		Device:              a.deviceInfo(),
+		Storage:             a.storageInfo(),
+		LAN:                 a.lanInfo(),
+		Speedtest:           a.speedtestStatus(),
+		EthernetDiagnostics: a.ethernetDiagnostics(),
 	}
 	// Empty lists are sent as [] rather than null, which is easier for the UI.
 	if status.Radios == nil {
@@ -80,6 +88,13 @@ func (a *Agent) stationsOn(iface string) []stations.Station {
 	clients := stations.Merge(stations.ParseStationDump(dump), stations.ParseLeases(string(leases)))
 	if clients == nil {
 		return []stations.Station{}
+	}
+	for i := range clients {
+		c := &clients[i]
+		c.Band = string(a.cfg.Hotspot.Band)
+		rate := a.readings.stationRates[c.MAC]
+		c.DownMbps, c.UpMbps = rate[0], rate[1]
+		c.InternetAccess = true
 	}
 	return clients
 }
@@ -180,6 +195,9 @@ func (a *Agent) Diagnostics() string {
 		u.WiFi.Interface, u.WiFi.State, u.WiFi.SSID, u.WiFi.Band, u.WiFi.SignalDBM)
 	fmt.Fprintf(&report, "ethernet: present=%v role=%s cable=%v foreignDhcp=%s\n",
 		u.Ethernet.Present, u.Ethernet.Role, u.Ethernet.CablePlugged, u.Ethernet.ForeignDHCPServer)
+	sys := status.System
+	fmt.Fprintf(&report, "hardware: cpu=%.0f%% (%s) ram=%.0f/%.0fMB temp=%.1fC throttling=%q storage=%s\n",
+		sys.CPUPercent, sys.CPUModel, sys.RAMUsedMB, sys.RAMTotalMB, sys.TemperatureC, sys.Throttling, status.Storage.Medium)
 	for _, r := range status.Radios {
 		fmt.Fprintf(&report, "radio: interface=%s driver=%s usb=%v usbId=%s ap=%v maxAps=%d role=%s\n",
 			r.Interface, r.Driver, r.IsUSB, r.USBID, r.SupportsAP, r.MaxAPs, r.Role)
