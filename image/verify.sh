@@ -41,6 +41,8 @@ check "Built-in Wi-Fi firmware (Pi 4/5)" sh -c "ls '$root'/usr/lib/firmware/brcm
 # Services: ours enabled, SSH and Debian's hostapd not started at boot.
 check "lockdown firewall runs at boot" test -L "$root/etc/systemd/system/sysinit.target.wants/rasbeacon-firewall-early.service"
 check "rbd runs at boot" test -L "$root/etc/systemd/system/multi-user.target.wants/rbd.service"
+check "rbd shares /tmp with wpa_supplicant and hostapd (no PrivateTmp)" \
+  sh -c "! grep -q '^PrivateTmp=yes' '$root/usr/lib/systemd/system/rbd.service'"
 check "rbweb runs at boot" test -L "$root/etc/systemd/system/multi-user.target.wants/rbweb.service"
 check "opt-in debug log is available" test -L "$root/etc/systemd/system/sysinit.target.wants/rasbeacon-debug-log.service"
 check "systemd-networkd runs at boot" sh -c "ls '$root'/etc/systemd/system/*.wants/systemd-networkd.service"
