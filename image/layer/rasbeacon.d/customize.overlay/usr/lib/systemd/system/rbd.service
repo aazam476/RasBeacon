@@ -13,7 +13,9 @@ Restart=always
 RestartSec=3
 # rbd must run as root to change network settings. Limit what else it can do.
 ProtectHome=yes
-PrivateTmp=yes
+# No PrivateTmp: wpa_cli and hostapd_cli, which rbd runs, create their reply
+# socket in /tmp, and wpa_supplicant and hostapd must be able to answer it
+# there. With a private /tmp every command times out (exit status 254).
 
 [Install]
 WantedBy=multi-user.target
