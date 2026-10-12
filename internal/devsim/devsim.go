@@ -11,6 +11,8 @@
 //   - optionally run a simulated hotel login page (StartHotel) and use a
 //     real headless Chromium as the login browser (see cmd/rbd's -dev-hotel
 //     and -dev-browser options),
+//   - run the speed test against a local stand-in for Cloudflare's service
+//     (StartSpeedtestServer), at about 300 Mbps,
 //   - log the commands it would run (ip, iw, systemctl, ...) instead of
 //     running them, and answer with made-up output (two connected phones).
 //
@@ -33,6 +35,7 @@ import (
 	"rasbeacon/internal/dhcpprobe"
 	"rasbeacon/internal/paths"
 	"rasbeacon/internal/portal"
+	"rasbeacon/internal/speedtest"
 )
 
 // Setup prepares a fake device under root and returns its paths.
@@ -206,6 +209,21 @@ const hotelWelcomePage = `<!doctype html>
 <meta name="viewport" content="width=device-width">
 <title>Connected</title>
 <h1>You are online</h1><p>Enjoy your stay, room %s.</p>`
+
+// StartSpeedtestServer runs a stand-in for Cloudflare's speed test service
+// on a free local port and returns its address. The speed test (with the
+// -dev-browser) measures it instead of the internet.
+func StartSpeedtestServer() (string, error) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return "", err
+	}
+	standIn := &speedtest.StandIn{RateMbps: 300}
+	go http.Serve(listener, standIn.Handler())
+	address := "http://" + listener.Addr().String()
+	slog.Info("devsim: simulated speed test service", "address", address)
+	return address, nil
+}
 
 // Run logs the command and returns made-up output where it matters.
 func (Runner) Run(name string, args ...string) (string, error) {

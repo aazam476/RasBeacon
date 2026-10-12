@@ -148,6 +148,17 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/v1/status", s.requireLogin(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s.forward(w, http.MethodGet, "/status?viewer="+url.QueryEscape(clientIP(r)), nil)
 	})))
+	// The speed test takes about 20 seconds (rbd stops it after 3 minutes),
+	// longer than the server's usual time limits.
+	mux.Handle("POST /api/v1/speedtest", s.requireLogin(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(speedtestTime))
+		status, body, err := s.rbd.DoSlow(http.MethodPost, "/speedtest", nil)
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, api.ErrorResponse{Error: err.Error()})
+			return
+		}
+		writeRaw(w, status, "application/json", body)
+	})))
 	// Update files are large, so they are streamed to rbd.
 	mux.Handle("POST /api/v1/system/update", s.requireLogin(http.HandlerFunc(s.handleUpdate)))
 
@@ -337,6 +348,9 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	clearSessionCookie(w)
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// speedtestTime is how long a speed test request may take.
+const speedtestTime = 4 * time.Minute
 
 // maxUpdateSize limits update uploads. Real ones are a few hundred MB.
 const maxUpdateSize = 2 << 30

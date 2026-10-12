@@ -363,8 +363,3 @@ func wifiChannel(mhz int) int {
 		return 0
 	}
 }
-
-// speedtestStatus describes the last speed test (see speedtest.go).
-func (a *Agent) speedtestStatus() api.Speedtest {
-	return api.Speedtest{Provider: "Cloudflare"}
-}

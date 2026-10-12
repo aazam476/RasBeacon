@@ -223,6 +223,19 @@ func (a *Agent) Handler() http.Handler {
 		})
 	}
 
+	// Runs Cloudflare's speed test (about 20 seconds; see speedtest.go) and
+	// answers with the result.
+	mux.HandleFunc("POST /speedtest", func(w http.ResponseWriter, r *http.Request) {
+		if err := a.RunSpeedtest(); err != nil {
+			writeError(w, err)
+			return
+		}
+		a.mu.Lock()
+		result := a.speedtestStatus()
+		a.mu.Unlock()
+		writeJSON(w, http.StatusOK, result)
+	})
+
 	mux.HandleFunc("GET /settings/vpn", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, a.VPNSettings())
 	})
@@ -456,7 +469,7 @@ func writeError(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusBadRequest, api.ErrorResponse{Error: validation.Message, Field: validation.Field})
 	case errors.Is(err, ErrWrongPassword):
 		writeJSON(w, http.StatusForbidden, api.ErrorResponse{Error: err.Error(), Field: "password"})
-	case errors.Is(err, ErrWrongMode), errors.Is(err, ErrNoWiFiUplink), errors.Is(err, ErrUpdateBusy):
+	case errors.Is(err, ErrWrongMode), errors.Is(err, ErrNoWiFiUplink), errors.Is(err, ErrUpdateBusy), errors.Is(err, ErrSpeedtestBusy):
 		writeJSON(w, http.StatusConflict, api.ErrorResponse{Error: err.Error()})
 	default:
 		slog.Error("request failed", "error", err)

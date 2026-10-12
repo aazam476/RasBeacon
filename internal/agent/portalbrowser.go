@@ -82,20 +82,26 @@ func defaultBrowserSettings() browserSettings {
 	}
 }
 
-// startRealBrowser starts Chromium. If its sandbox can't work on this
-// system (it needs user namespaces), it starts again without it: the
-// browser still runs as its own user, behind the firewall rule.
+// startRealBrowser starts Chromium as the login browser.
 func startRealBrowser(opts browser.Options) (loginBrowser, error) {
-	s, err := browser.Start(opts)
-	if err != nil && !opts.NoSandbox && strings.Contains(strings.ToLower(err.Error()), "sandbox") {
-		slog.Warn("login browser: Chromium's sandbox is not available here; starting without it", "error", err)
-		opts.NoSandbox = true
-		s, err = browser.Start(opts)
-	}
+	s, err := startChromium(opts)
 	if err != nil {
 		return nil, err
 	}
 	return s, nil
+}
+
+// startChromium starts Chromium. If its sandbox can't work on this system
+// (it needs user namespaces), it starts again without it: the browser
+// still runs as its own user, behind the firewall rule.
+func startChromium(opts browser.Options) (*browser.Session, error) {
+	s, err := browser.Start(opts)
+	if err != nil && !opts.NoSandbox && strings.Contains(strings.ToLower(err.Error()), "sandbox") {
+		slog.Warn("Chromium's sandbox is not available here; starting without it", "error", err)
+		opts.NoSandbox = true
+		s, err = browser.Start(opts)
+	}
+	return s, err
 }
 
 // SetBrowser changes how the login browser is started (for the simulated
