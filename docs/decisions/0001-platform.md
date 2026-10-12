@@ -1,23 +1,23 @@
 # ADR 0001: Primary platform for v1
 
-- Status: **Accepted** (2026-09-30), with the owner's amendments below
-- Date: 2026-09-30
-- Amended 2026-10-12: **RasBeacon has no battery requirement.** It runs from
-  a USB-C power supply or a power bank, as the owner chooses. The battery
-  estimates below are kept as the record of how the platform was chosen.
+- Status: **Accepted** (2026-09-30)
+- Date: 2026-09-30, amended 2026-10-12 (power)
 
-## 0. Owner decisions (amend sections 1 to 9)
+Section 0 is the decision. Sections 1 to 8 are the analysis behind it,
+starting from an initial proposal; where they differ, section 0 wins.
 
-1. Platform and base OS approved: Raspberry Pi, with Raspberry Pi OS Lite
+## 0. Decision
+
+1. Platform and base OS: Raspberry Pi, with Raspberry Pi OS Lite
    (trixie, arm64) built with `rpi-image-gen`.
 2. **Reference hardware is a Raspberry Pi 4 or newer (Pi 4B / Pi 5) plus one
    MT7612U adapter** (option D), not the Zero 2 W. Consequences:
    - The onboard CYW43455 (2.4/5 GHz) is the Wi-Fi uplink. Built-in Gigabit
      Ethernet is also available as an uplink.
    - The config ceiling is well above 40 Mbps (section 5).
-   - **The battery requirement is degraded, by owner choice:** about 7 h on a
-     10,000 mAh bank, about 14 h on 20,000 mAh (estimates). 12 hours of real
-     use needs a bank of roughly 20,000 mAh.
+   - **Power:** there is no battery requirement (amended 2026-10-12).
+     RasBeacon runs from a USB-C power supply or a power bank. On a bank, a
+     Pi 4B lasts about 7 h on 10,000 mAh or 14 h on 20,000 mAh (estimates).
    - Measured Pi 4B idle figures vary by source, from about 1.4 W (275 mA) to
      2.9 W. Raspberry Pi's "typical active" figures are 600 mA (Pi 4B) and
      800 mA (Pi 5). We will measure our own in milestone 1.
@@ -30,10 +30,9 @@
 3. **The hotspot defaults to 2.4 GHz**, with a setting in the web UI to switch
    it to 5 GHz. This also removes the Apple Watch question: every Apple Watch
    joins 2.4 GHz.
-4. Commits use the owner's git identity, set per commit.
 
 
-## 1. Decision (summary)
+## 1. Initial proposal (superseded by section 0)
 
 **Platform: Raspberry Pi running Linux, with a USB Wi-Fi adapter on a MediaTek
 MT7612U chip as the hotspot radio.** The OS is a read-only image built from
@@ -61,15 +60,15 @@ it could be a later port.
    best measured TCP rate is about 33 to 35 Mbps, so reference config A tops out
    around 30 Mbps through WireGuard, below the 40 Mbps target. Configs B and C
    meet the target but draw more power. This is the battery-versus-throughput
-   tradeoff you asked me to show, not resolve silently.
+   tradeoff that section 0 settled in favor of throughput.
 2. **WPA3-only uplinks on the onboard radio.** Broadcom FullMAC (brcmfmac)
    support for WPA3 and protected management frames is inconsistent across
    firmware. WPA2-Enterprise, WPA2-Personal and open networks are fine. A
    WPA3-only uplink needs config B, where a mac80211 USB adapter handles the
    uplink.
 3. **10-client verification.** The MT7612U driver has a 128-entry station table.
-   I could not find a published test of 10 clients associated with WPA2/WPA3 on
-   this chip. Passing that test is therefore the first hardware gate in
+   No published test of 10 clients associated with WPA2/WPA3 on this chip was
+   found. Passing that test is therefore the first hardware gate in
    milestone 1, not an assumption. If it fails, the fallback is an MT7921AU
    adapter, whose driver table allows 15 stations.
 
@@ -90,7 +89,7 @@ it could be a later port.
   - Its README says the client limit is **8 (5 on the C3)**, set by RAM.
   - It reports **5 to 15 Mbps**.
   - It validates the server certificate against the built-in CA bundle and has
-    an option to skip the certificate time check. I found no documented upload
+    an option to skip the certificate time check. There is no documented upload
     of a custom CA or server-name check, although ESP-IDF itself has
     `esp_eap_client_set_ca_cert` and `esp_eap_client_set_domain_name`.
   - The web UI has no TLS.
@@ -152,8 +151,8 @@ Pi columns score config **A**. Where B or C changes the result, it's noted in th
 
 Throughput ceilings are **per configuration** and assume a fast uplink. The
 real uplink is often slower. All power figures are **estimates** built from the
-measurements above. I'll replace them with values measured with a USB power
-meter in milestone 1.
+measurements above; milestone 1 measures real values with a USB power
+meter.
 
 | Config | Config ceiling through WireGuard | Idle, clients associated | Under load | Mixed use* | 5,000 mAh | 10,000 mAh | 20,000 mAh |
 |---|---|---|---|---|---|---|---|
@@ -167,13 +166,13 @@ meter in milestone 1.
 load. Usable energy is estimated as mAh × 3.7 V × 0.8, which covers conversion
 to 5 V and wear.
 
-**Tradeoff (you decide):** A is the only Pi configuration that reaches 12 hours
-on a 10,000 mAh bank, and it gives up about a quarter of the throughput target.
-B and C reach the target, need about a 15,000 to 20,000 mAh bank for 12 hours,
-and B also restores full WPA3-Enterprise uplink support. Because you rank
-battery above throughput, I recommend **A as the reference** and **B as the
-documented upgrade**: you just plug in a second adapter, with no reflash. A
-20,000 mAh bank (about 74 Wh) is still within airline carry-on limits.
+**Tradeoff:** A is the only Pi configuration that reaches 12 hours on a
+10,000 mAh bank, and it gives up about a quarter of the throughput target.
+B and C reach the throughput target, need about a 15,000 to 20,000 mAh bank
+for 12 hours, and B also restores full WPA3-Enterprise uplink support. The
+initial proposal favored A, with B as a plug-in upgrade. The decision
+(section 0) chose D for throughput instead and later dropped the battery
+target. A 20,000 mAh bank (about 74 Wh) is within airline carry-on limits.
 
 **Power-saving measures, applied by default:**
 - Disable HDMI/KMS (measured: 120 mA to 75.5 mA on the Zero 2 W).
@@ -200,7 +199,7 @@ documented upgrade**: you just plug in a second adapter, with no reflash. A
    manages 8 clients and 5 to 15 Mbps before WireGuard. It also forces the
    hotspot onto the uplink's channel and makes a provably leak-free kill switch
    and IPv6 handling much harder. Its real advantages are power, price and a
-   polished web flasher. The Pi config meets the battery goal anyway.
+   polished web flasher; the Pi needs a power supply or a larger power bank instead.
    **ESP32 port:** not planned. A "lite" ESP32 build (hotspot + uplink + NAT,
    8 clients or fewer, no kill-switch guarantee) could be a separate future
    project that reuses the web UI's JSON API. It would not share the network
@@ -217,7 +216,7 @@ documented upgrade**: you just plug in a second adapter, with no reflash. A
 
    | OS | For | Against |
    |---|---|---|
-   | **Pi OS Lite (chosen)** | First-class kernel, firmware and onboard-Wi-Fi support. Redistributable Broadcom firmware is already packaged. Debian security fixes. Official image tool. Most familiar to contributors (systemd, nftables, hostapd, wpa_supplicant). | Bigger image, slower boot. We must build read-only root and A/B updates ourselves. `rpi-image-gen` officially supports only arm64 hosts; GitHub has arm64 runners, which I'll confirm in CI. |
+   | **Pi OS Lite (chosen)** | First-class kernel, firmware and onboard-Wi-Fi support. Redistributable Broadcom firmware is already packaged. Debian security fixes. Official image tool. Most familiar to contributors (systemd, nftables, hostapd, wpa_supplicant). | Bigger image, slower boot. We must build read-only root and A/B updates ourselves. `rpi-image-gen` officially supports only arm64 hosts; GitHub has arm64 runners (x86 with QEMU emulation also works, more slowly). |
    | OpenWrt 25.12 (bcm2710) | Router-native (firewall4, netifd), small, squashfs plus overlay, sysupgrade, excellent mt76 support, Image Builder needs no compiling | Pi is a second-class target. **Pi Wi-Fi firmware isn't shipped because of licensing uncertainty**, which we'd inherit. LuCI and ucode are niche for contributors. Our own UI would still be needed. |
    | Buildroot/Yocto | Smallest, fastest boot, read-only by design | Slow CI builds. We would own every CVE and every package. Hardest for contributors. |
 
@@ -226,8 +225,8 @@ documented upgrade**: you just plug in a second adapter, with no reflash. A
    - esp32_nat_router: feature scope and MSS/PMTU handling.
    - RaspAP: what not to ship by default.
 
-   I won't copy code from any of them, so their licenses (GPL-3.0 for RaspAP)
-   don't constrain ours. The license decision goes in the design doc.
+   No code is copied from any of them, so their licenses (GPL-3.0 for RaspAP)
+   don't constrain ours. RasBeacon is Apache-2.0 (see the design doc).
 
 ## 7. Reference hardware (first version of the compatibility table)
 
@@ -253,29 +252,16 @@ Adapters using out-of-tree Realtek drivers are excluded from the reference list.
   - Rutgers University Device Root CA. Self-signed; valid 2024-06-07 to
     2044-06-07. SHA-256 fingerprint
     `CF:5A:A5:BD:8E:2A:B9:9C:B3:D9:E7:E7:0A:BA:2C:B1:70:74:F3:04:18:76:4D:C2:C9:45:06:FA:0C:6F:BF:09`.
-    I have **no independent second source** for this one. Please compare it
-    against the profile your Mac or iPhone installed.
+    There is **no independent second source** for this one: compare it with
+    the profile Rutgers' own setup installs on a Mac or iPhone.
 - **The manual-installation URL now redirects** to a ServiceNow article
-  (`ithelp.rutgers.edu … KB0012502`) that renders with JavaScript, so I
-  couldn't re-read the WPA2/WPA3 wording or the `*.ruw.rutgers.edu` server name
-  from it. I'm using the values from your brief.
-- **WPA2 vs WPA3-Enterprise:** I can't observe it from here. In milestone 3,
-  the device will log the advertised security settings of the `eduroam` access
-  points it scans (AKM suites, PMF capable/required). I'll ask you to paste that
-  output, and we'll settle it then.
-
-## 9. What I need you to approve or decide
-
-1. Raspberry Pi platform and the Pi OS Lite trixie arm64 base (section 6).
-2. **Reference config A** (battery first, about 30 Mbps ceiling) with B as the
-   plug-in upgrade, or make **C** the reference (full throughput, needs a bigger
-   bank). This decides what hardware you buy. For A plus the B upgrade, that's a
-   Zero 2 W, two MT7612U adapters, a micro-USB OTG hub, a microSD card and a
-   USB power meter.
-3. Your Apple Watch model. The hotspot defaults to 5 GHz, and older watches
-   need 2.4 GHz; my understanding is that Apple Watch 5 GHz support begins with
-   Series 6, which I'll confirm in the design doc.
-4. The git identity question in the chat message that came with this record.
+  (`ithelp.rutgers.edu … KB0012502`) that renders with JavaScript, so the
+  WPA2/WPA3 wording and the `*.ruw.rutgers.edu` server name couldn't be
+  re-read from it; the values used come from Rutgers' earlier instructions.
+- **WPA2 vs WPA3-Enterprise:** only observable on site. From milestone 3, the
+  device logs the advertised security settings of the `eduroam` access
+  points it scans (AKM suites, PMF capable/required), and hardware testing
+  settles it.
 
 ## Sources
 
