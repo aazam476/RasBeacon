@@ -114,7 +114,11 @@ jobs:
         run: mkdir -p "$SCREENSHOT_DIR" && make e2e
       - name: Keep screenshots
         if: always()
+        # Only a help for looking into failures: a full artifact storage
+        # quota must not fail the build.
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: e2e-screenshots
           path: ${{ runner.temp }}/screenshots
+          retention-days: 3
