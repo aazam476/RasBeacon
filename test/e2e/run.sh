@@ -15,11 +15,13 @@ trap 'kill $(jobs -p) 2>/dev/null || true; rm -rf "$work"' EXIT
 echo "Building the web UI and both programs..."
 make -C "$repo_root" build >/dev/null
 
-# The zero-leak login needs a headless Chromium for the simulated device's
+# The zero-leak login and the speed test need a headless Chromium for the simulated device's
 # own browser: Playwright's, Debian's, or RASBEACON_BROWSER.
 login_browser="${RASBEACON_BROWSER:-}"
 for candidate in /usr/bin/chromium-headless-shell \
+  "$HOME"/.cache/ms-playwright/chromium_headless_shell-*/chrome-headless-shell-linux64/chrome-headless-shell \
   "$HOME"/.cache/ms-playwright/chromium_headless_shell-*/chrome-linux/headless_shell \
+  /opt/pw-browsers/chromium_headless_shell-*/chrome-headless-shell-linux64/chrome-headless-shell \
   /opt/pw-browsers/chromium_headless_shell-*/chrome-linux/headless_shell; do
   [ -n "$login_browser" ] && break
   [ -x "$candidate" ] && login_browser="$candidate"
@@ -28,7 +30,8 @@ if [ -n "$login_browser" ]; then
   echo "Login browser for the simulated device: $login_browser"
   export RASBEACON_E2E_HOTEL=http://127.0.0.1:8099
 else
-  echo "No headless Chromium found: the zero-leak login step is skipped."
+  echo "No headless Chromium found: the zero-leak login and speed test steps are skipped."
+  if [ "${RASBEACON_REQUIRE_BROWSER:-}" = 1 ]; then exit 1; fi
 fi
 
 echo "Starting a simulated device in $work ..."

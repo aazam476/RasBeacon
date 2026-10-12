@@ -119,3 +119,13 @@ func (a *Agent) RescanEthernetPort() error {
 	a.checkUplink()
 	return nil
 }
+
+// endUplinkPause ends a Disconnect pause early (saving the Wi-Fi networks
+// does). wpa_supplicant only restarts when its file changed, so the paused
+// network is allowed again explicitly. Nothing happens if none is paused.
+// The caller holds a.mu.
+func (a *Agent) endUplinkPause() {
+	if wifi := a.wifiUplinkInterface(); wifi != "" {
+		_, _ = system.WPACommand(a.runner, a.paths.WPAControlDir(), wifi, "enable_network", "all")
+	}
+}

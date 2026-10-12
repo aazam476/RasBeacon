@@ -20,8 +20,10 @@ LDFLAGS := -s -w -X rasbeacon/internal/version.Version=$(VERSION) -X rasbeacon/i
 help:
 	@grep -E "^#   make" Makefile | sed "s/^#   //"
 
-# Build the web UI into web/dist (embedded into rbweb by web/embed.go).
+# Build the web UI into web/dist (embedded into rbweb by web/embed.go). The
+# old build is removed first, except dist/.gitkeep.
 ui:
+	find web/dist -mindepth 1 ! -name .gitkeep -delete
 	cd web && npm ci --no-audit --no-fund && npm run build
 
 test:
@@ -40,7 +42,8 @@ build: ui
 
 # Simulated device: no Raspberry Pi needed, nothing on this computer changes.
 # DEV_BROWSER: a headless Chromium for the zero-leak login screen (optional;
-# for example Playwright's chromium_headless_shell-*/chrome-linux/headless_shell).
+# for example Playwright's chromium_headless_shell-*/chrome-headless-shell-linux64/
+# chrome-headless-shell).
 DEV_BROWSER ?=
 
 dev: build
@@ -60,4 +63,5 @@ pi: ui
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags "$(LDFLAGS)" -o build/arm64/ ./cmd/rbd ./cmd/rbweb
 
 clean:
-	rm -rf build web/dist/assets web/dist/index.html
+	rm -rf build web/dist-demo
+	find web/dist -mindepth 1 ! -name .gitkeep -delete

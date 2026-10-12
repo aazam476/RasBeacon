@@ -738,31 +738,21 @@ wins.
   files.
 - Bash only inside image-build hooks and CI steps.
 
-**The web UI is built bare in this project, then restyled elsewhere.**
-- **What "bare" means:**
-  - semantic HTML (forms, labels, tables, buttons)
-  - one small stylesheet for basic mobile layout
-  - no CSS framework and no component library
-  - every screen still works fully: it handles loading, error and empty
-    states, shows validation messages, and is usable on a phone
-- **Logic and looks are split so a designer can restyle without touching
-  behavior:**
-  - `web/src/api/`: typed API client and the TypeScript types for every
-    request and response. This is the same contract as `docs/api.md`.
-  - `web/src/screens/<Screen>/use<Screen>.ts`: that screen's data loading,
-    form state, validation and actions. No markup.
-  - `web/src/screens/<Screen>/<Screen>View.tsx`: markup only. It receives
-    everything through props and calls callbacks for actions, and it holds no
-    fetch calls and no business rules.
-  - `docs/ui-contract.md`: for each screen, its props, actions, states and
-    messages. This is the document to give the designing agent.
-- **Integrating the styled version:**
-  - The designer replaces `*View.tsx` files and styles, keeping the view props.
-  - I type-check it against the contract and run the UI logic tests.
-  - I check that nothing calls the API directly or re-implements validation,
-    and that no new third-party dependencies were added without review.
-  - If the designer needs data a view doesn't receive, the fix is to add it to
-    the screen's `use<Screen>.ts` and the contract, not to fetch it in the view.
+**The web UI was first built bare, then redesigned (M8).**
+- The first UI (M1 to M7) was bare: semantic HTML, one small stylesheet,
+  every state handled, logic in `use<Screen>.ts` hooks and markup in
+  `<Screen>View.tsx` files.
+- It was then redesigned after Apple's Settings app (React
+  Router, Tailwind CSS; see `web/README.md`), adding the features the owner
+  kept from the mockups. Its seam is one interface, `useDevice()`
+  (`web/src/data/device.ts`): screens only read its state and call its
+  actions. The demo provider (`web/src/data/demo/`) runs it on sample data;
+  the real provider (`web/src/data/real/`) implements every action against
+  the API, reusing the first UI's logic (`logic.ts`, unit-tested).
+- **Integrating a restyled version:** keep `device.ts` and the wording the
+  end-to-end test uses (`docs/ui-contract.md`); check that nothing outside
+  `data/` talks to the API and that no new runtime packages came in; run
+  the build, lint, format check, unit tests and the end-to-end test.
 - **Ready for the v2 mobile app:**
   - The API is versioned under `/api/v1` and documented in `docs/api.md`.
   - The API accepts a token login alongside the browser's cookie sessions.
@@ -801,6 +791,8 @@ wins.
    diagnostics, compatibility table, redistribution, README 15-minute path.
 7. **Stretch:** guest SSID, metered toggle, zero-leak portal login (remote
    browser), routed IPv6 prefix instead of NAT66. Built; see 11b.
+8. **The redesigned web UI** and the features the owner kept from its
+   mockups. Built; see 11c.
 
 ## 11a. As built in M6
 
@@ -867,6 +859,47 @@ wins.
   tunnel isn't up) before login mode, and is public to the hotspot like
   login mode. The image grew by about 300 MB, so the system slots are now
   1536 MB; devices on older images must be flashed once.
+
+## 11c. As built in M8
+
+- **Web UI:** the redesign replaced the bare UI (see 9b). The device's build
+  contains only the real provider; `npm run demo` builds the demo router.
+- **Readings** (`internal/readings`, `internal/agent/readings.go`): CPU load
+  from `/proc/stat`, memory, temperature, the firmware's throttling flags,
+  traffic through `br-lan`/`br-guest` and per device (`iw station dump`
+  byte counters), sampled with every uplink check (5 s). Storage from the
+  A/B slot links and `statfs` of the data partition; Ethernet details from
+  sysfs, the networkd lease and `resolvectl`.
+- **Per-device controls:** pausing adds the MAC address to a `reject` rule
+  ahead of `ct state established` in the forward chain, so a paused device
+  loses its open connections too, but still reaches RasBeacon (to see why,
+  or to undo it); saved in `config.json`. Disconnect is hostapd's
+  `deauthenticate`; "forget address" is dnsmasq's `dhcp_release`
+  (`dnsmasq-utils`). rbweb tells rbd the viewer's address
+  (`/status?viewer=`), so the list marks "this device".
+- **VPN profiles:** `config.json` version 3 keeps `vpn.profiles` and
+  `vpn.active`; each profile's keys are in `secrets.json` under its name. A
+  version 2 file becomes the profile `wireguard.conf` at start, and both
+  files are saved at once so keys and profile never part. Switching
+  profiles deletes `wg0` and builds it again; the firewall's egress set
+  still says `wg0` meanwhile, so nothing leaks.
+- **Uplink buttons:** Disconnect is a 10-minute `disable_network` (Wi-Fi) or
+  `networkctl down` (Ethernet), so RasBeacon moves to another saved network
+  or the other uplink; Renew is `networkctl renew`; Rescan port is
+  `networkctl up` + `reconfigure`, or the DHCP safety check for a client
+  port.
+- **Stay logged in:** a second cookie with a random token; rbd stores its
+  SHA-256 (30 days, at most 20 logins) on the data partition, since rbweb
+  can't write to disk and keeps sessions in memory.
+- **Speed test:** Cloudflare's own library (`@cloudflare/speedtest`, MIT,
+  vendored unchanged in `internal/speedtest/cloudflare/`) runs in the
+  headless browser as `rbbrowser`, opened on `speed.cloudflare.com` so its
+  requests are same-origin. The firewall keeps that user on the uplink, so
+  it measures the uplink. Default measurements without packet loss (which
+  needs a WebRTC TURN connection and isn't shown); results are sent to
+  Cloudflare as on their page (the owner agreed). Only on request; one at a
+  time; at most 3 minutes. Ookla's CLI was ruled out: its license doesn't
+  allow use on routers.
 
 ## 12. Requirements I'd change
 1. **Battery:** the goal of 12 h on a common bank becomes **about 12 h on a

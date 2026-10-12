@@ -41,8 +41,11 @@ func findBrowser(t *testing.T) string {
 	candidates := []string{os.Getenv("RASBEACON_TEST_BROWSER"), browser.DefaultBinary}
 	home, _ := os.UserHomeDir()
 	for _, pattern := range []string{
+		// Playwright's headless Chromium (older and newer layouts).
 		"/opt/pw-browsers/chromium_headless_shell-*/chrome-linux/headless_shell",
+		"/opt/pw-browsers/chromium_headless_shell-*/chrome-headless-shell-linux64/chrome-headless-shell",
 		filepath.Join(home, ".cache/ms-playwright/chromium_headless_shell-*/chrome-linux/headless_shell"),
+		filepath.Join(home, ".cache/ms-playwright/chromium_headless_shell-*/chrome-headless-shell-linux64/chrome-headless-shell"),
 	} {
 		matches, _ := filepath.Glob(pattern)
 		candidates = append(candidates, matches...)

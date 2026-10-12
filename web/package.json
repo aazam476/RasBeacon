@@ -1,36 +1,38 @@
 {
   "name": "rasbeacon-web",
   "private": true,
-  "version": "0.0.0",
-  "description": "RasBeacon web UI (bare). Built into web/dist and embedded in rbweb.",
-  "license": "Apache-2.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "gallery": "vite --open /gallery.html",
-    "build": "tsc --noEmit && vite build",
-    "typecheck": "tsc --noEmit",
-    "lint": "eslint .",
+    "demo": "vite --mode demo",
+    "build": "tsc -b && vite build",
+    "build:demo": "tsc -b && vite build --mode demo --outDir dist-demo --emptyOutDir",
+    "preview": "vite preview",
+    "typecheck": "tsc -b",
+    "lint": "oxlint",
     "format": "prettier --write src",
     "format:check": "prettier --check src",
     "test": "vitest run"
   },
   "dependencies": {
-    "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-router": "^8.4.0"
   },
   "devDependencies": {
-    "@eslint/js": "10.0.1",
-    "@types/react": "19.3.0",
-    "@types/react-dom": "19.3.0",
-    "@vitejs/plugin-react": "6.1.1",
-    "eslint": "10.11.0",
-    "eslint-plugin-react-hooks": "7.1.1",
-    "globals": "17.12.0",
-    "prettier": "3.9.9",
-    "typescript": "5.9.3",
-    "typescript-eslint": "8.71.0",
-    "vite": "8.3.1",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "oxlint": "^1.81.0",
+    "prettier": "^3.9.9",
+    "tailwindcss": "^4.3.3",
+    "typescript": "~6.0.2",
+    "vite": "^8.3.0",
     "vitest": "5.0.3"
-  }
+  },
+  "description": "RasBeacon web UI. Built into web/dist and embedded in rbweb.",
+  "license": "Apache-2.0"
 }

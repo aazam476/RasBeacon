@@ -43,6 +43,8 @@ jobs:
       - run: npm run format:check
       - run: npm test
       - run: npm run build
+      # The demo router (npm run demo) must keep building too.
+      - run: npm run build:demo
 
   netns:
     name: Network namespace tests (real firewall and dnsmasq)
@@ -101,9 +103,14 @@ jobs:
       - name: Install Playwright's Chromium
         working-directory: test/e2e
         run: npm ci --no-audit --no-fund && npx playwright install --with-deps chromium
+      - name: Browser and speed test unit tests (real headless Chromium)
+        # RASBEACON_REQUIRE_BROWSER=1 makes them fail instead of skipping if
+        # Playwright's headless Chromium can't be found.
+        run: RASBEACON_REQUIRE_BROWSER=1 go test -count=1 ./internal/browser/ ./internal/speedtest/
       - name: Run the walkthrough
         env:
           SCREENSHOT_DIR: ${{ runner.temp }}/screenshots
+          RASBEACON_REQUIRE_BROWSER: "1"
         run: mkdir -p "$SCREENSHOT_DIR" && make e2e
       - name: Keep screenshots
         if: always()
