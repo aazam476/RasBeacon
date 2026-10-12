@@ -130,6 +130,19 @@ func (l LAN) Netmask() string {
 	return fmt.Sprintf("%d.%d.%d.%d", byte(mask>>24), byte(mask>>16), byte(mask>>8), byte(mask))
 }
 
+// DHCP hands out the addresses from .20 to .250 (.1 to .19 are left free
+// for RasBeacon and future use).
+const (
+	dhcpFirst = 20
+	dhcpLast  = 250
+)
+
+// DHCPRange returns the first and last address DHCP hands out on this
+// network, and how many that is.
+func (l LAN) DHCPRange() (first, last string, count int) {
+	return l.hostAddress(dhcpFirst), l.hostAddress(dhcpLast), dhcpLast - dhcpFirst + 1
+}
+
 // hostAddress returns the address with the given last number in this /24,
 // e.g. hostAddress(20) = 10.87.0.20.
 func (l LAN) hostAddress(last byte) string {
@@ -343,12 +356,11 @@ type dnsmasqData struct {
 // Dnsmasq produces dnsmasq.conf text.
 func Dnsmasq(in DnsmasqInput) (string, error) {
 	data := dnsmasqData{
-		Bridge:     BridgeName,
-		LANAddress: in.LAN.Address(),
-		Netmask:    in.LAN.Netmask(),
-		// Addresses .1 to .19 are left free for RasBeacon and future use.
-		DHCPStart:        in.LAN.hostAddress(20),
-		DHCPEnd:          in.LAN.hostAddress(250),
+		Bridge:           BridgeName,
+		LANAddress:       in.LAN.Address(),
+		Netmask:          in.LAN.Netmask(),
+		DHCPStart:        in.LAN.hostAddress(dhcpFirst),
+		DHCPEnd:          in.LAN.hostAddress(dhcpLast),
 		LeaseFile:        in.LeaseFile,
 		Captive:          in.Captive,
 		CaptivePortalAPI: "http://" + in.LAN.Address() + "/api/v1/captive",
@@ -363,8 +375,8 @@ func Dnsmasq(in DnsmasqInput) (string, error) {
 			data.GuestBridge = GuestBridgeName
 			data.GuestAddress = g.Address()
 			data.GuestNetmask = g.Netmask()
-			data.GuestDHCPStart = g.hostAddress(20)
-			data.GuestDHCPEnd = g.hostAddress(250)
+			data.GuestDHCPStart = g.hostAddress(dhcpFirst)
+			data.GuestDHCPEnd = g.hostAddress(dhcpLast)
 		}
 	}
 	for _, name := range data.NoticeHostnames {

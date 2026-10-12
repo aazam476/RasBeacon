@@ -272,6 +272,7 @@ func (a *Agent) RunUplinkMonitor() {
 		time.Sleep(UplinkCheckInterval)
 		a.mu.Lock()
 		a.checkUplink()
+		a.sampleReadings()
 		a.mu.Unlock()
 	}
 }
@@ -360,11 +361,15 @@ func (a *Agent) observeUplink() (api.UplinkStatus, []netip.Prefix) {
 				upstreamIPv4 = append(upstreamIPv4, prefix)
 				if name == s.Interface && s.Address == "" {
 					s.Address = prefix.Addr().String()
+					s.SubnetMask = subnetMask(prefix.Bits())
 				}
 			}
 		}
 	}
 
+	if s.Interface != "" {
+		s.InterfaceMAC = a.readSysNet(s.Interface, "address")
+	}
 	if wifi := a.wifiUplinkInterface(); wifi != "" {
 		s.WiFi = a.observeWiFi(wifi)
 	}
@@ -373,6 +378,9 @@ func (a *Agent) observeUplink() (api.UplinkStatus, []netip.Prefix) {
 		Role:              a.cfg.Ethernet.Role,
 		CablePlugged:      a.readSysNet(ethernetInterface, "carrier") == "1",
 		ForeignDHCPServer: a.uplink.foreignDHCPServer,
+	}
+	if s.Ethernet.Present {
+		s.Ethernet.LinkSpeed, s.Ethernet.Duplex = a.ethernetLink()
 	}
 	return s, upstreamIPv4
 }
@@ -391,6 +399,7 @@ func (a *Agent) observeWiFi(iface string) api.WiFiUplinkStatus {
 		s.State = "connected"
 		s.SSID = wpa.SSID
 		s.Band = uplink.BandName(wpa.FrequencyMHz)
+		s.BSSID, s.FrequencyMHz, s.Channel = wpa.BSSID, wpa.FrequencyMHz, wifiChannel(wpa.FrequencyMHz)
 		poll, _ := system.WPACommand(a.runner, a.paths.WPAControlDir(), iface, "signal_poll")
 		s.SignalDBM = uplink.ParseSignalPoll(poll)
 	case len(a.cfg.Uplink.Networks) == 0:

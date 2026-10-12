@@ -118,6 +118,117 @@ type Status struct {
 	Guest         GuestStatus        `json:"guest"`
 	// Warnings are problems the owner should know about, in plain words.
 	Warnings []string `json:"warnings"`
+
+	Throughput Throughput  `json:"throughput"`
+	System     SystemStats `json:"system"`
+	Device     DeviceInfo  `json:"device"`
+	Storage    StorageInfo `json:"storage"`
+	LAN        LANInfo     `json:"lan"`
+	Speedtest  Speedtest   `json:"speedtest"`
+	// EthernetDiagnostics describes the Ethernet port while it carries the
+	// internet (null otherwise).
+	EthernetDiagnostics *EthernetDiagnostics `json:"ethernetDiagnostics"`
+}
+
+// Throughput is the traffic between RasBeacon and the devices on its
+// networks (the hotspot and the guest network), in megabits per second.
+// Download is towards the devices.
+type Throughput struct {
+	DownMbps     float64 `json:"downMbps"`
+	DownPeakMbps float64 `json:"downPeakMbps"`
+	UpMbps       float64 `json:"upMbps"`
+	UpPeakMbps   float64 `json:"upPeakMbps"`
+	// PeakMbps is the highest download plus upload rate since rbd started.
+	PeakMbps float64 `json:"peakMbps"`
+	// SessionBytes is everything the devices sent and received since the
+	// router started.
+	SessionBytes uint64 `json:"sessionBytes"`
+}
+
+// SystemStats are the hardware readings. Text fields are short phrases
+// for the UI.
+type SystemStats struct {
+	CPUPercent   float64 `json:"cpuPercent"`
+	CPUModel     string  `json:"cpuModel"`
+	RAMUsedMB    float64 `json:"ramUsedMb"`
+	RAMTotalMB   float64 `json:"ramTotalMb"`
+	SwapUsedMB   float64 `json:"swapUsedMb"`
+	SwapTotalMB  float64 `json:"swapTotalMb"`
+	TemperatureC float64 `json:"temperatureC"`
+	// ThermalState is "Normal", "Warm" or "Hot: slowing down".
+	ThermalState string `json:"thermalState"`
+	// Cooling is "Fan" or "No fan found".
+	Cooling string `json:"cooling"`
+	// SensorStatus is "OK" or "No sensor found".
+	SensorStatus string `json:"sensorStatus"`
+	// Throttling says whether the firmware slowed the processor down:
+	// "No", "Yes, now", "Earlier, not now", possibly with "(power too weak)".
+	Throttling string `json:"throttling"`
+}
+
+// DeviceInfo identifies the router on the System page.
+type DeviceInfo struct {
+	Hostname      string `json:"hostname"`
+	ModelSpec     string `json:"modelSpec"`
+	Kernel        string `json:"kernel"`
+	KernelRelease string `json:"kernelRelease"`
+	Appliance     string `json:"appliance"`
+	BootDevice    string `json:"bootDevice"`
+}
+
+// StorageInfo describes the space RasBeacon uses on its card or drive, in
+// gigabytes (10^9 bytes).
+type StorageInfo struct {
+	// TotalGB is RasBeacon's partitions together.
+	TotalGB float64 `json:"totalGb"`
+	// FirmwareGB is the boot and system partitions (both A/B copies).
+	FirmwareGB float64 `json:"firmwareGb"`
+	// UserGB is what settings and logs use on the data partition.
+	UserGB     float64 `json:"userGb"`
+	Medium     string  `json:"medium"`
+	Filesystem string  `json:"filesystem"`
+	// Health is "unknown": SD cards don't report it.
+	Health string `json:"health"`
+}
+
+// LANInfo describes the hotspot's own network.
+type LANInfo struct {
+	// MaxClients is how many addresses DHCP can hand out on the hotspot.
+	MaxClients int    `json:"maxClients"`
+	Subnet     string `json:"subnet"`
+	DHCPRange  string `json:"dhcpRange"`
+}
+
+// Speedtest is the last speed test (Cloudflare's speed test, run only when
+// the owner asks; see internal/speedtest).
+type Speedtest struct {
+	Provider string `json:"provider"`
+	// Last is null until a test has run since rbd started.
+	Last *SpeedtestResult `json:"last"`
+}
+
+// SpeedtestResult is one finished speed test.
+type SpeedtestResult struct {
+	// Server is the Cloudflare location tested against (its airport code,
+	// e.g. "SJC"), or "" when unknown.
+	Server       string  `json:"server"`
+	AgeSeconds   int     `json:"ageSeconds"`
+	DownloadMbps float64 `json:"downloadMbps"`
+	UploadMbps   float64 `json:"uploadMbps"`
+	PingMs       float64 `json:"pingMs"`
+}
+
+// EthernetDiagnostics are details of the Ethernet port while it carries
+// the internet, as short phrases.
+type EthernetDiagnostics struct {
+	CarrierState     string `json:"carrierState"`
+	Controller       string `json:"controller"`
+	MTU              string `json:"mtu"`
+	PacketStatistics string `json:"packetStatistics"`
+	DNSServers       string `json:"dnsServers"`
+	DHCPLease        string `json:"dhcpLease"`
+	PortDescription  string `json:"portDescription"`
+	PollingInterval  string `json:"pollingInterval"`
 }
 
 // HotspotStatus summarises the running hotspot.
@@ -171,6 +282,10 @@ type UplinkStatus struct {
 	IPv6     bool                 `json:"ipv6"`
 	WiFi     WiFiUplinkStatus     `json:"wifi"`
 	Ethernet EthernetUplinkStatus `json:"ethernet"`
+	// SubnetMask and InterfaceMAC describe RasBeacon's address on the
+	// uplink in use ("" when not connected).
+	SubnetMask   string `json:"subnetMask,omitempty"`
+	InterfaceMAC string `json:"interfaceMac,omitempty"`
 }
 
 // WiFiUplinkStatus describes the Wi-Fi uplink radio.
@@ -186,6 +301,10 @@ type WiFiUplinkStatus struct {
 	SSID      string `json:"ssid"`
 	Band      string `json:"band"`
 	SignalDBM int    `json:"signalDbm"`
+	// The access point while connected.
+	BSSID        string `json:"bssid,omitempty"`
+	Channel      int    `json:"channel,omitempty"`
+	FrequencyMHz int    `json:"frequencyMhz,omitempty"`
 }
 
 // EthernetUplinkStatus describes the Ethernet port.
@@ -198,6 +317,10 @@ type EthernetUplinkStatus struct {
 	// answered on the port: it is probably plugged into a network rather
 	// than a laptop, so it was not connected to the hotspot network.
 	ForeignDHCPServer string `json:"foreignDhcpServer,omitempty"`
+	// LinkSpeed ("1 Gbps") and Duplex ("Full duplex") while the cable has
+	// a link.
+	LinkSpeed string `json:"linkSpeed,omitempty"`
+	Duplex    string `json:"duplex,omitempty"`
 }
 
 // UpdateStatus describes software updates.

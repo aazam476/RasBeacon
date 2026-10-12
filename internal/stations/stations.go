@@ -27,6 +27,24 @@ type Station struct {
 	Hostname         string `json:"hostname"` // empty if the device didn't send one
 	SignalDBm        int    `json:"signalDbm"`
 	ConnectedSeconds int    `json:"connectedSeconds"`
+
+	// Filled in by the agent:
+	// Band is the hotspot's band ("2.4GHz" or "5GHz").
+	Band string `json:"band"`
+	// DownMbps (towards the device) and UpMbps are its current rates.
+	DownMbps float64 `json:"downMbps"`
+	UpMbps   float64 `json:"upMbps"`
+	// InternetAccess is false while the owner has paused it.
+	InternetAccess bool `json:"internetAccess"`
+	// PausedSeconds is how long ago it was paused (0 when not paused).
+	PausedSeconds int `json:"pausedSeconds,omitempty"`
+	// IsThisDevice marks the device viewing the page.
+	IsThisDevice bool `json:"isThisDevice,omitempty"`
+
+	// RxBytes and TxBytes are the radio's byte counters for the device
+	// (Tx is towards it), used to work out the rates.
+	RxBytes uint64 `json:"-"`
+	TxBytes uint64 `json:"-"`
 }
 
 // ParseStationDump reads `iw dev <iface> station dump` output, which lists
@@ -69,6 +87,10 @@ func ParseStationDump(output string) []Station {
 		case "connected time":
 			// "367 seconds"
 			current.ConnectedSeconds = firstInt(value)
+		case "rx bytes":
+			current.RxBytes, _ = strconv.ParseUint(value, 10, 64)
+		case "tx bytes":
+			current.TxBytes, _ = strconv.ParseUint(value, 10, 64)
 		}
 	}
 	return result

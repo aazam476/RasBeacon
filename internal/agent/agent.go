@@ -18,6 +18,7 @@
 //	https.go       the HTTPS setting
 //	update.go      installing and confirming updates
 //	status.go      the status page and diagnostics export
+//	readings.go    hardware readings, traffic, storage, Ethernet details
 //	server.go      the local HTTP API that rbweb talks to
 //
 // # One change at a time
@@ -102,6 +103,7 @@ type Agent struct {
 	// (see vpn.go, applyRoutedIPv6).
 	routedIPv6 netip.Prefix
 	portal     portalState
+	readings   readingsState
 	update     updateState
 	// decompress is zstdDecompress, or a stand-in in tests.
 	decompress func(io.Reader) (io.Reader, func() error, error)
