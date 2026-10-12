@@ -161,6 +161,8 @@ type routerSettings struct {
 	IPv6 bool
 	// Guest adds the guest network (normal mode only; see buildGuest).
 	Guest bool
+	// PausedMACs are devices whose internet access is paused.
+	PausedMACs []string
 }
 
 // startRouter applies rbd's firewall and starts dnsmasq with rbd's config,
@@ -173,7 +175,7 @@ func startRouter(t *testing.T, settings routerSettings) (leaseFile string) {
 		t.Fatal(err)
 	}
 
-	firewall := render.FirewallInput{SSHEnabled: settings.SSHEnabled, Guest: settings.Guest}
+	firewall := render.FirewallInput{SSHEnabled: settings.SSHEnabled, Guest: settings.Guest, PausedMACs: settings.PausedMACs}
 	if settings.Normal {
 		firewall.Egress = []string{"eth0"}
 	}

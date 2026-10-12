@@ -19,7 +19,12 @@ import (
 )
 
 // Status collects everything shown on the status page.
-func (a *Agent) Status() api.Status {
+func (a *Agent) Status() api.Status { return a.StatusFor("") }
+
+// StatusFor is Status as seen by the device at address viewer (the browser
+// showing the web UI): that device is marked IsThisDevice in the client
+// list, so the web UI can warn before you disconnect yourself.
+func (a *Agent) StatusFor(viewer string) api.Status {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -69,6 +74,12 @@ func (a *Agent) Status() api.Status {
 	if status.Warnings == nil {
 		status.Warnings = []string{}
 	}
+	for i := range status.Clients {
+		status.Clients[i].IsThisDevice = viewer != "" && status.Clients[i].IP == viewer
+	}
+	for i := range status.Guest.Clients {
+		status.Guest.Clients[i].IsThisDevice = viewer != "" && status.Guest.Clients[i].IP == viewer
+	}
 	return status
 }
 
@@ -94,7 +105,11 @@ func (a *Agent) stationsOn(iface string) []stations.Station {
 		c.Band = string(a.cfg.Hotspot.Band)
 		rate := a.readings.stationRates[c.MAC]
 		c.DownMbps, c.UpMbps = rate[0], rate[1]
-		c.InternetAccess = true
+		pausedAt, paused := a.cfg.Clients.Paused[c.MAC]
+		c.InternetAccess = !paused
+		if paused {
+			c.PausedSeconds = max(1, int(a.now().Sub(pausedAt).Seconds()))
+		}
 	}
 	return clients
 }

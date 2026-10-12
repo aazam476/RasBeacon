@@ -14,6 +14,9 @@ mmdebstrap:
     - hostapd
     # DHCP and DNS for the hotspot (the program only; we supply the service)
     - dnsmasq-base
+    # dhcp_release: makes dnsmasq forget a device's address ("Forget
+    # address" on the Clients page)
+    - dnsmasq-utils
     # Joins upstream Wi-Fi networks (the uplink)
     - wpasupplicant
     # The "wg" tool for the WireGuard VPN (the kernel has WireGuard built in;
