@@ -28,7 +28,7 @@ check "rbweb is installed and executable" test -x "$root/usr/bin/rbweb"
 # The network programs rbd drives.
 for tool in usr/sbin/hostapd usr/sbin/dnsmasq usr/sbin/nft usr/sbin/iw usr/sbin/rfkill \
   usr/sbin/wpa_supplicant usr/sbin/wpa_cli usr/bin/networkctl usr/lib/systemd/systemd-resolved \
-  usr/bin/wg usr/bin/timedatectl usr/bin/zstd usr/bin/rpi-slot-tryboot; do
+  usr/bin/wg usr/bin/dhcp_release usr/bin/timedatectl usr/bin/zstd usr/bin/rpi-slot-tryboot; do
   check "$tool is installed" test -x "$root/$tool"
 done
 

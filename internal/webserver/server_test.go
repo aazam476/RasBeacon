@@ -148,7 +148,7 @@ func TestLogin_ThenChangesNeedCSRFToken(t *testing.T) {
 
 	// Reading works with just the cookie.
 	rec := request(s, "GET", "http://10.87.0.1/api/v1/status", "", nil, cookies)
-	if rec.Code != http.StatusOK || rbd.lastForwarded != "GET /status" {
+	if rec.Code != http.StatusOK || rbd.lastForwarded != "GET /status?viewer=10.87.0.23" {
 		t.Fatalf("status with login: %d, forwarded %q", rec.Code, rbd.lastForwarded)
 	}
 
@@ -340,5 +340,16 @@ func TestUpdateUpload_NeedsLoginAndIsStreamedToRBD(t *testing.T) {
 		map[string]string{"X-CSRF-Token": csrf, "Content-Type": "application/octet-stream"}, cookies)
 	if rec.Code != http.StatusOK || rbd.lastForwarded != "POST /system/update" {
 		t.Errorf("got %d, forwarded %q", rec.Code, rbd.lastForwarded)
+	}
+}
+
+func TestStatus_TellsRBDWhoIsLooking(t *testing.T) {
+	s, rbd := newTestServer(api.ModeNormal)
+	cookies, _ := login(t, s)
+	if rec := request(s, "GET", "/api/v1/status", "", nil, cookies); rec.Code != http.StatusOK {
+		t.Fatalf("got %d", rec.Code)
+	}
+	if rbd.lastForwarded != "GET /status?viewer=10.87.0.23" {
+		t.Errorf("forwarded %q", rbd.lastForwarded)
 	}
 }

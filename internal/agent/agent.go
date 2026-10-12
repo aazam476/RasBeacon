@@ -514,6 +514,7 @@ func (a *Agent) applyFirewall() error {
 		PortalOnly:      a.mode == api.ModeNormal && a.portal.loginMode,
 		Guest:           a.guestActive(),
 		RoutedIPv6:      a.wantedRoutedIPv6(),
+		PausedMACs:      a.pausedMACs(),
 	}
 	if a.browser.uid > 0 {
 		input.Browser = &render.BrowserRule{UID: a.browser.uid, Uplinks: a.uplinkInterfaces()}

@@ -15,9 +15,11 @@ package config
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"net/netip"
 	"slices"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 )
@@ -71,6 +73,15 @@ type Config struct {
 	VPN      VPNConfig      `json:"vpn"`
 	HTTPS    HTTPSConfig    `json:"https"`
 	Updates  UpdatesConfig  `json:"updates"`
+	Clients  ClientsConfig  `json:"clients"`
+}
+
+// ClientsConfig holds per-device settings.
+type ClientsConfig struct {
+	// Paused lists the devices whose internet access the owner paused, by
+	// MAC address (lower case), with when it was paused. They stay paused
+	// until the owner allows them again, also after a restart.
+	Paused map[string]time.Time `json:"paused,omitempty"`
 }
 
 // UpdatesConfig holds the update settings.
@@ -551,6 +562,7 @@ func (c Config) Clone() Config {
 	c.VPN.Addresses = slices.Clone(c.VPN.Addresses)
 	c.VPN.DNS = slices.Clone(c.VPN.DNS)
 	c.VPN.Peer.AllowedIPs = slices.Clone(c.VPN.Peer.AllowedIPs)
+	c.Clients.Paused = maps.Clone(c.Clients.Paused)
 	return c
 }
 

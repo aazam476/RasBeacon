@@ -560,3 +560,16 @@ type CaptivePortalInfo struct {
 	Captive       bool   `json:"captive"`
 	UserPortalURL string `json:"user-portal-url,omitempty"`
 }
+
+// ClientRequest names a device on the hotspot by its MAC address
+// (POST /clients/disconnect and /clients/flush-lease).
+type ClientRequest struct {
+	MAC string `json:"mac"`
+}
+
+// ClientInternetAccessRequest pauses (allowed false) or allows a device's
+// internet access (POST /clients/internet-access).
+type ClientInternetAccessRequest struct {
+	MAC     string `json:"mac"`
+	Allowed bool   `json:"allowed"`
+}

@@ -58,8 +58,39 @@ func (a *Agent) Handler() http.Handler {
 	})
 
 	mux.HandleFunc("GET /status", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, a.Status())
+		// rbweb says which device is looking (?viewer=<its address>).
+		writeJSON(w, http.StatusOK, a.StatusFor(r.URL.Query().Get("viewer")))
 	})
+
+	// Per-device controls on the Clients page. Each answers 204.
+	mux.HandleFunc("POST /clients/internet-access", func(w http.ResponseWriter, r *http.Request) {
+		var req api.ClientInternetAccessRequest
+		if !readJSON(w, r, &req) {
+			return
+		}
+		if err := a.SetClientInternetAccess(req.MAC, req.Allowed); err != nil {
+			writeError(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+	clientActions := map[string]func(string) error{
+		"POST /clients/disconnect":  a.DisconnectClient,
+		"POST /clients/flush-lease": a.FlushClientLease,
+	}
+	for route, action := range clientActions {
+		mux.HandleFunc(route, func(w http.ResponseWriter, r *http.Request) {
+			var req api.ClientRequest
+			if !readJSON(w, r, &req) {
+				return
+			}
+			if err := action(req.MAC); err != nil {
+				writeError(w, err)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+		})
+	}
 
 	mux.HandleFunc("GET /settings/hotspot", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, a.HotspotSettings())

@@ -19,6 +19,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -110,7 +111,6 @@ func (s *Server) Handler() http.Handler {
 	// --- Login required: forwarded to rbd unchanged ---
 	// Each entry maps a public API route to rbd's internal route.
 	forwarded := map[string]string{
-		"GET /api/v1/status":                            "/status",
 		"GET /api/v1/settings/hotspot":                  "/settings/hotspot",
 		"PUT /api/v1/settings/hotspot":                  "/settings/hotspot",
 		"POST /api/v1/settings/hotspot/reveal-password": "/settings/hotspot/reveal-password",
@@ -130,10 +130,18 @@ func (s *Server) Handler() http.Handler {
 		"PUT /api/v1/settings/updates":                  "/settings/updates",
 		"POST /api/v1/system/reboot":                    "/system/reboot",
 		"GET /api/v1/diagnostics":                       "/diagnostics",
+		"POST /api/v1/clients/internet-access":          "/clients/internet-access",
+		"POST /api/v1/clients/disconnect":               "/clients/disconnect",
+		"POST /api/v1/clients/flush-lease":              "/clients/flush-lease",
 	}
 	for route, rbdPath := range forwarded {
 		mux.Handle(route, s.requireLogin(s.forwardTo(rbdPath)))
 	}
+	// The status tells rbd who is looking, so the client list can mark
+	// "this device".
+	mux.Handle("GET /api/v1/status", s.requireLogin(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.forward(w, http.MethodGet, "/status?viewer="+url.QueryEscape(clientIP(r)), nil)
+	})))
 	// Update files are large, so they are streamed to rbd.
 	mux.Handle("POST /api/v1/system/update", s.requireLogin(http.HandlerFunc(s.handleUpdate)))
 

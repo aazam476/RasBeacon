@@ -417,6 +417,23 @@ func TestFirewall_LoginBrowserOnlyReachesUplinks(t *testing.T) {
 	}
 }
 
+func TestFirewall_PausedDevicesAreNotForwarded(t *testing.T) {
+	got, err := Firewall(FirewallInput{Egress: []string{"wlan0"}, PausedMACs: []string{"3A:1F:22:AA:BB:CC", "8e:00:11:22:33:44"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkGolden(t, "firewall_paused", got)
+	forward := got[strings.Index(got, "chain forward"):]
+	rule := `iifname @lans ether saddr { 3a:1f:22:aa:bb:cc, 8e:00:11:22:33:44 } reject`
+	at := strings.Index(forward, rule)
+	if at < 0 || at > strings.Index(forward, "ct state established,related accept") {
+		t.Errorf("paused devices must be refused before established connections are let through:\n%s", forward)
+	}
+	if _, err := Firewall(FirewallInput{PausedMACs: []string{"3a:1f:22:aa:bb:cc } accept #"}}); err == nil {
+		t.Error("a bad MAC address must be refused")
+	}
+}
+
 func TestFirewall_EstablishedOnlyOnCurrentPath(t *testing.T) {
 	got, _ := Firewall(FirewallInput{Egress: []string{"wg0"}})
 	forward := got[strings.Index(got, "chain forward"):strings.Index(got, "chain prerouting_nat")]
