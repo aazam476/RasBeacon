@@ -56,6 +56,7 @@ import (
 	"rasbeacon/internal/render"
 	"rasbeacon/internal/routing"
 	"rasbeacon/internal/setupfile"
+	"rasbeacon/internal/speedtest"
 	"rasbeacon/internal/system"
 )
 
@@ -104,6 +105,7 @@ type Agent struct {
 	routedIPv6 netip.Prefix
 	portal     portalState
 	readings   readingsState
+	speedtest  speedtestState
 	update     updateState
 	// decompress is zstdDecompress, or a stand-in in tests.
 	decompress func(io.Reader) (io.Reader, func() error, error)
@@ -139,6 +141,7 @@ func New(p paths.Paths, runner system.Runner) *Agent {
 		lan:        render.DefaultLAN,
 		webGroup:   -1,
 		browser:    defaultBrowserSettings(),
+		speedtest:  speedtestState{server: speedtest.DefaultServer, run: runSpeedtest},
 		// USB adapters usually appear within a few seconds of power-on.
 		usbRadioWait: 20 * time.Second,
 	}

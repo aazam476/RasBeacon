@@ -55,6 +55,9 @@ type Options struct {
 	// start as root with its sandbox, so tests running as root need this;
 	// on the device the browser runs as rbbrowser with the sandbox on.
 	NoSandbox bool
+	// NoPictures skips the stream of pictures of the page, for a browser
+	// nobody looks at (the speed test).
+	NoPictures bool
 }
 
 // DefaultBinary is where Debian's chromium-headless-shell package puts the
@@ -88,6 +91,7 @@ type Session struct {
 	profileDir string
 	width      int
 	height     int
+	noPictures bool
 	stderr     *tailBuffer
 
 	mu      sync.Mutex
@@ -102,7 +106,7 @@ const startTimeout = 30 * time.Second
 
 // Start launches the browser with an empty page.
 func Start(opts Options) (*Session, error) {
-	s := &Session{changed: make(chan struct{}), done: make(chan struct{}), stderr: &tailBuffer{}}
+	s := &Session{changed: make(chan struct{}), done: make(chan struct{}), stderr: &tailBuffer{}, noPictures: opts.NoPictures}
 	s.width, s.height = ClampSize(opts.Width, opts.Height)
 
 	var cred *syscall.Credential
@@ -269,6 +273,9 @@ func (s *Session) setUp(ctx context.Context) error {
 		{"Emulation.setUserAgentOverride", map[string]any{"userAgent": mobileUserAgent(version.UserAgent)}},
 		{"Page.startScreencast", map[string]any{
 			"format": "jpeg", "quality": 70, "maxWidth": s.width, "maxHeight": s.height}},
+	}
+	if s.noPictures {
+		pageCalls = pageCalls[:len(pageCalls)-1] // no Page.startScreencast
 	}
 	for _, c := range pageCalls {
 		if err := s.conn.call(ctx, s.page, c.method, c.params, nil); err != nil {
@@ -498,6 +505,37 @@ func (s *Session) Back() error {
 // Reload loads the page again.
 func (s *Session) Reload() error {
 	return s.pageCall("Page.reload", nil, nil)
+}
+
+// Evaluate runs JavaScript in the page and returns its result as JSON. If
+// the code gives a promise, Evaluate waits for it (until ctx ends). Only
+// RasBeacon's own code is run this way (the speed test), never anything
+// from the web UI.
+func (s *Session) Evaluate(ctx context.Context, expression string) (json.RawMessage, error) {
+	var reply struct {
+		Result struct {
+			Value json.RawMessage `json:"value"`
+		} `json:"result"`
+		ExceptionDetails *struct {
+			Text      string `json:"text"`
+			Exception struct {
+				Description string `json:"description"`
+			} `json:"exception"`
+		} `json:"exceptionDetails"`
+	}
+	err := s.conn.call(ctx, s.page, "Runtime.evaluate", map[string]any{
+		"expression": expression, "awaitPromise": true, "returnByValue": true}, &reply)
+	if err != nil {
+		return nil, err
+	}
+	if e := reply.ExceptionDetails; e != nil {
+		message := e.Exception.Description
+		if message == "" {
+			message = e.Text
+		}
+		return nil, fmt.Errorf("script failed: %s", message)
+	}
+	return reply.Result.Value, nil
 }
 
 // Done is closed when the browser has exited.

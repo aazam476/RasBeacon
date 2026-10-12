@@ -1,7 +1,9 @@
 # Third-party components and redistribution
 
 RasBeacon's own code (this repository) is licensed under **Apache-2.0**
-(see [../LICENSE](../LICENSE)). No code was copied from other projects.
+(see [../LICENSE](../LICENSE)). One file was copied from another project,
+unchanged: Cloudflare's speed test library (below), with its license next
+to it in `internal/speedtest/cloudflare/`.
 
 The released SD card images also contain software and firmware from others.
 This file lists what, and what redistributing the images requires.
@@ -17,6 +19,7 @@ This file lists what, and what redistributing the images requires.
 | Wi-Fi firmware for Realtek RTW88 USB adapters | `linux-firmware` | Realtek redistribution license, **to verify** |
 | React, React DOM (in the web UI) | npm | MIT |
 | golang.org/x/crypto (in rbd and rbweb) | Go module | BSD-3-Clause |
+| Cloudflare speed test library 1.14.1 (in rbd, run in the headless browser) | github.com/cloudflare/speedtest (npm `@cloudflare/speedtest`) | MIT (`internal/speedtest/cloudflare/LICENSE`) |
 | Go standard library (in rbd and rbweb) | go.dev | BSD-3-Clause |
 
 The build tools (rpi-image-gen, Vite, TypeScript, ESLint, Playwright, ...)

@@ -210,8 +210,8 @@ type Speedtest struct {
 
 // SpeedtestResult is one finished speed test.
 type SpeedtestResult struct {
-	// Server is the Cloudflare location tested against (its airport code,
-	// e.g. "SJC"), or "" when unknown.
+	// Server is the Cloudflare location tested against, e.g.
+	// "San Jose (SJC)", or "" when unknown.
 	Server       string  `json:"server"`
 	AgeSeconds   int     `json:"ageSeconds"`
 	DownloadMbps float64 `json:"downloadMbps"`

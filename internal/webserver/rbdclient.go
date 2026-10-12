@@ -66,6 +66,16 @@ func (c *RBDClient) Stream(path string, body io.Reader) (int, []byte, error) {
 // Do sends a request to rbd and returns the status code and response body.
 // body may be nil for requests without one.
 func (c *RBDClient) Do(method, path string, body []byte) (int, []byte, error) {
+	return c.do(c.http, method, path, body)
+}
+
+// DoSlow is Do without the time limit, for requests rbd itself limits
+// (the speed test).
+func (c *RBDClient) DoSlow(method, path string, body []byte) (int, []byte, error) {
+	return c.do(c.stream, method, path, body)
+}
+
+func (c *RBDClient) do(client *http.Client, method, path string, body []byte) (int, []byte, error) {
 	var reader io.Reader
 	if body != nil {
 		reader = bytes.NewReader(body)
@@ -77,7 +87,7 @@ func (c *RBDClient) Do(method, path string, body []byte) (int, []byte, error) {
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	resp, err := c.http.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return 0, nil, fmt.Errorf("contacting rbd: %w", err)
 	}

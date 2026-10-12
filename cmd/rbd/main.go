@@ -59,6 +59,13 @@ func main() {
 		// without Chromium's sandbox, which many development machines
 		// and CI runners can't provide.
 		a.SetBrowser(*devBrowser, true)
+		// The speed test runs against a stand-in for Cloudflare's service.
+		server, err := devsim.StartSpeedtestServer()
+		if err != nil {
+			slog.Error("could not start the simulated speed test service", "error", err)
+			os.Exit(1)
+		}
+		a.SetSpeedtestServer(server)
 		if *devHotel != "" {
 			if err := devsim.StartHotel(*devHotel); err != nil {
 				slog.Error("could not start the simulated hotel", "error", err)
