@@ -13,6 +13,7 @@
 package config
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -30,7 +31,8 @@ import (
 //
 //	1: milestones 1 to 3
 //	2: adds the VPN section, with the kill switch on by default
-const CurrentVersion = 2
+//	3: the VPN keeps several WireGuard profiles (see MoveVPNIntoProfile)
+const CurrentVersion = 3
 
 // Band is the Wi-Fi frequency band the hotspot uses.
 type Band string
@@ -101,8 +103,9 @@ type HTTPSConfig struct {
 	Uploaded bool `json:"uploaded"`
 }
 
-// VPNConfig holds the WireGuard VPN settings. The private key and the
-// optional preshared key are kept in Secrets.
+// VPNConfig holds the WireGuard VPN settings: the switches, and the
+// profiles (one per WireGuard server or configuration file) the owner kept.
+// One profile is in use at a time.
 type VPNConfig struct {
 	// Enabled sends devices' traffic through the WireGuard tunnel.
 	Enabled bool `json:"enabled"`
@@ -111,6 +114,29 @@ type VPNConfig struct {
 	// Off means traffic goes directly through the uplink while the tunnel
 	// is down (see internal/tunnel).
 	KillSwitch bool `json:"killSwitch"`
+	// Active is the name of the profile in use; "" when there is none.
+	Active   string       `json:"active"`
+	Profiles []VPNProfile `json:"profiles"`
+}
+
+// MaxVPNProfiles keeps the VPN page short.
+const MaxVPNProfiles = 20
+
+// Profile returns the profile called name.
+func (v VPNConfig) Profile(name string) (VPNProfile, bool) {
+	for _, p := range v.Profiles {
+		if p.Name == name {
+			return p, true
+		}
+	}
+	return VPNProfile{}, false
+}
+
+// VPNProfile is one WireGuard configuration. Its private key and optional
+// preshared key are kept in Secrets.WireGuardKeys under the same name.
+type VPNProfile struct {
+	// Name is unique, usually the imported file's name ("home.conf").
+	Name string `json:"name"`
 	// Addresses are RasBeacon's addresses inside the tunnel.
 	Addresses []netip.Prefix `json:"addresses"`
 	// DNS servers reached through the tunnel.
@@ -124,6 +150,56 @@ type VPNConfig struct {
 	// without NAT. Unset (IsValid() false) means devices use RasBeacon's
 	// private IPv6 network with NAT, as without this setting.
 	RoutedIPv6Prefix netip.Prefix `json:"routedIpv6Prefix"`
+}
+
+// ValidateProfileName checks a profile name: 1 to 64 characters of
+// printable text.
+func ValidateProfileName(name string) error {
+	if strings.TrimSpace(name) == "" || utf8.RuneCountInString(name) > 64 || !utf8.ValidString(name) {
+		return &ValidationError{Field: "name", Message: "A profile name must be 1 to 64 characters."}
+	}
+	for _, r := range name {
+		if !unicode.IsPrint(r) {
+			return &ValidationError{Field: "name", Message: "A profile name can't contain control characters."}
+		}
+	}
+	return nil
+}
+
+// Clone returns a copy of p that shares no lists with p.
+func (p VPNProfile) Clone() VPNProfile {
+	p.Addresses = slices.Clone(p.Addresses)
+	p.DNS = slices.Clone(p.DNS)
+	p.Peer.AllowedIPs = slices.Clone(p.Peer.AllowedIPs)
+	return p
+}
+
+// MoveVPNIntoProfile upgrades the VPN settings of a version 2 config.json
+// (raw is the file's text): version 2 kept a single server's settings in
+// the VPN section and its keys in secrets.json. They become the profile
+// "wireguard.conf", in use. It does nothing if no server was set up.
+func MoveVPNIntoProfile(raw []byte, c *Config, s *Secrets) error {
+	var old struct {
+		VPN struct {
+			VPNProfile
+		} `json:"vpn"`
+	}
+	if err := json.Unmarshal(raw, &old); err != nil {
+		return err
+	}
+	if old.VPN.Peer.PublicKey == "" && s.WireGuardPrivateKey == "" {
+		return nil
+	}
+	profile := old.VPN.VPNProfile
+	profile.Name = "wireguard.conf"
+	c.VPN.Profiles = []VPNProfile{profile}
+	c.VPN.Active = profile.Name
+	if s.WireGuardKeys == nil {
+		s.WireGuardKeys = map[string]WireGuardKeys{}
+	}
+	s.WireGuardKeys[profile.Name] = WireGuardKeys{PrivateKey: s.WireGuardPrivateKey, PresharedKey: s.WireGuardPresharedKey}
+	s.WireGuardPrivateKey, s.WireGuardPresharedKey = "", ""
+	return nil
 }
 
 // ValidateRoutedIPv6Prefix checks VPNConfig.RoutedIPv6Prefix: a public
@@ -397,11 +473,21 @@ type Secrets struct {
 	UplinkPasswords map[string]string `json:"uplinkPasswords,omitempty"`
 	// GuestPassword is the WPA2/WPA3 password for the guest network.
 	GuestPassword string `json:"guestPassword,omitempty"`
-	// WireGuardPrivateKey is RasBeacon's own WireGuard key (base64).
-	WireGuardPrivateKey string `json:"wireguardPrivateKey,omitempty"`
-	// WireGuardPresharedKey is an optional extra secret shared with the
-	// WireGuard server (base64).
+	// WireGuardKeys holds each VPN profile's keys, keyed by profile name.
+	WireGuardKeys map[string]WireGuardKeys `json:"wireguardKeys,omitempty"`
+	// WireGuardPrivateKey and WireGuardPresharedKey are where version 2
+	// kept the single VPN server's keys. MoveVPNIntoProfile moves them into
+	// WireGuardKeys.
+	WireGuardPrivateKey   string `json:"wireguardPrivateKey,omitempty"`
 	WireGuardPresharedKey string `json:"wireguardPresharedKey,omitempty"`
+}
+
+// WireGuardKeys are one VPN profile's secrets (base64).
+type WireGuardKeys struct {
+	// PrivateKey is RasBeacon's own key for this profile.
+	PrivateKey string `json:"privateKey"`
+	// PresharedKey is an optional extra secret shared with the server.
+	PresharedKey string `json:"presharedKey,omitempty"`
 }
 
 // Identity holds values generated once, on first boot.
@@ -559,9 +645,10 @@ func (c Config) Clone() Config {
 			c.Uplink.Networks[i].Enterprise = &copied
 		}
 	}
-	c.VPN.Addresses = slices.Clone(c.VPN.Addresses)
-	c.VPN.DNS = slices.Clone(c.VPN.DNS)
-	c.VPN.Peer.AllowedIPs = slices.Clone(c.VPN.Peer.AllowedIPs)
+	c.VPN.Profiles = slices.Clone(c.VPN.Profiles)
+	for i, p := range c.VPN.Profiles {
+		c.VPN.Profiles[i] = p.Clone()
+	}
 	c.Clients.Paused = maps.Clone(c.Clients.Paused)
 	return c
 }
@@ -573,6 +660,7 @@ func (s Secrets) Clone() Secrets {
 		passwords[id] = password
 	}
 	s.UplinkPasswords = passwords
+	s.WireGuardKeys = maps.Clone(s.WireGuardKeys)
 	return s
 }
 

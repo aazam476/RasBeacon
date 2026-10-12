@@ -29,6 +29,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/netip"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -55,27 +57,42 @@ type vpnState struct {
 	lastRefresh time.Time
 }
 
-// wireguardConfig builds the tunnel settings from config.json and the
-// secrets. ok is false if no server has been set up yet.
+// activeProfile returns the VPN profile in use. ok is false if there is
+// none.
+func (a *Agent) activeProfile() (config.VPNProfile, bool) {
+	return a.cfg.VPN.Profile(a.cfg.VPN.Active)
+}
+
+// wireguardConfig builds the tunnel settings for the profile in use. ok is
+// false if there is none, or it isn't complete yet.
 func (a *Agent) wireguardConfig() (c wireguard.Config, ok bool, err error) {
-	v := a.cfg.VPN
-	if v.Peer.PublicKey == "" || a.secrets.WireGuardPrivateKey == "" {
+	p, found := a.activeProfile()
+	if !found {
 		return c, false, nil
 	}
-	if c.PrivateKey, err = wireguard.ParseKey(a.secrets.WireGuardPrivateKey); err != nil {
+	return wireguardConfigFor(p, a.secrets.WireGuardKeys[p.Name])
+}
+
+// wireguardConfigFor builds the tunnel settings from a profile and its keys.
+// ok is false if the server or RasBeacon's own key is still missing.
+func wireguardConfigFor(p config.VPNProfile, keys config.WireGuardKeys) (c wireguard.Config, ok bool, err error) {
+	if p.Peer.PublicKey == "" || keys.PrivateKey == "" {
+		return c, false, nil
+	}
+	if c.PrivateKey, err = wireguard.ParseKey(keys.PrivateKey); err != nil {
 		return c, false, fmt.Errorf("saved private key: %w", err)
 	}
-	if c.Peer.PublicKey, err = wireguard.ParseKey(v.Peer.PublicKey); err != nil {
+	if c.Peer.PublicKey, err = wireguard.ParseKey(p.Peer.PublicKey); err != nil {
 		return c, false, fmt.Errorf("saved server key: %w", err)
 	}
-	if a.secrets.WireGuardPresharedKey != "" {
-		if c.Peer.PresharedKey, err = wireguard.ParseKey(a.secrets.WireGuardPresharedKey); err != nil {
+	if keys.PresharedKey != "" {
+		if c.Peer.PresharedKey, err = wireguard.ParseKey(keys.PresharedKey); err != nil {
 			return c, false, fmt.Errorf("saved preshared key: %w", err)
 		}
 		c.Peer.HasPresharedKey = true
 	}
-	c.Addresses, c.DNS, c.MTU = v.Addresses, v.DNS, v.MTU
-	c.Peer.Endpoint, c.Peer.AllowedIPs, c.Peer.PersistentKeepalive = v.Peer.Endpoint, v.Peer.AllowedIPs, v.Peer.PersistentKeepalive
+	c.Addresses, c.DNS, c.MTU = p.Addresses, p.DNS, p.MTU
+	c.Peer.Endpoint, c.Peer.AllowedIPs, c.Peer.PersistentKeepalive = p.Peer.Endpoint, p.Peer.AllowedIPs, p.Peer.PersistentKeepalive
 	return c, true, nil
 }
 
@@ -159,7 +176,8 @@ func (a *Agent) wantedRoutedIPv6() netip.Prefix {
 	if !a.vpnActive() || !routing.KernelHasIPv6(a.paths.ProcSysNetIPv6()) {
 		return netip.Prefix{}
 	}
-	return a.cfg.VPN.RoutedIPv6Prefix
+	p, _ := a.activeProfile()
+	return p.RoutedIPv6Prefix
 }
 
 // applyRoutedIPv6 puts RasBeacon's address in the routed IPv6 network on
@@ -226,9 +244,10 @@ func (a *Agent) updateTunnel() error {
 	// now and then (it may have changed, or the uplink's DNS works now).
 	if active && state != tunnel.Up && a.now().Sub(a.vpn.lastRefresh) >= endpointRefreshInterval {
 		a.vpn.lastRefresh = a.now()
-		cmd := routing.SetEndpoint(a.cfg.VPN.Peer.PublicKey, a.cfg.VPN.Peer.Endpoint)
+		p, _ := a.activeProfile()
+		cmd := routing.SetEndpoint(p.Peer.PublicKey, p.Peer.Endpoint)
 		if _, err := a.runner.Run(cmd[0], cmd[1:]...); err != nil {
-			slog.Warn("could not look up the VPN server", "endpoint", a.cfg.VPN.Peer.Endpoint, "error", err)
+			slog.Warn("could not look up the VPN server", "endpoint", p.Peer.Endpoint, "error", err)
 		}
 	}
 
@@ -288,7 +307,8 @@ func (a *Agent) upstreamDNS() []string {
 		return []string{deviceResolver}
 	}
 	var servers []string
-	for _, dns := range a.cfg.VPN.DNS {
+	p, _ := a.activeProfile()
+	for _, dns := range p.DNS {
 		servers = append(servers, dns.String())
 	}
 	return servers
@@ -310,7 +330,8 @@ func (a *Agent) tunnelDNSGuard() []netip.Addr {
 	if !a.vpnActive() {
 		return nil
 	}
-	return a.cfg.VPN.DNS
+	p, _ := a.activeProfile()
+	return p.DNS
 }
 
 // vpnStatus describes the tunnel for the status page.
@@ -337,7 +358,7 @@ func (a *Agent) vpnStatus() api.VPNStatus {
 func (a *Agent) vpnWarnings() []string {
 	if !a.vpnActive() {
 		if a.cfg.VPN.Enabled {
-			return []string{"The VPN is turned on but not set up yet: import a WireGuard file on the VPN page."}
+			return []string{"The VPN is turned on but its profile isn't complete: import a WireGuard file on the VPN page, or finish the profile's server details."}
 		}
 		return nil
 	}
@@ -360,80 +381,114 @@ func (a *Agent) VPNSettings() api.VPNSettings {
 	defer a.mu.Unlock()
 	v := a.cfg.VPN
 	s := api.VPNSettings{
-		Enabled:             v.Enabled,
-		KillSwitch:          v.KillSwitch,
-		Configured:          v.Peer.PublicKey != "" && a.secrets.WireGuardPrivateKey != "",
-		Addresses:           prefixStrings(v.Addresses),
-		DNS:                 addrStrings(v.DNS),
-		MTU:                 v.MTU,
-		PeerPublicKey:       v.Peer.PublicKey,
-		Endpoint:            v.Peer.Endpoint,
-		AllowedIPs:          prefixStrings(v.Peer.AllowedIPs),
-		PersistentKeepalive: v.Peer.PersistentKeepalive,
-		HasPresharedKey:     a.secrets.WireGuardPresharedKey != "",
+		Enabled:       v.Enabled,
+		KillSwitch:    v.KillSwitch,
+		ActiveProfile: v.Active,
+		Profiles:      []api.VPNProfile{},
 	}
-	if v.RoutedIPv6Prefix.IsValid() {
-		s.RoutedIPv6Prefix = v.RoutedIPv6Prefix.String()
-	}
-	if key, err := wireguard.ParseKey(a.secrets.WireGuardPrivateKey); err == nil {
-		s.PublicKey = key.PublicKey().String()
+	for _, p := range v.Profiles {
+		keys := a.secrets.WireGuardKeys[p.Name]
+		profile := api.VPNProfile{
+			Name:                p.Name,
+			Addresses:           prefixStrings(p.Addresses),
+			DNS:                 addrStrings(p.DNS),
+			MTU:                 p.MTU,
+			PeerPublicKey:       p.Peer.PublicKey,
+			Endpoint:            p.Peer.Endpoint,
+			AllowedIPs:          prefixStrings(p.Peer.AllowedIPs),
+			PersistentKeepalive: p.Peer.PersistentKeepalive,
+			HasPresharedKey:     keys.PresharedKey != "",
+		}
+		if p.RoutedIPv6Prefix.IsValid() {
+			profile.RoutedIPv6Prefix = p.RoutedIPv6Prefix.String()
+		}
+		if key, err := wireguard.ParseKey(keys.PrivateKey); err == nil {
+			profile.PublicKey = key.PublicKey().String()
+		}
+		s.Profiles = append(s.Profiles, profile)
 	}
 	return s
 }
 
-// UpdateVPNSettings saves settings typed into the VPN page and applies them.
-func (a *Agent) UpdateVPNSettings(req api.VPNSettings) error {
+// SetVPNSwitches turns the VPN and its kill switch on or off.
+func (a *Agent) SetVPNSwitches(req api.VPNSwitches) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.mode != api.ModeNormal {
 		return ErrWrongMode
 	}
+	newCfg := a.cfg.Clone()
+	newCfg.VPN.Enabled, newCfg.VPN.KillSwitch = req.Enabled, req.KillSwitch
+	return a.saveVPN(newCfg, a.secrets.Clone(), "")
+}
 
+// profileIndex finds a profile in newCfg, or answers "no such profile".
+func profileIndex(v config.VPNConfig, name string) (int, error) {
+	for i, p := range v.Profiles {
+		if p.Name == name {
+			return i, nil
+		}
+	}
+	return -1, &config.ValidationError{Field: "name", Message: "There is no VPN profile called " + strconv.Quote(name) + "."}
+}
+
+// SaveVPNProfile saves the details typed into one profile's form.
+func (a *Agent) SaveVPNProfile(req api.VPNProfileDetails) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.mode != api.ModeNormal {
+		return ErrWrongMode
+	}
 	newCfg := a.cfg.Clone()
 	newSecrets := a.secrets.Clone()
-	v := &newCfg.VPN
-	v.Enabled, v.KillSwitch, v.MTU = req.Enabled, req.KillSwitch, req.MTU
-	v.Peer.PublicKey = strings.TrimSpace(req.PeerPublicKey)
-	v.Peer.Endpoint = strings.TrimSpace(req.Endpoint)
-	v.Peer.PersistentKeepalive = req.PersistentKeepalive
+	i, err := profileIndex(newCfg.VPN, req.Name)
+	if err != nil {
+		return err
+	}
+	p := &newCfg.VPN.Profiles[i]
+	p.MTU = req.MTU
+	p.Peer.PublicKey = strings.TrimSpace(req.PeerPublicKey)
+	p.Peer.Endpoint = strings.TrimSpace(req.Endpoint)
+	p.Peer.PersistentKeepalive = req.PersistentKeepalive
 
-	var err error
-	if v.Addresses, err = parsePrefixes(req.Addresses, "addresses", true); err != nil {
+	if p.Addresses, err = parsePrefixes(req.Addresses, "addresses", true); err != nil {
 		return err
 	}
-	if v.Peer.AllowedIPs, err = parsePrefixes(req.AllowedIPs, "allowedIps", false); err != nil {
+	if p.Peer.AllowedIPs, err = parsePrefixes(req.AllowedIPs, "allowedIps", false); err != nil {
 		return err
 	}
-	if v.DNS, err = parseAddrs(req.DNS, "dns"); err != nil {
+	if p.DNS, err = parseAddrs(req.DNS, "dns"); err != nil {
 		return err
 	}
-	v.RoutedIPv6Prefix = netip.Prefix{}
+	p.RoutedIPv6Prefix = netip.Prefix{}
 	if text := strings.TrimSpace(req.RoutedIPv6Prefix); text != "" {
-		if v.RoutedIPv6Prefix, err = netip.ParsePrefix(text); err != nil {
+		if p.RoutedIPv6Prefix, err = netip.ParsePrefix(text); err != nil {
 			return &config.ValidationError{Field: "routedIpv6Prefix", Message: "Must be an IPv6 network like 2001:db8:1234:5678::/64."}
 		}
 	}
+	keys := newSecrets.WireGuardKeys[p.Name]
 	if req.PrivateKey != "" {
 		if _, err := wireguard.ParseKey(strings.TrimSpace(req.PrivateKey)); err != nil {
 			return &config.ValidationError{Field: "privateKey", Message: err.Error()}
 		}
-		newSecrets.WireGuardPrivateKey = strings.TrimSpace(req.PrivateKey)
+		keys.PrivateKey = strings.TrimSpace(req.PrivateKey)
 	}
 	switch {
 	case req.RemovePresharedKey:
-		newSecrets.WireGuardPresharedKey = ""
+		keys.PresharedKey = ""
 	case req.PresharedKey != "":
 		if _, err := wireguard.ParseKey(strings.TrimSpace(req.PresharedKey)); err != nil {
 			return &config.ValidationError{Field: "presharedKey", Message: err.Error()}
 		}
-		newSecrets.WireGuardPresharedKey = strings.TrimSpace(req.PresharedKey)
+		keys.PresharedKey = strings.TrimSpace(req.PresharedKey)
 	}
-	return a.saveVPN(newCfg, newSecrets)
+	newSecrets.WireGuardKeys = withKeys(newSecrets.WireGuardKeys, p.Name, keys)
+	return a.saveVPN(newCfg, newSecrets, p.Name)
 }
 
-// ImportVPNConfig reads a WireGuard .conf file and saves its settings (the
-// "Use VPN" and kill switch choices stay as they are).
-func (a *Agent) ImportVPNConfig(conf string) error {
+// ImportVPNProfile reads a WireGuard .conf file and keeps it as a new
+// profile. The first profile is put in use; the switches stay as they are.
+func (a *Agent) ImportVPNProfile(conf, name string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.mode != api.ModeNormal {
@@ -442,68 +497,183 @@ func (a *Agent) ImportVPNConfig(conf string) error {
 	if len(conf) > 16*1024 {
 		return &config.ValidationError{Field: "conf", Message: "This file is too big to be a WireGuard configuration."}
 	}
+	if len(a.cfg.VPN.Profiles) >= config.MaxVPNProfiles {
+		return &config.ValidationError{Field: "conf", Message: fmt.Sprintf("RasBeacon keeps at most %d VPN profiles. Remove one first.", config.MaxVPNProfiles)}
+	}
 	wg, err := wireguard.ParseConf(conf)
 	if err != nil {
 		return &config.ValidationError{Field: "conf", Message: err.Error()}
 	}
+	name = uniqueProfileName(a.cfg.VPN, strings.TrimSpace(name))
+	if err := config.ValidateProfileName(name); err != nil {
+		return err
+	}
 	newCfg := a.cfg.Clone()
 	newSecrets := a.secrets.Clone()
-	newCfg.VPN.Addresses, newCfg.VPN.DNS, newCfg.VPN.MTU = wg.Addresses, wg.DNS, wg.MTU
-	newCfg.VPN.Peer = config.VPNPeer{
-		PublicKey:           wg.Peer.PublicKey.String(),
-		Endpoint:            wg.Peer.Endpoint,
-		AllowedIPs:          wg.Peer.AllowedIPs,
-		PersistentKeepalive: wg.Peer.PersistentKeepalive,
+	newCfg.VPN.Profiles = append(newCfg.VPN.Profiles, config.VPNProfile{
+		Name:      name,
+		Addresses: wg.Addresses,
+		DNS:       wg.DNS,
+		MTU:       wg.MTU,
+		Peer: config.VPNPeer{
+			PublicKey:           wg.Peer.PublicKey.String(),
+			Endpoint:            wg.Peer.Endpoint,
+			AllowedIPs:          wg.Peer.AllowedIPs,
+			PersistentKeepalive: wg.Peer.PersistentKeepalive,
+		},
+	})
+	if newCfg.VPN.Active == "" {
+		newCfg.VPN.Active = name
 	}
-	newSecrets.WireGuardPrivateKey = wg.PrivateKey.String()
-	newSecrets.WireGuardPresharedKey = presharedKeyText(wg.Peer)
-	slog.Info("WireGuard file imported", "endpoint", wg.Peer.Endpoint)
-	return a.saveVPN(newCfg, newSecrets)
+	newSecrets.WireGuardKeys = withKeys(newSecrets.WireGuardKeys, name, config.WireGuardKeys{
+		PrivateKey:   wg.PrivateKey.String(),
+		PresharedKey: presharedKeyText(wg.Peer),
+	})
+	slog.Info("WireGuard file imported", "profile", name, "endpoint", wg.Peer.Endpoint)
+	return a.saveVPN(newCfg, newSecrets, name)
 }
 
-// GenerateVPNKey makes a new private key for RasBeacon. The matching public
-// key (shown on the VPN page) must then be added to the WireGuard server.
-func (a *Agent) GenerateVPNKey() error {
+// uniqueProfileName returns name, or "wireguard.conf" if it is empty, with
+// "-2", "-3", ... added before ".conf" if a profile already has it.
+func uniqueProfileName(v config.VPNConfig, name string) string {
+	if name == "" {
+		name = "wireguard.conf"
+	}
+	if _, taken := v.Profile(name); !taken {
+		return name
+	}
+	base := strings.TrimSuffix(name, ".conf")
+	for n := 2; ; n++ {
+		candidate := fmt.Sprintf("%s-%d.conf", base, n)
+		if _, taken := v.Profile(candidate); !taken {
+			return candidate
+		}
+	}
+}
+
+// SetActiveVPNProfile switches to another profile.
+func (a *Agent) SetActiveVPNProfile(name string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.mode != api.ModeNormal {
 		return ErrWrongMode
+	}
+	if _, err := profileIndex(a.cfg.VPN, name); err != nil {
+		return err
+	}
+	if name == a.cfg.VPN.Active {
+		return nil
+	}
+	newCfg := a.cfg.Clone()
+	newCfg.VPN.Active = name
+	slog.Info("VPN profile switched", "profile", name)
+	return a.saveVPN(newCfg, a.secrets.Clone(), name)
+}
+
+// RemoveVPNProfile deletes a profile and its keys. If it was in use, the
+// first remaining profile takes over; without any, the VPN is turned off.
+func (a *Agent) RemoveVPNProfile(name string) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.mode != api.ModeNormal {
+		return ErrWrongMode
+	}
+	i, err := profileIndex(a.cfg.VPN, name)
+	if err != nil {
+		return err
+	}
+	newCfg := a.cfg.Clone()
+	newSecrets := a.secrets.Clone()
+	newCfg.VPN.Profiles = slices.Delete(newCfg.VPN.Profiles, i, i+1)
+	delete(newSecrets.WireGuardKeys, name)
+	if newCfg.VPN.Active == name {
+		newCfg.VPN.Active = ""
+		if len(newCfg.VPN.Profiles) > 0 {
+			newCfg.VPN.Active = newCfg.VPN.Profiles[0].Name
+		}
+	}
+	if len(newCfg.VPN.Profiles) == 0 {
+		newCfg.VPN.Enabled = false
+	}
+	slog.Info("VPN profile removed", "profile", name, "active", newCfg.VPN.Active)
+	return a.saveVPN(newCfg, newSecrets, "")
+}
+
+// GenerateVPNKey makes a new private key for one profile. The matching
+// public key (shown on the VPN page) must then be added to the WireGuard
+// server.
+func (a *Agent) GenerateVPNKey(name string) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.mode != api.ModeNormal {
+		return ErrWrongMode
+	}
+	if _, err := profileIndex(a.cfg.VPN, name); err != nil {
+		return err
 	}
 	key, err := wireguard.GeneratePrivateKey()
 	if err != nil {
 		return err
 	}
 	newSecrets := a.secrets.Clone()
-	newSecrets.WireGuardPrivateKey = key.String()
-	return a.saveVPN(a.cfg.Clone(), newSecrets)
+	keys := newSecrets.WireGuardKeys[name]
+	keys.PrivateKey = key.String()
+	newSecrets.WireGuardKeys = withKeys(newSecrets.WireGuardKeys, name, keys)
+	return a.saveVPN(a.cfg.Clone(), newSecrets, name)
 }
 
-// saveVPN checks, saves and applies new VPN settings.
-func (a *Agent) saveVPN(newCfg config.Config, newSecrets config.Secrets) error {
-	// A VPN that is set up (or being turned on) must be complete and valid.
-	previous, previousSecrets := a.cfg, a.secrets
-	a.cfg, a.secrets = newCfg, newSecrets
-	wg, configured, err := a.wireguardConfig()
-	a.cfg, a.secrets = previous, previousSecrets
-	if err != nil {
-		return &config.ValidationError{Field: "privateKey", Message: err.Error()}
+// withKeys sets one profile's keys in a (possibly nil) map.
+func withKeys(all map[string]config.WireGuardKeys, name string, keys config.WireGuardKeys) map[string]config.WireGuardKeys {
+	if all == nil {
+		all = map[string]config.WireGuardKeys{}
 	}
-	if newCfg.VPN.Enabled && !configured {
-		return &config.ValidationError{Field: "enabled", Message: "Import a WireGuard file (or enter the server's details and keys) before turning the VPN on."}
+	all[name] = keys
+	return all
+}
+
+// checkProfile checks that a profile is valid, as far as it is filled in.
+// configured is false while its server or key is still missing.
+func checkProfile(p config.VPNProfile, keys config.WireGuardKeys) (configured bool, err error) {
+	wg, configured, err := wireguardConfigFor(p, keys)
+	if err != nil {
+		return false, &config.ValidationError{Field: "privateKey", Message: err.Error()}
 	}
 	if configured {
 		if err := wg.Validate(); err != nil {
-			return &config.ValidationError{Field: "conf", Message: err.Error()}
+			return false, &config.ValidationError{Field: "conf", Message: err.Error()}
 		}
 	}
-	if p := newCfg.VPN.RoutedIPv6Prefix; p.IsValid() {
-		if err := config.ValidateRoutedIPv6Prefix(p); err != nil {
-			return &config.ValidationError{Field: "routedIpv6Prefix", Message: err.Error()}
+	if prefix := p.RoutedIPv6Prefix; prefix.IsValid() {
+		if err := config.ValidateRoutedIPv6Prefix(prefix); err != nil {
+			return false, &config.ValidationError{Field: "routedIpv6Prefix", Message: err.Error()}
 		}
 		if configured && !wg.CarriesIPv6() {
-			return &config.ValidationError{Field: "routedIpv6Prefix",
+			return false, &config.ValidationError{Field: "routedIpv6Prefix",
 				Message: "The VPN must carry IPv6 for this: it needs an IPv6 address and ::/0 in AllowedIPs."}
 		}
+	}
+	return configured, nil
+}
+
+// saveVPN checks, saves and applies new VPN settings. changed is the
+// profile that was edited ("" for none), which is checked too even if it
+// isn't in use.
+func (a *Agent) saveVPN(newCfg config.Config, newSecrets config.Secrets, changed string) error {
+	if p, ok := newCfg.VPN.Profile(changed); ok {
+		if _, err := checkProfile(p, newSecrets.WireGuardKeys[p.Name]); err != nil {
+			return err
+		}
+	}
+	active, hasActive := newCfg.VPN.Profile(newCfg.VPN.Active)
+	configured := false
+	if hasActive {
+		var err error
+		if configured, err = checkProfile(active, newSecrets.WireGuardKeys[active.Name]); err != nil {
+			return err
+		}
+	}
+	if newCfg.VPN.Enabled && !configured {
+		return &config.ValidationError{Field: "enabled", Message: "Import a WireGuard file (or finish the profile's server details and keys) before turning the VPN on."}
 	}
 
 	if err := config.WriteJSON(a.paths.SecretsFile(), newSecrets, 0o600); err != nil {
@@ -512,8 +682,17 @@ func (a *Agent) saveVPN(newCfg config.Config, newSecrets config.Secrets) error {
 	if err := config.WriteJSON(a.paths.ConfigFile(), newCfg, 0o644); err != nil {
 		return err
 	}
+	previous := a.cfg.VPN.Active
 	a.cfg, a.secrets = newCfg, newSecrets
-	slog.Info("VPN settings saved", "enabled", newCfg.VPN.Enabled, "killSwitch", newCfg.VPN.KillSwitch)
+	if previous != newCfg.VPN.Active {
+		// Another server: start from a fresh tunnel, so nothing of the old
+		// profile (addresses, routes to its DNS servers) stays behind. The
+		// firewall keeps devices' traffic in the tunnel meanwhile.
+		for _, cmd := range routing.TunnelDown() {
+			_, _ = a.runner.Run(cmd[0], cmd[1:]...) // errors: already gone
+		}
+	}
+	slog.Info("VPN settings saved", "enabled", newCfg.VPN.Enabled, "killSwitch", newCfg.VPN.KillSwitch, "profile", newCfg.VPN.Active)
 	// Start the state machine again from "connecting" so the new settings
 	// are judged on their own.
 	a.vpn.machine = tunnel.Machine{}

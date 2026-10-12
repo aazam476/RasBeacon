@@ -177,7 +177,9 @@ func (a *Agent) Diagnostics() string {
 
 	a.mu.Lock()
 	secretsToHide := []string{a.secrets.HotspotPassword, a.secrets.GuestPassword, a.setupPassword, a.identity.SuggestedHotspotPassword}
-	secretsToHide = append(secretsToHide, a.secrets.WireGuardPrivateKey, a.secrets.WireGuardPresharedKey)
+	for _, keys := range a.secrets.WireGuardKeys {
+		secretsToHide = append(secretsToHide, keys.PrivateKey, keys.PresharedKey)
+	}
 	for _, password := range a.secrets.UplinkPasswords {
 		secretsToHide = append(secretsToHide, password)
 	}

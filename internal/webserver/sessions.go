@@ -26,6 +26,11 @@ import (
 // sessionCookieName is the cookie that carries the session ID.
 const sessionCookieName = "rasbeacon_session"
 
+// rememberCookieName carries the "Stay logged in" token (see
+// agent/remember.go), which starts a new session without the password
+// after the old one ended (for example because RasBeacon restarted).
+const rememberCookieName = "rasbeacon_remember"
+
 // sessionIdleTimeout logs you out after this long without any request.
 const sessionIdleTimeout = 12 * time.Hour
 
@@ -116,9 +121,28 @@ func setSessionCookie(w http.ResponseWriter, r *http.Request, id string) {
 	})
 }
 
-// clearSessionCookie deletes the cookie in the browser.
+// clearSessionCookie deletes the cookies in the browser.
 func clearSessionCookie(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{Name: sessionCookieName, Value: "", Path: "/", MaxAge: -1, HttpOnly: true})
+	clearRememberCookie(w)
+}
+
+// setRememberCookie sends the "Stay logged in" token to the browser. It
+// lasts until the token expires, also when the browser is closed.
+func setRememberCookie(w http.ResponseWriter, r *http.Request, token string, expires time.Time) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     rememberCookieName,
+		Value:    token,
+		Path:     "/",
+		Expires:  expires,
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+		Secure:   r.TLS != nil,
+	})
+}
+
+func clearRememberCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{Name: rememberCookieName, Value: "", Path: "/", MaxAge: -1, HttpOnly: true})
 }
 
 // randomToken returns 32 random bytes as URL-safe text.

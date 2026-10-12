@@ -272,6 +272,7 @@ func (a *Agent) loadOrCreateSettings() error {
 	if err != nil {
 		return err
 	}
+	fileVersion := a.cfg.Version
 	a.cfg.FillDefaults()
 
 	// RasBeacon's private IPv6 address on the hotspot comes from the
@@ -288,7 +289,31 @@ func (a *Agent) loadOrCreateSettings() error {
 		a.secrets = config.Secrets{}
 		err = nil
 	}
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Version 2 kept a single VPN server; it becomes a profile. Both files
+	// are saved now, so the keys can't be separated from their profile.
+	if fileVersion > 0 && fileVersion < 3 {
+		raw, err := os.ReadFile(a.paths.ConfigFile())
+		if err != nil {
+			return err
+		}
+		if err := config.MoveVPNIntoProfile(raw, &a.cfg, &a.secrets); err != nil {
+			return fmt.Errorf("upgrading the VPN settings: %w", err)
+		}
+		if len(a.cfg.VPN.Profiles) > 0 {
+			if err := config.WriteJSON(a.paths.SecretsFile(), a.secrets, 0o600); err != nil {
+				return err
+			}
+			if err := config.WriteJSON(a.paths.ConfigFile(), a.cfg, 0o644); err != nil {
+				return err
+			}
+			slog.Info("VPN settings moved into a profile", "profile", a.cfg.VPN.Active)
+		}
+	}
+	return nil
 }
 
 // setUpRadios detects the Wi-Fi radios, assigns roles, and renames the

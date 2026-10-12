@@ -115,7 +115,7 @@ Station 8e:00:11:22:33:44 (on ap0)
 const (
 	defaultRoutes = `[{"dst":"default","gateway":"192.168.4.1","dev":"wlan0","protocol":"dhcp","metric":600,"flags":[]}]`
 	addresses     = `[{"ifname":"wlan0","addr_info":[{"family":"inet","local":"192.168.4.20","prefixlen":24,"scope":"global"}]}]`
-	wpaStatus     = "bssid=aa:bb:cc:dd:ee:ff\nfreq=2437\nssid=Corner Caf\\xc3\\xa9\nkey_mgmt=WPA2-PSK\nwpa_state=COMPLETED\n"
+	wpaStatus     = "bssid=aa:bb:cc:dd:ee:ff\nid=0\nfreq=2437\nssid=Corner Caf\\xc3\\xa9\nkey_mgmt=WPA2-PSK\nwpa_state=COMPLETED\n"
 	signalPoll    = "RSSI=-58\nLINKSPEED=72\n"
 	scanResults   = "bssid / frequency / signal level / flags / ssid\n" +
 		"aa:bb:cc:dd:ee:ff\t2437\t-58\t[WPA2-PSK-CCMP][ESS]\tCorner Caf\\xc3\\xa9\n" +
