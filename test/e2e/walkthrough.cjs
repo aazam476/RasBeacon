@@ -2,19 +2,21 @@
 //
 // It expects rbd and rbweb already running as a simulated device on
 // http://127.0.0.1:8080 (run.sh starts them). It then acts like a person
-// with a phone: finishes setup, checks the status page, changes a setting,
-// logs out and tries a wrong password.
+// with a phone: finishes setup, checks the status page, changes settings on
+// every page, uses the VPN profiles, the per-device controls and the speed
+// test, logs out and tries a wrong password.
 //
-// Steps find elements by their visible text and labels (like a person or a
-// screen reader would), so a redesigned UI keeps passing as long as it
-// keeps the wording listed in docs/ui-contract.md.
+// Steps find elements by their role and visible name (like a person or a
+// screen reader would), so a restyled UI keeps passing as long as it keeps
+// the wording listed in docs/ui-contract.md.
 
 const { chromium } = require("playwright");
 
 const BASE_URL = process.env.RASBEACON_URL ?? "http://127.0.0.1:8080";
 const SCREENSHOT_DIR = process.env.SCREENSHOT_DIR ?? "";
 // The simulated hotel login page (run.sh sets this when a headless
-// Chromium is available for the simulated device's own browser).
+// Chromium is available for the simulated device's own browser, which the
+// zero-leak login and the speed test need).
 const HOTEL_URL = process.env.RASBEACON_E2E_HOTEL ?? "";
 
 // A WireGuard file with the WireGuard documentation's example keys.
@@ -29,6 +31,9 @@ Endpoint = vpn.example.com:51820
 AllowedIPs = 0.0.0.0/0, ::/0
 `;
 
+// Pages that phones reach through "More" (computers have them in the sidebar).
+const ON_MORE_PAGE = new Set(["Hotspot", "Guests", "SSH", "HTTPS", "System"]);
+
 async function main() {
   const browser = await chromium.launch(
     process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {},
@@ -40,16 +45,38 @@ async function main() {
 
   const step = async (name, action) => {
     process.stdout.write(`- ${name} ... `);
-    await action();
+    try {
+      await action();
+    } catch (error) {
+      if (SCREENSHOT_DIR) {
+        await page.screenshot({ path: `${SCREENSHOT_DIR}/FAILED-${name.replace(/\W+/g, "-")}.png`, fullPage: true });
+      }
+      throw error;
+    }
     if (SCREENSHOT_DIR) {
       await page.screenshot({ path: `${SCREENSHOT_DIR}/${name.replace(/\W+/g, "-")}.png`, fullPage: true });
     }
     console.log("ok");
   };
 
+  const nav = page.getByRole("navigation", { name: "Main navigation" });
+  const main = page.getByRole("main");
+  // Opens a page the way a person would: from the tab bar, or through "More".
+  const open = async (name) => {
+    if (ON_MORE_PAGE.has(name)) {
+      await nav.getByRole("link", { name: "More", exact: true }).click();
+      await main.getByRole("link", { name, exact: true }).click();
+    } else {
+      await nav.getByRole("link", { name, exact: true }).click();
+    }
+    await page.getByRole("heading", { level: 1, name, exact: true }).waitFor();
+  };
+  // A dialog (sheet or alert) on the page.
+  const dialog = () => page.getByRole("dialog");
+
   await step("setup page opens", async () => {
     await page.goto(BASE_URL + "/");
-    await page.getByText("Set up RasBeacon").waitFor();
+    await page.getByRole("heading", { name: "Set up RasBeacon" }).waitFor();
   });
 
   await step("mismatched admin passwords are caught", async () => {
@@ -62,67 +89,116 @@ async function main() {
   await step("setup completes", async () => {
     await page.getByLabel("Type it again").fill("tangerine-orbit-42");
     await page.getByRole("button", { name: "Finish setup" }).click();
-    await page.getByText("Setup complete").waitFor();
+    await page.getByRole("heading", { name: "Setup complete" }).waitFor();
   });
 
   await step("status page lists connected devices", async () => {
     // rbd switches to the owner's hotspot 5 seconds after setup.
     await page.waitForTimeout(6000);
-    await page.goto(BASE_URL + "/#status");
+    await page.goto(BASE_URL + "/#/");
     await page.reload();
-    await page.getByText("Connected devices (2)").waitFor();
+    await page.getByRole("heading", { name: "Connected devices (2)" }).waitFor();
   });
 
-  await step("status page shows the internet connection", async () => {
+  await step("status page shows the internet connection and the hardware", async () => {
     await page.getByText('Connected to Wi-Fi "Corner Café"').waitFor();
+    await page.getByRole("meter", { name: "Memory" }).waitFor();
   });
 
   await step("internet page finds nearby networks and saves one", async () => {
-    await page.getByRole("button", { name: "Internet" }).click();
+    await open("Internet");
     await page.getByRole("button", { name: "Look for nearby networks" }).click();
-    // Picking eduroam opens the Enterprise login fields.
-    await page.getByRole("button", { name: "eduroam" }).click();
-    await page.getByText("Enterprise login").waitFor();
     await page.getByRole("button", { name: "Hotel Guest" }).click();
-    await page.getByRole("button", { name: "Add to list" }).click();
-    await page.getByText("(not saved yet)").waitFor();
-    await page.getByRole("button", { name: "Save" }).click();
+    await dialog().getByRole("button", { name: "Add to list" }).click();
+    await page.getByText("You have changes that are not saved yet.").waitFor();
+    await page.getByRole("button", { name: "Save", exact: true }).click();
     await page.getByText("Saved. RasBeacon is joining the networks now").waitFor();
   });
 
   await step("eduroam needs a CA certificate, then saves", async () => {
     await page.getByRole("button", { name: "Set up eduroam" }).click();
-    await page.getByLabel("Username", { exact: true }).fill("NetID@example.edu");
-    await page.getByLabel("Your password").fill("campus-password");
-    await page.getByRole("button", { name: "Add to list" }).click();
-    await page.getByText("Choose the network's CA certificate file").waitFor();
+    const sheet = dialog();
+    await sheet.getByLabel("Username", { exact: true }).fill("NetID@example.edu");
+    await sheet.getByLabel("Your password").fill("campus-password");
+    await sheet.getByRole("button", { name: "Add to list" }).click();
+    await sheet.getByText("Choose the network's CA certificate file").waitFor();
     // A test certificate (fixtures/test-campus-ca.pem; certificate only, no key).
-    await page.getByLabel("CA certificate file (choose several if your institution lists more than one)").setInputFiles(__dirname + "/fixtures/test-campus-ca.pem");
-    await page.getByLabel("Login server name").fill("*.example.edu");
-    await page.getByRole("button", { name: "Add to list" }).click();
-    await page.getByRole("button", { name: "Save" }).click();
+    await sheet.getByLabel(/^CA certificate file/).setInputFiles(__dirname + "/fixtures/test-campus-ca.pem");
+    await sheet.getByLabel("Login server name").fill("*.example.edu");
+    await sheet.getByRole("button", { name: "Add to list" }).click();
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    // The router reads the certificate and describes it.
     await page.getByText("RasBeacon Test Campus CA (valid until").waitFor();
   });
 
-  await step("VPN: a WireGuard file is imported and the VPN turned on", async () => {
-    await page.getByRole("button", { name: "VPN" }).click();
-    await page.getByLabel("Or paste its contents").fill(WIREGUARD_CONF.replace("DNS =", "PostUp = echo hi\nDNS ="));
-    await page.getByRole("button", { name: "Import" }).click();
+  await step("internet page renews the lease", async () => {
+    await page.getByRole("button", { name: "Renew lease" }).click();
+    await page.getByRole("button", { name: "Renew lease" }).waitFor();
+  });
+
+  if (HOTEL_URL) {
+    await step("the speed test runs when asked and shows its result", async () => {
+      await page.getByRole("button", { name: "Run speed test" }).click();
+      // The simulated device tests against a local stand-in for Cloudflare.
+      await page.getByText("Simulated city (DEV)").waitFor({ timeout: 120000 });
+      await main.getByText("Download", { exact: true }).first().waitFor();
+    });
+  }
+
+  await step("VPN: an unsafe file is refused, a good one becomes a profile", async () => {
+    await open("VPN");
+    const paste = page.getByLabel("Or paste its contents");
+    await paste.fill(WIREGUARD_CONF.replace("DNS =", "PostUp = echo hi\nDNS ="));
+    await page.getByRole("button", { name: "Import", exact: true }).click();
     await page.getByText("never runs commands").waitFor();
-    await page.getByLabel("Or paste its contents").fill(WIREGUARD_CONF);
-    await page.getByRole("button", { name: "Import" }).click();
+    await paste.fill(WIREGUARD_CONF);
+    await page.getByRole("button", { name: "Import", exact: true }).click();
     await page.getByText("WireGuard file imported").waitFor();
-    await page.getByLabel("Use the VPN").check();
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.getByText("Saved.").waitFor();
-    await page.getByRole("button", { name: "Status" }).click();
+    await page.getByRole("radio", { name: /wireguard\.conf/ }).waitFor();
+  });
+
+  await step("VPN: turning it on protects the devices", async () => {
+    await page.getByRole("switch", { name: "Use the VPN" }).click();
+    await page.getByRole("switch", { name: "Use the VPN", checked: true }).waitFor();
+    await open("Status");
     await page.getByText("Connected: your devices' traffic goes through the VPN.").waitFor();
+  });
+
+  await step("VPN: a second profile can be chosen, then removed", async () => {
+    await open("VPN");
+    await page.getByLabel("WireGuard file", { exact: true }).setInputFiles({
+      name: "office.conf",
+      mimeType: "text/plain",
+      buffer: Buffer.from(WIREGUARD_CONF.replace("vpn.example.com", "office.example.com")),
+    });
+    await page.getByRole("button", { name: "Import", exact: true }).click();
+    const office = page.getByRole("radio", { name: /office\.conf/ });
+    await office.click();
+    await page.getByRole("radio", { name: /office\.conf/, checked: true }).waitFor();
+    await page.getByRole("button", { name: "Remove office.conf" }).click();
+    await dialog().getByRole("button", { name: "Remove", exact: true }).click();
+    await office.waitFor({ state: "detached" });
+    await page.getByRole("radio", { name: /wireguard\.conf/, checked: true }).waitFor();
+  });
+
+  await step("VPN: the server details check numbers and save", async () => {
+    await page.getByText("Server details (advanced)").click();
+    const mtu = page.getByLabel(/^MTU/);
+    await mtu.fill("big");
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await page.getByText("Must be a number, or empty for the default.").waitFor();
+    await mtu.fill("1420");
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await page.getByText("Saved.", { exact: true }).waitFor();
+    await page.getByRole("button", { name: "Generate new key" }).click();
+    await dialog().getByRole("button", { name: "Generate", exact: true }).click();
+    await page.getByRole("button", { name: "Generate new key" }).waitFor();
   });
 
   await step("the login-page notice opens without logging in", async () => {
     // The simulated network has no login page, so there is nothing to do.
     const other = await browser.newPage({ viewport: { width: 390, height: 844 } });
-    await other.goto(BASE_URL + "/#portal");
+    await other.goto(BASE_URL + "/#/portal");
     await other.getByRole("heading", { name: "This network needs a login" }).waitFor();
     await other.getByText("Nothing to do").waitFor();
     await other.close();
@@ -134,7 +210,7 @@ async function main() {
       await fetch(HOTEL_URL + "/require-login");
       const phone = await browser.newPage({ viewport: { width: 390, height: 844 } });
       phone.on("pageerror", (error) => pageErrors.push(error.message));
-      await phone.goto(BASE_URL + "/#portal");
+      await phone.goto(BASE_URL + "/#/portal");
       await phone.getByRole("button", { name: "Check again" }).click();
       await phone.getByRole("button", { name: "Open the login page here" }).click({ timeout: 20000 });
       await phone.getByText("Grand Hotel Wi-Fi", { exact: true }).waitFor({ timeout: 20000 });
@@ -157,9 +233,19 @@ async function main() {
     });
   }
 
+  await step("clients: a device's internet access is paused, then allowed again", async () => {
+    await open("Clients");
+    const access = page.getByRole("switch", { name: "Internet access for Pixel-8" });
+    await access.click();
+    await page.getByRole("switch", { name: "Internet access for Pixel-8", checked: false }).waitFor();
+    await page.getByRole("radio", { name: "Paused (1)" }).waitFor();
+    await access.click();
+    await page.getByRole("switch", { name: "Internet access for Pixel-8", checked: true }).waitFor();
+  });
+
   await step("HTTPS can be turned on and shows the certificate fingerprint", async () => {
-    await page.getByRole("button", { name: "HTTPS" }).click();
-    await page.getByLabel("Use HTTPS for these settings pages").click();
+    await open("HTTPS");
+    await page.getByRole("switch", { name: "Use HTTPS for these settings pages" }).click();
     await page.getByText("HTTPS is on.").waitFor();
     await page.getByText("SHA-256 fingerprint").waitFor();
     // (The simulated device doesn't restart its web server, so this browser
@@ -167,41 +253,56 @@ async function main() {
   });
 
   await step("hotspot settings validate and save", async () => {
-    await page.getByRole("button", { name: "Hotspot" }).click();
+    await open("Hotspot");
     await page.getByLabel("Band").selectOption("5GHz");
     const passwordBox = page.getByLabel("New Wi-Fi password (leave empty to keep the current one)");
     await passwordBox.fill("short");
-    await page.getByRole("button", { name: "Save" }).click();
+    await page.getByRole("button", { name: "Save", exact: true }).click();
     await page.getByText("Must be 8 to 63 characters long.").waitFor();
     await passwordBox.fill("");
-    await page.getByRole("button", { name: "Save" }).click();
+    await page.getByRole("button", { name: "Save", exact: true }).click();
     await page.getByText("Saved.", { exact: true }).waitFor();
+  });
+
+  await step("the current Wi-Fi password is shown with the admin password", async () => {
+    await page.getByLabel("Admin password").fill("tangerine-orbit-42");
+    await page.getByRole("button", { name: "Show Wi-Fi password" }).click();
+    // The password setup suggested (four groups of four letters and digits).
+    await page.getByText(/^[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}$/).waitFor();
   });
 
   await step("the metered setting saves and shows on the status page", async () => {
     await page.getByLabel("Metered connection (for example a phone's hotspot or a paid plan)").check();
-    await page.getByRole("button", { name: "Save" }).click();
+    await page.getByRole("button", { name: "Save", exact: true }).click();
     await page.getByText("Saved.", { exact: true }).waitFor();
-    await page.getByRole("button", { name: "Status" }).click();
-    await page.getByText("On (Android follows it").waitFor();
+    await open("Status");
+    await page.getByText(/Metered connection\s*On/).waitFor();
   });
 
   await step("the guest network needs a password, then runs", async () => {
-    await page.getByRole("button", { name: "Guests" }).click();
+    await open("Guests");
     await page.getByLabel("Turn on the guest network").check();
     await page.getByLabel("Guest network name").fill("Ali's Guests");
-    await page.getByRole("button", { name: "Save" }).click();
+    await page.getByRole("button", { name: "Save", exact: true }).click();
     await page.getByText("Choose a password for the guest network.").waitFor();
     await page.getByLabel("Guest password").fill("visitors-welcome");
-    await page.getByRole("button", { name: "Save" }).click();
+    await page.getByRole("button", { name: "Save", exact: true }).click();
     await page.getByText("Saved. The hotspot has restarted.").waitFor();
-    await page.getByRole("button", { name: "Status" }).click();
+    await open("Status");
     await page.getByRole("heading", { name: "Guest network" }).waitFor();
     await page.getByText("Ali's Guests").waitFor();
   });
 
+  await step("system: reboot and factory reset ask first", async () => {
+    await open("System");
+    await page.getByRole("button", { name: "Reboot" }).click();
+    await dialog().getByRole("button", { name: "Reboot" }).waitFor();
+    await dialog().getByRole("button", { name: "Cancel" }).click();
+    await page.getByText("Factory reset").click();
+    await page.getByRole("button", { name: "Erase everything" }).waitFor();
+  });
+
   await step("log out, then a wrong password is refused", async () => {
-    await page.getByRole("button", { name: "System" }).click();
     await page.getByRole("button", { name: "Log out" }).click();
     // Wait for the login screen: the System page also has an "Admin
     // password" box (for factory reset), which must not be the one we fill.
@@ -211,10 +312,15 @@ async function main() {
     await page.getByText("Wrong password.").waitFor();
   });
 
-  await step("the right password logs in", async () => {
+  await step("the right password logs in, staying logged in", async () => {
     await page.getByLabel("Admin password").fill("tangerine-orbit-42");
+    await page.getByLabel("Stay logged in").check();
     await page.getByRole("button", { name: "Log in" }).click();
-    await page.getByRole("heading", { name: "Status" }).waitFor();
+    await page.getByRole("heading", { level: 1, name: "Status" }).waitFor();
+    const cookies = await page.context().cookies();
+    if (!cookies.some((cookie) => cookie.name === "rasbeacon_remember")) {
+      throw new Error('"Stay logged in" should leave a lasting login cookie');
+    }
   });
 
   await browser.close();

@@ -7,7 +7,9 @@ hotspot**, never from the upstream network.
 
 - **Request and response bodies are JSON.** The field names and types are
   defined once in Go ([`internal/api/types.go`](../internal/api/types.go)) and
-  mirrored in TypeScript ([`web/src/api/types.ts`](../web/src/api/types.ts)).
+  mirrored in TypeScript ([`web/src/data/types.ts`](../web/src/data/types.ts)).
+  The web UI calls them from one file,
+  [`web/src/data/real/api.ts`](../web/src/data/real/api.ts).
 - **Errors** return a 4xx/5xx status with an `ErrorResponse`:
   `{ "error": "Must be 8 to 63 characters long.", "field": "hotspotPassword" }`.
   The `error` text is a full sentence you can show to the user. `field`, when
@@ -18,13 +20,20 @@ hotspot**, never from the upstream network.
 
 ## Authentication
 
-1. **Login:** `POST /api/v1/session` with `{ "password": "..." }`.
+1. **Login:** `POST /api/v1/session` with
+   `{ "password": "...", "stayLoggedIn": false }`.
 2. On success the response sets an HttpOnly cookie named `rasbeacon_session`
    and returns `{ "loggedIn": true, "csrfToken": "..." }`.
 3. **Every request that changes something** (POST, PUT, DELETE) must send
    that token in the `X-CSRF-Token` header. Without it the request gets 403.
 4. **Sessions end** after 12 hours without use, on logout, when `rbweb`
    restarts, or after a factory reset.
+   With `stayLoggedIn: true`, the browser also gets a second HttpOnly cookie,
+   `rasbeacon_remember`, valid for 30 days. While it is valid, a browser
+   whose session ended (for example because RasBeacon restarted) gets a new
+   session without the password. rbd keeps only the token's SHA-256 hash
+   (`remembered-logins.json` on the data partition). Logging out forgets it;
+   a factory reset forgets all of them.
 5. **Rate limiting:** after 5 wrong passwords from one device, each further
    attempt waits twice as long (2 s, 4 s, … up to 5 min). After 20 wrong
    passwords within 5 minutes from any mix of devices, all logins pause for
@@ -42,7 +51,7 @@ hotspot**, never from the upstream network.
 | `GET /api/v1/setup` | — | `SetupState` | Mode, claimed or not, and suggestions for the setup wizard |
 | `POST /api/v1/setup/claim` | `ClaimRequest` | `ClaimResponse` | Only in `setup` mode (409 otherwise). Also logs the browser in. |
 | `GET /api/v1/session` | — | `SessionInfo` | Is this browser logged in? Returns the CSRF token if so. |
-| `POST /api/v1/session` | `PasswordRequest` | `SessionInfo` | Login. 401 wrong password, 429 rate-limited. |
+| `POST /api/v1/session` | `LoginRequest` (`password`, `stayLoggedIn`) | `SessionInfo` | Login. 401 wrong password, 429 rate-limited. |
 | `DELETE /api/v1/session` | — | 204 | Logout |
 | `GET /api/v1/captive` | — | `CaptivePortalInfo` | RFC 8908 captive-portal API (`application/captive+json`). `captive` is true during setup. |
 
@@ -81,7 +90,7 @@ shown, and `GET /api/v1/captive` (RFC 8908) then answers
 
 | Method and path | Request | Response | Notes |
 |---|---|---|---|
-| `GET /api/v1/status` | — | `Status` | Hotspot (with `metered`), connected devices, guest network (`guest`), VPN (with `routedIpv6Prefix` while in use), radios (with `maxAps`), device info, warnings |
+| `GET /api/v1/status` | — | `Status` | Hotspot (with `metered`), connected devices, guest network (`guest`), VPN (with `routedIpv6Prefix` while in use), radios (with `maxAps`), device info, warnings. Also: `throughput` (rates through the hotspot, sampled every 5 s), `system` (CPU, memory, temperature, throttling), `device`, `storage`, `lan` (subnet, DHCP range), `speedtest` (`provider` and the `last` result, or null), and `ethernetDiagnostics` (null unless the cable carries the internet). Each client has `band`, `downMbps`, `upMbps`, `internetAccess`, `pausedSeconds` (while paused) and `isThisDevice` (the device viewing the page, told by its address). The uplink has `subnetMask`, `interfaceMac`, Wi-Fi `bssid`/`channel`/`frequencyMhz`, and Ethernet `linkSpeed`/`duplex`, when known. |
 | `GET /api/v1/settings/hotspot` | — | `HotspotSettings` | Never includes the password |
 | `PUT /api/v1/settings/hotspot` | `HotspotSettings` | `HotspotSettings` | Empty `password` keeps the current one. Restarts the hotspot, unless only `metered` changed. `metered: true` sends Android's metered hint (DHCP option 43 `ANDROID_METERED`); other systems don't read a hint. |
 | `GET /api/v1/settings/guest` | — | `GuestSettings` | The guest network: `enabled`, `ssid`, `hasPassword`, `supported` (the adapter can broadcast two networks) |
@@ -92,10 +101,20 @@ shown, and `GET /api/v1/captive` (RFC 8908) then answers
 | `GET /api/v1/settings/uplink` | — | `UplinkSettings` | Ethernet role and saved upstream Wi-Fi networks (most preferred first). Passwords are never returned; `hasPassword` says one is saved. |
 | `PUT /api/v1/settings/uplink` | `UplinkSettings` | `UplinkSettings` | Saves the **whole** list. New networks have `id: ""`. An empty `password` keeps the saved one. Networks left out are forgotten (with their certificates). Errors name the field as `networks.<position>.<input>`, for example `networks.0.password` or `networks.0.enterprise.caCert`. Enterprise networks (`security: "enterprise"`) carry `enterprise: EnterpriseSettings`: certificates and the key are uploaded as PEM text or base64 DER, are write-only (empty keeps the saved file), and are described by `caCertSummary`, `clientCertSummary` and `hasClientKey`. Saving is refused without a CA certificate and server name unless `allowNoCertificateCheck` is true. |
 | `POST /api/v1/uplink/scan` | — | `ScanResponse` | Nearby Wi-Fi networks, strongest first, without RasBeacon's own hotspot. Takes about 5 s. 409 when no radio is free to join Wi-Fi. |
-| `GET /api/v1/settings/vpn` | — | `VPNSettings` | WireGuard settings. Keys are never returned except RasBeacon's own *public* key (`publicKey`). |
-| `PUT /api/v1/settings/vpn` | `VPNSettings` | `VPNSettings` | Saves typed-in settings. `privateKey`/`presharedKey` are write-only (empty keeps the saved key; `removePresharedKey` deletes it). Turning the VPN on needs a complete server. Errors name the field (`enabled`, `dns`, `privateKey`, ...) or `conf` for problems with the whole configuration. `routedIpv6Prefix` (optional, e.g. `2001:db8:1234:5678::/64`) is a public /64 the server routes to RasBeacon: devices then get public IPv6 addresses through the tunnel, without NAT; it must be public, exactly /64, and the VPN must carry IPv6. |
-| `POST /api/v1/settings/vpn/import` | `{ conf }` | `VPNSettings` | Reads a WireGuard `.conf`. Refuses `PostUp`/`PreUp`/`PostDown`/`PreDown`, `Table`, `FwMark`, `SaveConfig`, split tunnels, more than one peer and files without `DNS`. Keeps the "use the VPN" and kill switch settings. |
-| `POST /api/v1/settings/vpn/generate-key` | — | `VPNSettings` | Makes a new private key; the answer's `publicKey` goes to the WireGuard server. |
+| `POST /api/v1/uplink/disconnect` | — | 204 | Leaves the network that carries the internet now and stays away from it for 10 minutes (Wi-Fi: wpa_supplicant's `disable_network`; Ethernet: the port goes down), so another saved network or the other uplink takes over. Saving the Wi-Fi networks, or "Rescan port", ends it early. 400 when not connected. |
+| `POST /api/v1/uplink/renew` | — | 204 | Asks the uplink's DHCP server for the address again (`networkctl renew`). |
+| `POST /api/v1/uplink/ethernet/scan` | — | 204 | Checks the Ethernet port again: as an uplink it is brought up and reconfigured; as a client port the DHCP safety check runs again. |
+| `POST /api/v1/speedtest` | — | `Speedtest` | Runs Cloudflare's speed test now (about 20 s; stopped after 3 minutes) and answers with the result (`last`: `downloadMbps`, `uploadMbps`, `pingMs`, `server`, `ageSeconds`). It runs Cloudflare's library in RasBeacon's headless browser, which the firewall keeps on the uplink, so it measures the uplink (not the VPN). Results are sent to Cloudflare, as on their own speed test page. Never runs by itself. 409 while one runs; 400 without an internet connection or without the browser. |
+| `POST /api/v1/clients/internet-access` | `{ mac, allowed }` | 204 | Pauses (`allowed: false`) or allows a device's internet access. While paused, the firewall forwards nothing from its MAC address; it can still reach RasBeacon. Saved with the settings. |
+| `POST /api/v1/clients/disconnect` | `{ mac }` | 204 | Sends the device off the Wi-Fi (hostapd deauthenticates it; it may join again). 400 if it isn't connected. |
+| `POST /api/v1/clients/flush-lease` | `{ mac }` | 204 | Makes dnsmasq forget the device's address (`dhcp_release`), so it gets a fresh one next time. 400 if it has no lease. |
+| `GET /api/v1/settings/vpn` | — | `VPNSettings` | `enabled`, `killSwitch`, `activeProfile` (the profile in use, or "") and `profiles`. Each `VPNProfile` has a unique `name` (usually the imported file's), the server and address settings, `hasPresharedKey`, `routedIpv6Prefix`, and RasBeacon's own *public* key for it (`publicKey`). Private and preshared keys are never returned. |
+| `PUT /api/v1/settings/vpn` | `{ enabled, killSwitch }` | `VPNSettings` | The switches. Turning the VPN on needs a complete profile in use (400, `field: "enabled"`). |
+| `POST /api/v1/settings/vpn/import` | `{ conf, name? }` | `VPNSettings` | Reads a WireGuard `.conf` and keeps it as a new profile called `name` (default `wireguard.conf`; `-2`, `-3`, ... is added if taken). The first profile is put in use. Refuses `PostUp`/`PreUp`/`PostDown`/`PreDown`, `Table`, `FwMark`, `SaveConfig`, split tunnels, more than one peer and files without `DNS`. At most 20 profiles. |
+| `POST /api/v1/settings/vpn/profile/save` | `VPNProfileDetails` (a `VPNProfile` plus write-only `privateKey`, `presharedKey`, `removePresharedKey`) | `VPNSettings` | Saves one profile's typed-in details; `name` picks it. Empty keys keep the saved ones. Errors name the field (`dns`, `privateKey`, ...) or `conf` for problems with the whole configuration. `routedIpv6Prefix` (optional, e.g. `2001:db8:1234:5678::/64`) is a public /64 the server routes to RasBeacon: devices then get public IPv6 addresses through the tunnel, without NAT; it must be public, exactly /64, and the profile must carry IPv6. |
+| `POST /api/v1/settings/vpn/profile/activate` | `{ name }` | `VPNSettings` | Puts another profile in use. The tunnel is rebuilt; the firewall keeps devices' traffic in it meanwhile. |
+| `POST /api/v1/settings/vpn/profile/remove` | `{ name }` | `VPNSettings` | Deletes a profile and its keys. If it was in use, the first remaining one takes over; without any, the VPN turns off. |
+| `POST /api/v1/settings/vpn/profile/generate-key` | `{ name }` | `VPNSettings` | Makes a new private key for that profile; its new `publicKey` goes to the WireGuard server. |
 | `GET /api/v1/settings/https` | — | `HTTPSSettings` | HTTPS on/off and the certificate: `subject`, `fingerprint` (SHA-256), `validUntil`, `uploaded` |
 | `PUT /api/v1/settings/https` | `HTTPSSettings` | `HTTPSSettings` | Set `enabled`; `generateNew: true` makes a new certificate; `certificate` + `privateKey` (PEM) upload your own. rbweb restarts about 2 s later. With HTTPS on, login and all routes in this table refuse plain HTTP (403). |
 | `POST /api/v1/system/update` | the `.rbupdate` file itself (`application/octet-stream`) | `UpdateStatus` | Checks the signature and board, writes the other slot, checks the SHA-256, then restarts into it on trial. Errors are 400 with `field: "update"` and a readable message. Up to 2 GB, 30 minutes. |

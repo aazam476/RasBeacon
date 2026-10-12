@@ -1,11 +1,13 @@
-// Entry point: draws the App into the page's <div id="root">.
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
 
-import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
-import { App } from "./app/App";
-import "./styles.css";
+// The app uses the device's own system font (SF Pro on Apple devices), so nothing has to load
+// before text appears, even when the phone has no internet yet (e.g. behind a captive portal).
+import './index.css';
 
-createRoot(document.getElementById("root")!).render(
+import { App } from './App';
+
+createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
   </StrictMode>,

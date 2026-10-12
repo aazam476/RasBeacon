@@ -9,18 +9,22 @@ hotel login pages.
 - **Setup happens in your phone's browser.** No command line, no compiling.
 - **No shared default passwords.** Every device generates its own on first
   boot.
-- **No telemetry and no cloud.** Everything works offline.
+- **No telemetry and no cloud.** Everything works offline. The one
+  exception is the speed test, which only runs when you press its button:
+  like Cloudflare's own speed test page, it sends its result to Cloudflare.
 - **Licensed under Apache-2.0.**
 
-> **Status: all seven milestones are built and tested in CI; hardware
+> **Status: all eight milestones are built and tested in CI; hardware
 > testing is in progress** (see [docs/testing/](docs/testing/)). RasBeacon
 > runs your hotspot (plus an optional guest network), connects it to the
 > internet through Ethernet or Wi-Fi (open, password, or WPA-Enterprise
 > such as eduroam, [guide](docs/eduroam.md)), can send everything through
-> your own WireGuard VPN with a kill switch
+> your own WireGuard VPN with a kill switch, keeping several VPN profiles
 > ([server guide](docs/wireguard-server.md)), lets you log in to hotel login
 > pages without anything leaving the VPN, and installs signed updates with
-> automatic rollback.
+> automatic rollback. Its settings pages, designed like Apple's Settings
+> app, also show live traffic and hardware readings, let you pause or
+> disconnect single devices, and run Cloudflare's speed test when you ask.
 
 ## What you need
 
@@ -74,8 +78,9 @@ hotel login pages.
    networks; RasBeacon joins the first one in the list that is in range,
    and prefers a plugged-in cable.
 9. **Optional, your VPN:** on the **VPN** page, import your WireGuard
-   `.conf` file and tick *Use the VPN*. Keep the *Kill switch* on so nothing
-   is ever sent outside the VPN.
+   `.conf` file and turn on *Use the VPN*. Keep the *Kill switch* on so
+   nothing is ever sent outside the VPN. You can import several files and
+   pick the one in use.
 
 > **Important:** the setup network closes after 30 minutes if nobody
 > finishes setup. Unplug and replug the power to reopen it. Until setup is
@@ -91,9 +96,9 @@ hotel login pages.
 | No setup network, and another repeating pattern of long/short flashes | A boot error. Count the long and short flashes and look them up in the [Raspberry Pi LED code table](https://www.raspberrypi.com/documentation/computers/configuration.html#led-warning-flash-codes). |
 | No setup network and no blinking | Check the USB Wi-Fi adapter is plugged in, and power-cycle. If it still doesn't appear, connect the Pi to a TV and keyboard, or see [docs/testing/m1.md](docs/testing/m1.md) for how to collect logs. |
 | Devices on the hotspot say "No internet" | Check the **Internet** section of the Status page. "Not connected": plug in a cable or save a Wi-Fi network on the Internet page. Wi-Fi "Looking for your saved networks": the network is out of range or its password is wrong. If the network shows a login page (hotels), see the next row. |
-| Hotel or café Wi-Fi with a login page | Your phone should show RasBeacon's *This network needs a login* page by itself (or open `http://10.87.0.1/#portal`). Tap **Open the login page here**: RasBeacon opens the hotel's page itself and shows it to you; tap and type on it as usual. Nothing from your devices leaves the VPN, and it closes by itself once you're logged in. If a page doesn't work that way, **Start login mode** instead: for at most 10 minutes (extendable to 30), web traffic from your devices skips the VPN so they can reach the page directly. |
+| Hotel or café Wi-Fi with a login page | Your phone should show RasBeacon's *This network needs a login* page by itself (or open `http://10.87.0.1/#/portal`). Tap **Open the login page here**: RasBeacon opens the hotel's page itself and shows it to you; tap and type on it as usual. Nothing from your devices leaves the VPN, and it closes by itself once you're logged in. If a page doesn't work that way, **Start login mode** instead: for at most 10 minutes (extendable to 30), web traffic from your devices skips the VPN so they can reach the page directly. |
 | A warning says the Ethernet port "seems to be plugged into a network" | The port is set to *Client port* (for your own laptop), but it's plugged into a network. Set it to *Uplink* on the Internet page if that cable is your internet connection. |
-| The status page warns that the built-in Wi-Fi is running the hotspot | RasBeacon didn't find a USB adapter it can use. Plug one in and restart from the System page. |
+| The status page warns that the built-in Wi-Fi is running the hotspot | RasBeacon didn't find a USB adapter it can use. Plug one in and choose *Reboot* on the System page. |
 | Nothing works and you want to see why | Put the SD card in a computer and create an empty file named `debug` on the `BOOTCONFIG` drive. Boot the Pi and wait 3 minutes, then unplug it. Back on the computer, open `rasbeacon-debug.txt` from the same drive. It holds the startup logs (no passwords, but device names and MAC addresses, so delete it afterwards). |
 | Forgot the admin password | Factory reset: put the SD card in a computer and create an empty file named `factory-reset` on the `BOOTCONFIG` drive. At the next start, RasBeacon erases all settings and runs first-time setup again. (Or hold the optional reset button for 10 seconds.) |
 | An update didn't install | The System page says why. "not signed by a key this RasBeacon trusts": use update files from the official Releases page; images built before signing was set up can't install updates, so flash the new image once. "for pi5, but this is a pi4": download the file for your board. |

@@ -65,7 +65,9 @@ starts it with `rbweb` on `http://127.0.0.1:8080`.
 
 To work on the web UI with instant reload, start the simulated device in one
 terminal and `cd web && npm run dev` in another. To get back to first-time
-setup, stop everything and delete the `-dev` directory.
+setup, stop everything and delete the `-dev` directory. Without any device,
+`cd web && npm run demo` runs the UI on a demo router with every state
+listed on `/#/demo`.
 
 ## Building an SD card image
 
@@ -100,8 +102,10 @@ These rules are also in [docs/design.md](docs/design.md) (section 9a).
   to do. Validation messages are shown to users as-is.
 - **Tests describe behaviour** in their names, e.g.
   `TestFirstBoot_BrokenSetupTxt_KeepsNetworkOffInsteadOfOpen`.
-- **Web UI:** logic goes in `use<Screen>.ts`, markup in `<Screen>View.tsx`.
-  See [docs/ui-contract.md](docs/ui-contract.md).
+- **Web UI:** screens only read `useDevice()` and call its actions; talking
+  to the router is the provider's job (`web/src/data/real/`), and its pure
+  logic is in `logic.ts` with unit tests. See
+  [docs/ui-contract.md](docs/ui-contract.md) and [web/README.md](web/README.md).
 
 ## Commit messages
 

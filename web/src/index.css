@@ -1,0 +1,663 @@
+@import 'tailwindcss';
+
+/*
+ * RasBeacon design tokens: the look of Apple's Settings app, iOS on phones and macOS on
+ * computers, in light and dark appearance (following the device).
+ *
+ * Tailwind's default palette is cleared, so every color in the app comes from this list. Use
+ * them as normal Tailwind colors: `bg-cell`, `text-label-2`, `border-separator`, `bg-tint/15`.
+ * The values switch with the appearance below; contrast is at least 4.5:1 for every text color
+ * on the backgrounds it is used on.
+ */
+@theme inline {
+  --color-*: initial;
+
+  /* Surfaces: the grouped page background, its rows, and raised surfaces (sheets, alerts). */
+  --color-bg: var(--c-bg);
+  --color-cell: var(--c-cell);
+  --color-raised: var(--c-raised);
+
+  /* Text: primary, secondary (descriptions, values), tertiary (placeholders only). */
+  --color-label: var(--c-label);
+  --color-label-2: var(--c-label-2);
+  --color-label-3: var(--c-label-3);
+
+  /* Lines and the gray fills of controls (switch off, text boxes, pressed row). */
+  --color-separator: var(--c-separator);
+  --color-fill: var(--c-fill);
+  --color-fill-2: var(--c-fill-2);
+  --color-pressed: var(--c-pressed);
+
+  /* The app's tint: links, buttons, selected states. `tint-fill` carries white text. */
+  --color-tint: var(--c-tint);
+  --color-tint-fill: var(--c-tint-fill);
+  --color-white: #fff;
+
+  /* Meaning colors. The plain name is for text; `-fill` for shapes (switch on, icons, dots). */
+  --color-green: var(--c-green);
+  --color-green-fill: var(--c-green-fill);
+  --color-orange: var(--c-orange);
+  --color-orange-fill: var(--c-orange-fill);
+  --color-red: var(--c-red);
+  --color-red-fill: var(--c-red-fill);
+  /* Filled destructive buttons carry white text, so they keep this deeper red in both modes. */
+  --color-red-strong: #d70015;
+
+  /* The colored tiles behind row icons, as in the Settings app. Decorative only. */
+  --color-tile-blue: var(--c-tile-blue);
+  --color-tile-indigo: var(--c-tile-indigo);
+  --color-tile-teal: var(--c-tile-teal);
+  --color-tile-green: var(--c-tile-green);
+  --color-tile-purple: var(--c-tile-purple);
+  --color-tile-orange: var(--c-tile-orange);
+  --color-tile-red: var(--c-tile-red);
+  --color-tile-gray: var(--c-tile-gray);
+
+  /* The system font, so text looks native on every device (SF Pro on Apple devices). */
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI Variable Text', 'Segoe UI', Roboto, 'Noto Sans', Ubuntu, Cantarell,
+    'Helvetica Neue', Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
+  /* Keys, fingerprints, MAC addresses and commands. */
+  --font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Cascadia Mono', 'Liberation Mono', monospace;
+
+  /* Motion: strong curves (see README, "Motion"). Springs live in src/lib/spring.ts. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+
+  --radius-group: var(--r-group);
+
+  /* The dimming behind sheets and alerts. */
+  --color-scrim: var(--scrim);
+
+  /* A raised selected segment (the demo's data switcher), and surfaces that float (sheets, alerts). */
+  --color-thumb: var(--c-thumb);
+  --shadow-thumb: 0 3px 8px rgb(0 0 0 / 0.12), 0 3px 1px rgb(0 0 0 / 0.04);
+  --shadow-raised: var(--raised-shadow);
+}
+
+:root {
+  color-scheme: light dark;
+
+  --c-bg: #f2f2f7;
+  --c-cell: #ffffff;
+  --c-raised: #ffffff;
+  --c-label: #1d1d1f;
+  --c-label-2: #636366;
+  --c-label-3: #a1a1a6;
+  --c-separator: rgb(60 60 67 / 0.22);
+  --c-fill: rgb(120 120 128 / 0.16);
+  --c-fill-2: rgb(118 118 128 / 0.12);
+  --c-pressed: rgb(0 0 0 / 0.07);
+  --c-thumb: #ffffff;
+
+  --c-tint: #076c7c;
+  --c-tint-fill: #08788a;
+
+  --c-green: #1e7633;
+  --c-green-fill: #34c759;
+  --c-orange: #c13200;
+  --c-orange-fill: #ff9500;
+  --c-red: #c80014;
+  --c-red-fill: #ff3b30;
+
+  --c-tile-blue: #007aff;
+  --c-tile-indigo: #5856d6;
+  --c-tile-teal: #00a3b4;
+  --c-tile-green: #30b14d;
+  --c-tile-purple: #af52de;
+  --c-tile-orange: #ff9500;
+  --c-tile-red: #ff3b30;
+  --c-tile-gray: #8e8e93;
+
+  /* Bars, floating controls and the dimming behind sheets. */
+  --material: rgb(249 249 249 / 0.78);
+  --glass: rgb(255 255 255 / 0.8);
+  --glass-edge: rgb(255 255 255 / 0.75);
+  --glass-line: rgb(0 0 0 / 0.08);
+  --glass-shadow: 0 8px 28px rgb(0 0 0 / 0.12), 0 1px 3px rgb(0 0 0 / 0.08);
+  --scrim: rgb(0 0 0 / 0.32);
+  --raised-shadow: 0 12px 40px rgb(0 0 0 / 0.16), 0 2px 8px rgb(0 0 0 / 0.08);
+
+  /* Grouped sections: rounder on phones (iOS), tighter on computers (macOS). */
+  --r-group: 16px;
+
+  /* Tracking is set per type size (see the type scale below). */
+  --track-large: -0.015em;
+  --track-title: -0.01em;
+  --track-headline: 0em;
+  --track-body: 0em;
+  --track-small: 0.005em;
+  --track-caption: 0.01em;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --c-bg: #000000;
+    --c-cell: #1c1c1e;
+    --c-raised: #2c2c2e;
+    --c-label: #ffffff;
+    --c-label-2: #9d9da3;
+    --c-label-3: #636366;
+    --c-separator: rgb(84 84 88 / 0.6);
+    --c-fill: rgb(120 120 128 / 0.36);
+    --c-fill-2: rgb(118 118 128 / 0.24);
+    --c-pressed: rgb(255 255 255 / 0.1);
+    --c-thumb: #636366;
+
+    --c-tint: #5ac8dc;
+    --c-tint-fill: #0e7486;
+
+    --c-green: #30d158;
+    --c-green-fill: #30d158;
+    --c-orange: #ff9f0a;
+    --c-orange-fill: #ff9f0a;
+    --c-red: #ff6961;
+    --c-red-fill: #ff453a;
+
+    --c-tile-blue: #0a84ff;
+    --c-tile-indigo: #5e5ce6;
+    --c-tile-teal: #00a9bb;
+    --c-tile-green: #30b14d;
+    --c-tile-purple: #bf5af2;
+    --c-tile-orange: #ff9f0a;
+    --c-tile-red: #ff453a;
+    --c-tile-gray: #636366;
+
+    --material: rgb(28 28 30 / 0.78);
+    --glass: rgb(40 40 42 / 0.74);
+    --glass-edge: rgb(255 255 255 / 0.1);
+    --glass-line: rgb(255 255 255 / 0.1);
+    --glass-shadow: 0 8px 28px rgb(0 0 0 / 0.5), 0 1px 3px rgb(0 0 0 / 0.3);
+    --scrim: rgb(0 0 0 / 0.55);
+    --raised-shadow: 0 12px 40px rgb(0 0 0 / 0.6), 0 2px 8px rgb(0 0 0 / 0.3);
+  }
+}
+
+@media (min-width: 64rem) {
+  :root {
+    --r-group: 12px;
+  }
+}
+
+/*
+ * Sheets sit above the page. In dark appearance their surfaces are a step lighter, as on iOS,
+ * so they read as raised without a border.
+ */
+@media (prefers-color-scheme: dark) {
+  .elevated {
+    --c-bg: #1c1c1e;
+    --c-cell: #2c2c2e;
+    --c-thumb: #737378;
+  }
+}
+
+/*
+ * Safari renders the system font as SF Pro, whose spacing Apple tunes per size: tighter for
+ * body text, slightly looser for large titles. These values match the ones apple.com uses.
+ */
+@supports (font: -apple-system-body) {
+  :root {
+    --track-large: 0.004em;
+    --track-title: 0.01em;
+    --track-headline: -0.022em;
+    --track-body: -0.022em;
+    --track-small: -0.013em;
+    --track-caption: -0.01em;
+  }
+}
+
+/*
+ * Type scale: iOS's text styles on phones, a denser set on computers. Each style is one class
+ * that sets size, leading, tracking and weight together (`text-body`, `text-footnote`, …) and
+ * adapts to the layout on its own. Sizes are in rem, so they follow the browser's text size.
+ */
+@utility text-large-title {
+  font-size: 2.125rem;
+  line-height: 2.5625rem;
+  letter-spacing: var(--track-large);
+  font-weight: 700;
+  @media (min-width: 64rem) {
+    font-size: 1.75rem;
+    line-height: 2.125rem;
+  }
+}
+@utility text-title2 {
+  font-size: 1.375rem;
+  line-height: 1.75rem;
+  letter-spacing: var(--track-title);
+  font-weight: 700;
+  @media (min-width: 64rem) {
+    font-size: 1.25rem;
+    line-height: 1.625rem;
+  }
+}
+@utility text-title3 {
+  font-size: 1.25rem;
+  line-height: 1.5625rem;
+  letter-spacing: var(--track-title);
+  font-weight: 600;
+  @media (min-width: 64rem) {
+    font-size: 1.0625rem;
+    line-height: 1.375rem;
+  }
+}
+@utility text-headline {
+  font-size: 1.0625rem;
+  line-height: 1.375rem;
+  letter-spacing: var(--track-headline);
+  font-weight: 600;
+  @media (min-width: 64rem) {
+    font-size: 0.9375rem;
+    line-height: 1.25rem;
+  }
+}
+@utility text-body {
+  font-size: 1.0625rem;
+  line-height: 1.375rem;
+  letter-spacing: var(--track-body);
+  font-weight: 400;
+  @media (min-width: 64rem) {
+    font-size: 0.9375rem;
+    line-height: 1.25rem;
+  }
+}
+@utility text-callout {
+  font-size: 1rem;
+  line-height: 1.3125rem;
+  letter-spacing: var(--track-body);
+  font-weight: 400;
+  @media (min-width: 64rem) {
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+  }
+}
+@utility text-subhead {
+  font-size: 0.9375rem;
+  line-height: 1.25rem;
+  letter-spacing: var(--track-small);
+  font-weight: 400;
+  @media (min-width: 64rem) {
+    font-size: 0.8125rem;
+    line-height: 1.125rem;
+  }
+}
+@utility text-footnote {
+  font-size: 0.8125rem;
+  line-height: 1.125rem;
+  letter-spacing: var(--track-small);
+  font-weight: 400;
+  @media (min-width: 64rem) {
+    font-size: 0.75rem;
+    line-height: 1rem;
+  }
+}
+@utility text-caption {
+  font-size: 0.75rem;
+  line-height: 1rem;
+  letter-spacing: var(--track-caption);
+  font-weight: 400;
+  @media (min-width: 64rem) {
+    font-size: 0.6875rem;
+    line-height: 0.875rem;
+  }
+}
+
+/* Floating chrome: the tab bar, nav bar buttons and toasts sit on frosted glass. */
+@utility glass {
+  background-color: var(--glass);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  backdrop-filter: blur(28px) saturate(180%);
+  /* The bright top edge reads as light catching the material. */
+  box-shadow:
+    inset 0 1px 0 var(--glass-edge),
+    0 0 0 0.5px var(--glass-line),
+    var(--glass-shadow);
+}
+
+/* Bars that content scrolls under (the desktop sidebar, a bar once scrolled). */
+@utility material {
+  background-color: var(--material);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
+}
+
+/*
+ * Where content passes under a floating bar it softens into the bar's material instead of
+ * meeting a hard line (iOS's scroll edge effect). The layer is a little taller than its bar and
+ * fades out at the bottom.
+ */
+@utility scroll-edge {
+  background-color: color-mix(in srgb, var(--c-bg) 72%, transparent);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 1.25rem), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 1.25rem), transparent);
+}
+
+/* A press on any tappable thing: instant, slightly smaller (see README, "Motion"). */
+@utility pressable {
+  transition:
+    transform 160ms var(--ease-out),
+    background-color 150ms ease,
+    color 150ms ease;
+  &:active:not(:disabled):not([aria-disabled='true']) {
+    transform: scale(0.97);
+  }
+}
+
+/* Horizontal scrollers (filter chips) without a visible scrollbar */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@layer base {
+  html {
+    /* No gray flash on tap, no text inflation in landscape (see README, "Feeling native"). */
+    -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    /* Keeps Android's pull-to-refresh from reloading the page; iOS keeps its bounce. */
+    overscroll-behavior-y: contain;
+    /* Controls reached by Tab stop clear of the bars that float over the content. */
+    scroll-padding-top: calc(4rem + env(safe-area-inset-top));
+    scroll-padding-bottom: calc(6rem + env(safe-area-inset-bottom));
+    @media (min-width: 64rem) {
+      scroll-padding-top: 5rem;
+      scroll-padding-bottom: 1.5rem;
+    }
+  }
+
+  body {
+    @apply bg-bg font-sans text-body text-label antialiased;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background-color: color-mix(in srgb, var(--c-tint) 30%, transparent);
+  }
+
+  /* One focus style for every control: a tint-colored ring that follows its shape. */
+  :focus-visible {
+    outline: 2px solid var(--c-tint);
+    outline-offset: 2px;
+  }
+
+  /* Controls are not text: no selection on long press, no 300 ms double-tap wait. */
+  button,
+  a,
+  label,
+  summary,
+  [role='button'],
+  [role='switch'],
+  [role='tab'] {
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
+    /* No copy/share callout when a link that acts as a control is held down. */
+    -webkit-touch-callout: none;
+  }
+  /* Values people copy (addresses, keys, messages) stay selectable inside rows. */
+  .selectable {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
+  /* iOS zooms into fields with text under 16px; keep them at 16px wherever touch is used. */
+  @media (pointer: coarse) {
+    input,
+    select,
+    textarea {
+      font-size: max(1rem, 16px) !important;
+    }
+  }
+
+  /* Numbers line up and don't jitter as they update. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Keep the page from scrolling behind an open dialog. */
+  html:has(dialog[open]) {
+    overflow: hidden;
+  }
+
+  dialog::backdrop {
+    background: transparent;
+  }
+
+  /* The copy of a dialog that plays its way out (playExit in src/ui/dialogBase.ts). */
+  dialog[data-closing] {
+    display: block;
+    z-index: 100;
+    pointer-events: none;
+  }
+}
+
+@layer components {
+  /*
+   * Rows of a grouped list (see src/ui/Section.tsx). Rows after the first get a hairline at the
+   * top, inset to where the text starts, as in the Settings app.
+   */
+  .row {
+    --row-inset: 1rem;
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-height: 2.75rem;
+    padding: 0.6875rem 1rem;
+    @media (min-width: 64rem) {
+      --row-inset: 0.875rem;
+      gap: 0.625rem;
+      min-height: 2.5rem;
+      padding: 0.5625rem 0.875rem;
+    }
+  }
+  .row:has(> .row-tile),
+  .row:has(> :first-child > .row-tile) {
+    --row-inset: 3.5625rem;
+    @media (min-width: 64rem) {
+      --row-inset: 2.875rem;
+    }
+  }
+  /* A list of notices in one tinted group (NoticeList in src/ui/Notice.tsx): lined up with its text. */
+  .notice-list > li {
+    --row-inset: 3.125rem;
+    @media (min-width: 64rem) {
+      --row-inset: 2.875rem;
+    }
+  }
+  .row + .row::before,
+  .row-group > .row:first-child::before,
+  .rows + .row::before,
+  .row + .rows > .row:first-child::before,
+  .rows + .rows > .row:first-child::before,
+  .notice-list > li + li::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: var(--row-inset);
+    right: 0;
+    height: 1px;
+    background: var(--c-separator);
+    pointer-events: none;
+  }
+  @media (min-resolution: 2dppx) {
+    .row + .row::before,
+    .row-group > .row:first-child::before,
+    .rows + .row::before,
+    .row + .rows > .row:first-child::before,
+    .rows + .rows > .row:first-child::before,
+    .notice-list > li + li::before {
+      transform: scaleY(0.5);
+      transform-origin: top;
+    }
+  }
+  /*
+   * Wrappers of rows: `.rows` for a list inside a group (a radio group, an ordered list), with
+   * hairlines to the rows around it; `.row-group` for the rows of an opened disclosure
+   * (src/ui/Disclosure.tsx), which also get one under the disclosure's title.
+   */
+  .rows,
+  .row-group {
+    display: flex;
+    flex-direction: column;
+  }
+  /* Rows you can press: highlighted the moment a finger lands, fading out after release. */
+  .row-pressable {
+    cursor: pointer;
+    transition: background-color 250ms ease;
+    &:active {
+      background-color: var(--c-pressed);
+      transition-duration: 0ms;
+    }
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        background-color: color-mix(in srgb, var(--c-pressed) 55%, transparent);
+      }
+    }
+  }
+
+  /* RasBeacon's icon (src/ui/AppIcon.tsx), shaped like an app icon on a home screen. */
+  .app-icon {
+    border-radius: 22.5%;
+    background: linear-gradient(165deg, #35c6d8 0%, #0c8a9c 55%, #066a79 100%);
+    box-shadow:
+      inset 0 0.5px 0 rgb(255 255 255 / 0.35),
+      0 1px 2px rgb(0 0 0 / 0.12);
+  }
+
+  /*
+   * The on/off switch (src/ui/Switch.tsx): iOS's on phones, the smaller macOS one on computers
+   * with a mouse. The knob slides when it flips and stretches while pressed.
+   */
+  .switch {
+    --w: 51px;
+    --h: 31px;
+    --k: 27px;
+    --stretch: 6px;
+    position: relative;
+    display: inline-flex;
+    flex-shrink: 0;
+    width: var(--w);
+    height: var(--h);
+    border-radius: 999px;
+    background-color: var(--c-fill);
+    cursor: pointer;
+    transition: background-color 200ms ease;
+    /* A 44px tall touch target without changing the look. */
+    &::after {
+      content: '';
+      position: absolute;
+      inset: calc((var(--h) - 44px) / 2) -4px;
+    }
+    @media (min-width: 64rem) and (pointer: fine) {
+      --w: 38px;
+      --h: 22px;
+      --k: 18px;
+      --stretch: 4px;
+    }
+  }
+  .switch-knob {
+    position: absolute;
+    top: calc((var(--h) - var(--k)) / 2);
+    left: calc((var(--h) - var(--k)) / 2);
+    width: var(--k);
+    height: var(--k);
+    border-radius: 999px;
+    background: #fff;
+    box-shadow:
+      0 3px 8px rgb(0 0 0 / 0.15),
+      0 3px 1px rgb(0 0 0 / 0.06);
+    pointer-events: none;
+    transition:
+      transform 200ms var(--ease-out),
+      width 150ms var(--ease-out);
+  }
+  .switch[aria-checked='true'],
+  .switch:has(> input:checked) {
+    background-color: var(--c-green-fill);
+  }
+  .switch[aria-checked='true'] > .switch-knob,
+  .switch:has(> input:checked) > .switch-knob {
+    transform: translateX(calc(var(--w) - var(--h)));
+  }
+  .switch:active > .switch-knob,
+  .switch:has(> input:active) > .switch-knob {
+    width: calc(var(--k) + var(--stretch));
+  }
+  .switch[aria-checked='true']:active > .switch-knob,
+  .switch:has(> input:checked:active) > .switch-knob {
+    transform: translateX(calc(var(--w) - var(--h) - var(--stretch)));
+  }
+  .switch:has(> input:focus-visible) {
+    outline: 2px solid var(--c-tint);
+    outline-offset: 2px;
+  }
+  .switch:disabled,
+  .switch:has(> input:disabled) {
+    cursor: not-allowed;
+    opacity: 0.4;
+  }
+  .switch[aria-busy='true'] {
+    cursor: wait;
+    opacity: 0.6;
+  }
+}
+
+/* The activity indicator turns in eight steps, like iOS's. */
+@keyframes activity-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+@utility activity-spin {
+  animation: activity-spin 0.8s steps(8) infinite;
+}
+
+/* Expanding sections open smoothly where the browser can animate to their natural height. */
+:root {
+  interpolate-size: allow-keywords;
+}
+details::details-content {
+  block-size: 0;
+  overflow-y: clip;
+  transition:
+    block-size 200ms var(--ease-out),
+    content-visibility 200ms allow-discrete;
+}
+details[open]::details-content {
+  block-size: auto;
+}
+@media (prefers-reduced-motion: reduce) {
+  details::details-content {
+    transition: none;
+  }
+}
+
+/* Translucency off: solid surfaces. More contrast: solid surfaces with clear edges. */
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --material: var(--c-cell);
+    --glass: var(--c-cell);
+  }
+  .scroll-edge {
+    background-color: var(--c-bg);
+  }
+}
+@media (prefers-contrast: more) {
+  :root {
+    --material: var(--c-cell);
+    --glass: var(--c-cell);
+    --glass-line: var(--c-label-2);
+    --c-separator: var(--c-label-2);
+  }
+  .scroll-edge {
+    background-color: var(--c-bg);
+  }
+}

@@ -161,7 +161,7 @@ func (a *Agent) deviceInfo() api.DeviceInfo {
 	d := api.DeviceInfo{
 		Hostname:      host + ".lan",
 		KernelRelease: release,
-		Kernel:        strings.TrimSpace("Linux " + release + " " + arch),
+		Kernel:        strings.Join(strings.Fields("Linux "+release+" "+arch), " "),
 		Appliance:     "RasBeacon " + version.Version,
 		BootDevice:    a.storageMedium(),
 	}

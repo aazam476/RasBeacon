@@ -127,6 +127,9 @@ all three to the uplink; before the first check, traffic stays in the
 tunnel. `test/netns/vpn_test.go` checks this against a real WireGuard
 server, including deleting `wg0` while devices are using it.
 
+The VPN keeps several WireGuard profiles (imported files) and uses one;
+switching rebuilds `wg0` while the firewall keeps traffic in it.
+
 The clock matters for WireGuard and certificates, and the Pi has no clock
 battery: `internal/agent/clock.go` saves the time regularly, never lets it
 go backwards across a reboot, and falls back to web servers' `Date`
@@ -153,6 +156,15 @@ on, devices can't reach that page either (`internal/agent/portal.go`):
    network for 10 minutes. It ends by itself as soon as the login works,
    and the firewall cuts any connection still on the old path, so nothing
    opened during login mode keeps going outside the VPN.
+
+## Device controls and the speed test
+
+The Clients page can pause a device (the firewall forwards nothing from its
+MAC address until it's allowed again), disconnect it (hostapd), or make
+dnsmasq forget its address (`internal/agent/clients.go`). The Internet
+page's speed test (`internal/speedtest`) runs Cloudflare's own library in
+the same headless browser as the zero-leak login, as the `rbbrowser` user
+the firewall keeps on the uplink. It runs only when asked.
 
 ## The guest network
 
@@ -197,7 +209,8 @@ Settings live on the shared `/persistent` partition, so they carry over.
 | Path | What | Written by |
 |---|---|---|
 | `/persistent/rasbeacon/config.json` | Non-secret settings | rbd |
-| `/persistent/rasbeacon/secrets.json` (mode 0600) | Hotspot password, admin password hash, upstream Wi-Fi passwords, WireGuard keys | rbd |
+| `/persistent/rasbeacon/secrets.json` (mode 0600) | Hotspot password, admin password hash, upstream Wi-Fi passwords, WireGuard keys (per VPN profile) | rbd |
+| `/persistent/rasbeacon/remembered-logins.json` (mode 0600) | Hashes of "Stay logged in" tokens, with their expiry | rbd |
 | `/persistent/rasbeacon/clock` | Last known time (the "time floor") | rbd |
 | `/persistent/rasbeacon/tls/` | HTTPS certificate and key (key root-only) | rbd |
 | `/persistent/rasbeacon/update-pending.json` | An installed update until it's confirmed | rbd |
@@ -238,5 +251,8 @@ For example, when you change the hotspot band:
   campus network, and wpa_supplicant uses RasBeacon's generated settings.
 - **`test/netns`** runs the real firewall rules and dnsmasq inside Linux
   *network namespaces*, with virtual cables instead of Wi-Fi.
-- **`rbd -dev`** (`internal/devsim`) simulates a whole device for UI work,
-  and `test/e2e` drives the UI in a real browser against it.
+- **`rbd -dev`** (`internal/devsim`) simulates a whole device for UI work
+  (with a stand-in for Cloudflare's speed test service), and `test/e2e`
+  drives the UI in a real browser against it.
+- **`cd web && npm run demo`** runs the UI on a demo router, with no device
+  at all.

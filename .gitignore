@@ -3,6 +3,7 @@
 /web/dist/*
 !/web/dist/.gitkeep
 /web/node_modules/
+/web/dist-demo/
 
 # Build outputs
 /build/

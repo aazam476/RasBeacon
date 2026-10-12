@@ -42,6 +42,13 @@ func TestUplinkControls_WiFi(t *testing.T) {
 	if len(e.timers.delays) != 1 || e.timers.delays[0] != uplinkPauseTime {
 		t.Fatalf("timers: %v", e.timers.delays)
 	}
+	// Saving the networks ends the pause early.
+	if err := e.agent.UpdateUplinkSettings(e.agent.UplinkSettings()); err != nil {
+		t.Fatal(err)
+	}
+	if !e.runner.ran(wpa + "enable_network all") {
+		t.Error("saving the networks should allow the paused one again")
+	}
 	e.timers.runAll()
 	if !e.runner.ran(wpa + "enable_network 1") {
 		t.Error("the network should be allowed again after the pause")

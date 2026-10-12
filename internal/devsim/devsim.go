@@ -90,6 +90,21 @@ func Setup(root string) (paths.Paths, error) {
 	if err := os.MkdirAll(p.BootConfigDir(), 0o755); err != nil {
 		return p, err
 	}
+	// Hardware readings of a Raspberry Pi 4 for the System page (they don't
+	// change, so the processor reads as idle).
+	readings := map[string]string{
+		p.ProcCPUInfo():    strings.Repeat("processor\t: 0\nCPU part\t: 0xd08\n\n", 4),
+		p.ProcMeminfo():    "MemTotal: 3884332 kB\nMemAvailable: 3491116 kB\nSwapTotal: 0 kB\nSwapFree: 0 kB\n",
+		p.ProcStat():       "cpu  4705 356 584 3699 23 23 0 0 0 0\n",
+		p.KernelRelease():  "6.12.34+rpt-rpi-v8\n",
+		p.ThrottledFlags(): "0x0\n",
+		filepath.Join(p.SysClassThermal(), "thermal_zone0", "temp"): "48750\n",
+	}
+	for path, content := range readings {
+		if err := writeFile(path, content); err != nil {
+			return p, err
+		}
+	}
 	// Two phones with DHCP leases.
 	leases := "1790800000 3a:1f:22:aa:bb:cc 10.87.0.23 Alis-iPhone *\n" +
 		"1790800000 8e:00:11:22:33:44 10.87.0.24 Pixel-8 *\n"

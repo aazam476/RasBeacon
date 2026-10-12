@@ -646,7 +646,11 @@ func (a *Agent) UpdateUplinkSettings(req api.UplinkSettings) error {
 	if err := a.applyFirewall(); err != nil {
 		return err
 	}
-	return a.applyUplinkConfig()
+	if err := a.applyUplinkConfig(); err != nil {
+		return err
+	}
+	a.endUplinkPause()
+	return nil
 }
 
 // isSavedNetworkID reports whether id belongs to a saved network.
