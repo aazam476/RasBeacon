@@ -57,6 +57,35 @@ func (a *Agent) Handler() http.Handler {
 		writeJSON(w, http.StatusOK, api.VerifyPasswordResponse{OK: a.VerifyAdminPassword(req.Password)})
 	})
 
+	// "Stay logged in" (see remember.go). rbweb has checked the password
+	// before asking for a token.
+	mux.HandleFunc("POST /remembered-logins", func(w http.ResponseWriter, r *http.Request) {
+		token, expires, err := a.RememberLogin()
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, api.RememberedLogin{Token: token, Expires: expires})
+	})
+	mux.HandleFunc("POST /remembered-logins/check", func(w http.ResponseWriter, r *http.Request) {
+		var req api.RememberedLogin
+		if !readJSON(w, r, &req) {
+			return
+		}
+		writeJSON(w, http.StatusOK, api.VerifyPasswordResponse{OK: a.CheckRememberedLogin(req.Token)})
+	})
+	mux.HandleFunc("POST /remembered-logins/forget", func(w http.ResponseWriter, r *http.Request) {
+		var req api.RememberedLogin
+		if !readJSON(w, r, &req) {
+			return
+		}
+		if err := a.ForgetLogin(req.Token); err != nil {
+			writeError(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+
 	mux.HandleFunc("GET /status", func(w http.ResponseWriter, r *http.Request) {
 		// rbweb says which device is looking (?viewer=<its address>).
 		writeJSON(w, http.StatusOK, a.StatusFor(r.URL.Query().Get("viewer")))
@@ -178,16 +207,32 @@ func (a *Agent) Handler() http.Handler {
 		writeJSON(w, http.StatusOK, resp)
 	})
 
+	// The Internet page's buttons. Each answers 204.
+	uplinkActions := map[string]func() error{
+		"POST /uplink/disconnect":    a.DisconnectUplink,
+		"POST /uplink/renew":         a.RenewDHCPLease,
+		"POST /uplink/ethernet/scan": a.RescanEthernetPort,
+	}
+	for route, action := range uplinkActions {
+		mux.HandleFunc(route, func(w http.ResponseWriter, r *http.Request) {
+			if err := action(); err != nil {
+				writeError(w, err)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+		})
+	}
+
 	mux.HandleFunc("GET /settings/vpn", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, a.VPNSettings())
 	})
 
 	mux.HandleFunc("PUT /settings/vpn", func(w http.ResponseWriter, r *http.Request) {
-		var req api.VPNSettings
+		var req api.VPNSwitches
 		if !readJSON(w, r, &req) {
 			return
 		}
-		if err := a.UpdateVPNSettings(req); err != nil {
+		if err := a.SetVPNSwitches(req); err != nil {
 			writeError(w, err)
 			return
 		}
@@ -199,20 +244,43 @@ func (a *Agent) Handler() http.Handler {
 		if !readJSON(w, r, &req) {
 			return
 		}
-		if err := a.ImportVPNConfig(req.Conf); err != nil {
+		if err := a.ImportVPNProfile(req.Conf, req.Name); err != nil {
 			writeError(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, a.VPNSettings())
 	})
 
-	mux.HandleFunc("POST /settings/vpn/generate-key", func(w http.ResponseWriter, r *http.Request) {
-		if err := a.GenerateVPNKey(); err != nil {
+	mux.HandleFunc("POST /settings/vpn/profile/save", func(w http.ResponseWriter, r *http.Request) {
+		var req api.VPNProfileDetails
+		if !readJSON(w, r, &req) {
+			return
+		}
+		if err := a.SaveVPNProfile(req); err != nil {
 			writeError(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, a.VPNSettings())
 	})
+
+	profileActions := map[string]func(string) error{
+		"POST /settings/vpn/profile/activate":     a.SetActiveVPNProfile,
+		"POST /settings/vpn/profile/remove":       a.RemoveVPNProfile,
+		"POST /settings/vpn/profile/generate-key": a.GenerateVPNKey,
+	}
+	for route, action := range profileActions {
+		mux.HandleFunc(route, func(w http.ResponseWriter, r *http.Request) {
+			var req api.VPNProfileRequest
+			if !readJSON(w, r, &req) {
+				return
+			}
+			if err := action(req.Name); err != nil {
+				writeError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, a.VPNSettings())
+		})
+	}
 
 	mux.HandleFunc("GET /settings/https", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, a.HTTPSSettings())

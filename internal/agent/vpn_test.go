@@ -39,15 +39,25 @@ func newVPNEnv(t *testing.T, killSwitch bool) (*testEnv, *fakeClock) {
 	e.agent.now = func() time.Time { return c.now }
 	e.setHandshake(time.Time{}) // no handshake yet
 
-	if err := e.agent.ImportVPNConfig(testWireGuardConf); err != nil {
+	if err := e.agent.ImportVPNProfile(testWireGuardConf, "home.conf"); err != nil {
 		t.Fatal(err)
 	}
-	settings := e.agent.VPNSettings()
-	settings.Enabled, settings.KillSwitch = true, killSwitch
-	if err := e.agent.UpdateVPNSettings(settings); err != nil {
+	if err := e.agent.SetVPNSwitches(api.VPNSwitches{Enabled: true, KillSwitch: killSwitch}); err != nil {
 		t.Fatal(err)
 	}
 	return e, c
+}
+
+// profileDetails returns a profile's form as the VPN page fills it in.
+func (e *testEnv) profileDetails(name string) api.VPNProfileDetails {
+	e.t.Helper()
+	for _, p := range e.agent.VPNSettings().Profiles {
+		if p.Name == name {
+			return api.VPNProfileDetails{VPNProfile: p}
+		}
+	}
+	e.t.Fatalf("no profile %q", name)
+	return api.VPNProfileDetails{}
 }
 
 // setHandshake fakes `wg show wg0 dump` with the given last handshake.
@@ -79,7 +89,7 @@ func (e *testEnv) firewallEgress() string {
 
 func TestVPN_ImportRefusesUnsafeFile(t *testing.T) {
 	e := newClaimedEnv(t, false)
-	err := e.agent.ImportVPNConfig(strings.Replace(testWireGuardConf, "DNS = 10.66.0.1", "DNS = 10.66.0.1\nPostUp = curl x | sh", 1))
+	err := e.agent.ImportVPNProfile(strings.Replace(testWireGuardConf, "DNS = 10.66.0.1", "DNS = 10.66.0.1\nPostUp = curl x | sh", 1), "")
 	var verr *config.ValidationError
 	if !errors.As(err, &verr) || !strings.Contains(verr.Message, "never runs commands") {
 		t.Fatalf("got %v", err)
@@ -88,7 +98,7 @@ func TestVPN_ImportRefusesUnsafeFile(t *testing.T) {
 
 func TestVPN_TurningOnNeedsASetUpServer(t *testing.T) {
 	e := newClaimedEnv(t, false)
-	err := e.agent.UpdateVPNSettings(api.VPNSettings{Enabled: true, KillSwitch: true})
+	err := e.agent.SetVPNSwitches(api.VPNSwitches{Enabled: true, KillSwitch: true})
 	var verr *config.ValidationError
 	if !errors.As(err, &verr) || verr.Field != "enabled" {
 		t.Fatalf("got %v", err)
@@ -170,9 +180,7 @@ func TestVPN_KillSwitchOff_FallsBackToUplinkAndReturns(t *testing.T) {
 
 func TestVPN_TurningOffRemovesTheTunnel(t *testing.T) {
 	e, _ := newVPNEnv(t, true)
-	settings := e.agent.VPNSettings()
-	settings.Enabled = false
-	if err := e.agent.UpdateVPNSettings(settings); err != nil {
+	if err := e.agent.SetVPNSwitches(api.VPNSwitches{Enabled: false, KillSwitch: true}); err != nil {
 		t.Fatal(err)
 	}
 	if !e.runner.ran("ip link delete dev wg0") {
@@ -182,7 +190,7 @@ func TestVPN_TurningOffRemovesTheTunnel(t *testing.T) {
 		t.Errorf("egress = %s, want the uplink", got)
 	}
 	// The imported settings are kept for next time.
-	if !e.agent.VPNSettings().Configured {
+	if s := e.agent.VPNSettings(); s.ActiveProfile != "home.conf" || len(s.Profiles) != 1 {
 		t.Error("turning the VPN off must not forget the server")
 	}
 }
@@ -192,8 +200,8 @@ func TestVPN_SecretsStayHidden(t *testing.T) {
 	if strings.Contains(e.readFile(e.paths.ConfigFile()), "yAnz5TF") {
 		t.Error("the private key belongs in secrets.json only")
 	}
-	s := e.agent.VPNSettings()
-	if s.PrivateKey != "" || s.PublicKey != "HIgo9xNzJMWLKASShiTqIybxZ0U3wGLiUeJ1PKf8ykw=" {
+	s := e.agent.VPNSettings().Profiles[0]
+	if s.PublicKey != "HIgo9xNzJMWLKASShiTqIybxZ0U3wGLiUeJ1PKf8ykw=" {
 		t.Errorf("settings should show the public key only: %+v", s)
 	}
 	e.runner.outputs["wg show"] = "private key: yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=\n"
@@ -203,12 +211,16 @@ func TestVPN_SecretsStayHidden(t *testing.T) {
 }
 
 func TestVPN_GenerateKey(t *testing.T) {
-	e := newClaimedEnv(t, false)
-	if err := e.agent.GenerateVPNKey(); err != nil {
+	e, _ := newVPNEnv(t, true)
+	if err := e.agent.GenerateVPNKey("home.conf"); err != nil {
 		t.Fatal(err)
 	}
-	if len(e.agent.VPNSettings().PublicKey) != 44 {
-		t.Error("a public key should be shown after generating a key")
+	if key := e.agent.VPNSettings().Profiles[0].PublicKey; len(key) != 44 || key == "HIgo9xNzJMWLKASShiTqIybxZ0U3wGLiUeJ1PKf8ykw=" {
+		t.Errorf("a new public key should be shown after generating a key, got %q", key)
+	}
+	var ve *config.ValidationError
+	if err := e.agent.GenerateVPNKey("nope.conf"); !errors.As(err, &ve) {
+		t.Errorf("unknown profile: got %v", err)
 	}
 }
 
@@ -217,20 +229,23 @@ func TestVPN_RoutedIPv6Network(t *testing.T) {
 	// The tests' fake device has IPv6 switched on.
 	mustWrite(t, e.paths.ProcSysNetIPv6()+"/conf/all/forwarding", "1")
 
-	settings := e.agent.VPNSettings()
+	settings := e.profileDetails("home.conf")
 	settings.RoutedIPv6Prefix = "2001:db8:1234:5678::/64"
 	var ve *config.ValidationError
-	if err := e.agent.UpdateVPNSettings(settings); !errors.As(err, &ve) || ve.Field != "routedIpv6Prefix" {
+	if err := e.agent.SaveVPNProfile(settings); !errors.As(err, &ve) || ve.Field != "routedIpv6Prefix" {
 		t.Fatalf("a VPN without IPv6 can't carry a routed IPv6 network, got %v", err)
 	}
 
 	ipv6Conf := strings.Replace(testWireGuardConf, "Address = 10.66.0.2/32", "Address = 10.66.0.2/32, fd66::2/128", 1)
-	if err := e.agent.ImportVPNConfig(ipv6Conf); err != nil {
+	if err := e.agent.ImportVPNProfile(ipv6Conf, "home.conf"); err != nil {
 		t.Fatal(err)
 	}
-	settings = e.agent.VPNSettings()
+	if err := e.agent.SetActiveVPNProfile("home-2.conf"); err != nil {
+		t.Fatal(err)
+	}
+	settings = e.profileDetails("home-2.conf")
 	settings.RoutedIPv6Prefix = "2001:db8:1234:5678::/64"
-	if err := e.agent.UpdateVPNSettings(settings); err != nil {
+	if err := e.agent.SaveVPNProfile(settings); err != nil {
 		t.Fatal(err)
 	}
 	if !e.runner.ran("ip -6 address replace 2001:db8:1234:5678::1/64 dev br-lan") {
@@ -244,9 +259,7 @@ func TestVPN_RoutedIPv6Network(t *testing.T) {
 	}
 
 	// Turning the VPN off takes the network off the hotspot again.
-	settings = e.agent.VPNSettings()
-	settings.Enabled = false
-	if err := e.agent.UpdateVPNSettings(settings); err != nil {
+	if err := e.agent.SetVPNSwitches(api.VPNSwitches{Enabled: false, KillSwitch: true}); err != nil {
 		t.Fatal(err)
 	}
 	if !e.runner.ran("ip -6 address del 2001:db8:1234:5678::1/64 dev br-lan") {
@@ -259,8 +272,120 @@ func TestVPN_RoutedIPv6Network(t *testing.T) {
 	// Bad values are explained.
 	for _, text := range []string{"2001:db8::/48", "fd00:1:2:3::/64", "not a network"} {
 		settings.RoutedIPv6Prefix = text
-		if err := e.agent.UpdateVPNSettings(settings); !errors.As(err, &ve) || ve.Field != "routedIpv6Prefix" {
+		if err := e.agent.SaveVPNProfile(settings); !errors.As(err, &ve) || ve.Field != "routedIpv6Prefix" {
 			t.Errorf("%s: got %v", text, err)
 		}
+	}
+}
+
+func TestVPN_Profiles(t *testing.T) {
+	e, _ := newVPNEnv(t, true)
+	other := strings.Replace(testWireGuardConf, "vpn.example.com", "office.example.com", 1)
+	if err := e.agent.ImportVPNProfile(other, "office.conf"); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.agent.ImportVPNProfile(other, "office.conf"); err != nil {
+		t.Fatal(err)
+	}
+	s := e.agent.VPNSettings()
+	if s.ActiveProfile != "home.conf" || len(s.Profiles) != 3 || s.Profiles[2].Name != "office-2.conf" {
+		t.Fatalf("importing keeps the profile in use and makes names unique: %+v", s)
+	}
+
+	// Switching starts a fresh tunnel with the other server.
+	e.runner.commands = nil
+	if err := e.agent.SetActiveVPNProfile("office.conf"); err != nil {
+		t.Fatal(err)
+	}
+	if !e.runner.ran("ip link delete dev wg0") || !strings.Contains(e.readFile(e.paths.WireGuardConfig()), "office.example.com") {
+		t.Errorf("the tunnel should be rebuilt for office.conf; commands: %v", e.runner.commands)
+	}
+	if got := e.firewallEgress(); got != `elements = { "wg0" }` {
+		t.Errorf("devices' traffic must stay in the tunnel while switching, egress = %s", got)
+	}
+
+	// Editing a profile that isn't in use doesn't touch the tunnel.
+	details := e.profileDetails("home.conf")
+	details.Endpoint = "home.example.net:51820"
+	e.runner.commands = nil
+	if err := e.agent.SaveVPNProfile(details); err != nil {
+		t.Fatal(err)
+	}
+	if e.runner.ran("ip link delete") || strings.Contains(e.readFile(e.paths.WireGuardConfig()), "home.example.net") {
+		t.Error("editing another profile must not change the tunnel")
+	}
+	var ve *config.ValidationError
+	details.Name = "missing.conf"
+	if err := e.agent.SaveVPNProfile(details); !errors.As(err, &ve) {
+		t.Errorf("unknown profile: got %v", err)
+	}
+
+	// Removing the profile in use falls back to the first one left; its
+	// keys go too.
+	if err := e.agent.RemoveVPNProfile("office.conf"); err != nil {
+		t.Fatal(err)
+	}
+	s = e.agent.VPNSettings()
+	if s.ActiveProfile != "home.conf" || len(s.Profiles) != 2 || !s.Enabled {
+		t.Errorf("after removing: %+v", s)
+	}
+	if _, kept := e.agent.secrets.WireGuardKeys["office.conf"]; kept {
+		t.Error("a removed profile's keys must be deleted")
+	}
+	// Removing the last one turns the VPN off.
+	for _, name := range []string{"home.conf", "office-2.conf"} {
+		if err := e.agent.RemoveVPNProfile(name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s = e.agent.VPNSettings()
+	if s.Enabled || s.ActiveProfile != "" || len(s.Profiles) != 0 {
+		t.Errorf("without profiles: %+v", s)
+	}
+	if got := e.firewallEgress(); got != `elements = { "wlan0" }` {
+		t.Errorf("egress = %s, want the uplink", got)
+	}
+}
+
+func TestVPN_Version2SettingsBecomeAProfile(t *testing.T) {
+	e := newClaimedEnv(t, false)
+	// A config.json and secrets.json as version 2 wrote them.
+	var raw map[string]any
+	if err := config.ReadJSON(e.paths.ConfigFile(), &raw); err != nil {
+		t.Fatal(err)
+	}
+	raw["version"] = 2
+	raw["vpn"] = map[string]any{
+		"enabled": true, "killSwitch": true,
+		"addresses": []string{"10.66.0.2/32"}, "dns": []string{"10.66.0.1"}, "mtu": 0,
+		"peer":             map[string]any{"publicKey": "xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=", "endpoint": "vpn.example.com:51820", "allowedIps": []string{"0.0.0.0/0"}},
+		"routedIpv6Prefix": "",
+	}
+	if err := config.WriteJSON(e.paths.ConfigFile(), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var secrets map[string]any
+	if err := config.ReadJSON(e.paths.SecretsFile(), &secrets); err != nil {
+		t.Fatal(err)
+	}
+	secrets["wireguardPrivateKey"] = "yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk="
+	if err := config.WriteJSON(e.paths.SecretsFile(), secrets, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	restarted := New(e.paths, e.runner)
+	if err := restarted.loadOrCreateSettings(); err != nil {
+		t.Fatal(err)
+	}
+	s := restarted.VPNSettings()
+	if !s.Enabled || s.ActiveProfile != "wireguard.conf" || len(s.Profiles) != 1 ||
+		s.Profiles[0].Endpoint != "vpn.example.com:51820" || s.Profiles[0].PublicKey != "HIgo9xNzJMWLKASShiTqIybxZ0U3wGLiUeJ1PKf8ykw=" {
+		t.Errorf("after the upgrade: %+v", s)
+	}
+	if text := e.readFile(e.paths.SecretsFile()); strings.Contains(text, "wireguardPrivateKey") || !strings.Contains(text, `"wireguard.conf"`) {
+		t.Errorf("the key should have moved to the profile:\n%s", text)
+	}
+	if !strings.Contains(e.readFile(e.paths.ConfigFile()), `"version": 3`) {
+		t.Error("the upgraded settings should be saved")
 	}
 }

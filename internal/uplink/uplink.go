@@ -87,6 +87,9 @@ type WiFiStatus struct {
 	FrequencyMHz int
 	// KeyMgmt is the security in use, e.g. "WPA2-PSK", "SAE" or "NONE".
 	KeyMgmt string
+	// NetworkID is wpa_supplicant's number for the network it is using
+	// (for enable_network and disable_network); "" if none.
+	NetworkID string
 	// LoginFailed is true when an Enterprise network rejected the login
 	// (wrong username or password, or the server failed RasBeacon's
 	// certificate check). wpa_supplicant then waits before trying again.
@@ -115,6 +118,8 @@ func ParseWPAStatus(out string) WiFiStatus {
 			s.FrequencyMHz, _ = strconv.Atoi(value)
 		case "key_mgmt":
 			s.KeyMgmt = value
+		case "id":
+			s.NetworkID = value
 		case "Supplicant PAE state":
 			// HELD means "the last login failed, waiting before retrying".
 			s.LoginFailed = s.LoginFailed || value == "HELD"

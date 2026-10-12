@@ -3,6 +3,7 @@ package webserver
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -22,6 +23,7 @@ type fakeRBD struct {
 	portalNotice  bool
 	adminPassword string
 	lastForwarded string
+	remembered    map[string]bool
 }
 
 func (f *fakeRBD) handler() http.Handler {
@@ -33,6 +35,22 @@ func (f *fakeRBD) handler() http.Handler {
 		var req api.PasswordRequest
 		_ = json.NewDecoder(r.Body).Decode(&req)
 		writeJSON(w, http.StatusOK, api.VerifyPasswordResponse{OK: req.Password == f.adminPassword})
+	})
+	mux.HandleFunc("POST /remembered-logins", func(w http.ResponseWriter, r *http.Request) {
+		token := fmt.Sprintf("token-%d", len(f.remembered)+1)
+		f.remembered[token] = true
+		writeJSON(w, http.StatusOK, api.RememberedLogin{Token: token, Expires: time.Now().Add(time.Hour)})
+	})
+	mux.HandleFunc("POST /remembered-logins/check", func(w http.ResponseWriter, r *http.Request) {
+		var req api.RememberedLogin
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		writeJSON(w, http.StatusOK, api.VerifyPasswordResponse{OK: f.remembered[req.Token]})
+	})
+	mux.HandleFunc("POST /remembered-logins/forget", func(w http.ResponseWriter, r *http.Request) {
+		var req api.RememberedLogin
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		delete(f.remembered, req.Token)
+		w.WriteHeader(http.StatusNoContent)
 	})
 	mux.HandleFunc("POST /claim", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, api.ClaimResponse{HotspotSSID: "x"})
@@ -49,7 +67,7 @@ func (f *fakeRBD) handler() http.Handler {
 
 // newTestServer returns an rbweb server backed by a fake rbd and a tiny UI.
 func newTestServer(mode api.Mode) (*Server, *fakeRBD) {
-	rbd := &fakeRBD{mode: mode, adminPassword: "tangerine-orbit-42"}
+	rbd := &fakeRBD{mode: mode, adminPassword: "tangerine-orbit-42", remembered: map[string]bool{}}
 	ui := fstest.MapFS{
 		"index.html":         {Data: []byte("<html>RasBeacon UI</html>")},
 		"assets/app-1a2b.js": {Data: []byte("console.log(1)")},
@@ -351,5 +369,55 @@ func TestStatus_TellsRBDWhoIsLooking(t *testing.T) {
 	}
 	if rbd.lastForwarded != "GET /status?viewer=10.87.0.23" {
 		t.Errorf("forwarded %q", rbd.lastForwarded)
+	}
+}
+
+func TestStayLoggedIn_SurvivesARestartUntilLogout(t *testing.T) {
+	s, rbd := newTestServer(api.ModeNormal)
+	rec := request(s, "POST", "http://10.87.0.1/api/v1/session", `{"password":"tangerine-orbit-42","stayLoggedIn":true}`, nil, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("login failed: %d %s", rec.Code, rec.Body)
+	}
+	var remember *http.Cookie
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == rememberCookieName {
+			remember = c
+		}
+	}
+	if remember == nil || !remember.HttpOnly || remember.SameSite != http.SameSiteStrictMode || remember.Expires.IsZero() {
+		t.Fatalf("want a lasting, HttpOnly, SameSite=Strict remember cookie, got %+v", remember)
+	}
+
+	// rbweb restarts: its sessions are gone, but the browser is logged in
+	// again with the remembered login.
+	restarted := New(s.rbd, s.ui)
+	rec = request(restarted, "GET", "/api/v1/session", "", nil, []*http.Cookie{remember})
+	var info api.SessionInfo
+	_ = json.Unmarshal(rec.Body.Bytes(), &info)
+	if !info.LoggedIn || info.CSRFToken == "" {
+		t.Fatalf("want logged in again, got %s", rec.Body)
+	}
+	session := rec.Result().Cookies()
+	if rec := request(restarted, "GET", "/api/v1/status", "", nil, session); rec.Code != http.StatusOK {
+		t.Errorf("status with the new session: %d", rec.Code)
+	}
+
+	// Logging out forgets it.
+	rec = request(restarted, "DELETE", "/api/v1/session", "", nil, append(session, remember))
+	if rec.Code != http.StatusNoContent || len(rbd.remembered) != 0 {
+		t.Fatalf("logout: %d, remembered %v", rec.Code, rbd.remembered)
+	}
+	again := New(s.rbd, s.ui)
+	rec = request(again, "GET", "/api/v1/session", "", nil, []*http.Cookie{remember})
+	if strings.Contains(rec.Body.String(), `"loggedIn":true`) {
+		t.Error("a forgotten login must not log in")
+	}
+
+	// Without "Stay logged in" there is no remember cookie.
+	cookies, _ := login(t, s)
+	for _, c := range cookies {
+		if c.Name == rememberCookieName {
+			t.Error("unexpected remember cookie")
+		}
 	}
 }

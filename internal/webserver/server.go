@@ -111,28 +111,34 @@ func (s *Server) Handler() http.Handler {
 	// --- Login required: forwarded to rbd unchanged ---
 	// Each entry maps a public API route to rbd's internal route.
 	forwarded := map[string]string{
-		"GET /api/v1/settings/hotspot":                  "/settings/hotspot",
-		"PUT /api/v1/settings/hotspot":                  "/settings/hotspot",
-		"POST /api/v1/settings/hotspot/reveal-password": "/settings/hotspot/reveal-password",
-		"GET /api/v1/settings/guest":                    "/settings/guest",
-		"PUT /api/v1/settings/guest":                    "/settings/guest",
-		"GET /api/v1/settings/ssh":                      "/settings/ssh",
-		"PUT /api/v1/settings/ssh":                      "/settings/ssh",
-		"GET /api/v1/settings/uplink":                   "/settings/uplink",
-		"PUT /api/v1/settings/uplink":                   "/settings/uplink",
-		"POST /api/v1/uplink/scan":                      "/uplink/scan",
-		"GET /api/v1/settings/vpn":                      "/settings/vpn",
-		"PUT /api/v1/settings/vpn":                      "/settings/vpn",
-		"POST /api/v1/settings/vpn/import":              "/settings/vpn/import",
-		"POST /api/v1/settings/vpn/generate-key":        "/settings/vpn/generate-key",
-		"GET /api/v1/settings/https":                    "/settings/https",
-		"PUT /api/v1/settings/https":                    "/settings/https",
-		"PUT /api/v1/settings/updates":                  "/settings/updates",
-		"POST /api/v1/system/reboot":                    "/system/reboot",
-		"GET /api/v1/diagnostics":                       "/diagnostics",
-		"POST /api/v1/clients/internet-access":          "/clients/internet-access",
-		"POST /api/v1/clients/disconnect":               "/clients/disconnect",
-		"POST /api/v1/clients/flush-lease":              "/clients/flush-lease",
+		"GET /api/v1/settings/hotspot":                   "/settings/hotspot",
+		"PUT /api/v1/settings/hotspot":                   "/settings/hotspot",
+		"POST /api/v1/settings/hotspot/reveal-password":  "/settings/hotspot/reveal-password",
+		"GET /api/v1/settings/guest":                     "/settings/guest",
+		"PUT /api/v1/settings/guest":                     "/settings/guest",
+		"GET /api/v1/settings/ssh":                       "/settings/ssh",
+		"PUT /api/v1/settings/ssh":                       "/settings/ssh",
+		"GET /api/v1/settings/uplink":                    "/settings/uplink",
+		"PUT /api/v1/settings/uplink":                    "/settings/uplink",
+		"POST /api/v1/uplink/scan":                       "/uplink/scan",
+		"POST /api/v1/uplink/disconnect":                 "/uplink/disconnect",
+		"POST /api/v1/uplink/renew":                      "/uplink/renew",
+		"POST /api/v1/uplink/ethernet/scan":              "/uplink/ethernet/scan",
+		"GET /api/v1/settings/vpn":                       "/settings/vpn",
+		"PUT /api/v1/settings/vpn":                       "/settings/vpn",
+		"POST /api/v1/settings/vpn/import":               "/settings/vpn/import",
+		"POST /api/v1/settings/vpn/profile/save":         "/settings/vpn/profile/save",
+		"POST /api/v1/settings/vpn/profile/activate":     "/settings/vpn/profile/activate",
+		"POST /api/v1/settings/vpn/profile/remove":       "/settings/vpn/profile/remove",
+		"POST /api/v1/settings/vpn/profile/generate-key": "/settings/vpn/profile/generate-key",
+		"GET /api/v1/settings/https":                     "/settings/https",
+		"PUT /api/v1/settings/https":                     "/settings/https",
+		"PUT /api/v1/settings/updates":                   "/settings/updates",
+		"POST /api/v1/system/reboot":                     "/system/reboot",
+		"GET /api/v1/diagnostics":                        "/diagnostics",
+		"POST /api/v1/clients/internet-access":           "/clients/internet-access",
+		"POST /api/v1/clients/disconnect":                "/clients/disconnect",
+		"POST /api/v1/clients/flush-lease":               "/clients/flush-lease",
 	}
 	for route, rbdPath := range forwarded {
 		mux.Handle(route, s.requireLogin(s.forwardTo(rbdPath)))
@@ -230,8 +236,34 @@ func (s *Server) handleClaim(w http.ResponseWriter, r *http.Request) {
 	writeRaw(w, status, "application/json", respBody)
 }
 
+// currentSession returns the browser's session. A browser without one (or
+// whose session ended) but with a valid "Stay logged in" token gets a new
+// session.
+func (s *Server) currentSession(w http.ResponseWriter, r *http.Request) (*session, bool) {
+	if _, sess, ok := s.sessions.fromRequest(r); ok {
+		return sess, true
+	}
+	cookie, err := r.Cookie(rememberCookieName)
+	if err != nil || cookie.Value == "" {
+		return nil, false
+	}
+	body, _ := json.Marshal(api.RememberedLogin{Token: cookie.Value})
+	status, respBody, err := s.rbd.Do(http.MethodPost, "/remembered-logins/check", body)
+	var check api.VerifyPasswordResponse
+	if err != nil || status != http.StatusOK || json.Unmarshal(respBody, &check) != nil || !check.OK {
+		if err == nil {
+			clearRememberCookie(w) // expired or forgotten
+		}
+		return nil, false
+	}
+	id, _ := s.sessions.create()
+	setSessionCookie(w, r, id)
+	sess, ok := s.sessions.lookup(id)
+	return sess, ok
+}
+
 func (s *Server) handleGetSession(w http.ResponseWriter, r *http.Request) {
-	_, sess, ok := s.sessions.fromRequest(r)
+	sess, ok := s.currentSession(w, r)
 	if !ok {
 		writeJSON(w, http.StatusOK, api.SessionInfo{LoggedIn: false})
 		return
@@ -259,6 +291,12 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	var login api.LoginRequest
+	if err := json.Unmarshal(body, &login); err != nil {
+		writeJSON(w, http.StatusBadRequest, api.ErrorResponse{Error: "invalid request: " + err.Error()})
+		return
+	}
+	body, _ = json.Marshal(api.PasswordRequest{Password: login.Password})
 	var verify api.VerifyPasswordResponse
 	status, respBody, err := s.rbd.Do(http.MethodPost, "/verify-password", body)
 	if err != nil || status != http.StatusOK || json.Unmarshal(respBody, &verify) != nil {
@@ -272,6 +310,15 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.limiter.recordSuccess(ip)
+	if login.StayLoggedIn {
+		var remembered api.RememberedLogin
+		status, respBody, err := s.rbd.Do(http.MethodPost, "/remembered-logins", []byte("{}"))
+		if err == nil && status == http.StatusOK && json.Unmarshal(respBody, &remembered) == nil {
+			setRememberCookie(w, r, remembered.Token, remembered.Expires)
+		} else {
+			slog.Warn("could not remember the login", "error", err, "status", status)
+		}
+	}
 	id, csrf := s.sessions.create()
 	setSessionCookie(w, r, id)
 	writeJSON(w, http.StatusOK, api.SessionInfo{LoggedIn: true, CSRFToken: csrf})
@@ -280,6 +327,12 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	if id, _, ok := s.sessions.fromRequest(r); ok {
 		s.sessions.remove(id)
+	}
+	if cookie, err := r.Cookie(rememberCookieName); err == nil && cookie.Value != "" {
+		body, _ := json.Marshal(api.RememberedLogin{Token: cookie.Value})
+		if _, _, err := s.rbd.Do(http.MethodPost, "/remembered-logins/forget", body); err != nil {
+			slog.Warn("could not forget the remembered login", "error", err)
+		}
 	}
 	clearSessionCookie(w)
 	w.WriteHeader(http.StatusNoContent)
@@ -348,7 +401,7 @@ func (s *Server) requireLogin(next http.Handler) http.Handler {
 			s.refuseOverHTTP(w, r)
 			return
 		}
-		_, sess, ok := s.sessions.fromRequest(r)
+		sess, ok := s.currentSession(w, r)
 		if !ok {
 			writeJSON(w, http.StatusUnauthorized, api.ErrorResponse{Error: "Please log in."})
 			return

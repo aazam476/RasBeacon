@@ -69,6 +69,12 @@ func (p Paths) FactoryResetFile() string {
 	return filepath.Join(p.BootConfigDir(), "factory-reset")
 }
 
+// RememberedLoginsFile lists the browsers that chose "Stay logged in" (see
+// agent/remember.go).
+func (p Paths) RememberedLoginsFile() string {
+	return filepath.Join(p.DataDir(), "remembered-logins.json")
+}
+
 // ClockFile holds the last known time (seconds since 1970), saved
 // regularly so the clock never goes backwards across a reboot.
 func (p Paths) ClockFile() string { return filepath.Join(p.DataDir(), "clock") }

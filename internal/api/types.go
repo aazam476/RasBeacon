@@ -14,6 +14,7 @@ import (
 	"rasbeacon/internal/radio"
 	"rasbeacon/internal/stations"
 	"rasbeacon/internal/uplink"
+	"time"
 )
 
 // Mode is what the device is doing right now.
@@ -425,34 +426,66 @@ type VPNStatus struct {
 	RoutedIPv6Prefix string `json:"routedIpv6Prefix,omitempty"`
 }
 
-// VPNSettings is read and written by the VPN page. Addresses are text
-// (e.g. "10.66.0.2/32") so mistakes can be reported per field.
+// VPNSettings is read by the VPN page: the switches and the WireGuard
+// profiles (GET /settings/vpn). Each change has its own route, and each
+// answers with the new VPNSettings.
 type VPNSettings struct {
 	Enabled    bool `json:"enabled"`
 	KillSwitch bool `json:"killSwitch"`
-	// Configured is true once a server has been set up (read-only).
-	Configured bool     `json:"configured"`
-	Addresses  []string `json:"addresses"`
-	DNS        []string `json:"dns"`
-	MTU        int      `json:"mtu"`
+	// ActiveProfile is the name of the profile in use; "" when there is
+	// none.
+	ActiveProfile string       `json:"activeProfile"`
+	Profiles      []VPNProfile `json:"profiles"`
+}
+
+// VPNSwitches turns the VPN and its kill switch on or off
+// (PUT /settings/vpn).
+type VPNSwitches struct {
+	Enabled    bool `json:"enabled"`
+	KillSwitch bool `json:"killSwitch"`
+}
+
+// VPNProfile is one WireGuard configuration. Addresses are text (e.g.
+// "10.66.0.2/32") so mistakes can be reported per field.
+type VPNProfile struct {
+	// Name is unique, usually the imported file's name.
+	Name      string   `json:"name"`
+	Addresses []string `json:"addresses"`
+	DNS       []string `json:"dns"`
+	// MTU 0 means the default (1380).
+	MTU int `json:"mtu"`
 	// Server (peer) settings.
-	PeerPublicKey       string   `json:"peerPublicKey"`
-	Endpoint            string   `json:"endpoint"`
-	AllowedIPs          []string `json:"allowedIps"`
-	PersistentKeepalive int      `json:"persistentKeepalive"`
-	// PublicKey is RasBeacon's own public key, to give to the server
-	// (read-only; empty until a private key exists).
-	PublicKey string `json:"publicKey"`
-	// Write-only secrets: empty keeps the saved value.
-	PrivateKey      string `json:"privateKey,omitempty"`
-	PresharedKey    string `json:"presharedKey,omitempty"`
+	PeerPublicKey string   `json:"peerPublicKey"`
+	Endpoint      string   `json:"endpoint"`
+	AllowedIPs    []string `json:"allowedIps"`
+	// PersistentKeepalive 0 means the default (25 seconds).
+	PersistentKeepalive int `json:"persistentKeepalive"`
+	// PublicKey is RasBeacon's own public key for this profile, to give to
+	// the server (empty until a private key exists).
+	PublicKey       string `json:"publicKey"`
 	HasPresharedKey bool   `json:"hasPresharedKey"`
-	// RemovePresharedKey deletes the saved preshared key.
-	RemovePresharedKey bool `json:"removePresharedKey,omitempty"`
 	// RoutedIPv6Prefix is optional: a public IPv6 /64 the WireGuard server
 	// routes to RasBeacon (e.g. "2001:db8:1234:5678::/64"). Devices then
 	// get public IPv6 addresses through the VPN, without NAT. Empty: off.
 	RoutedIPv6Prefix string `json:"routedIpv6Prefix"`
+}
+
+// VPNProfileDetails saves the details typed into one profile's form
+// (POST /settings/vpn/profile/save). Name picks the profile; it can't be
+// changed. PublicKey and HasPresharedKey are ignored.
+type VPNProfileDetails struct {
+	VPNProfile
+	// Write-only secrets: empty keeps the saved value.
+	PrivateKey   string `json:"privateKey,omitempty"`
+	PresharedKey string `json:"presharedKey,omitempty"`
+	// RemovePresharedKey deletes the saved preshared key.
+	RemovePresharedKey bool `json:"removePresharedKey,omitempty"`
+}
+
+// VPNProfileRequest names a profile (POST /settings/vpn/profile/activate,
+// /remove and /generate-key).
+type VPNProfileRequest struct {
+	Name string `json:"name"`
 }
 
 // HTTPSSettings is read and written by the HTTPS page.
@@ -469,9 +502,12 @@ type HTTPSSettings struct {
 	PrivateKey  string `json:"privateKey,omitempty"`
 }
 
-// VPNImportRequest carries a WireGuard .conf file's text.
+// VPNImportRequest carries a WireGuard .conf file's text, which becomes a
+// new profile (POST /settings/vpn/import). Name is the file's name, if it
+// came from a file; RasBeacon makes it unique.
 type VPNImportRequest struct {
 	Conf string `json:"conf"`
+	Name string `json:"name,omitempty"`
 }
 
 // UplinkSettings is read and written by the Internet (uplink) settings page.
@@ -572,4 +608,17 @@ type ClientRequest struct {
 type ClientInternetAccessRequest struct {
 	MAC     string `json:"mac"`
 	Allowed bool   `json:"allowed"`
+}
+
+// RememberedLogin is a "Stay logged in" token between rbweb and rbd. Expires
+// is only set in rbd's answer when a token is made.
+type RememberedLogin struct {
+	Token   string    `json:"token"`
+	Expires time.Time `json:"expires,omitzero"`
+}
+
+// LoginRequest is the login form (POST /api/v1/session).
+type LoginRequest struct {
+	Password     string `json:"password"`
+	StayLoggedIn bool   `json:"stayLoggedIn"`
 }
