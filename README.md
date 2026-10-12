@@ -1,6 +1,6 @@
 # RasBeacon
 
-An open-source, battery-powered Wi-Fi travel router for the Raspberry Pi.
+An open-source Wi-Fi travel router for the Raspberry Pi.
 Your devices join RasBeacon's hotspot, and RasBeacon joins the network where
 you are (hotel, campus eduroam, café). The goal is that all your traffic can
 go through your own WireGuard VPN, with a kill switch and an easy way through
@@ -33,7 +33,7 @@ hotel login pages.
 | Raspberry Pi 4 or 5 | A Pi 4 may need a one-time bootloader update first (see [Troubleshooting](#troubleshooting): 4 short flashes). The Pi Zero 2 W and older boards don't work with the current image. See [docs/compatibility.md](docs/compatibility.md). |
 | A USB Wi-Fi adapter that can run a hotspot | Recommended: one with a **MediaTek MT7612U** chip (e.g. Alfa AWUS036ACM). A TP-Link Archer T3U also works in principle. The Pi's built-in Wi-Fi alone holds only about 8 devices. |
 | microSD card, 8 GB or larger | |
-| USB power bank, about 20,000 mAh for a full day on a Pi 4/5 | Or any 5 V / 3 A USB-C supply |
+| A 5 V / 3 A USB-C power supply | Or a USB power bank, if you want to use it away from an outlet |
 
 ## Set up (about 15 minutes)
 
