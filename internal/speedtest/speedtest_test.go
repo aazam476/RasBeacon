@@ -72,8 +72,10 @@ func TestRun_InARealBrowser(t *testing.T) {
 	server := httptest.NewServer(standIn.Handler())
 	defer server.Close()
 
+	// Without Chromium's sandbox: CI runners (Ubuntu 24.04) don't allow the
+	// user namespaces it needs, and these tests only open local test pages.
 	session, err := browser.Start(browser.Options{Binary: binary, ProfileParent: t.TempDir(),
-		Width: 400, Height: 600, NoSandbox: os.Geteuid() == 0, NoPictures: true})
+		Width: 400, Height: 600, NoSandbox: true, NoPictures: true})
 	if err != nil {
 		t.Fatal(err)
 	}

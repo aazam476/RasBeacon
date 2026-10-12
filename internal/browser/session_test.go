@@ -92,8 +92,10 @@ func TestSession_LogInThroughThePictures(t *testing.T) {
 	site := loginSite(t)
 	profiles := t.TempDir()
 
+	// Without Chromium's sandbox: CI runners (Ubuntu 24.04) don't allow the
+	// user namespaces it needs, and these tests only open local test pages.
 	s, err := Start(Options{Binary: binary, ProfileParent: profiles, Width: 390, Height: 700,
-		NoSandbox: os.Geteuid() == 0})
+		NoSandbox: true})
 	if err != nil {
 		t.Fatal(err)
 	}
