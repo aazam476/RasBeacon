@@ -1,7 +1,7 @@
 # RasBeacon UI
 
 React + TypeScript front end for the RasBeacon travel router: first-time setup, the notices, the
-hotel login page and every settings page, plus the features the owner kept from the mockups
+hotel login page and every settings page, plus the extras from the mockups
 (speed test, VPN profiles, client controls, uplink controls).
 
 It is designed like Apple's Settings app: iOS Settings on phones, macOS System Settings on
@@ -245,7 +245,7 @@ API paths are under `/api/v1` and are the original client's functions.
 
 ### 6. Added to the router for this UI
 
-The owner kept these features of the mockups; the router added them (see `docs/api.md`):
+These features of the mockups were added to the router for this UI (see `docs/api.md`):
 
 - `Status.throughput`, `system`, `device`, `storage`, `lan`, `speedtest` and
   `ethernetDiagnostics`; per client `band`, `downMbps`, `upMbps`, `internetAccess`,

@@ -21,8 +21,8 @@ eduroam, and says which milestone checks them.
 | Onboard CYW43455 (Pi 4/5) or BCM43436 (Zero 2 W), brcmfmac | **Wi-Fi uplink** | WPA2-Personal/Enterprise, open. WPA3 depends on firmware (M3 checks this). |
 | Built-in Gigabit Ethernet (Pi 4/5), or a USB Ethernet adapter | **Role setting:** *Uplink* (default) or *Client port* (4.1) | |
 | USB adapter with MT7612U (mt76x2u), e.g. Alfa AWUS036ACM | **Hotspot** (reference): 2.4 GHz default, 5 GHz optional | 128-entry station table. SAE and MFP supported. 2 AP interfaces (main + guest). |
-| TP-Link "AC1300" USB adapters (Realtek, rtw88 driver) | **Hotspot** (supported, **at risk**) | TP-Link sells several AC1300 models with different chips: **Archer T3U, T3U Plus and T4U v3 use RTL8812BU**; **Archer T4U v1/v2 use RTL8812AU**. Both drivers are in the Raspberry Pi kernel (6.18, `CONFIG_RTW88_8822BU` and `CONFIG_RTW88_8812AU`), with a 32-entry station table and MFP (needed for WPA3). **Known risk:** users have reported the RTL8812BU dropping clients in AP mode ("failed to download beacon", "timed out to flush queue"). The ≥10-client M1 gate runs on this adapter too. Run `lsusb` to identify yours: `2357:012d`, `2357:0138` and `2357:0115` are RTL8812BU; `2357:0101`, `2357:0103` and `2357:010d` are RTL8812AU. **The owner's test adapter is an Archer T3U (RTL8812BU, expected ID `2357:012d`).** If it fails the M1 gate, `rbd` first tries the reported mitigation (a longer beacon interval, plus a driver reload on beacon errors), and the fallback is an MT7612U adapter. |
-| 5 V / 3 A USB-C supply, or a USB power bank | Power | The owner's choice: RasBeacon has no battery and no battery-life target. Power banks that people test are listed in `docs/compatibility.md` (auto-off threshold, pass-through charging). |
+| TP-Link "AC1300" USB adapters (Realtek, rtw88 driver) | **Hotspot** (supported, **at risk**) | TP-Link sells several AC1300 models with different chips: **Archer T3U, T3U Plus and T4U v3 use RTL8812BU**; **Archer T4U v1/v2 use RTL8812AU**. Both drivers are in the Raspberry Pi kernel (6.18, `CONFIG_RTW88_8822BU` and `CONFIG_RTW88_8812AU`), with a 32-entry station table and MFP (needed for WPA3). **Known risk:** users have reported the RTL8812BU dropping clients in AP mode ("failed to download beacon", "timed out to flush queue"). The ≥10-client M1 gate runs on this adapter too. Run `lsusb` to identify yours: `2357:012d`, `2357:0138` and `2357:0115` are RTL8812BU; `2357:0101`, `2357:0103` and `2357:010d` are RTL8812AU. If an RTL8812BU adapter fails the M1 gate, `rbd` first tries the reported mitigation (a longer beacon interval, plus a driver reload on beacon errors), and the fallback is an MT7612U adapter. |
+| 5 V / 3 A USB-C supply, or a USB power bank | Power | Either works: RasBeacon has no battery and no battery-life target. Power banks that people test are listed in `docs/compatibility.md` (auto-off threshold, pass-through charging). |
 
 Roles are assigned automatically:
 - A mac80211 USB adapter that supports AP mode becomes `ap0`.
@@ -55,8 +55,7 @@ compatibility table records the result.
     network-namespace integration tests, and hwsim tests (section 8).
   - `release.yml` runs on version tags and builds the image. It uses
     `ubuntu-24.04-arm` runners, which are free only for **public** repos. This
-    repo stays private until you move the project to a public repo (Q2). Until
-    then, `release.yml` can be started by hand, and it falls back to an x86
+    In a private repository, `release.yml` can be started by hand, and it falls back to an x86
     runner with QEMU user emulation, which is slower. Nothing in the code or
     workflows hard-codes the repository name, so the move is a plain push.
 - **Release artifacts:**
@@ -503,7 +502,7 @@ tunnel health check plus a portal probe, and the flow repeats.
     the string Android's own tethering DHCP server sends in option 43 when the
     network is metered (AOSP `NetworkStack` `DhcpPacket.java`). That Android
     clients act on it is to verify on your phone.
-  - **Apple: I found no verified beacon-level or DHCP hint.** iOS turns on Low
+  - **Apple: there is no verified beacon-level or DHCP hint.** iOS turns on Low
     Data Mode automatically for Apple Personal Hotspot, but the mechanism
     isn't documented, and imitating Apple's vendor elements would be fragile
     and misrepresent the network. So Apple devices get only the one-time UI
@@ -743,8 +742,8 @@ wins.
   every state handled, logic in `use<Screen>.ts` hooks and markup in
   `<Screen>View.tsx` files.
 - It was then redesigned after Apple's Settings app (React
-  Router, Tailwind CSS; see `web/README.md`), adding the features the owner
-  kept from the mockups. Its seam is one interface, `useDevice()`
+  Router, Tailwind CSS; see `web/README.md`), adding features from its
+  mockups. Its seam is one interface, `useDevice()`
   (`web/src/data/device.ts`): screens only read its state and call its
   actions. The demo provider (`web/src/data/demo/`) runs it on sample data;
   the real provider (`web/src/data/real/`) implements every action against
@@ -771,8 +770,8 @@ wins.
      versions and attaches it to each release.
   2. Shipping every package's copyright file (kept under
      `/usr/share/doc/*/copyright` in the image) and listing firmware licenses
-     in `LICENSES/THIRD_PARTY.md`. **In M1 I'll verify that each firmware
-     license permits binary redistribution.**
+     in `LICENSES/THIRD_PARTY.md`. Each firmware license is checked
+     for binary redistribution.
   3. Not calling the image "Raspberry Pi OS" (trademark). It is "RasBeacon,
      based on Debian and Raspberry Pi OS packages".
   4. GPLv3 installation information: users can always reflash the SD card and
@@ -791,7 +790,7 @@ wins.
    diagnostics, compatibility table, redistribution, README 15-minute path.
 7. **Stretch:** guest SSID, metered toggle, zero-leak portal login (remote
    browser), routed IPv6 prefix instead of NAT66. Built; see 11b.
-8. **The redesigned web UI** and the features the owner kept from its
+8. **The redesigned web UI** and the features from its
    mockups. Built; see 11c.
 
 ## 11a. As built in M6
@@ -897,13 +896,13 @@ wins.
   requests are same-origin. The firewall keeps that user on the uplink, so
   it measures the uplink. Default measurements without packet loss (which
   needs a WebRTC TURN connection and isn't shown); results are sent to
-  Cloudflare as on their page (the owner agreed). Only on request; one at a
+  Cloudflare as on their page. Only on request; one at a
   time; at most 3 minutes. Ookla's CLI was ruled out: its license doesn't
   allow use on routers.
 
-## 12. Requirements I'd change
+## 12. Changes to the original requirements
 1. **Power:** there is no battery target. RasBeacon runs from a USB-C
-   supply or a power bank, as the owner chooses (the earlier "12 hours on a
+   supply or a power bank, whichever the user prefers (the earlier "12 hours on a
    common bank" goal was dropped).
 2. **"No leaks during mode switches" gets one documented exception:**
    user-initiated portal mode, time-limited and restricted to 80/443/53. It
@@ -918,11 +917,10 @@ wins.
    plus a "WPA2 only" switch for old devices. No change in intent, just making
    it explicit.
 
-## 13. Open questions (consolidated)
+## 13. Decisions
 
-**Decided:**
 - Q1: Apache-2.0.
-- Q2: private for now, moving to a public repo later (see 2.1).
+- Q2: developed privately, then published as a public repository (see 2.1).
 - Q4: HTTP by default; HTTPS setting with a generated or uploaded certificate.
 - Q6: IPv6 for clients (ULA plus NAT66, section 4.4).
 - Q8: manual upload, plus an opt-in GitHub check.
@@ -937,11 +935,9 @@ wins.
 - Q7: WireGuard MTU 1380.
 - Q12: Ethernet role setting, *Uplink* (default) or *Client port*, with a
   foreign-DHCP safety check (4.1).
-- Owner's hotspot adapter: TP-Link Archer T3U (RTL8812BU).
 - Q1b: project name **RasBeacon**. It avoids the "Raspberry Pi" trademark in
   the name; the image is described as based on Debian and Raspberry Pi OS
   packages.
 - Q10/Q10b: hotspot subnet **`10.87.0.0/24`** (guest `10.87.8.0/24`), with
   fallback to `10.88.0.0/24` if the uplink or tunnel overlaps.
 
-**Still open:** none.
