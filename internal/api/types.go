@@ -326,11 +326,15 @@ type EthernetUplinkStatus struct {
 
 // UpdateStatus describes software updates.
 type UpdateStatus struct {
-	// Board is the image's board, "rpi64" (the Pi 4 and Pi 5 image; older
-	// images said "pi4" or "pi5"): update files must be for this board.
+	// Board is the image's board: "rpi64" (the Pi 4 and Pi 5 image; older
+	// images said "pi4" or "pi5") or "zero2w". Update files must be for it.
 	Board string `json:"board"`
-	// CanInstall is false when the image has no update signing key.
+	// CanInstall is false when the image has no update signing key, or
+	// when SingleSystem is true.
 	CanInstall bool `json:"canInstall"`
+	// SingleSystem is true for the Pi Zero 2 W image: it has one copy of
+	// the system (no A/B), so new versions are flashed, not installed.
+	SingleSystem bool `json:"singleSystem,omitempty"`
 	// Installing is true while an update is being written.
 	Installing bool `json:"installing"`
 	// Message describes the last update, e.g. "Updated to v1.2.0." or why

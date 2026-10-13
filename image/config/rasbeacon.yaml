@@ -1,5 +1,5 @@
-# The RasBeacon image: one image for the Raspberry Pi 4 (and 400) and the
-# Pi 5 (and 500).
+# The RasBeacon image for the Raspberry Pi 4 (and 400) and the Pi 5 (and
+# 500): one image for both.
 #
 # Board: rpi-image-gen's "rpi4" device layer, with the standard 64-bit
 # Raspberry Pi kernel (kernel8.img, 4 KB memory pages). It also runs on the
@@ -7,16 +7,14 @@
 # the Pi 5's own kernel uses 16 KB pages, and the read-only system is
 # formatted for 4 KB ones. The firmware and device trees cover both boards.
 #
-# Layout: rpi-image-gen's "image-rota" A/B layout. Two copies of the
+# Layout: rpi-image-gen's "image-rota" A/B layout (GPT). Two copies of the
 # read-only system (A and B) let an update be tried and rolled back
 # automatically; writable data lives on the /persistent partition.
+include:
+  file: rasbeacon-common.yaml
+
 device:
   layer: rpi4
-  hostname: rasbeacon
-  # The login user created by the base layers. It has no password, so it
-  # cannot log in with one; SSH (off by default) only accepts keys for root.
-  user1: rasbeacon
-  user1sudo: none
 
 image:
   name: rasbeacon
@@ -26,19 +24,3 @@ image:
   # browser (about 300 MB of it), with room to grow.
   system_part_size: 1536M
   data_part_size: 512M
-
-layer:
-  base: rasbeacon-base
-  app: rasbeacon
-
-# SSH settings come from our own file,
-# layer/rasbeacon.d/customize.overlay/etc/ssh/sshd_config.d/00-rasbeacon.conf
-# (keys only, root only). rpi-image-gen's "pubkey_only" option is left off
-# because its file would forbid root login, and OpenSSH uses the first value
-# it reads for each setting.
-ssh:
-  pubkey_only: n
-
-locale:
-  default: en_US.UTF-8
-  timezone: Etc/UTC

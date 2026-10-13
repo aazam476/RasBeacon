@@ -1,9 +1,10 @@
-# Builds the SD card image (one for the Pi 4 and Pi 5).
+# Builds the SD card images: one for the Pi 4 and Pi 5, one for the Pi Zero
+# 2 W (same programs, different partition layout; see image/README.md).
 #
-# - Pushing a tag like v0.1.0 builds the image and publishes a GitHub
-#   release with the image, the update file and SHA256SUMS.
-# - "Run workflow" on the Actions tab builds the image for testing without
-#   a release (download it from the run's artifacts).
+# - Pushing a tag like v0.1.0 builds both and publishes a GitHub release
+#   with the images, the update file (Pi 4/5) and SHA256SUMS.
+# - "Run workflow" on the Actions tab builds them for testing without a
+#   release (download them from the run's artifacts).
 #
 # The image tool (rpi-image-gen) is pinned to an exact commit so builds are
 # repeatable. Update IMAGE_GEN_COMMIT deliberately and test the result.
@@ -32,8 +33,14 @@ env:
 
 jobs:
   image:
-    name: Image (Pi 4 and Pi 5)
+    name: Image (${{ matrix.target.title }})
     runs-on: ${{ inputs.runner || 'ubuntu-24.04-arm' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - { board: rpi64, name: rasbeacon, title: Pi 4 and Pi 5 }
+          - { board: zero2w, name: rasbeacon-zero2w, title: Pi Zero 2 W }
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -68,11 +75,11 @@ jobs:
           # Signs the update file. Stored as a repository secret (see
           # docs/releasing.md); without it, no update file is made.
           RASBEACON_UPDATE_SIGNING_KEY: ${{ secrets.RASBEACON_UPDATE_SIGNING_KEY }}
-        run: image/build.sh ${{ steps.version.outputs.version }}
+        run: image/build.sh ${{ matrix.target.board }} ${{ steps.version.outputs.version }}
 
       - uses: actions/upload-artifact@v7
         with:
-          name: rasbeacon-${{ steps.version.outputs.version }}
+          name: ${{ matrix.target.name }}-${{ steps.version.outputs.version }}
           path: build/image/
           # Images are large; keep test builds for a week.
           retention-days: 7

@@ -121,7 +121,7 @@ shown, and `GET /api/v1/captive` (RFC 8908) then answers
 | `POST /api/v1/settings/vpn/profile/generate-key` | `{ name }` | `VPNSettings` | Makes a new private key for that profile; its new `publicKey` goes to the WireGuard server. |
 | `GET /api/v1/settings/https` | — | `HTTPSSettings` | HTTPS on/off and the certificate: `subject`, `fingerprint` (SHA-256), `validUntil`, `uploaded` |
 | `PUT /api/v1/settings/https` | `HTTPSSettings` | `HTTPSSettings` | Set `enabled`; `generateNew: true` makes a new certificate; `certificate` + `privateKey` (PEM) upload your own. rbweb restarts about 2 s later. With HTTPS on, login and all routes in this table refuse plain HTTP (403). |
-| `POST /api/v1/system/update` | the `.rbupdate` file itself (`application/octet-stream`) | `UpdateStatus` | Checks the signature and board, writes the other slot, checks the SHA-256, then restarts into it on trial. Errors are 400 with `field: "update"` and a readable message. Up to 2 GB, 30 minutes. |
+| `POST /api/v1/system/update` | the `.rbupdate` file itself (`application/octet-stream`) | `UpdateStatus` | Checks the signature and board, writes the other slot, checks the SHA-256, then restarts into it on trial. Errors are 400 with `field: "update"` and a readable message. Up to 2 GB, 30 minutes. Refused on the Pi Zero 2 W image (`Status.update.singleSystem`: one system copy, new versions are flashed). |
 | `PUT /api/v1/settings/updates` | `{ checkOnline }` | `UpdateStatus` | The optional online check for new releases |
 | `POST /api/v1/system/reboot` | — | 204 | Restarts about 5 s later |
 | `POST /api/v1/system/factory-reset` | `PasswordRequest` (admin password) | 204 | Erases everything and restarts into setup. Logs everyone out. |
