@@ -4,9 +4,8 @@ This folder describes the RasBeacon SD card image for
 [rpi-image-gen](https://github.com/raspberrypi/rpi-image-gen).
 
 ```
-config/rasbeacon-common.yaml   settings shared by all boards (layout, users, locale)
-config/rasbeacon-pi4.yaml      Pi 4 / 400 (also Pi Zero 2 W and Pi 3: same kernel)
-config/rasbeacon-pi5.yaml      Pi 5 / 500
+config/rasbeacon.yaml          the image: one for the Pi 4/400 and Pi 5/500
+                               (board, partition layout, users, locale)
 layer/rasbeacon-base.yaml      minimal Debian trixie system (without iwd)
 layer/rasbeacon.yaml           RasBeacon's packages and setup steps
 layer/rasbeacon.d/customize.overlay/   files copied into the image as-is:
@@ -32,4 +31,13 @@ the other slot and switch over with automatic rollback (milestone 6).
 
 ## Building
 
-See CONTRIBUTING.md. In short: `image/build.sh pi4` or `image/build.sh pi5`.
+See CONTRIBUTING.md. In short: `image/build.sh` (optionally with a version).
+
+## One image for the Pi 4 and Pi 5
+
+Both boards start the same standard 64-bit kernel (`kernel8.img`, 4 KB
+memory pages): `config.txt` tells the Pi 5 to use it (`[pi5]
+kernel=kernel8.img`) instead of its own 16 KB-page kernel, because the
+read-only system is formatted for 4 KB pages. The boot partitions carry the
+firmware and device trees for both boards. On the Pi 5 this costs a few per
+cent of speed in memory-heavy work, which a router doesn't notice.

@@ -326,7 +326,8 @@ type EthernetUplinkStatus struct {
 
 // UpdateStatus describes software updates.
 type UpdateStatus struct {
-	// Board is "pi4" or "pi5": update files must be for this board.
+	// Board is the image's board, "rpi64" (the Pi 4 and Pi 5 image; older
+	// images said "pi4" or "pi5"): update files must be for this board.
 	Board string `json:"board"`
 	// CanInstall is false when the image has no update signing key.
 	CanInstall bool `json:"canInstall"`

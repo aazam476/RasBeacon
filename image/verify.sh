@@ -79,6 +79,14 @@ check "the login browser has its own user" grep -q "^rbbrowser:" "$root/etc/pass
 # The optional reset button's overlay is in the boot configuration.
 check "reset button overlay in config.txt" grep -q "dtoverlay=gpio-key,gpio=17" "$root/boot/firmware/config.txt"
 
+# One image for the Pi 4 and Pi 5: the 64-bit kernel both start, the Pi 5
+# told to start it, and both boards' device trees.
+check "the 64-bit kernel (kernel8.img) is on the boot partition" test -s "$root/boot/firmware/kernel8.img"
+check "the Pi 5 starts kernel8.img" sh -c "grep -A1 -x '\[pi5\]' '$root/boot/firmware/config.txt' | grep -qx 'kernel=kernel8.img'"
+check "Pi 4 device tree" test -s "$root/boot/firmware/bcm2711-rpi-4-b.dtb"
+check "Pi 5 device tree" test -s "$root/boot/firmware/bcm2712-rpi-5-b.dtb"
+echo "INFO  boot partition contents: $(du -sh "$root/boot/firmware" 2>/dev/null | cut -f1) (each boot partition is 128 MB)"
+
 # Updates: the image knows its board; report whether it can check updates.
 check "the image knows its board" test -s "$root/usr/lib/rasbeacon/board"
 keys="$(ls "$root"/usr/lib/rasbeacon/update-keys/*.pub 2>/dev/null | wc -l)"

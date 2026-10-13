@@ -17,7 +17,11 @@ import {
   SwitchRow,
 } from '@/ui';
 
-const BOARDS: Record<string, string> = { pi4: 'Raspberry Pi 4', pi5: 'Raspberry Pi 5' };
+const BOARDS: Record<string, string> = {
+  rpi64: 'Raspberry Pi 4 and 5',
+  pi4: 'Raspberry Pi 4',
+  pi5: 'Raspberry Pi 5',
+};
 
 /** The running version, news of a newer one, the result of the last update, and installing one. */
 export function SoftwareSection({ status }: { status: Status }) {
