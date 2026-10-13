@@ -1,9 +1,0 @@
-# RasBeacon for Raspberry Pi 5 (and 500). The Pi 5 needs its own kernel.
-include:
-  file: rasbeacon-common.yaml
-
-device:
-  layer: rpi5
-
-image:
-  name: rasbeacon-pi5

@@ -278,8 +278,8 @@ Keep the VPN on with the kill switch.
 Today's images can't install updates (System says so). Once a release is
 built with the update signing key ([releasing.md](../releasing.md)), flash
 that release and run [m6](m6.md) steps 1 to 3: a newer `.rbupdate`
-installs and keeps all settings; a renamed image, a pi5 file on a Pi 4 and
-a file with one byte changed are refused without restarting; a power cut
+installs and keeps all settings; a renamed image, an update made for another board
+(`rbsign pack -board other`) and a file with one byte changed are refused without restarting; a power cut
 during the restart rolls back to the old version.
 
 ## 14. Robustness

@@ -1,16 +1,17 @@
 # Making a release
 
 Releases are built by GitHub Actions (`.github/workflows/release.yml`).
-Pushing a tag like `v1.2.0` builds both images and creates a **draft**
+Pushing a tag like `v1.2.0` builds the image and creates a **draft**
 release; check it, then publish it.
 
-Each release contains, per board (`pi4`, `pi5`):
+There is one image for the Pi 4 and Pi 5 (board name `rpi64`). Each
+release contains:
 
 | File | What it is |
 |---|---|
-| `rasbeacon-<board>-<version>.img.xz` | The SD card image (flash it with Raspberry Pi Imager) |
-| `rasbeacon-<board>-<version>.rbupdate` | The signed update file (install it on the System page) |
-| `rasbeacon-<board>-<version>.packages.txt` | Every Debian package in the image, with its source package and version (see [source-code.md](source-code.md)) |
+| `rasbeacon-<version>.img.xz` | The SD card image (flash it with Raspberry Pi Imager) |
+| `rasbeacon-<version>.rbupdate` | The signed update file (install it on the System page) |
+| `rasbeacon-<version>.packages.txt` | Every Debian package in the image, with its source package and version (see [source-code.md](source-code.md)) |
 | `SHA256SUMS` | Checksums of all of the above |
 
 ## One-time setup: the update signing key
@@ -49,7 +50,7 @@ files.
 2. Update `docs/compatibility.md` with any new hardware results.
 3. Tag and push: `git tag v1.2.0 && git push origin v1.2.0`.
 4. When the workflow finishes, open the draft release, check the files are
-   all there (two images, two update files, two package lists,
+   all there (the image, the update file, the package list,
    `SHA256SUMS`), write the notes, and publish.
 5. Test the update file on a device running the previous release (System
    page → Install update), and check it comes back on the new version.

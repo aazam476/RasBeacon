@@ -37,8 +37,8 @@ hotel login pages.
 
 ## Set up (about 15 minutes)
 
-1. **Download** `rasbeacon-pi4-<version>.img.xz` (for a Pi 4 or 400) or `rasbeacon-pi5-<version>.img.xz` (for a Pi 5) from the
-   [Releases](../../releases) page. Also download `SHA256SUMS` if you want to
+1. **Download** `rasbeacon-<version>.img.xz` from the
+   [Releases](../../releases) page: one image for the Pi 4, 400, 5 and 500. Also download `SHA256SUMS` if you want to
    check the file (see [Checking your download](#checking-your-download)).
 2. **Flash** it with [Raspberry Pi Imager](https://www.raspberrypi.com/software/):
    1. Choose your device.
@@ -101,14 +101,14 @@ hotel login pages.
 | The status page warns that the built-in Wi-Fi is running the hotspot | RasBeacon didn't find a USB adapter it can use. Plug one in and choose *Reboot* on the System page. |
 | Nothing works and you want to see why | Put the SD card in a computer and create an empty file named `debug` on the `BOOTCONFIG` drive. Boot the Pi and wait 3 minutes, then unplug it. Back on the computer, open `rasbeacon-debug.txt` from the same drive. It holds the startup logs (no passwords, but device names and MAC addresses, so delete it afterwards). |
 | Forgot the admin password | Factory reset: put the SD card in a computer and create an empty file named `factory-reset` on the `BOOTCONFIG` drive. At the next start, RasBeacon erases all settings and runs first-time setup again. (Or hold the optional reset button for 10 seconds.) |
-| An update didn't install | The System page says why. "not signed by a key this RasBeacon trusts": use update files from the official Releases page; images built before signing was set up can't install updates, so flash the new image once. "for pi5, but this is a pi4": download the file for your board. |
+| An update didn't install | The System page says why. "not signed by a key this RasBeacon trusts": use update files from the official Releases page; images built before signing was set up can't install updates, so flash the new image once. "for rpi64, but this is a pi4": the device runs an image from before the Pi 4 and Pi 5 shared one; flash the new image once. |
 
 ## Checking your download
 
 Each release lists the SHA-256 checksum of every image in `SHA256SUMS`.
 
-- **macOS/Linux:** `shasum -a 256 rasbeacon-pi4-v0.1.0.img.xz`
-- **Windows PowerShell:** `Get-FileHash rasbeacon-pi4-v0.1.0.img.xz`
+- **macOS/Linux:** `shasum -a 256 rasbeacon-v0.1.0.img.xz`
+- **Windows PowerShell:** `Get-FileHash rasbeacon-v0.1.0.img.xz`
 
 The result must match the line in `SHA256SUMS`.
 

@@ -2,8 +2,8 @@
 //
 // # The update file
 //
-// A release has one update file per board, e.g.
-// rasbeacon-pi4-v1.2.0.rbupdate. It is a tar archive with three entries,
+// A release has one update file, e.g. rasbeacon-v1.2.0.rbupdate, for the
+// board "rpi64" (the one image for the Pi 4 and Pi 5). It is a tar archive with three entries,
 // in this order:
 //
 //	manifest.json   what this is: board, version, size and SHA-256 of the bundle
@@ -39,7 +39,7 @@ const Format = "rasbeacon-update-1"
 // Manifest describes an update.
 type Manifest struct {
 	Format string `json:"format"`
-	// Board is the image the update is for: "pi4" or "pi5".
+	// Board is the image the update is for: "rpi64" (see build.sh).
 	Board   string `json:"board"`
 	Version string `json:"version"`
 	// BundleSHA256 and BundleSize describe bundle.tar.zst.

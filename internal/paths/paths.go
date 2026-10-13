@@ -176,7 +176,7 @@ func (p Paths) IPv6Forwarding() string {
 // signed with. They are part of the image.
 func (p Paths) UpdateKeysDir() string { return p.join("usr", "lib", "rasbeacon", "update-keys") }
 
-// BoardFile names the image's board ("pi4" or "pi5"), written at build time.
+// BoardFile names the image's board ("rpi64"), written at build time.
 func (p Paths) BoardFile() string { return p.join("usr", "lib", "rasbeacon", "board") }
 
 // SlotDevice is a partition of the running ("active") or the other A/B

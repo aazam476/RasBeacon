@@ -196,7 +196,7 @@ export function createMockRouter(): MockRouter {
         browsing: false,
       },
       update: {
-        board: 'pi4',
+        board: 'rpi64',
         canInstall: true,
         installing: false,
         canCheckOnline: true,

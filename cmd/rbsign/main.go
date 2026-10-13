@@ -6,7 +6,7 @@
 //	    RASBEACON_UPDATE_SIGNING_KEY secret of the GitHub repository) and its
 //	    public key (commit it to image/.../usr/lib/rasbeacon/update-keys/).
 //
-//	rbsign pack -board pi4 -version v1.2.0 -bundle x.update.tar.zst -out x.rbupdate
+//	rbsign pack -board rpi64 -version v1.2.0 -bundle x.update.tar.zst -out x.rbupdate
 //	    Makes a signed update file. The private key is read from the
 //	    RASBEACON_UPDATE_SIGNING_KEY environment variable, never from the
 //	    command line (which other users of the computer could see).
@@ -62,7 +62,7 @@ func keygen() error {
 
 func pack(args []string) error {
 	flags := flag.NewFlagSet("pack", flag.ExitOnError)
-	board := flags.String("board", "", "board the update is for: pi4 or pi5")
+	board := flags.String("board", "", "board the update is for: rpi64 (the Pi 4 and Pi 5 image)")
 	version := flags.String("version", "", "version, e.g. v1.2.0")
 	bundlePath := flags.String("bundle", "", "rpi-image-gen's <image>.update.tar.zst")
 	outPath := flags.String("out", "", "update file to write (.rbupdate)")
