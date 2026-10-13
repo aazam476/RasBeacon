@@ -482,7 +482,7 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
       saveDnsSettings: async (text) => {
         await wait(800);
         const servers = text
-          .split(',')
+          .split(/[,\s]+/)
           .map((item) => item.trim())
           .filter(Boolean);
         const bad = servers.find((server) => !/^[\d.]+$|^[\da-f:]+$/i.test(server));

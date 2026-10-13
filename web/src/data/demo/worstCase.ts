@@ -80,6 +80,34 @@ export function applyWorstCase(demo: DemoState) {
     pausedSeconds: index === 1 ? 2_592_000 : index === 9 ? 30 : undefined,
     isThisDevice: index === 3,
   }));
+  // The last two are on the Ethernet client port: no band, no measured traffic.
+  clients.push(
+    {
+      hostname: 'Aleksandra-Wiśniewska-Kowalczyk-Workstation-Docking-Station',
+      mac: 'a4:83:e7:2e:9c:7e',
+      ip: '192.168.8.250',
+      signalDbm: 0,
+      connectedSeconds: 1_209_600,
+      band: '',
+      wired: true,
+      downMbps: 0,
+      upMbps: 0,
+      internetAccess: false,
+      pausedSeconds: 600,
+    },
+    {
+      hostname: '',
+      mac: 'a4:83:e7:2f:9c:85',
+      ip: '',
+      signalDbm: 0,
+      connectedSeconds: 2,
+      band: '',
+      wired: true,
+      downMbps: 0,
+      upMbps: 0,
+      internetAccess: true,
+    },
+  );
   status.clients = clients;
   status.guest = {
     enabled: true,
@@ -226,6 +254,10 @@ export function applyWorstCase(demo: DemoState) {
     'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK0wmN/Cr3JXqmLW7u+g9pTh+wyqDHpSQEIQczXkVx9q owner@laptop',
     `ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQ${'Cx8vK2Lq9Tz4WbN7Rj3Pm6Hd1Fs5Ga0Ye8Uc2Vo4Xi7Ql9Bn3Mk6Jp1Rt5Sw8Dz2Ah4Ef7Gi0Ku3Lw6'.repeat(9)} bartholomew.fitzgerald@northwind-industries-holdings.example.com`,
   ].join('\n');
+  // Four DNS servers, the most allowed, two of them long IPv6 addresses.
+  router.dnsSettings = { servers: ['2001:4860:4860::8888', '2a10:50c0::ad1:ff', '94.140.14.140', '9.9.9.9'] };
+  // A 2 TB SSD instead of an SD card: nearly 1,900 sizes to choose from.
+  router.swapSettings = { sizeGb: 0, maxGb: 1_862 };
   router.httpsSettings = {
     ...router.httpsSettings,
     uploaded: true,
@@ -240,6 +272,9 @@ export function applyNoClients(demo: DemoState) {
   status.guest = { ...status.guest, clients: [] };
   // Nobody to send anything: the live rates are zero, the session's totals stay.
   status.throughput = { ...status.throughput, downMbps: 0, upMbps: 0 };
+  // And no room: a card too full for any swap file, and no DNS servers of its own.
+  demo.router.swapSettings = { sizeGb: 0, maxGb: 0 };
+  demo.router.dnsSettings = { servers: [] };
 }
 
 /** Exactly one of everything that is counted, for "1 device", "1 guest". */
@@ -251,4 +286,6 @@ export function applyOneOfEach(demo: DemoState) {
   demo.router.vpnSettings.profiles = demo.router.vpnSettings.profiles.slice(0, 1);
   demo.router.uplinkSettings.networks = demo.router.uplinkSettings.networks.slice(0, 1);
   demo.nearbyNetworks = (demo.nearbyNetworks ?? []).slice(0, 1);
+  demo.router.swapSettings = { sizeGb: 1, maxGb: 1 };
+  demo.router.dnsSettings = { servers: ['1.1.1.1'] };
 }

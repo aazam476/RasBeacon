@@ -162,6 +162,7 @@ describe('the VPN server details', () => {
   };
   it('turns the form into the request for one profile', () => {
     expect(splitList(' a, b,,c ')).toEqual(['a', 'b', 'c']);
+    expect(splitList('a\nb,\n c\n')).toEqual(['a', 'b', 'c']);
     const details = vpnDetailsRequest('home.conf', form);
     expect(details).toMatchObject({
       name: 'home.conf',
