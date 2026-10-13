@@ -4,8 +4,9 @@
 in an order that never makes you redo setup. It brings together the
 milestone plans ([m1](m1.md) to [m8](m8.md)) and the later additions:
 the scan fix, the hotspot moving on large networks, devices on the Ethernet
-port, the card being used in full, swap, your own DNS servers and
-DNS-over-HTTPS.
+port, the card being used in full, swap, your own DNS servers,
+DNS-over-HTTPS, signed updates, one image for the Pi 4 and Pi 5, and the
+second image for the Pi Zero 2 W, 3B and 3B+.
 
 Each check says what should happen. Tick it, or write down what happened
 instead. Checks marked **(if you can)** need something you may not have;
@@ -15,18 +16,20 @@ skip them freely. The report template at the end has one line per section.
 
 | For | What |
 |---|---|
-| Everything | A Pi 4 or 5, its USB Wi-Fi adapter, a microSD card, power. The newest image from GitHub (Actions → Release images → newest run → Artifacts). Raspberry Pi Imager. |
+| Everything | A Pi (4 or 5 recommended), a USB Wi-Fi adapter, a microSD card, power, Raspberry Pi Imager. The newest images from GitHub (Actions → Release images → newest run → Artifacts): `rasbeacon-…` for a Pi 4 or 5, `rasbeacon-pi3-zero2w-…` for a Zero 2 W, 3B or 3B+. |
 | Most sections | A phone (A), a second phone or tablet (B), a laptop. Your home router, an Ethernet cable, your home Wi-Fi password. |
 | Section 8 | A WireGuard `.conf` for RasBeacon ([server guide](../wireguard-server.md)); a second one for profiles if you can. |
 | Section 10 | A network with a login page (hotel, café, library, campus guest). |
 | Section 4.6 | Being on campus, with eduroam's certificates ([guide](../eduroam.md)). |
-| Section 13 | Two signed builds (blocked until the update signing key is set up, see [releasing.md](../releasing.md)). |
+| Section 13 (Pi 4/5 only) | The `.rbupdate` file from a build **newer** than the image you flashed (same Artifacts download). |
 | Optional | A USB power meter, `iperf3` on two computers, a push button and two jumper wires. |
 
 **Pi Zero 2 W, 3B or 3B+:** flash `rasbeacon-pi3-zero2w-…` instead, and skip
 what the board doesn't have: the updates section (13; the System page should
 say *New versions are flashed*), on the Zero 2 W the Ethernet steps (4.1,
-4.5, 7), and on the Zero 2 W and 3B 5 GHz on the built-in Wi-Fi. In section
+4.5, 7) unless you add a USB Ethernet adapter through a powered hub, and on
+the Zero 2 W and 3B 5 GHz on the built-in Wi-Fi. Its card drive is called
+`BOOT`, not `BOOTCONFIG` (section 15). In section
 3, the Storage total is the card minus about 0.3 GB. Note how fast the
 login page and speed test are (512 MB of memory on the Zero 2 W, 1 GB on the
 3B/3B+), and on the 3B/3B+ the speed with Ethernet and the USB adapter both
@@ -42,7 +45,9 @@ first if you want them; everything else works from the web pages alone.
 1. Flash the `.img.xz` (Imager: *Use custom*, **No** to OS customisation).
    Don't create `setup.txt` yet.
 2. Plug the adapter into a **USB 3 (blue)** port on a Pi 4 (any port on a
-   Pi 5). Power on and note the time.
+   Pi 5, 3B or 3B+; on a Zero 2 W through a micro-USB OTG cable). Power on
+   and note the time. **Pi 5:** this is the first boot of the shared Pi 4/5
+   image on a Pi 5, so note anything odd (it starts the Pi 4's kernel).
 3. **Expect:** `RasBeacon-Setup-XXXX` appears within about 2 minutes, open
    (no password). Note how long it took.
 4. Join it on phone A. **Expect:** the "Log in" sheet (iPhone) or "Sign in
@@ -66,9 +71,9 @@ first if you want them; everything else works from the web pages alone.
 ## 3. Storage and swap (new)
 
 1. **System → Storage**. **Expect:** the total is the card's size minus
-   about 3.5 GB for the two system copies (a 32 GB card shows about 28 GB),
-   not about 0.5 GB: the data partition grew to fill the card on the first
-   boot.
+   about 3.5 GB for the two system copies (a 32 GB card shows about 28 GB;
+   on the Pi 3/Zero 2 W image, minus about 0.3 GB), not about 0.5 GB: the
+   data partition grew to fill the card on the first boot.
 2. **System → Swap file** row. **Expect:** it says **2 GB**. Tap it: a
    *Size* list (Off, 1 GB, 2 GB, 4 GB, ... and the largest that fits),
    with the largest leaving 1 GB of the card free.
@@ -282,14 +287,30 @@ Keep the VPN on with the kill switch.
    the page's *SHA-256 fingerprint*; `http://` redirects to `https://`.
    Turn it off again if you prefer.
 
-## 13. Updates (blocked until the signing key is set up)
+## 13. Updates (Pi 4/5 only)
 
-Today's images can't install updates (System says so). Once a release is
-built with the update signing key ([releasing.md](../releasing.md)), flash
-that release and run [m6](m6.md) steps 1 to 3: a newer `.rbupdate`
-installs and keeps all settings; a renamed image, an update made for another board
-(`rbsign pack -board other`) and a file with one byte changed are refused without restarting; a power cut
-during the restart rolls back to the old version.
+The image you flashed was built with the update signing key, so it can
+install updates (on the Pi 3/Zero 2 W image, check instead that System says
+*New versions are flashed* and skip the rest).
+
+1. **System → Software:** note the version (like `dev-a64bc3b`). There is an
+   *Update file* field with **Install update**, and no warning about a
+   missing key.
+2. **Bad files are refused:** try each of these; **expect** a message saying
+   why, no restart, and the same version afterwards:
+   - the `.img.xz` image file renamed to `test.rbupdate`;
+   - a copy of the good `.rbupdate` with one byte changed near the end (Mac
+     or Linux:
+     `cp good.rbupdate bad.rbupdate && printf 'X' | dd of=bad.rbupdate bs=1 seek=100000000 conv=notrunc`).
+3. **A good update installs:** choose the newer build's `.rbupdate`,
+   **Install update**, confirm. Keep the page open: uploading takes a minute
+   or two, then RasBeacon restarts (the hotspot is gone for about 2
+   minutes). **Expect:** *Updated to <new version>*, and every setting kept
+   (hotspot, networks, VPN, DNS, swap). Note how long it took.
+4. **Rollback (if you can):** start another update (the same file again
+   works), and as soon as the hotspot disappears for the restart, pull the
+   power, wait 5 s, plug it back in. **Expect:** RasBeacon comes back on the
+   **old** version and System says *The update to … didn't start correctly, so RasBeacon went back to …*.
 
 ## 14. Robustness
 
@@ -301,9 +322,10 @@ during the restart rolls back to the old version.
 3. **Long run:** leave 3+ devices connected and in use for an hour (or as
    many as you have: the goal from [m1](m1.md) is 10 for 30 minutes).
    **Expect:** no drops, the hotspot stays up, devices rejoin.
-4. **Memory (on a 1 GB board if you have one):** open the zero-leak login
-   (section 10) or run the speed test, then *SSH:* `free -m`. **Expect:**
-   it works; swap used stays small.
+4. **Memory (on a 1 GB board, and a Zero 2 W with 512 MB, if you have
+   them):** open the zero-leak login (section 10) or run the speed test,
+   then *SSH:* `free -m`. **Expect:** it works (slower on the Zero 2 W);
+   RasBeacon's pages keep responding.
 5. **Diagnostics:** System → **Download diagnostics**. Search it for your
    hotspot password, Wi-Fi passwords, the VPN's `PrivateKey`, your eduroam
    username. **Expect:** none appear (usernames only masked, like
@@ -314,13 +336,13 @@ during the restart rolls back to the old version.
 1. **Factory reset:** System → *Factory reset* → **Erase everything** with
    the admin password. **Expect:** it restarts into `RasBeacon-Setup-XXXX`.
 2. **setup.txt:** power off, create `setup.txt` on the card's `BOOTCONFIG`
-   drive with `setup_password=testing-1234`, boot. **Expect:** the setup
+   drive (`BOOT` on the Pi 3/Zero 2 W image) with `setup_password=testing-1234`, boot. **Expect:** the setup
    network asks for that password. Then change it to
    `setup_password=short`, boot: **expect** no setup network and the green
    LED blinking 3 short, 1 long. Delete the file, boot, finish setup:
    `setup.txt` is gone from the card afterwards.
 3. **factory-reset file:** power off, create an empty file
-   `factory-reset` (no extension) on `BOOTCONFIG`, boot. **Expect:** the
+   `factory-reset` (no extension) on `BOOTCONFIG` (or `BOOT`), boot. **Expect:** the
    setup network, and the file gone afterwards.
 4. **Reset button (if you can):** button between pin 11 (GPIO 17) and pin 9
    (ground). A short press does nothing; holding 10 s erases everything
@@ -343,7 +365,7 @@ Copy this, fill it in (yes/no, numbers, or what went wrong), and paste it
 back. One line per section; add details under any that failed.
 
 ```
-Board / RAM:            Adapter:            Card size:          Image:
+Board (Pi 4/5/3B/3B+/Zero 2 W) / RAM:     Adapter:          Card size:          Image (rasbeacon-… or rasbeacon-pi3-zero2w-…):
 1  First boot: setup network after __ s; opened by itself iPhone/Android:
 2  Setup + login (mismatch caught, wrong password refused, stay logged in):
 3  Storage shows full card (__ GB): / swap row 2 GB: / 4 GB, Off, 2 GB save: / SSH swapon+swappiness:
@@ -356,7 +378,7 @@ Board / RAM:            Adapter:            Card size:          Image:
 10 Login page notice: / zero-leak login worked, tap delay __ s: / no leak: / login mode:
 11 SSH: / pages OK phone+laptop+dark: / rounded focus outline: / readings: / stay logged in: / unsaved bar:
 12 Hotspot password check + 5 GHz: / show password: / metered: / guests isolated: / IPv6: / HTTPS fingerprint + redirect:
-13 Updates: blocked (no signing key yet) / results:
+13 Version before __ / renamed image refused: / changed byte refused: / update installed, settings kept, took __ min: / rollback:
 14 Power cuts x3: / reboot dialog: / long run __ devices __ min, drops: / memory: / diagnostics clean:
 15 Factory reset: / setup.txt password + broken-file LED + deleted: / factory-reset file: / button:
 16 Power idle __ W, load __ W / iperf3:
