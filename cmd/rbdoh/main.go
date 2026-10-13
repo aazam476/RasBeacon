@@ -13,6 +13,7 @@
 package main
 
 import (
+	"crypto/x509"
 	"flag"
 	"log/slog"
 	"net"
@@ -25,6 +26,7 @@ import (
 
 func main() {
 	listen := flag.String("listen", "127.0.0.1:5053", "address and port to answer DNS on (UDP and TCP)")
+	caFile := flag.String("ca", "", "trust only the certificate authorities in this PEM file (tests)")
 	flag.Parse()
 
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, nil)))
@@ -32,7 +34,16 @@ func main() {
 	bootstrap := strings.Fields(os.Getenv("RBDOH_BOOTSTRAP"))
 	slog.Info("rbdoh starting", "version", version.Version, "listen", *listen, "servers", servers, "bootstrap", bootstrap)
 
-	f, err := doh.New(doh.Options{Servers: servers, Bootstrap: bootstrap})
+	options := doh.Options{Servers: servers, Bootstrap: bootstrap}
+	if *caFile != "" {
+		pem, err := os.ReadFile(*caFile)
+		options.RootCAs = x509.NewCertPool()
+		if err != nil || !options.RootCAs.AppendCertsFromPEM(pem) {
+			slog.Error("rbdoh can't read the certificate authorities", "file", *caFile, "error", err)
+			os.Exit(1)
+		}
+	}
+	f, err := doh.New(options)
 	if err != nil {
 		slog.Error("rbdoh can't start", "error", err)
 		os.Exit(1)
