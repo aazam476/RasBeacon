@@ -153,7 +153,7 @@ per-device is generated on first boot.
 
 | Interface | Managed by | Address |
 |---|---|---|
-| `br-lan` (client side) = `ap0` + `eth0` when Ethernet is set to *Client port* | `rbd` (bridge), hostapd (`bridge=br-lan`) | `10.87.0.1/24`, plus an IPv6 ULA `/64` (4.4). If it collides with the uplink subnet **or the WireGuard tunnel's addresses**, `rbd` falls back to `10.88.0.1/24`, pushes short leases and shows why in the UI. |
+| `br-lan` (client side) = `ap0` + `eth0` when Ethernet is set to *Client port* | `rbd` (bridge), hostapd (`bridge=br-lan`) | `10.87.0.1/24`, plus an IPv6 ULA `/64` (4.4). If it collides with the uplink subnet **or the WireGuard tunnel's addresses**, `rbd` falls back to `10.88.0.1/24` (then `172.31.87.1/24`, `192.168.87.1/24`), restarts the hotspot so devices reconnect and get new addresses, and shows why in the UI. It doesn't move back while running. |
 | `ap0g` (guest, stretch) | hostapd second BSS | `10.87.8.1/24` |
 | `wlan0` (Wi-Fi uplink) | wpa_supplicant (driven by `rbd`) + networkd DHCPv4/RA | From uplink DHCP |
 | `eth0` | *Uplink:* networkd DHCP client. *Client port:* bridged into `br-lan` | From uplink DHCP / none |

@@ -78,18 +78,22 @@ var LANCandidates = []netip.Prefix{
 // first one.
 func ChooseLANPrefix(upstream []netip.Prefix) netip.Prefix {
 	for _, candidate := range LANCandidates {
-		overlaps := false
-		for _, u := range upstream {
-			if u.Masked().Overlaps(candidate.Masked()) || u.Masked().Overlaps(GuestPrefixFor(candidate).Masked()) {
-				overlaps = true
-				break
-			}
-		}
-		if !overlaps {
+		if !LANOverlaps(candidate, upstream) {
 			return candidate
 		}
 	}
 	return LANCandidates[0]
+}
+
+// LANOverlaps reports whether a hotspot network, or the guest network that
+// goes with it, overlaps any of the upstream networks.
+func LANOverlaps(lan netip.Prefix, upstream []netip.Prefix) bool {
+	for _, u := range upstream {
+		if u.Masked().Overlaps(lan.Masked()) || u.Masked().Overlaps(GuestPrefixFor(lan).Masked()) {
+			return true
+		}
+	}
+	return false
 }
 
 // GuestPrefixFor returns the guest network that goes with a hotspot

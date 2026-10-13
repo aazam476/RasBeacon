@@ -309,7 +309,11 @@ func (a *Agent) checkUplink() {
 	// 4. If the upstream network uses the hotspot's addresses, move the
 	//    hotspot network. Otherwise, update the IPv6 announcements if IPv6
 	//    internet access came or went. (Moving the network also does that.)
-	if want := render.ChooseLANPrefix(upstreamIPv4); want != a.lan.Prefix {
+	//    It only moves when it must: each move briefly disconnects every
+	//    device (see moveLAN), so it doesn't move back when the clash ends.
+	//    If every candidate clashes, it stays put rather than move in place.
+	want := render.ChooseLANPrefix(upstreamIPv4)
+	if render.LANOverlaps(a.lan.Prefix, upstreamIPv4) && want != a.lan.Prefix {
 		a.moveLAN(want)
 	} else if status.IPv6 != previous.IPv6 {
 		if err := a.applyDHCP(false); err != nil {
@@ -507,6 +511,14 @@ func (a *Agent) moveLAN(prefix netip.Prefix) {
 	}
 	if err := a.applyDHCP(false); err != nil {
 		slog.Error("could not restart DHCP for the new hotspot network", "error", err)
+	}
+	// Devices still have addresses in the old network, and nothing tells
+	// them it moved: they would stay connected to the Wi-Fi but reach
+	// nothing, RasBeacon included, until their lease ran out. Restarting the
+	// hotspot makes them reconnect and ask for a new address (dnsmasq,
+	// being authoritative, refuses their old one at once).
+	if err := system.ServiceRestart(a.runner, hostapdService); err != nil {
+		slog.Error("could not restart the hotspot after moving its network", "error", err)
 	}
 }
 
