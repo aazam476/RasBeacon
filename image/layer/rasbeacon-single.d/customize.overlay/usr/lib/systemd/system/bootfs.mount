@@ -1,4 +1,4 @@
-# On the Pi Zero 2 W image, /bootfs shows the boot partition (mounted at
+# On the Pi Zero 2 W/3B/3B+ image, /bootfs shows the boot partition (mounted at
 # /boot/firmware), the drive a computer sees: setup.txt, factory-reset and
 # the debug log go there, as on the Pi 4/5 image's BOOTCONFIG partition.
 [Unit]

@@ -1,24 +1,28 @@
-# The RasBeacon image for the Raspberry Pi Zero 2 W.
+# The RasBeacon image for the Raspberry Pi Zero 2 W, 3B and 3B+ (one image:
+# the same chip family, boot ROM and kernel).
 #
 # Same programs, packages and 64-bit kernel as the Pi 4/5 image, but a
-# different partition layout: the Zero 2 W's boot ROM only reads an MBR
+# different partition layout: these boards' boot ROM only reads an MBR
 # partition table and can't follow the A/B selection, so this image uses
 # rpi-image-gen's "image-rpios" layout (MBR; a FAT boot partition and one
 # writable ext4 system partition). There is one copy of the system, so new
 # versions are flashed instead of installed as updates. The
-# rasbeacon-zero2w layer gives it the folders the programs expect
+# rasbeacon-single layer gives it the folders the programs expect
 # (/persistent, /bootfs).
 include:
   file: rasbeacon-common.yaml
 
+# rpi-image-gen's Zero 2 W device layer; like its Pi 3 layer, it is the
+# generic 64-bit kernel and firmware for every board, so the image also
+# starts on the Pi 3B and 3B+ (their device trees are in it).
 device:
   layer: rpizero2w
 
 layer:
-  zero2w: rasbeacon-zero2w
+  single: rasbeacon-single
 
 image:
-  name: rasbeacon-zero2w
+  name: rasbeacon-pi3-zero2w
   layer: image-rpios
   rootfs_type: ext4
   boot_part_size: 256M

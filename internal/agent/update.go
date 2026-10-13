@@ -71,13 +71,14 @@ func (a *Agent) board() string {
 	return strings.TrimSpace(string(data))
 }
 
-// zero2wBoard is the Pi Zero 2 W image's board (image/build.sh). That image
-// has one copy of the system, so it can't install update files.
-const zero2wBoard = "zero2w"
+// singleSystemBoard is the board of the Pi Zero 2 W, 3B and 3B+ image
+// (image/build.sh). That image has one copy of the system, so it can't
+// install update files.
+const singleSystemBoard = "rpi3"
 
 // singleSystem reports whether this image has one copy of the system (the
-// Pi Zero 2 W image): new versions are flashed instead of installed.
-func (a *Agent) singleSystem() bool { return a.board() == zero2wBoard }
+// Pi Zero 2 W/3B/3B+ image): new versions are flashed instead of installed.
+func (a *Agent) singleSystem() bool { return a.board() == singleSystemBoard }
 
 // trustedUpdateKeys reads the public keys built into the image.
 func (a *Agent) trustedUpdateKeys() []ed25519.PublicKey {

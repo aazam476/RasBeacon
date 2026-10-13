@@ -19,7 +19,7 @@ import {
 
 const BOARDS: Record<string, string> = {
   rpi64: 'Raspberry Pi 4 and 5',
-  zero2w: 'Raspberry Pi Zero 2 W',
+  rpi3: 'Raspberry Pi Zero 2 W, 3B and 3B+',
   pi4: 'Raspberry Pi 4',
   pi5: 'Raspberry Pi 5',
 };
@@ -76,8 +76,8 @@ export function SoftwareSection({ status }: { status: Status }) {
       {update.singleSystem ? (
         <Notice title="New versions are flashed">
           <p>
-            The Pi Zero 2 W image has one copy of the system, so it can&apos;t install update files. To move to a new
-            version, flash its new image and set RasBeacon up again.
+            On the Pi Zero 2 W, 3B and 3B+, RasBeacon has one copy of the system, so it can&apos;t install update files.
+            To move to a new version, flash its new image and set RasBeacon up again.
           </p>
         </Notice>
       ) : (
