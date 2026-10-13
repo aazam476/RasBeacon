@@ -1,6 +1,6 @@
 import type { Client, GuestStatus, HotspotStatus } from '@/data/types';
 import { formatBand, formatDuration } from '@/lib/format';
-import { Badge, BreakableText, LinkRow, Row, Section, SignalIcon } from '@/ui';
+import { Badge, BreakableText, Icon, LinkRow, Row, Section, SignalIcon } from '@/ui';
 import { clientName } from '../common/clientDisplay';
 import { describeMetered, describeSecurity } from '../common/describe';
 
@@ -70,7 +70,15 @@ export function DevicesSection({ clients, guests }: { clients: Client[]; guests:
           key={client.mac}
           title={<BreakableText>{clientName(client)}</BreakableText>}
           subtitle={`${client.ip || 'waiting for address'} · ${formatDuration(client.connectedSeconds)}`}
-          trailing={<SignalIcon dbm={client.signalDbm} />}
+          trailing={
+            client.wired ? (
+              <span role="img" aria-label="Ethernet cable" className="text-label-2">
+                <Icon name="settings_ethernet" />
+              </span>
+            ) : (
+              <SignalIcon dbm={client.signalDbm} />
+            )
+          }
         />
       ))}
       <LinkRow

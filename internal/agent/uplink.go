@@ -70,6 +70,9 @@ type uplinkState struct {
 	// ethernetInBridge is true when Ethernet (client port) has joined the
 	// hotspot network.
 	ethernetInBridge bool
+	// wiredSince is when each device on the Ethernet client port was first
+	// seen (see wiredClients).
+	wiredSince map[string]time.Time
 	// foreignDHCPServer is the DHCP server found by the safety check.
 	foreignDHCPServer string
 	// connectedSince is when the uplink last became connected.

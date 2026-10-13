@@ -1,0 +1,46 @@
+#!/bin/bash
+# Grows the data partition (/persistent) to the end of the SD card, then its
+# file system, so the whole card is used. The image is small (to download
+# and flash quickly), so on a fresh card most of the space comes after it.
+#
+# It runs at every start but only changes something when there are more than
+# 16 MB free after the partition, which is the first start after flashing.
+# It only grows the partition if it is the last one on the card, and only
+# moves its end: the data on it stays where it is. ext4 grows while mounted.
+set -euo pipefail
+
+source=$(findmnt -n -o SOURCE /persistent)
+part=$(basename "$(readlink -f "$source")")
+disk=$(lsblk -n -d -o PKNAME "/dev/$part")
+number=$(cat "/sys/class/block/$part/partition")
+
+start=$(cat "/sys/class/block/$part/start")
+size=$(cat "/sys/class/block/$part/size")
+disk_size=$(cat "/sys/block/$disk/size")
+end=$((start + size))
+
+# Only the last partition can grow into the free space.
+for other in /sys/block/"$disk"/"$disk"*; do
+  [ -e "$other/start" ] || continue
+  if [ "$(cat "$other/start")" -gt "$start" ]; then
+    echo "The data partition isn't the last one on /dev/$disk; leaving it as it is."
+    exit 0
+  fi
+done
+
+# 512-byte sectors. GPT keeps a backup copy in the last 33 sectors.
+free=$((disk_size - end - 33))
+if [ "$free" -le 32768 ]; then
+  exit 0
+fi
+
+echo "Growing /dev/$part to the end of /dev/$disk ($((free / 2048)) MB more)."
+# The backup partition table is still where the image ended; move it to
+# the end of the card first.
+sfdisk --no-reread --no-tell-kernel --relocate gpt-bak-std "/dev/$disk"
+# ", +" keeps the start and makes the partition as large as possible. The
+# card is in use, so the kernel is told about the new size by partx.
+echo ", +" | sfdisk --no-reread --no-tell-kernel -N "$number" "/dev/$disk"
+partx --update --nr "$number" "/dev/$disk"
+resize2fs "/dev/$part"
+echo "Done: /persistent now fills the card."

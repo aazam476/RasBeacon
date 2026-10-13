@@ -4,15 +4,18 @@ package agent
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"regexp"
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"rasbeacon/internal/api"
 	"rasbeacon/internal/config"
 	"rasbeacon/internal/radio"
+	"rasbeacon/internal/render"
 	"rasbeacon/internal/stations"
 	"rasbeacon/internal/system"
 	"rasbeacon/internal/version"
@@ -83,9 +86,57 @@ func (a *Agent) StatusFor(viewer string) api.Status {
 	return status
 }
 
-// connectedClients lists devices associated with the hotspot right now.
+// connectedClients lists devices on the hotspot right now: on its Wi-Fi,
+// and on the Ethernet client port.
 func (a *Agent) connectedClients() []stations.Station {
-	return a.stationsOn(radio.HotspotInterfaceName)
+	return append(a.stationsOn(radio.HotspotInterfaceName), a.wiredClients()...)
+}
+
+// wiredClients lists devices on the Ethernet client port, from the devices
+// the hotspot bridge has seen behind that port, with their DHCP leases.
+// "Connected for" counts from when RasBeacon first saw each one.
+func (a *Agent) wiredClients() []stations.Station {
+	if !a.uplink.ethernetInBridge {
+		a.uplink.wiredSince = nil
+		return nil
+	}
+	out, err := a.runner.Run("bridge", "-json", "fdb", "show", "br", render.BridgeName, "brport", ethernetInterface)
+	if err != nil {
+		return nil
+	}
+	macs, err := stations.ParseBridgeFDB(out)
+	if err != nil {
+		slog.Warn("could not list the devices on the Ethernet port", "error", err)
+		return nil
+	}
+	seen := map[string]time.Time{}
+	var wired []stations.Station
+	for _, mac := range macs {
+		since, ok := a.uplink.wiredSince[mac]
+		if !ok {
+			since = a.now()
+		}
+		seen[mac] = since
+		wired = append(wired, stations.Station{MAC: mac, ConnectedSeconds: int(a.now().Sub(since).Seconds())})
+	}
+	a.uplink.wiredSince = seen
+	leases, _ := os.ReadFile(a.paths.DnsmasqLeases())
+	wired = stations.Merge(wired, stations.ParseLeases(string(leases)))
+	for i := range wired {
+		c := &wired[i]
+		c.Wired = true
+		a.setInternetAccess(c)
+	}
+	return wired
+}
+
+// setInternetAccess fills in whether the owner paused the device.
+func (a *Agent) setInternetAccess(c *stations.Station) {
+	pausedAt, paused := a.cfg.Clients.Paused[c.MAC]
+	c.InternetAccess = !paused
+	if paused {
+		c.PausedSeconds = max(1, int(a.now().Sub(pausedAt).Seconds()))
+	}
 }
 
 // stationsOn lists devices associated with one of the hotspot radio's
@@ -105,11 +156,7 @@ func (a *Agent) stationsOn(iface string) []stations.Station {
 		c.Band = string(a.cfg.Hotspot.Band)
 		rate := a.readings.stationRates[c.MAC]
 		c.DownMbps, c.UpMbps = rate[0], rate[1]
-		pausedAt, paused := a.cfg.Clients.Paused[c.MAC]
-		c.InternetAccess = !paused
-		if paused {
-			c.PausedSeconds = max(1, int(a.now().Sub(pausedAt).Seconds()))
-		}
+		a.setInternetAccess(c)
 	}
 	return clients
 }

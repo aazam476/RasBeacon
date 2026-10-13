@@ -121,6 +121,8 @@ type Agent struct {
 	webGroup int
 	// browser says how to start the login browser (see portalbrowser.go).
 	browser browserSettings
+	// diskFree reports the free space where a path is (tests fake it).
+	diskFree func(path string) (int64, error)
 
 	// usbRadioWait is how long startup waits for a USB Wi-Fi adapter to
 	// appear (see waitForRadios). Tests set it to zero.
@@ -141,6 +143,7 @@ func New(p paths.Paths, runner system.Runner) *Agent {
 		lan:        render.DefaultLAN,
 		webGroup:   -1,
 		browser:    defaultBrowserSettings(),
+		diskFree:   diskFreeBytes,
 		speedtest:  speedtestState{server: speedtest.DefaultServer, run: runSpeedtest},
 		// USB adapters usually appear within a few seconds of power-on.
 		usbRadioWait: 20 * time.Second,
@@ -187,6 +190,11 @@ func (a *Agent) Start() error {
 	// 2. Load settings, creating them on first boot.
 	if err := a.loadOrCreateSettings(); err != nil {
 		return err
+	}
+
+	// 2a. The swap file (its size is a setting; a problem isn't fatal).
+	if err := a.applySwap(); err != nil {
+		slog.Warn("swap could not be set up", "error", err)
 	}
 
 	// 2b. The HTTPS certificate for rbweb, if HTTPS is on. (rbweb waits

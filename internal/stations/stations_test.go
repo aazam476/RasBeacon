@@ -53,3 +53,21 @@ func TestMerge_OnlyConnectedDevicesAreListed(t *testing.T) {
 		t.Errorf("device without a lease should have no IP yet, got %q", merged[1].IP)
 	}
 }
+
+func TestParseBridgeFDB_DevicesBehindThePort(t *testing.T) {
+	out := `[{"mac":"33:33:00:00:00:01","ifname":"eth0","flags":["self"],"state":"permanent"},` +
+		`{"mac":"dc:a6:32:01:02:03","ifname":"eth0","vlan":1,"master":"br-lan","state":"permanent"},` +
+		`{"mac":"01:00:5e:00:00:01","ifname":"eth0","master":"br-lan","state":""},` +
+		`{"mac":"A4:83:E7:12:34:56","ifname":"eth0","master":"br-lan","state":""},` +
+		`{"mac":"a4:83:e7:12:34:56","ifname":"eth0","flags":["extern_learn"],"master":"br-lan","state":""}]`
+	got, err := ParseBridgeFDB(out)
+	if err != nil || len(got) != 1 || got[0] != "a4:83:e7:12:34:56" {
+		t.Errorf("got %v, %v; want only the laptop", got, err)
+	}
+	if got, err := ParseBridgeFDB(""); err != nil || got != nil {
+		t.Errorf("empty table: got %v, %v", got, err)
+	}
+	if _, err := ParseBridgeFDB("not json"); err == nil {
+		t.Error("expected an error")
+	}
+}

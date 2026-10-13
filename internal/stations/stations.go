@@ -15,6 +15,10 @@ package stations
 
 import (
 	"bufio"
+	"encoding/json"
+	"fmt"
+	"net"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -40,6 +44,9 @@ type Station struct {
 	PausedSeconds int `json:"pausedSeconds,omitempty"`
 	// IsThisDevice marks the device viewing the page.
 	IsThisDevice bool `json:"isThisDevice,omitempty"`
+	// Wired marks a device on the Ethernet client port. It has no band,
+	// signal or measured traffic, and can't be sent off like a Wi-Fi device.
+	Wired bool `json:"wired,omitempty"`
 
 	// RxBytes and TxBytes are the radio's byte counters for the device
 	// (Tx is towards it), used to work out the rates.
@@ -156,4 +163,34 @@ func firstInt(s string) int {
 		return 0
 	}
 	return n
+}
+
+// ParseBridgeFDB reads `bridge -json fdb show br <bridge> brport <port>`:
+// the devices the bridge has seen behind one port, by MAC address. It
+// leaves out the port's own addresses ("permanent", "self") and multicast
+// addresses. A device stays in the table while it sends something now and
+// then (the kernel forgets it after 5 minutes of silence).
+func ParseBridgeFDB(out string) ([]string, error) {
+	var entries []struct {
+		MAC   string   `json:"mac"`
+		State string   `json:"state"`
+		Flags []string `json:"flags"`
+	}
+	if strings.TrimSpace(out) == "" {
+		return nil, nil
+	}
+	if err := json.Unmarshal([]byte(out), &entries); err != nil {
+		return nil, fmt.Errorf("reading the bridge table: %w", err)
+	}
+	var macs []string
+	for _, e := range entries {
+		hw, err := net.ParseMAC(e.MAC)
+		if err != nil || len(hw) != 6 || hw[0]&1 == 1 || e.State == "permanent" || slices.Contains(e.Flags, "self") {
+			continue
+		}
+		if !slices.Contains(macs, hw.String()) {
+			macs = append(macs, hw.String())
+		}
+	}
+	return macs, nil
 }

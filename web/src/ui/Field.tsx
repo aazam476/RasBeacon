@@ -45,7 +45,8 @@ export function FieldRow({ label, labelNote, hint, error, stacked = false, child
       className={cn(
         'row flex-col items-stretch gap-1',
         !stacked && 'lg:grid lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:items-center lg:gap-x-4 lg:gap-y-1',
-        'has-[:focus-visible]:outline-2 has-[:focus-visible]:-outline-offset-2 has-[:focus-visible]:outline-tint',
+        // The focus ring is rounded like the group, so the group's corners don't cut it off.
+        'has-[:focus-visible]:rounded-group has-[:focus-visible]:outline-2 has-[:focus-visible]:-outline-offset-2 has-[:focus-visible]:outline-tint',
       )}
     >
       <label htmlFor={id} className={cn('text-subhead text-label-2', !stacked && 'lg:text-body lg:text-label')}>

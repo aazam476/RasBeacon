@@ -1,6 +1,7 @@
 import { createContext, useContext } from 'react';
 import type {
   ClaimResponse,
+  DNSSettings,
   EthernetRole,
   GuestSettings,
   HotspotSettings,
@@ -16,6 +17,7 @@ import type {
   SetupForm,
   SetupState,
   SSHSettings,
+  SwapSettings,
   Status,
   UplinkSettings,
   VPNDetailsForm,
@@ -53,6 +55,8 @@ export type DataKey =
   | 'uplinkSettings'
   | 'vpnSettings'
   | 'sshSettings'
+  | 'dnsSettings'
+  | 'swapSettings'
   | 'httpsSettings'
   | 'portal';
 
@@ -78,6 +82,8 @@ export interface DeviceState {
   uplinkSettings: Loadable<UplinkSettings>;
   vpnSettings: Loadable<VPNSettings>;
   sshSettings: Loadable<SSHSettings>;
+  dnsSettings: Loadable<DNSSettings>;
+  swapSettings: Loadable<SwapSettings>;
   httpsSettings: Loadable<HTTPSSettings>;
   /** The last scan's results; null before the first scan. */
   nearbyNetworks: NearbyNetwork[] | null;
@@ -178,6 +184,11 @@ export interface DeviceActions {
   /** Check the Ethernet port again. */
   rescanEthernetPort: () => Promise<void>;
   /**
+   * The DNS servers for devices while the VPN isn't in use: the text as typed, comma-separated;
+   * empty uses the network's. Field key: servers.
+   */
+  saveDnsSettings: (servers: string) => Promise<void>;
+  /**
    * Run Cloudflare's speed test (about 20 seconds) and update
    * `status.speedtest`.
    */
@@ -234,6 +245,8 @@ export interface DeviceActions {
   /** Upload and install a .rbupdate file; resolves when the router has accepted it. */
   installUpdate: (file: File) => Promise<void>;
   setCheckOnline: (enabled: boolean) => Promise<void>;
+  /** The swap file's size in whole gigabytes (0 = off). Field key: sizeGb. */
+  saveSwapSettings: (sizeGb: number) => Promise<void>;
   /** Resolves once the router answers again after restarting. */
   reboot: () => Promise<void>;
   /** Erase everything; afterwards the phase is `setup`. Reject when the admin password is wrong. */

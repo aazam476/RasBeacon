@@ -471,6 +471,24 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
       disconnectClient: () => wait(900),
       flushClientLease: () => wait(900),
 
+      saveSwapSettings: async (sizeGb) => {
+        await wait(1500);
+        change((d) => {
+          d.router.swapSettings.sizeGb = sizeGb;
+          d.router.status.system.swapTotalMb = sizeGb * 1024;
+          d.router.status.system.swapUsedMb = Math.min(d.router.status.system.swapUsedMb, sizeGb * 1024);
+        });
+      },
+      saveDnsSettings: async (text) => {
+        await wait(800);
+        const servers = text
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean);
+        const bad = servers.find((server) => !/^[\d.]+$|^[\da-f:]+$/i.test(server));
+        if (bad) throw new FieldErrors({ servers: `"${bad}" is not an IP address.` });
+        change((d) => void (d.router.dnsSettings = { servers }));
+      },
       saveSshSettings: async (settings) => {
         await wait(900);
         if (settings.enabled && settings.authorizedKeys.trim() === '') {
@@ -583,6 +601,8 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
       uplinkSettings: loadable('uplinkSettings', router.uplinkSettings),
       vpnSettings: loadable('vpnSettings', router.vpnSettings),
       sshSettings: loadable('sshSettings', router.sshSettings),
+      dnsSettings: loadable('dnsSettings', router.dnsSettings),
+      swapSettings: loadable('swapSettings', router.swapSettings),
       httpsSettings: loadable('httpsSettings', router.httpsSettings),
       nearbyNetworks: demo.nearbyNetworks,
       portal: loadable('portal', router.status.portal),

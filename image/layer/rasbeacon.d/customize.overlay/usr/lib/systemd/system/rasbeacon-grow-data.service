@@ -1,0 +1,13 @@
+# Grows the data partition to fill the SD card (see grow-data-partition).
+# Does nothing once it fills the card.
+[Unit]
+Description=RasBeacon: use the whole SD card for settings and data
+RequiresMountsFor=/persistent
+Before=rbd.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/rasbeacon/grow-data-partition
+
+[Install]
+WantedBy=multi-user.target

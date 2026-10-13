@@ -76,6 +76,43 @@ type Config struct {
 	HTTPS    HTTPSConfig    `json:"https"`
 	Updates  UpdatesConfig  `json:"updates"`
 	Clients  ClientsConfig  `json:"clients"`
+	DNS      DNSConfig      `json:"dns"`
+	Swap     SwapConfig     `json:"swap"`
+}
+
+// SwapConfig is the size of the swap file on the data partition.
+type SwapConfig struct {
+	// SizeGB is in whole gigabytes; 0 turns swap off. Unset (nil) means the
+	// default, DefaultSwapGB (less on a card too small for it).
+	SizeGB *int `json:"sizeGb,omitempty"`
+}
+
+// DefaultSwapGB is the swap file's size until the owner changes it.
+const DefaultSwapGB = 4
+
+// DNSConfig chooses the DNS servers devices use while their traffic isn't
+// going through the VPN (with the VPN in use, its own servers are used).
+type DNSConfig struct {
+	// Servers are used instead of the current network's; empty uses the
+	// network's (the default). While a login page is in the way, the
+	// network's are used anyway: many only work with them.
+	Servers []netip.Addr `json:"servers,omitempty"`
+}
+
+// MaxDNSServers keeps the list short; dnsmasq asks them in turn.
+const MaxDNSServers = 4
+
+// Validate checks the DNS servers: real addresses of other machines.
+func (d DNSConfig) Validate() error {
+	if len(d.Servers) > MaxDNSServers {
+		return &ValidationError{Field: "servers", Message: fmt.Sprintf("At most %d DNS servers.", MaxDNSServers)}
+	}
+	for _, s := range d.Servers {
+		if !s.IsValid() || s.IsUnspecified() || s.IsLoopback() || s.IsMulticast() || s.IsLinkLocalUnicast() {
+			return &ValidationError{Field: "servers", Message: fmt.Sprintf("%s can't be a DNS server: use the address of a DNS server, like 1.1.1.1.", s)}
+		}
+	}
+	return nil
 }
 
 // ClientsConfig holds per-device settings.
@@ -650,6 +687,11 @@ func (c Config) Clone() Config {
 		c.VPN.Profiles[i] = p.Clone()
 	}
 	c.Clients.Paused = maps.Clone(c.Clients.Paused)
+	c.DNS.Servers = slices.Clone(c.DNS.Servers)
+	if c.Swap.SizeGB != nil {
+		size := *c.Swap.SizeGB
+		c.Swap.SizeGB = &size
+	}
 	return c
 }
 

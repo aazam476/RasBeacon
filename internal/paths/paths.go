@@ -36,6 +36,13 @@ func (p Paths) join(parts ...string) string {
 
 // --- Persistent data (survives reboots and updates) ---
 
+// SwapFile is the swap file, on the data partition but outside DataDir
+// (see agent/swap.go).
+func (p Paths) SwapFile() string { return p.join("persistent", "swapfile") }
+
+// ProcSwaps lists the swap areas in use.
+func (p Paths) ProcSwaps() string { return p.join("proc", "swaps") }
+
 // DataDir is RasBeacon's directory on the persistent partition. A factory
 // reset deletes everything inside it.
 func (p Paths) DataDir() string { return p.join("persistent", "rasbeacon") }

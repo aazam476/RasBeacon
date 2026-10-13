@@ -7,6 +7,7 @@ import { getResourceMetrics } from '../common/resourceMetrics';
 import { FactoryResetSection, RebootSection } from './RestartSections';
 import { SoftwareSection } from './SoftwareSection';
 import { StorageSection } from './StorageSection';
+import { SwapSection } from './SwapSection';
 
 /** Software updates, hardware health and identity, diagnostics, restarting and factory reset. */
 export function SystemScreen() {
@@ -19,6 +20,7 @@ export function SystemScreen() {
           <SoftwareSection status={status} />
           <HardwareSection status={status} />
           <StorageSection storage={status.storage} />
+          <SwapSection />
           <AboutSection status={status} />
           <RadiosSection status={status} />
           <DiagnosticsSection />

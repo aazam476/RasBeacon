@@ -21,7 +21,11 @@ export function UnsavedChangesBar({ draft }: { draft: NetworkDraft }) {
 
   return (
     // Above the tab bar on phones, and above the demo's data switcher when it shows.
-    <div className="glass sticky bottom-[calc(max(env(safe-area-inset-bottom),0.75rem)+4.75rem+var(--stress-toggle,0rem))] z-30 flex flex-col gap-3 rounded-[22px] p-3 pl-4 lg:bottom-[calc(1.5rem+var(--stress-toggle,0rem))] lg:flex-row lg:items-center lg:rounded-[14px]">
+    <div
+      role="region"
+      aria-label="Unsaved changes"
+      className="glass sticky bottom-[calc(max(env(safe-area-inset-bottom),0.75rem)+4.75rem+var(--stress-toggle,0rem))] z-30 flex flex-col gap-3 rounded-[22px] p-3 pl-4 lg:bottom-[calc(1.5rem+var(--stress-toggle,0rem))] lg:flex-row lg:items-center lg:rounded-[14px]"
+    >
       {showSaved ? (
         <div className="flex flex-1 items-start justify-between gap-3">
           <FormSuccess className="py-1.5">

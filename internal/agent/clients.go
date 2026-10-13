@@ -111,6 +111,9 @@ func (a *Agent) DisconnectClient(mac string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	iface, ok := a.findStation(mac)
+	if _, wired := a.uplink.wiredSince[mac]; !ok && wired {
+		return &config.ValidationError{Field: "mac", Message: "This device is on the Ethernet cable, which can't be disconnected from here. Unplug it, or pause its internet access."}
+	}
 	if !ok {
 		return &config.ValidationError{Field: "mac", Message: ErrNotConnected.Error()}
 	}

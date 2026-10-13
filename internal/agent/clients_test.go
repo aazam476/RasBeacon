@@ -75,3 +75,45 @@ func TestClients_PauseAllowDisconnectAndFlush(t *testing.T) {
 		t.Errorf("a device without a lease: got %v", err)
 	}
 }
+
+func TestClients_DevicesOnTheEthernetClientPort(t *testing.T) {
+	e := newClaimedEnv(t, true)
+	c := &fakeClock{now: time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)}
+	e.agent.now = func() time.Time { return c.now }
+	mustWrite(t, e.paths.DnsmasqLeases(), "1790800000 a4:83:e7:12:34:56 10.87.0.31 Alis-MacBook *\n")
+	e.runner.outputs["bridge -json fdb show br br-lan brport eth0"] =
+		`[{"mac":"dc:a6:32:01:02:03","ifname":"eth0","master":"br-lan","state":"permanent"},` +
+			`{"mac":"a4:83:e7:12:34:56","ifname":"eth0","master":"br-lan","state":""}]`
+
+	// Not listed while the port isn't on the hotspot network.
+	if n := len(e.agent.Status().Clients); n != 0 {
+		t.Fatalf("%d clients before the port joined", n)
+	}
+	e.agent.mu.Lock()
+	e.agent.uplink.ethernetInBridge = true
+	e.agent.mu.Unlock()
+
+	e.agent.Status()
+	c.advance(2 * time.Minute)
+	clients := e.agent.StatusFor("10.87.0.31").Clients
+	if len(clients) != 1 {
+		t.Fatalf("clients = %+v", clients)
+	}
+	laptop := clients[0]
+	if !laptop.Wired || laptop.IP != "10.87.0.31" || laptop.Hostname != "Alis-MacBook" || laptop.Band != "" ||
+		laptop.ConnectedSeconds != 120 || !laptop.InternetAccess || !laptop.IsThisDevice {
+		t.Errorf("laptop = %+v", laptop)
+	}
+
+	// It can be paused, but not sent off like a Wi-Fi device.
+	if err := e.agent.SetClientInternetAccess(laptop.MAC, false); err != nil {
+		t.Fatal(err)
+	}
+	if e.agent.Status().Clients[0].InternetAccess {
+		t.Error("the laptop should be paused")
+	}
+	var ve *config.ValidationError
+	if err := e.agent.DisconnectClient(laptop.MAC); !errors.As(err, &ve) || !strings.Contains(ve.Message, "Ethernet cable") {
+		t.Errorf("got %v", err)
+	}
+}

@@ -220,6 +220,7 @@ Settings live on the shared `/persistent` partition, so they carry over.
 | `/usr/lib/rasbeacon/update-keys/*.pub`, `/usr/lib/rasbeacon/board` | Update signing keys and the board name, built into the image | the build |
 | `/persistent/rasbeacon/certs/` (directory 0700) | Certificates and keys for WPA-Enterprise networks, named after each network's ID | rbd |
 | `/persistent/rasbeacon/identity.json` | Device ID, IPv6 prefix, suggested password | rbd, once |
+| `/persistent/swapfile` (mode 0600) | Swap space (System → Swap) | rbd |
 | `/run/rbd/*.conf`, `firewall.nft` | Generated configs (in memory) | rbd |
 | `/run/systemd/network/00-rasbeacon-*.network` | Generated networkd settings (in memory) | rbd |
 | `/bootfs/setup.txt`, `/bootfs/factory-reset` | Files the owner can create from a computer | the owner |

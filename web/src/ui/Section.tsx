@@ -190,7 +190,7 @@ export function LinkRow({
     <div
       className={cn(
         'row row-pressable',
-        'has-[a:focus-visible]:outline-2 has-[a:focus-visible]:-outline-offset-2 has-[a:focus-visible]:outline-tint',
+        'has-[a:focus-visible]:rounded-group has-[a:focus-visible]:outline-2 has-[a:focus-visible]:-outline-offset-2 has-[a:focus-visible]:outline-tint',
         className,
       )}
     >

@@ -236,6 +236,36 @@ func (a *Agent) Handler() http.Handler {
 		writeJSON(w, http.StatusOK, result)
 	})
 
+	mux.HandleFunc("GET /settings/swap", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, a.SwapSettings())
+	})
+	mux.HandleFunc("PUT /settings/swap", func(w http.ResponseWriter, r *http.Request) {
+		var req api.SwapSettings
+		if !readJSON(w, r, &req) {
+			return
+		}
+		if err := a.UpdateSwapSettings(req); err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, a.SwapSettings())
+	})
+
+	mux.HandleFunc("GET /settings/dns", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, a.DNSSettings())
+	})
+	mux.HandleFunc("PUT /settings/dns", func(w http.ResponseWriter, r *http.Request) {
+		var req api.DNSSettings
+		if !readJSON(w, r, &req) {
+			return
+		}
+		if err := a.UpdateDNSSettings(req); err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, a.DNSSettings())
+	})
+
 	mux.HandleFunc("GET /settings/vpn", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, a.VPNSettings())
 	})

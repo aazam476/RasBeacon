@@ -40,6 +40,10 @@ mmdebstrap:
     # kernel has their drivers, but without firmware they don't work.
     - firmware-realtek
     - firmware-mediatek
+    # Grow the data partition to fill the SD card on first start
+    # (grow-data-partition): sfdisk, and resize2fs for ext4
+    - fdisk
+    - e2fsprogs
     # The login browser for hotel networks (zero-leak login, see
     # internal/browser): Chromium without a window, and a font for it
     - chromium-headless-shell
@@ -51,13 +55,15 @@ mmdebstrap:
     # only lets it reach the uplink.
     - chroot $1 useradd --system --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin rbbrowser
     # The programs are copied in by the overlay; make sure they can run.
-    - chmod 0755 $1/usr/bin/rbd $1/usr/bin/rbweb
+    - chmod 0755 $1/usr/bin/rbd $1/usr/bin/rbweb $1/usr/lib/rasbeacon/grow-data-partition
     # Start the early firewall, rbd and rbweb at boot. hostapd and dnsmasq
     # are started by rbd when it has written their configuration.
     - $BDEBSTRAP_HOOKS/enable-units "$1" rasbeacon-firewall-early.service rbd.service rbweb.service
     # systemd-networkd gets addresses on the uplinks; systemd-resolved is the
     # device's DNS resolver.
     - $BDEBSTRAP_HOOKS/enable-units "$1" systemd-networkd.service systemd-resolved.service
+    # Use the whole SD card for settings and data (first start only).
+    - $BDEBSTRAP_HOOKS/enable-units "$1" rasbeacon-grow-data.service
     # Opt-in debug log (does nothing unless a "debug" file is on the card).
     - $BDEBSTRAP_HOOKS/enable-units "$1" rasbeacon-debug-log.service
     # SSH is off until the owner turns it on in the web UI (rbd starts it).

@@ -78,11 +78,16 @@ As built in milestone 1, this uses rpi-image-gen's `image-rota` layout
 | `BOOTCONFIG` | FAT | 32 MB | A/B boot selection (`autoboot.txt`), plus the user-visible files `setup.txt` and `factory-reset` (section 5). Mounted at `/bootfs`. |
 | `boot_a`, `boot_b` | FAT | 128 MB each | Firmware and kernel for each slot |
 | `system_a`, `system_b` | erofs, **read-only** | 1536 MB each (768 MB before milestone 7) | The operating system for each slot |
-| `persistent` | ext4 | 512 MB | `/persistent`: RasBeacon settings in `/persistent/rasbeacon`, SSH host keys, per-slot `/var` |
+| `persistent` | ext4 | 512 MB in the image; grows to fill the card on first boot | `/persistent`: RasBeacon settings in `/persistent/rasbeacon`, SSH host keys, per-slot `/var`, the swap file |
 
 - `/var/log`, `/tmp` and `/run` are tmpfs, and journald is `Storage=volatile`.
-  Nothing writes to flash except explicit config saves, the clock save and
-  updates.
+  Nothing writes to flash except explicit config saves, the clock save,
+  updates and the swap file (4 GB by default, adjustable from 0; with
+  `vm.swappiness = 10` it is used only when memory is really short).
+- **The `persistent` partition grows to fill the card** at boot
+  (`rasbeacon-grow-data.service`: `sfdisk` moves the backup GPT to the end
+  of the card and grows the last partition, then `resize2fs` grows the
+  mounted file system). It does nothing once the partition fills the card.
 - **Config writes are atomic:** write a temp file, `fsync`, `rename`, then
   `fsync` the directory. On abrupt power loss you get the previous or the new
   config, never a partial one.
