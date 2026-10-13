@@ -82,7 +82,7 @@ As built in milestone 1, this uses rpi-image-gen's `image-rota` layout
 
 - `/var/log`, `/tmp` and `/run` are tmpfs, and journald is `Storage=volatile`.
   Nothing writes to flash except explicit config saves, the clock save,
-  updates and the swap file (4 GB by default, adjustable from 0; with
+  updates and the swap file (2 GB by default, adjustable from 0; with
   `vm.swappiness = 10` it is used only when memory is really short).
 - **The `persistent` partition grows to fill the card** at boot
   (`rasbeacon-grow-data.service`: `sfdisk` moves the backup GPT to the end

@@ -2,7 +2,7 @@ package agent
 
 // The swap file: room on the SD card for memory the Pi isn't using, so a
 // program that briefly needs more memory than the Pi has doesn't get
-// stopped. Its size is set on the System page, 4 GB by default, from 0
+// stopped. Its size is set on the System page, 2 GB by default, from 0
 // (off) up to the free space on the card minus 1 GB, which stays free for
 // settings and updates. Swapping wears the card, so the kernel is told to
 // swap only when memory is really short (vm.swappiness in 90-rasbeacon.conf).
