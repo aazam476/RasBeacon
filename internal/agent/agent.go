@@ -121,6 +121,9 @@ type Agent struct {
 	webGroup int
 	// browser says how to start the login browser (see portalbrowser.go).
 	browser browserSettings
+	// dohEnv is what the DoH forwarder was last started with ("" while it
+	// is stopped; "?" until rbd has told it either).
+	dohEnv string
 	// diskFree reports the free space where a path is (tests fake it).
 	diskFree func(path string) (int64, error)
 
@@ -144,6 +147,7 @@ func New(p paths.Paths, runner system.Runner) *Agent {
 		webGroup:   -1,
 		browser:    defaultBrowserSettings(),
 		diskFree:   diskFreeBytes,
+		dohEnv:     "?",
 		speedtest:  speedtestState{server: speedtest.DefaultServer, run: runSpeedtest},
 		// USB adapters usually appear within a few seconds of power-on.
 		usbRadioWait: 20 * time.Second,
@@ -529,6 +533,10 @@ func (a *Agent) applyDHCP(captive bool) error {
 	dnsmasqConf, err := render.Dnsmasq(input)
 	if err != nil {
 		return err
+	}
+	// The DoH forwarder first, so it answers by the time dnsmasq asks it.
+	if err := a.applyDoH(captive); err != nil {
+		slog.Warn("the DNS-over-HTTPS forwarder could not be started", "error", err)
 	}
 	if err := config.WriteFileAtomic(a.paths.DnsmasqConfig(), []byte(dnsmasqConf), 0o644); err != nil {
 		return err

@@ -36,7 +36,6 @@ import (
 
 	"rasbeacon/internal/api"
 	"rasbeacon/internal/config"
-	"rasbeacon/internal/portal"
 	"rasbeacon/internal/render"
 	"rasbeacon/internal/routing"
 	"rasbeacon/internal/system"
@@ -305,11 +304,12 @@ func (a *Agent) egressInterfaces() []string {
 // upstreamDNS returns the DNS servers dnsmasq passes devices' questions to.
 func (a *Agent) upstreamDNS() []string {
 	if !a.clientsThroughTunnel() {
-		// The owner's own servers, except while a login page is in the way:
-		// many only work with the network's DNS.
-		custom := a.cfg.DNS.Servers
-		if len(custom) > 0 && !a.portal.loginMode && a.portal.result.State != portal.Portal {
-			return addrStrings(custom)
+		if a.ownDNSInUse() {
+			servers := addrStrings(a.cfg.DNS.Servers)
+			if len(a.cfg.DNS.DoH) > 0 {
+				servers = append(servers, dohForwarder)
+			}
+			return servers
 		}
 		return []string{deviceResolver}
 	}

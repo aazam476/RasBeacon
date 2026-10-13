@@ -38,7 +38,7 @@ lint:
 
 build: ui
 	mkdir -p build
-	go build -trimpath -ldflags "$(LDFLAGS)" -o build/ ./cmd/rbd ./cmd/rbweb
+	go build -trimpath -ldflags "$(LDFLAGS)" -o build/ ./cmd/rbd ./cmd/rbweb ./cmd/rbdoh
 
 # Simulated device: no Raspberry Pi needed, nothing on this computer changes.
 # DEV_BROWSER: a headless Chromium for the zero-leak login screen (optional;
@@ -60,7 +60,7 @@ e2e:
 # Cross-compile for the Raspberry Pi (64-bit ARM). Go needs no extra tools.
 pi: ui
 	mkdir -p build/arm64
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags "$(LDFLAGS)" -o build/arm64/ ./cmd/rbd ./cmd/rbweb
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags "$(LDFLAGS)" -o build/arm64/ ./cmd/rbd ./cmd/rbweb ./cmd/rbdoh
 
 clean:
 	rm -rf build web/dist-demo

@@ -27,14 +27,14 @@ rig="${RPI_IMAGE_GEN:-$repo_root/../rpi-image-gen}"
 stage="$repo_root/build/image-src"
 out="$repo_root/build/image"
 
-# 1. Build the web UI and the two programs for 64-bit ARM.
+# 1. Build the web UI and the programs for 64-bit ARM.
 make -C "$repo_root" pi VERSION="$version" REPOSITORY="${GITHUB_REPOSITORY:-}"
 
 # 2. Copy image/ to a staging folder and put the programs into the layer's
 #    overlay, so the repository itself never contains built binaries.
 rm -rf "$stage" && mkdir -p "$stage" "$out"
 cp -a "$repo_root/image/." "$stage/"
-install -m 0755 "$repo_root/build/arm64/rbd" "$repo_root/build/arm64/rbweb" \
+install -m 0755 "$repo_root/build/arm64/rbd" "$repo_root/build/arm64/rbweb" "$repo_root/build/arm64/rbdoh" \
   "$stage/layer/rasbeacon.d/customize.overlay/usr/bin/"
 rm -f "$stage/layer/rasbeacon.d/customize.overlay/usr/bin/.gitkeep"
 # Which board this image is for: update files must match it.

@@ -55,7 +55,7 @@ mmdebstrap:
     # only lets it reach the uplink.
     - chroot $1 useradd --system --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin rbbrowser
     # The programs are copied in by the overlay; make sure they can run.
-    - chmod 0755 $1/usr/bin/rbd $1/usr/bin/rbweb $1/usr/lib/rasbeacon/grow-data-partition
+    - chmod 0755 $1/usr/bin/rbd $1/usr/bin/rbweb $1/usr/bin/rbdoh $1/usr/lib/rasbeacon/grow-data-partition
     # Start the early firewall, rbd and rbweb at boot. hostapd and dnsmasq
     # are started by rbd when it has written their configuration.
     - $BDEBSTRAP_HOOKS/enable-units "$1" rasbeacon-firewall-early.service rbd.service rbweb.service

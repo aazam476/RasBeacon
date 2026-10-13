@@ -254,8 +254,15 @@ export function applyWorstCase(demo: DemoState) {
     'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK0wmN/Cr3JXqmLW7u+g9pTh+wyqDHpSQEIQczXkVx9q owner@laptop',
     `ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQ${'Cx8vK2Lq9Tz4WbN7Rj3Pm6Hd1Fs5Ga0Ye8Uc2Vo4Xi7Ql9Bn3Mk6Jp1Rt5Sw8Dz2Ah4Ef7Gi0Ku3Lw6'.repeat(9)} bartholomew.fitzgerald@northwind-industries-holdings.example.com`,
   ].join('\n');
-  // Four DNS servers, the most allowed, two of them long IPv6 addresses.
-  router.dnsSettings = { servers: ['2001:4860:4860::8888', '2a10:50c0::ad1:ff', '94.140.14.140', '9.9.9.9'] };
+  // Four DNS servers, the most allowed: a long IPv6 address and two long DoH addresses.
+  router.dnsSettings = {
+    servers: [
+      '2a10:50c0::ad1:ff',
+      '94.140.14.140',
+      'https://dns.adguard-dns.com/dns-query',
+      'https://doh.mullvad.net:443/dns-query?ct=application/dns-message',
+    ],
+  };
   // A 2 TB SSD instead of an SD card: nearly 1,900 sizes to choose from.
   router.swapSettings = { sizeGb: 0, maxGb: 1_862 };
   router.httpsSettings = {

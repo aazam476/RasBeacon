@@ -293,7 +293,12 @@ main:        default via <uplink gw> (networkd, metric by uplink priority)
     points at `wg0`, so **if the tunnel is down, DNS queries die inside `wg0`
     and never reach the uplink**.
   - In `DIRECT` or no-VPN mode, dnsmasq is switched (SIGHUP with new config)
-    to the uplink's DNS.
+    to the uplink's DNS, or to the owner's DNS servers (Internet → DNS
+    servers). Those can be DNS-over-HTTPS servers: dnsmasq asks them through
+    `rbdoh` on 127.0.0.1:5053, which bootstraps their host names with the
+    owner's plain servers, then the uplink's DNS, and keeps the last known
+    addresses as a fallback. A login page in the way switches back to the
+    uplink's DNS (portals need it).
   - Clients' DoH/DoT just follows the forwarding policy, so it's tunnelled or
     dropped like any other traffic.
 - **Device's own traffic:** a second resolver listens on 127.0.0.53 and uses
