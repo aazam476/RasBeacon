@@ -97,7 +97,10 @@ seconds later, so the phone receives the "success" page first.
   2. reads the routes, addresses and Wi-Fi state (`internal/uplink` parses
      the output of `ip` and `wpa_cli`);
   3. moves the hotspot to another address range (10.88.0.0/24, ...) if the
-     upstream network uses 10.87.0.0/24 too;
+     upstream network uses its range too (large campus networks can), and
+     restarts the hotspot so devices reconnect and get addresses in the new
+     range. It moves only when it must; it returns to 10.87.0.0/24 at the
+     next restart;
   4. tells devices whether IPv6 internet is available, through dnsmasq's
      *router advertisements*.
 - **WPA-Enterprise (eduroam):** the username, password and uploaded

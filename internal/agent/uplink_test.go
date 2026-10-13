@@ -292,6 +292,59 @@ func TestCheckUplink_MovesHotspotNetworkWhenUpstreamUsesIt(t *testing.T) {
 	}
 }
 
+func TestCheckUplink_MovingTheNetworkMakesDevicesReconnect(t *testing.T) {
+	e := newClaimedEnv(t, false)
+	e.fakeUplink("wlan0", "192.168.4.20", "24", false)
+	e.check()
+	e.runner.commands = nil
+
+	// A campus network whose range (10.87.0.0/16) covers the hotspot's.
+	e.fakeUplink("wlan0", "10.87.200.9", "16", false)
+	e.check()
+	if got := e.agent.SetupState().LANAddress; got != "10.88.0.1" {
+		t.Fatalf("hotspot address = %s, want 10.88.0.1", got)
+	}
+	// Devices still hold 10.87.0.x addresses: the hotspot restarts after
+	// DHCP has the new range, so they reconnect and get new ones.
+	dhcp, hotspot := -1, -1
+	for i, c := range e.runner.commands {
+		switch c {
+		case "systemctl restart rasbeacon-dnsmasq.service":
+			dhcp = i
+		case "systemctl restart rasbeacon-hostapd.service":
+			hotspot = i
+		}
+	}
+	if dhcp < 0 || hotspot < dhcp {
+		t.Errorf("want dnsmasq, then hostapd restarted; commands: %v", e.runner.commands)
+	}
+
+	// The clash ends: the hotspot stays where it is (moving back would
+	// disconnect everyone again), and nothing restarts on later checks.
+	e.runner.commands = nil
+	e.fakeUplink("wlan0", "192.168.4.20", "24", false)
+	e.check()
+	e.check()
+	if got := e.agent.SetupState().LANAddress; got != "10.88.0.1" {
+		t.Errorf("hotspot address = %s, want it to stay 10.88.0.1", got)
+	}
+	if e.runner.ran("rasbeacon-hostapd.service") {
+		t.Errorf("the hotspot must not restart again; commands: %v", e.runner.commands)
+	}
+}
+
+func TestCheckUplink_EveryCandidateClashes_DoesntRestartOverAndOver(t *testing.T) {
+	e := newClaimedEnv(t, false)
+	// 0.0.0.0/0 overlaps every candidate network.
+	e.fakeUplink("wlan0", "10.1.1.1", "0", false)
+	e.runner.commands = nil
+	e.check()
+	e.check()
+	if e.runner.ran("rasbeacon-hostapd.service") {
+		t.Errorf("nothing to move to, so nothing should restart; commands: %v", e.runner.commands)
+	}
+}
+
 func TestScanNearby_HidesOwnHotspot(t *testing.T) {
 	e := newClaimedEnv(t, false)
 	e.runner.outputs["wpa_cli -p "+e.paths.WPAControlDir()+" -i wlan0 scan_results"] =
