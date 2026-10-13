@@ -20,9 +20,9 @@ function SwapForm({ settings }: { settings: SwapSettings }) {
   const { saveSwapSettings } = useDevice();
   const form = useForm({ sizeGb: String(settings.sizeGb) }, (values) => saveSwapSettings(Number(values.sizeGb)));
   const { values, setField, fieldErrors } = form;
-  const sizes = Array.from({ length: Math.max(settings.maxGb, settings.sizeGb) + 1 }, (_, size) => ({
+  const sizes = swapSizes(settings).map((size) => ({
     value: String(size),
-    label: size === 0 ? 'Off' : `${size} GB`,
+    label: size === 0 ? 'Off' : formatGb(size),
   }));
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -34,7 +34,7 @@ function SwapForm({ settings }: { settings: SwapSettings }) {
     <form onSubmit={handleSubmit} noValidate>
       <Section
         title="Swap"
-        footer={`Room on the SD card for memory the Pi isn't using, so a program that briefly needs more memory than the Pi has keeps running. Up to ${settings.maxGb} GB fits: 1 GB of the card stays free. RasBeacon only swaps when memory is really short, because it wears the card.`}
+        footer={`Room on the SD card for memory the Pi isn't using, so a program that briefly needs more memory than the Pi has keeps running. ${settings.maxGb > 0 ? `Up to ${formatGb(settings.maxGb)} fits` : 'The card is too full for one'} (1 GB of it always stays free). RasBeacon only swaps when memory is really short, because it wears the card.`}
       >
         <SelectField
           label="Swap file size"
@@ -57,4 +57,20 @@ function SwapForm({ settings }: { settings: SwapSettings }) {
       </Section>
     </form>
   );
+}
+
+/**
+ * The sizes to offer: off, then doubling from 1 GB, the largest that fits, and the current size,
+ * so a large card or SSD doesn't list every gigabyte.
+ */
+function swapSizes({ sizeGb, maxGb }: SwapSettings): number[] {
+  const sizes = new Set([0, sizeGb]);
+  for (let size = 1; size <= maxGb; size *= 2) sizes.add(size);
+  if (maxGb > 0) sizes.add(maxGb);
+  return [...sizes].sort((a, b) => a - b);
+}
+
+function formatGb(gb: number) {
+  // A no-break space, as elsewhere, so the unit never wraps away from the number.
+  return `${gb.toLocaleString('en-US')}\u00a0GB`;
 }

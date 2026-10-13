@@ -336,7 +336,7 @@ export const SCENARIOS: DemoScenario[] = [
     route: '/',
     apply: applyWorstCase,
   },
-  { id: 'no-clients', group: 'Stress test', title: 'No devices connected', route: '/clients', apply: applyNoClients },
+  { id: 'no-clients', group: 'Stress test', title: 'No devices, no room', route: '/clients', apply: applyNoClients },
   { id: 'one-of-each', group: 'Stress test', title: 'One of everything', route: '/', apply: applyOneOfEach },
 
   // Internet

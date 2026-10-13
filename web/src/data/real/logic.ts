@@ -217,7 +217,7 @@ export async function toSavedNetwork(form: NewNetworkForm): Promise<SavedNetwork
 /** Splits "a, b,c" into ["a", "b", "c"]. */
 export function splitList(text: string): string[] {
   return text
-    .split(',')
+    .split(/[,\s]+/)
     .map((item) => item.trim())
     .filter((item) => item !== '');
 }

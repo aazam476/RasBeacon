@@ -184,7 +184,8 @@ export interface DeviceActions {
   /** Check the Ethernet port again. */
   rescanEthernetPort: () => Promise<void>;
   /**
-   * The DNS servers for devices while the VPN isn't in use: the text as typed, comma-separated;
+   * The DNS servers for devices while the VPN isn't in use: the text as typed, one per line or
+   * comma-separated;
    * empty uses the network's. Field key: servers.
    */
   saveDnsSettings: (servers: string) => Promise<void>;
