@@ -21,7 +21,7 @@ image/              Raspberry Pi image definition (rpi-image-gen layers, systemd
 test/netns/         tests with real firewall/DHCP/DNS/WireGuard in network namespaces
 test/hwsim/         WPA-Enterprise logins with simulated Wi-Fi radios
 test/e2e/           browser walkthrough of the web UI
-docs/               design, architecture, API, UI contract, glossary, test plans
+docs/               design, architecture, API, UI contract, glossary, the hardware test plan
 ```
 
 ## Tools you need

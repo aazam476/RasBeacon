@@ -37,7 +37,7 @@ Sources for figures not measured by us are listed in
 
 **Gate for "Tested":** at least 10 devices associated with WPA2/WPA3 for 30
 minutes with no drops, plus power draw at idle and under `iperf3` load. See
-[testing/m1.md](testing/m1.md).
+[testing/full.md](testing/full.md) sections 14 and 16.
 
 The guest network needs an adapter whose driver can run two access points
 at once. RasBeacon reads this from the driver (`iw phy` "valid interface

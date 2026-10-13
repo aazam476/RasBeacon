@@ -1,9 +1,8 @@
 # Full hardware test plan (everything, end to end)
 
 **Goal:** check every feature of RasBeacon on real hardware, in one pass,
-in an order that never makes you redo setup. It brings together the
-milestone plans ([m1](m1.md) to [m8](m8.md)) and the later additions:
-the scan fix, the hotspot moving on large networks, devices on the Ethernet
+in an order that never makes you redo setup. It covers every feature,
+including the later additions: the scan fix, the hotspot moving on large networks, devices on the Ethernet
 port, the card being used in full, swap, your own DNS servers,
 DNS-over-HTTPS, signed updates, one image for the Pi 4 and Pi 5, and the
 second image for the Pi Zero 2 W, 3B and 3B+.
@@ -101,9 +100,15 @@ first if you want them; everything else works from the web pages alone.
    *Connected to Wi-Fi "…"* with signal and band; websites load.
 5. Plug Ethernet back in. **Expect:** it switches back to Ethernet. Unplug
    it again for the next sections.
-6. **eduroam (if you can, on campus):** **Set up eduroam**, as in
-   [m3](m3.md) step 2 (TTLS-PAP or PEAP, both CA files, server name
-   `*.ruw.rutgers.edu`). **Expect:** connected within 30 s, websites load.
+6. **eduroam (if you can, on campus):** connect RasBeacon to any network
+   once first, so its clock is set. Then **Set up eduroam**: login method
+   *EAP-TTLS with PAP* (try PEAP if it doesn't connect), username
+   `NetID@rutgers.edu`, anonymous username `anonymous@rutgers.edu`, your
+   password, **both** CA certificate files and the login server name
+   `*.ruw.rutgers.edu` (see the [eduroam guide](../eduroam.md#example-rutgers-university)),
+   **Add to list**, **Save**, and move eduroam to the top if other networks
+   are saved. **Expect:** connected within 30 s, websites load. *SSH* or
+   diagnostics: the `key_mgmt=` line tells WPA2- from WPA3-Enterprise.
    A wrong server name or wrong password: **expect** *The network rejected
    the login* and no connection.
 7. **Hotspot moves on large networks (fixed this round, campus/eduroam):**
@@ -279,9 +284,14 @@ Keep the VPN on with the kill switch.
    the guest network has internet (through the VPN if on), can't open
    `http://10.87.0.1` or `http://10.87.1.1`, and can't see or ping phone A;
    Status shows the guest network running with 1 guest.
-5. **Public IPv6 (if your WireGuard server routes a /64):** see
-   [m7](m7.md) step 3. Otherwise check <https://test-ipv6.com> loads quickly
-   and Status shows whether devices get IPv6.
+5. **Public IPv6 (if your WireGuard server routes a /64 to RasBeacon, and
+   its `.conf` gives RasBeacon an IPv6 address and `::/0`):** VPN →
+   *Server details* → *Public IPv6 network* → the /64 (like
+   `2001:db8:1234:5678::/64`) → **Save**. **Expect:** on a phone,
+   <https://test-ipv6.com> shows an address inside that /64, and Status says
+   *Public addresses through the VPN*. Without such a server, just check
+   <https://test-ipv6.com> loads quickly and Status shows whether devices get
+   IPv6.
 6. **HTTPS:** turn on **Use HTTPS for these settings pages**. Open
    `https://10.87.0.1`: the fingerprint in the browser's warning matches
    the page's *SHA-256 fingerprint*; `http://` redirects to `https://`.
@@ -319,9 +329,12 @@ install updates (on the Pi 3/Zero 2 W image, check instead that System says
    uplink (and VPN) back within about a minute, still logged in.
 2. **Reboot:** System → **Reboot** asks first (**Cancel** does nothing);
    confirming restarts.
-3. **Long run:** leave 3+ devices connected and in use for an hour (or as
-   many as you have: the goal from [m1](m1.md) is 10 for 30 minutes).
-   **Expect:** no drops, the hotspot stays up, devices rejoin.
+3. **Long run:** connect as many devices as you can (the goal for marking
+   an adapter *Tested* is **10 devices for 30 minutes**) and keep them in use
+   for at least 30 minutes. Phones drop idle Wi-Fi to save power; that's
+   not a failure. **Expect:** the hotspot stays up, no "incorrect password",
+   and devices rejoin. Afterwards download the diagnostics and look for
+   `beacon`, `flush`, `rtw88`, `timed out` or hostapd errors.
 4. **Memory (on a 1 GB board, and a Zero 2 W with 512 MB, if you have
    them):** open the zero-leak login (section 10) or run the speed test,
    then *SSH:* `free -m`. **Expect:** it works (slower on the Zero 2 W);
@@ -353,9 +366,30 @@ install updates (on the Pi 3/Zero 2 W image, check instead that System says
 1. **Power:** a USB meter between supply and Pi: watts idle with 5 devices,
    and during a download. With a power bank: does it stay on after 30
    minutes idle?
-2. **Throughput:** `iperf3` between two laptops on the hotspot, and from a
-   hotspot laptop to a home computer, as in [m1](m1.md) step 4 and
-   [m2](m2.md) step 8.
+2. **Throughput:** with `iperf3` (macOS: `brew install iperf3`), run
+   `iperf3 -s` on one computer and, from a laptop on the hotspot about 2 m
+   from the Pi, `iperf3 -c <its address> -t 20`, then the same with `-R`.
+   Note both *receiver* lines. Do it between two laptops on the hotspot
+   (the radio alone), and to a computer on your home network (hotspot plus
+   uplink), with the hotspot on 2.4 GHz and on 5 GHz.
+
+## 17. If something fails: what to send
+
+1. **System → Download diagnostics** (passwords removed, MAC addresses
+   partly hidden).
+2. If the settings pages don't open at all: create an empty file named
+   `debug` on the card's `BOOTCONFIG` (or `BOOT`) drive, boot, wait 3
+   minutes, unplug, and send `rasbeacon-debug.txt` from the same drive
+   (delete it afterwards: it holds device names and MAC addresses).
+3. With SSH on (section 11.1), the output of:
+   ```sh
+   uname -r
+   iw dev
+   iw list | sed -n '/valid interface combinations/,/^$/p'
+   dmesg | grep -i -E 'rtw88|mt76|brcmf|usb .*: new' | tail -n 40
+   journalctl -b -u rbd --no-pager | tail -n 80
+   journalctl -b -u rasbeacon-hostapd.service --no-pager | tail -n 40
+   ```
 
 ---
 
