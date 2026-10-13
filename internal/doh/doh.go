@@ -13,6 +13,8 @@ package doh
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -54,6 +56,8 @@ type Options struct {
 	// Transport replaces the HTTPS transport (tests). Its dialing is not
 	// replaced, so the bootstrap is bypassed.
 	Transport http.RoundTripper
+	// RootCAs replaces the system's certificate authorities (tests).
+	RootCAs *x509.CertPool
 }
 
 // Forwarder answers plain DNS questions by asking DoH servers.
@@ -112,6 +116,9 @@ func New(o Options) (*Forwarder, error) {
 			ResponseHeaderTimeout: f.timeout,
 			IdleConnTimeout:       90 * time.Second,
 			MaxIdleConnsPerHost:   4,
+		}
+		if o.RootCAs != nil {
+			transport.(*http.Transport).TLSClientConfig = &tls.Config{RootCAs: o.RootCAs}
 		}
 	}
 	f.client = &http.Client{Transport: transport}

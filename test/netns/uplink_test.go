@@ -158,10 +158,14 @@ func TestNormalMode_IPv6PrivateNetworkWithoutDefaultRoute(t *testing.T) {
 // prints the result and exits. probeInNamespace uses this to run the probe
 // inside a namespace (a running Go program can't easily switch itself).
 //
-// Two more helper modes work on IPv6 where busybox nc might not:
+// RB_DOH_SERVER=address:port runs a DNS-over-HTTPS server (see serveDoH in
+// dns_test.go). Two more helper modes work on IPv6 where busybox nc might not:
 // RB_GREETER=[address]:port answers every TCP connection with
 // "...-standin", and RB_DIAL=[address]:port connects and prints the answer.
 func TestMain(m *testing.M) {
+	if address := os.Getenv("RB_DOH_SERVER"); address != "" {
+		serveDoH(address, os.Getenv("RB_DOH_CERT"), os.Getenv("RB_DOH_KEY"))
+	}
 	if address := os.Getenv("RB_GREETER"); address != "" {
 		greet(address)
 	}

@@ -263,7 +263,9 @@ For example, when you change the hotspot band:
   Linux module `mac80211_hwsim` provides virtual radios, hostapd plays the
   campus network, and wpa_supplicant uses RasBeacon's generated settings.
 - **`test/netns`** runs the real firewall rules and dnsmasq inside Linux
-  *network namespaces*, with virtual cables instead of Wi-Fi.
+  *network namespaces*, with virtual cables instead of Wi-Fi. This includes
+  devices' lookups going through rbdoh to a local DNS-over-HTTPS server, and
+  a laptop on the Ethernet client port found through the real bridge.
 - **`rbd -dev`** (`internal/devsim`) simulates a whole device for UI work
   (with a stand-in for Cloudflare's speed test service), and `test/e2e`
   drives the UI in a real browser against it.
