@@ -1,7 +1,7 @@
 # METABEGIN
-# X-Env-Layer-Name: rasbeacon-zero2w
+# X-Env-Layer-Name: rasbeacon-single
 # X-Env-Layer-Category: app
-# X-Env-Layer-Desc: What the Pi Zero 2 W image (MBR, one writable system
+# X-Env-Layer-Desc: What the Pi Zero 2 W/3B/3B+ image (MBR, one writable system
 #  partition) needs so RasBeacon finds the same places as on the Pi 4/5
 #  image: /persistent is a folder on the system partition, and /bootfs (where
 #  setup.txt, factory-reset and debug go) shows the boot partition.

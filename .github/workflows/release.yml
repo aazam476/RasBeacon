@@ -1,5 +1,6 @@
 # Builds the SD card images: one for the Pi 4 and Pi 5, one for the Pi Zero
-# 2 W (same programs, different partition layout; see image/README.md).
+# 2 W, 3B and 3B+ (same programs, different partition layout; see
+# image/README.md).
 #
 # - Pushing a tag like v0.1.0 builds both and publishes a GitHub release
 #   with the images, the update file (Pi 4/5) and SHA256SUMS.
@@ -40,7 +41,7 @@ jobs:
       matrix:
         target:
           - { board: rpi64, name: rasbeacon, title: Pi 4 and Pi 5 }
-          - { board: zero2w, name: rasbeacon-zero2w, title: Pi Zero 2 W }
+          - { board: rpi3, name: rasbeacon-pi3-zero2w, title: Pi Zero 2 W and Pi 3 }
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7

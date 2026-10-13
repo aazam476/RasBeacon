@@ -3,10 +3,10 @@
 # get wrong and would only show up on real hardware. Run by build.sh after
 # rpi-image-gen finishes; any failed check stops the build.
 #
-# Usage: image/verify.sh <path to the built root filesystem> rpi64|zero2w
+# Usage: image/verify.sh <path to the built root filesystem> rpi64|rpi3
 set -uo pipefail
 
-root="${1:?usage: image/verify.sh <root filesystem directory> rpi64|zero2w}"
+root="${1:?usage: image/verify.sh <root filesystem directory> rpi64|rpi3}"
 board="${2:-rpi64}"
 failures=0
 
@@ -39,10 +39,16 @@ done
 check "Realtek RTL8812BU firmware (TP-Link Archer T3U)" test -f "$root/usr/lib/firmware/rtw88/rtw8822b_fw.bin"
 check "Realtek RTL8812AU firmware (TP-Link Archer T4U v1/v2)" test -f "$root/usr/lib/firmware/rtw88/rtw8812a_fw.bin"
 check "MediaTek MT7612U firmware" test -f "$root/usr/lib/firmware/mediatek/mt7662u.bin"
-if [ "$board" = zero2w ]; then
-  # The Zero 2 W's radio is a CYW43436 (some later boards use another
-  # 4343x chip); its firmware comes with the Pi's Wi-Fi firmware package.
-  check "Built-in Wi-Fi firmware (Zero 2 W)" sh -c "find '$root'/usr/lib/firmware -name 'brcmfmac4343*' | grep -q ."
+if [ "$board" = rpi3 ]; then
+  # Zero 2 W: CYW43436 (some later boards another 4343x chip); 3B:
+  # CYW43430; 3B+: CYW43455, as on the Pi 4/5.
+  check "Built-in Wi-Fi firmware (Zero 2 W)" sh -c "find '$root'/usr/lib/firmware -name 'brcmfmac43436*' | grep -q ."
+  check "Built-in Wi-Fi firmware (Pi 3B)" sh -c "find '$root'/usr/lib/firmware -name 'brcmfmac43430-sdio*' | grep -q ."
+  check "Built-in Wi-Fi firmware (Pi 3B+)" sh -c "find '$root'/usr/lib/firmware -name 'brcmfmac43455-sdio*' | grep -q ."
+  # The Pi 3B's and 3B+'s Ethernet sits on USB (smsc95xx, lan78xx).
+  for driver in smsc95xx lan78xx; do
+    check "Ethernet driver $driver (Pi 3B/3B+)" sh -c "find '$root'/usr/lib/modules -name '$driver.ko*' | grep -q . || grep -qs '/$driver.ko' '$root'/usr/lib/modules/*/modules.builtin"
+  done
 else
   check "Built-in Wi-Fi firmware (Pi 4/5)" sh -c "ls '$root'/usr/lib/firmware/brcm/brcmfmac43455-sdio*.bin"
 fi
@@ -88,10 +94,12 @@ check "reset button overlay in config.txt" grep -q "dtoverlay=gpio-key,gpio=17" 
 
 # The 64-bit kernel every board starts, and each board's device tree.
 check "the 64-bit kernel (kernel8.img) is on the boot partition" test -s "$root/boot/firmware/kernel8.img"
-if [ "$board" = zero2w ]; then
-  # The Zero 2 W's boot ROM starts bootcode.bin from the boot partition.
-  check "first-stage boot files for the Zero 2 W" sh -c "test -s '$root/boot/firmware/bootcode.bin' && test -s '$root/boot/firmware/start.elf'"
+if [ "$board" = rpi3 ]; then
+  # These boards' boot ROM starts bootcode.bin from the boot partition.
+  check "first-stage boot files (Zero 2 W, 3B, 3B+)" sh -c "test -s '$root/boot/firmware/bootcode.bin' && test -s '$root/boot/firmware/start.elf'"
   check "Zero 2 W device tree" test -s "$root/boot/firmware/bcm2710-rpi-zero-2-w.dtb"
+  check "Pi 3B device tree" test -s "$root/boot/firmware/bcm2710-rpi-3-b.dtb"
+  check "Pi 3B+ device tree" test -s "$root/boot/firmware/bcm2710-rpi-3-b-plus.dtb"
   check "settings folder and /bootfs mount point" sh -c "test -d '$root/persistent' && test -d '$root/bootfs'"
   check "/bootfs shows the boot partition" test -L "$root/etc/systemd/system/local-fs.target.wants/bootfs.mount"
 else

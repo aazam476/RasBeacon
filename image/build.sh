@@ -2,11 +2,11 @@
 # Builds a RasBeacon SD card image with rpi-image-gen.
 #
 # Usage (from the repository root):
-#   image/build.sh rpi64|zero2w [version]
+#   image/build.sh rpi64|rpi3 [version]
 #
 #   rpi64    the image for the Pi 4 and Pi 5 (A/B system, updates)
-#   zero2w   the image for the Pi Zero 2 W (one system copy; new versions
-#            are flashed)
+#   rpi3     the image for the Pi Zero 2 W, 3B and 3B+ (one system copy;
+#            new versions are flashed)
 #
 # Needs: a Debian/Ubuntu machine (arm64, or amd64 with qemu-user-static),
 # sudo, and a checkout of rpi-image-gen in $RPI_IMAGE_GEN (default:
@@ -15,7 +15,7 @@
 #
 # Output, in build/image/:
 #   <name>-<version>.img.xz        the SD card image; <name> is rasbeacon
-#                                   (Pi 4/5) or rasbeacon-zero2w
+#                                   (Pi 4/5) or rasbeacon-pi3-zero2w
 #   <name>-<version>.rbupdate      signed update file (Pi 4/5 only, and only
 #                                   when the RASBEACON_UPDATE_SIGNING_KEY
 #                                   environment variable is set)
@@ -27,12 +27,12 @@ set -euo pipefail
 
 # The board name, written into the image (update files must carry the same
 # one, see internal/update), and the image's name and config file.
-board="${1:?usage: image/build.sh rpi64|zero2w [version]}"
+board="${1:?usage: image/build.sh rpi64|rpi3 [version]}"
 version="${2:-dev}"
 case "$board" in
   rpi64) name=rasbeacon ;;
-  zero2w) name=rasbeacon-zero2w ;;
-  *) echo "usage: image/build.sh rpi64|zero2w [version]" >&2; exit 2 ;;
+  rpi3) name=rasbeacon-pi3-zero2w ;;
+  *) echo "usage: image/build.sh rpi64|rpi3 [version]" >&2; exit 2 ;;
 esac
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 rig="${RPI_IMAGE_GEN:-$repo_root/../rpi-image-gen}"
@@ -83,7 +83,7 @@ xz -T0 -6 -c "$built" > "$final"
 #    boot and system partitions). Without the signing key (for example in
 #    a fork), no update file is made; the image itself is unaffected.
 bundle="$(sudo find "$repo_root/build/rig-$board/image-$name" -maxdepth 1 -name '*.update.tar.zst' | head -n 1)"
-# The Zero 2 W image has one system copy and no update bundle.
+# The Pi 3/Zero 2 W image has one system copy and no update bundle.
 if [ "$board" = rpi64 ] && [ -n "${RASBEACON_UPDATE_SIGNING_KEY:-}" ] && [ -n "$bundle" ]; then
   sudo cat "$bundle" > "$out/bundle.tmp"
   go run "$repo_root/cmd/rbsign" pack -board "$board" -version "$version" \

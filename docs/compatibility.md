@@ -1,5 +1,14 @@
 # Hardware compatibility
 
+**Support tiers:**
+- **Recommended (tier 1): Pi 4 and Pi 5.** Everything works, including
+  updates installed from the System page. Tested before each release; a
+  problem here blocks a release.
+- **Best effort (tier 2): Pi Zero 2 W, 3B and 3B+.** The same features,
+  except that new versions are flashed (one copy of the system), plus each
+  board's hardware limits below. Tested when someone can; a problem here is
+  fixed in a following release rather than blocking one.
+
 **Status meanings:**
 - **Tested:** someone ran the listed checks on real hardware and recorded
   the numbers.
@@ -18,8 +27,10 @@ Sources for figures not measured by us are listed in
 |---|---|---|---|
 | Raspberry Pi 4 Model B (2 GB+) | `rasbeacon` | **Boots, setup and hotspot work** (owner's Pi 4, milestone 1 image, built-in radio as hotspot; USB adapter, uplink, VPN and update checks pending). **Needs a recent bootloader:** an older one ignores the A/B selection and blinks 4 short flashes ("start*.elf not found"), reported by the owner on first try. Fix: Imager → Misc utility images → Bootloader → SD Card Boot. | Built-in Wi-Fi: CYW43455, 2.4/5 GHz (uplink). Gigabit Ethernet. Published idle figures range from about 1.4 W to 2.9 W depending on setup: measure yours. |
 | Raspberry Pi 5 | `rasbeacon` | Untested (reference) | Runs the same 64-bit kernel as the Pi 4 (`kernel8.img`, 4 KB pages; set in `config.txt`), not its own 16 KB-page one. On power banks (no 5 V/5 A USB-PD), the Pi 5 limits all USB ports to 600 mA combined. One MT7612U adapter (about 380 mA under load) fits. |
-| Raspberry Pi Zero 2 W | `rasbeacon-zero2w` | Untested | Its own image: the boot ROM only reads an MBR partition table and can't follow the Pi 4/5 A/B selection, so this image has one writable system partition (same programs and kernel). **Differences:** new versions are flashed (no in-place updates); no Ethernet port (the Ethernet settings don't show); built-in Wi-Fi is 2.4 GHz only (about 33 Mbps measured); 512 MB of memory, so RasBeacon's browser (hotel login pages, speed test) is slower and leans on the swap file. The USB adapter needs a micro-USB OTG cable; the card's drive is called `BOOT`. |
-| Raspberry Pi 3 / 3A+ / 3B+ | — | Not built | The Zero 2 W image would likely boot (same chip family and boot ROM), but it isn't built or tested for them. |
+| Raspberry Pi Zero 2 W | `rasbeacon-pi3-zero2w` | Untested (best effort) | Shares the second image with the Pi 3B and 3B+: the boot ROM only reads an MBR partition table and can't follow the Pi 4/5 A/B selection, so this image has one writable system partition (same programs and kernel). New versions are flashed (no in-place updates). No Ethernet port (the Ethernet settings don't show). Built-in Wi-Fi is 2.4 GHz only (about 33 Mbps measured). 512 MB of memory, so RasBeacon's browser (hotel login pages, speed test) is slower and leans on the swap file. The USB adapter needs a micro-USB OTG cable; the card's drive is called `BOOT`. |
+| Raspberry Pi 3B | `rasbeacon-pi3-zero2w` | Untested (best effort) | Same image as the Zero 2 W. 1 GB of memory. Ethernet is 100 Mbit/s (smsc95xx, on USB). Built-in Wi-Fi is 2.4 GHz only (CYW43430). Ethernet and the USB Wi-Fi adapter share one USB 2.0 connection, so expect about 100 Mbit/s with both busy. |
+| Raspberry Pi 3B+ | `rasbeacon-pi3-zero2w` | Untested (best effort) | Same image as the Zero 2 W. 1 GB of memory. Gigabit Ethernet on USB 2.0 (lan78xx, about 300 Mbit/s in practice). Built-in Wi-Fi is 2.4 and 5 GHz (CYW43455). Ethernet and the USB adapter share the USB connection (about 200 to 300 Mbit/s with both busy). Needs a 5 V / 2.5 A supply. |
+| Raspberry Pi 3A+ | — | Not supported | Would likely start the same image, but 512 MB and no Ethernet with one USB port; not built for or tested. |
 | Raspberry Pi Zero W / Zero (original) | — | Not supported | 32-bit, single-core ARMv6; RasBeacon images are 64-bit. |
 
 ## USB Wi-Fi adapters (hotspot radio)

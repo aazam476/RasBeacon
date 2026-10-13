@@ -1,19 +1,19 @@
 # Making a release
 
 Releases are built by GitHub Actions (`.github/workflows/release.yml`).
-Pushing a tag like `v1.2.0` builds the image and creates a **draft**
+Pushing a tag like `v1.2.0` builds the images and creates a **draft**
 release; check it, then publish it.
 
 There is one image for the Pi 4 and Pi 5 (board name `rpi64`), and one for
-the Pi Zero 2 W (`zero2w`: same programs, MBR layout with one system copy,
-so it has no update file). Each release contains:
+the Pi Zero 2 W, 3B and 3B+ (`rpi3`: same programs, MBR layout with one
+system copy, so it has no update file). Each release contains:
 
 | File | What it is |
 |---|---|
 | `rasbeacon-<version>.img.xz` | The SD card image for the Pi 4 and Pi 5 (flash it with Raspberry Pi Imager) |
-| `rasbeacon-zero2w-<version>.img.xz` | The SD card image for the Pi Zero 2 W |
+| `rasbeacon-pi3-zero2w-<version>.img.xz` | The SD card image for the Pi Zero 2 W, 3B and 3B+ |
 | `rasbeacon-<version>.rbupdate` | The signed update file (install it on the System page) |
-| `rasbeacon-<version>.packages.txt`, `rasbeacon-zero2w-<version>.packages.txt` | Every Debian package in the image, with its source package and version (see [source-code.md](source-code.md)) |
+| `rasbeacon-<version>.packages.txt`, `rasbeacon-pi3-zero2w-<version>.packages.txt` | Every Debian package in the image, with its source package and version (see [source-code.md](source-code.md)) |
 | `SHA256SUMS` | Checksums of all of the above |
 
 ## One-time setup: the update signing key

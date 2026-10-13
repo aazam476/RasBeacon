@@ -78,7 +78,7 @@ Images are normally built by GitHub Actions
 ```sh
 git clone https://github.com/raspberrypi/rpi-image-gen.git ../rpi-image-gen
 sudo ../rpi-image-gen/install_deps.sh
-image/build.sh rpi64      # the Pi 4 and Pi 5 image (or: zero2w)
+image/build.sh rpi64      # the Pi 4 and Pi 5 image (or rpi3: Zero 2 W, 3B, 3B+)
 ```
 
 ## Code style

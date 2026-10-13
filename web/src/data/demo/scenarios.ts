@@ -328,7 +328,7 @@ export const SCENARIOS: DemoScenario[] = [
       const { status } = d.router;
       status.uplink.ethernet = { ...status.uplink.ethernet, present: false };
       d.router.uplinkSettings = { ...d.router.uplinkSettings, ethernetPresent: false };
-      status.update = { ...status.update, board: 'zero2w', canInstall: false, singleSystem: true };
+      status.update = { ...status.update, board: 'rpi3', canInstall: false, singleSystem: true };
       status.device = { ...status.device, modelSpec: 'Raspberry Pi Zero 2 W Rev 1.0' };
       status.storage = {
         ...status.storage,
