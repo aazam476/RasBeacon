@@ -1,6 +1,8 @@
 #!/bin/bash
 # Grows the data partition (/persistent) to the end of the SD card, then its
-# file system, so the whole card is used. The image is small (to download
+# file system, so the whole card is used. On the Pi 4/5 image /persistent is
+# its own partition (GPT); on the Pi Zero 2 W image it is a folder on the
+# root partition (MBR), which grows instead. The image is small (to download
 # and flash quickly), so on a fresh card most of the space comes after it.
 #
 # It runs at every start but only changes something when there are more than
@@ -9,7 +11,8 @@
 # moves its end: the data on it stays where it is. ext4 grows while mounted.
 set -euo pipefail
 
-source=$(findmnt -n -o SOURCE /persistent)
+# The partition holding /persistent (its own mount, or the root file system).
+source=$(findmnt -n -o SOURCE --target /persistent)
 part=$(basename "$(readlink -f "$source")")
 disk=$(lsblk -n -d -o PKNAME "/dev/$part")
 number=$(cat "/sys/class/block/$part/partition")
@@ -28,19 +31,27 @@ for other in /sys/block/"$disk"/"$disk"*; do
   fi
 done
 
-# 512-byte sectors. GPT keeps a backup copy in the last 33 sectors.
-free=$((disk_size - end - 33))
+# 512-byte sectors. GPT keeps a backup copy in the last 33 sectors; MBR
+# ("dos") keeps nothing at the end.
+table=$(lsblk -n -d -o PTTYPE "/dev/$disk")
+if [ "$table" = gpt ]; then
+  free=$((disk_size - end - 33))
+else
+  free=$((disk_size - end))
+fi
 if [ "$free" -le 32768 ]; then
   exit 0
 fi
 
 echo "Growing /dev/$part to the end of /dev/$disk ($((free / 2048)) MB more)."
-# The backup partition table is still where the image ended; move it to
-# the end of the card first.
-sfdisk --no-reread --no-tell-kernel --relocate gpt-bak-std "/dev/$disk"
+# A GPT's backup table is still where the image ended; move it to the end
+# of the card first.
+if [ "$table" = gpt ]; then
+  sfdisk --no-reread --no-tell-kernel --relocate gpt-bak-std "/dev/$disk"
+fi
 # ", +" keeps the start and makes the partition as large as possible. The
 # card is in use, so the kernel is told about the new size by partx.
 echo ", +" | sfdisk --no-reread --no-tell-kernel -N "$number" "/dev/$disk"
 partx --update --nr "$number" "/dev/$disk"
 resize2fs "/dev/$part"
-echo "Done: /persistent now fills the card."
+echo "Done: /dev/$part now fills the card."

@@ -11,6 +11,7 @@ package agent
 
 import (
 	"fmt"
+	"io/fs"
 	"math"
 	"os"
 	"path/filepath"
@@ -183,7 +184,14 @@ func (a *Agent) readFile(path string) string {
 // partitionBytes returns the size of the partition behind an A/B slot link
 // (e.g. /dev/disk/by-slot/active/system), and its block device name.
 func (a *Agent) partitionBytes(slot, part string) (uint64, string) {
-	target, err := filepath.EvalSymlinks(a.paths.SlotDevice(slot, part))
+	link := a.paths.SlotDevice(slot, part)
+	if a.singleSystem() {
+		if slot != "active" {
+			return 0, ""
+		}
+		link = a.paths.SingleSystemDevice(part)
+	}
+	target, err := filepath.EvalSymlinks(link)
 	if err != nil {
 		return 0, ""
 	}
@@ -215,6 +223,9 @@ func (a *Agent) storageMedium() string {
 // storageInfo describes RasBeacon's space: the boot and system partitions
 // (both copies) and the data partition.
 func (a *Agent) storageInfo() api.StorageInfo {
+	if a.singleSystem() {
+		return a.singleSystemStorage()
+	}
 	const gb = 1e9
 	var firmware uint64
 	for _, slot := range []string{"active", "other"} {
@@ -238,6 +249,43 @@ func (a *Agent) storageInfo() api.StorageInfo {
 	}
 	if fsType := a.mountType(a.paths.DataDir()); fsType != "" {
 		s.Filesystem += ", " + fsType + " settings"
+	}
+	return s
+}
+
+// singleSystemStorage is storageInfo for the Pi Zero 2 W image: a boot
+// partition and one writable system partition that also holds /persistent.
+// "Settings and logs" is what /persistent holds (with the swap file, as on
+// the Pi 4/5 image); the rest of what the partition uses is RasBeacon.
+func (a *Agent) singleSystemStorage() api.StorageInfo {
+	const gb = 1e9
+	boot, _ := a.partitionBytes("active", "boot")
+	s := api.StorageInfo{
+		FirmwareGB: float64(boot) / gb,
+		Medium:     a.storageMedium(),
+		Filesystem: "Writable system",
+		Health:     "unknown",
+	}
+	var persistent uint64
+	_ = filepath.WalkDir(a.paths.PersistentDir(), func(_ string, d fs.DirEntry, err error) error {
+		if err == nil && d.Type().IsRegular() {
+			if info, err := d.Info(); err == nil {
+				persistent += uint64(info.Size())
+			}
+		}
+		return nil
+	})
+	var st syscall.Statfs_t
+	if err := syscall.Statfs(a.paths.DataDir(), &st); err == nil {
+		total := st.Blocks * uint64(st.Bsize)
+		used := (st.Blocks - st.Bfree) * uint64(st.Bsize)
+		persistent = min(persistent, used)
+		s.UserGB = float64(persistent) / gb
+		s.FirmwareGB = float64(boot+used-persistent) / gb
+		s.TotalGB = float64(boot+total) / gb
+	}
+	if fsType := a.mountType(a.paths.DataDir()); fsType != "" {
+		s.Filesystem += " (" + fsType + ")"
 	}
 	return s
 }

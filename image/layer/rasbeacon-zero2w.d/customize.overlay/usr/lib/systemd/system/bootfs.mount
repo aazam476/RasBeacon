@@ -1,0 +1,15 @@
+# On the Pi Zero 2 W image, /bootfs shows the boot partition (mounted at
+# /boot/firmware), the drive a computer sees: setup.txt, factory-reset and
+# the debug log go there, as on the Pi 4/5 image's BOOTCONFIG partition.
+[Unit]
+Description=RasBeacon: the boot partition at /bootfs
+RequiresMountsFor=/boot/firmware
+
+[Mount]
+What=/boot/firmware
+Where=/bootfs
+Type=none
+Options=bind
+
+[Install]
+WantedBy=local-fs.target

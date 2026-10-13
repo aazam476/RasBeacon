@@ -71,6 +71,14 @@ func (a *Agent) board() string {
 	return strings.TrimSpace(string(data))
 }
 
+// zero2wBoard is the Pi Zero 2 W image's board (image/build.sh). That image
+// has one copy of the system, so it can't install update files.
+const zero2wBoard = "zero2w"
+
+// singleSystem reports whether this image has one copy of the system (the
+// Pi Zero 2 W image): new versions are flashed instead of installed.
+func (a *Agent) singleSystem() bool { return a.board() == zero2wBoard }
+
 // trustedUpdateKeys reads the public keys built into the image.
 func (a *Agent) trustedUpdateKeys() []ed25519.PublicKey {
 	var keys []ed25519.PublicKey
@@ -93,7 +101,8 @@ func (a *Agent) trustedUpdateKeys() []ed25519.PublicKey {
 func (a *Agent) updateStatus() api.UpdateStatus {
 	s := api.UpdateStatus{
 		Board:          a.board(),
-		CanInstall:     len(a.trustedUpdateKeys()) > 0,
+		CanInstall:     !a.singleSystem() && len(a.trustedUpdateKeys()) > 0,
+		SingleSystem:   a.singleSystem(),
 		Installing:     a.update.installing,
 		Message:        a.update.message,
 		CanCheckOnline: version.Repository != "",
@@ -152,6 +161,9 @@ func (a *Agent) writeUpdate(r io.Reader) (string, error) {
 	board := a.board()
 	if board == "" {
 		return "", errors.New("this image doesn't know its board, so it can't check updates")
+	}
+	if a.singleSystem() {
+		return "", errors.New("this image has one copy of the system, so new versions are flashed instead")
 	}
 	pkg, err := update.Open(r, a.trustedUpdateKeys(), board)
 	if err != nil {

@@ -23,6 +23,12 @@ skip them freely. The report template at the end has one line per section.
 | Section 13 | Two signed builds (blocked until the update signing key is set up, see [releasing.md](../releasing.md)). |
 | Optional | A USB power meter, `iperf3` on two computers, a push button and two jumper wires. |
 
+**Pi Zero 2 W:** flash `rasbeacon-zero2w-…` instead, and skip what it
+doesn't have: the Ethernet steps (4.1, 4.5, 7), the updates section (13;
+the System page should say *New versions are flashed*), and 5 GHz on the
+built-in Wi-Fi. In section 3, the Storage total is the card minus about
+0.3 GB. Note how slow the login page and speed test are (512 MB of memory).
+
 **SSH** helps with a few checks (marked *SSH*). Turn it on in section 11.1
 first if you want them; everything else works from the web pages alone.
 

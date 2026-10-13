@@ -19,6 +19,7 @@ import {
 
 const BOARDS: Record<string, string> = {
   rpi64: 'Raspberry Pi 4 and 5',
+  zero2w: 'Raspberry Pi Zero 2 W',
   pi4: 'Raspberry Pi 4',
   pi5: 'Raspberry Pi 5',
 };
@@ -72,10 +73,19 @@ export function SoftwareSection({ status }: { status: Status }) {
         {update.canInstall && <InstallUpdate busy={update.installing} />}
       </Section>
 
-      {!update.canInstall && (
-        <Notice tone="warning" title="This image can't install updates">
-          <p>It has no update signing key, so it can&apos;t install update files. Flash new versions instead.</p>
+      {update.singleSystem ? (
+        <Notice title="New versions are flashed">
+          <p>
+            The Pi Zero 2 W image has one copy of the system, so it can&apos;t install update files. To move to a new
+            version, flash its new image and set RasBeacon up again.
+          </p>
         </Notice>
+      ) : (
+        !update.canInstall && (
+          <Notice tone="warning" title="This image can't install updates">
+            <p>It has no update signing key, so it can&apos;t install update files. Flash new versions instead.</p>
+          </Notice>
+        )
       )}
     </>
   );

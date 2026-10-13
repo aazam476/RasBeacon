@@ -1,0 +1,17 @@
+# METABEGIN
+# X-Env-Layer-Name: rasbeacon-zero2w
+# X-Env-Layer-Category: app
+# X-Env-Layer-Desc: What the Pi Zero 2 W image (MBR, one writable system
+#  partition) needs so RasBeacon finds the same places as on the Pi 4/5
+#  image: /persistent is a folder on the system partition, and /bootfs (where
+#  setup.txt, factory-reset and debug go) shows the boot partition.
+# X-Env-Layer-Version: 1.0.0
+# X-Env-Layer-Requires: rasbeacon
+# METAEND
+---
+mmdebstrap:
+  customize-hooks:
+    # Settings live here, as on the Pi 4/5 image's /persistent partition.
+    - mkdir -p $1/persistent $1/bootfs
+    # /bootfs is the boot partition (bootfs.mount, a bind mount).
+    - $BDEBSTRAP_HOOKS/enable-units "$1" bootfs.mount

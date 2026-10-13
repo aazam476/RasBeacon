@@ -176,7 +176,8 @@ func (p Paths) IPv6Forwarding() string {
 // signed with. They are part of the image.
 func (p Paths) UpdateKeysDir() string { return p.join("usr", "lib", "rasbeacon", "update-keys") }
 
-// BoardFile names the image's board ("rpi64"), written at build time.
+// BoardFile names the image's board ("rpi64" or "zero2w"), written at build
+// time.
 func (p Paths) BoardFile() string { return p.join("usr", "lib", "rasbeacon", "board") }
 
 // SlotDevice is a partition of the running ("active") or the other A/B
@@ -184,6 +185,17 @@ func (p Paths) BoardFile() string { return p.join("usr", "lib", "rasbeacon", "bo
 func (p Paths) SlotDevice(slot, part string) string {
 	return p.join("dev", "disk", "by-slot", slot, part)
 }
+
+// SingleSystemDevice is the boot or system partition of an image with one
+// copy of the system (the Pi Zero 2 W image), e.g.
+// SingleSystemDevice("system").
+func (p Paths) SingleSystemDevice(part string) string {
+	return p.join("dev", "disk", "by-slot", part)
+}
+
+// PersistentDir holds everything RasBeacon writes: its own partition on the
+// Pi 4/5 image, a folder on the system partition on the Zero 2 W image.
+func (p Paths) PersistentDir() string { return p.join("persistent") }
 
 // TrybootFlag is non-zero when the bootloader started the system "on
 // trial" (tryboot), after an update.

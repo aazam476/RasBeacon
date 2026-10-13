@@ -30,7 +30,7 @@ hotel login pages.
 
 | Part | Notes |
 |---|---|
-| Raspberry Pi 4 or 5 | A Pi 4 may need a one-time bootloader update first (see [Troubleshooting](#troubleshooting): 4 short flashes). The Pi Zero 2 W and older boards don't work with the current image. See [docs/compatibility.md](docs/compatibility.md). |
+| Raspberry Pi 4 or 5 (or a Pi Zero 2 W) | A Pi 4 may need a one-time bootloader update first (see [Troubleshooting](#troubleshooting): 4 short flashes). The Pi Zero 2 W has its own image, with differences: no Ethernet port, 2.4 GHz built-in Wi-Fi, and new versions are flashed instead of installed as updates. Older boards don't work. See [docs/compatibility.md](docs/compatibility.md). |
 | A USB Wi-Fi adapter that can run a hotspot | Recommended: one with a **MediaTek MT7612U** chip (e.g. Alfa AWUS036ACM). A TP-Link Archer T3U also works in principle. The Pi's built-in Wi-Fi alone holds only about 8 devices. |
 | microSD card, 8 GB or larger | |
 | A 5 V / 3 A USB-C power supply | Or a USB power bank, if you want to use it away from an outlet |
@@ -38,7 +38,9 @@ hotel login pages.
 ## Set up (about 15 minutes)
 
 1. **Download** `rasbeacon-<version>.img.xz` from the
-   [Releases](../../releases) page: one image for the Pi 4, 400, 5 and 500. Also download `SHA256SUMS` if you want to
+   [Releases](../../releases) page: one image for the Pi 4, 400, 5 and 500.
+   For a Pi Zero 2 W, download `rasbeacon-zero2w-<version>.img.xz` instead
+   (its card drive is called `BOOT` rather than `BOOTCONFIG`). Also download `SHA256SUMS` if you want to
    check the file (see [Checking your download](#checking-your-download)).
 2. **Flash** it with [Raspberry Pi Imager](https://www.raspberrypi.com/software/):
    1. Choose your device.

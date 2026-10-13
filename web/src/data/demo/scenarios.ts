@@ -319,6 +319,28 @@ export const SCENARIOS: DemoScenario[] = [
     },
   },
 
+  {
+    id: 'zero2w',
+    group: 'Status',
+    title: 'Pi Zero 2 W: no Ethernet port, new versions are flashed',
+    route: '/system',
+    apply: (d) => {
+      const { status } = d.router;
+      status.uplink.ethernet = { ...status.uplink.ethernet, present: false };
+      d.router.uplinkSettings = { ...d.router.uplinkSettings, ethernetPresent: false };
+      status.update = { ...status.update, board: 'zero2w', canInstall: false, singleSystem: true };
+      status.device = { ...status.device, modelSpec: 'Raspberry Pi Zero 2 W Rev 1.0' };
+      status.storage = {
+        ...status.storage,
+        totalGb: 31.2,
+        firmwareGb: 1.6,
+        userGb: 2.1,
+        medium: 'microSD card',
+        filesystem: 'Writable system (ext4)',
+      };
+    },
+  },
+
   // Errors
   {
     id: 'actions-fail',

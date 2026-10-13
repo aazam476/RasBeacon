@@ -215,3 +215,51 @@ func TestFetchLatestRelease(t *testing.T) {
 		t.Error("a missing repository should be an error")
 	}
 }
+
+func TestUpdate_TheZero2WImageIsFlashedInstead(t *testing.T) {
+	e, key := newUpdateEnv(t)
+	mustWrite(t, e.paths.BoardFile(), "zero2w\n")
+	e.agent.mu.Lock()
+	s := e.agent.updateStatus()
+	e.agent.mu.Unlock()
+	if s.CanInstall || !s.SingleSystem || s.Board != "zero2w" {
+		t.Errorf("status = %+v: the Zero 2 W image has one system copy, so it can't install updates", s)
+	}
+	err := e.agent.InstallUpdate(bytes.NewReader(updateFile(t, key, "zero2w", testBundle("B", "S"))))
+	var ve *config.ValidationError
+	if !errors.As(err, &ve) || !strings.Contains(ve.Message, "flashed") {
+		t.Errorf("got %v", err)
+	}
+	if e.readFile(e.paths.SlotDevice("other", "system")) != strings.Repeat("o", 64) || e.runner.ran("tryboot") {
+		t.Error("nothing may be written or restarted")
+	}
+}
+
+func TestStorage_TheZero2WImageHasOneSystemPartition(t *testing.T) {
+	e, _ := newUpdateEnv(t)
+	mustWrite(t, e.paths.BoardFile(), "zero2w\n")
+	// /dev/disk/by-slot/{boot,system} point at the card's partitions; the
+	// boot partition is 256 MB.
+	for part, dev := range map[string]string{"boot": "mmcblk0p1", "system": "mmcblk0p2"} {
+		target := filepath.Join(e.paths.Root, "dev", dev)
+		mustWrite(t, target, "")
+		if err := os.MkdirAll(filepath.Dir(e.paths.SingleSystemDevice(part)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(target, e.paths.SingleSystemDevice(part)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mustWrite(t, filepath.Join(e.paths.SysClassBlock(), "mmcblk0p1", "size"), "524288\n")
+	mustWrite(t, filepath.Join(e.paths.PersistentDir(), "rasbeacon", "settings"), strings.Repeat("x", 4096))
+
+	e.agent.mu.Lock()
+	s := e.agent.storageInfo()
+	e.agent.mu.Unlock()
+	if s.Medium != "microSD card" || !strings.HasPrefix(s.Filesystem, "Writable system") {
+		t.Errorf("storage = %+v", s)
+	}
+	if s.FirmwareGB < 0.268 || s.UserGB <= 0 || s.TotalGB < s.FirmwareGB+s.UserGB {
+		t.Errorf("storage = %+v: RasBeacon is the boot partition and the system files, settings what /persistent holds", s)
+	}
+}

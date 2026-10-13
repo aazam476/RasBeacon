@@ -170,6 +170,8 @@ export interface UpdateStatus {
   board: string;
   /** False when the image has no update signing key. */
   canInstall: boolean;
+  /** The Pi Zero 2 W image: one copy of the system, so new versions are flashed, not installed. */
+  singleSystem?: boolean;
   installing: boolean;
   /** The last update's result, e.g. "Updated to v1.2.0." */
   message?: string;
