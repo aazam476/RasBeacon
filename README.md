@@ -15,7 +15,7 @@ hotel login pages.
 - **Licensed under Apache-2.0.**
 
 > **Status: all eight milestones are built and tested in CI; hardware
-> testing is in progress** (see [docs/testing/](docs/testing/)). RasBeacon
+> testing is in progress** (see the [full test plan](docs/testing/full.md)). RasBeacon
 > runs your hotspot (plus an optional guest network), connects it to the
 > internet through Ethernet or Wi-Fi (open, password, or WPA-Enterprise
 > such as eduroam, [guide](docs/eduroam.md)), can send everything through
