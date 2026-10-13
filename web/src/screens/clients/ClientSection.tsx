@@ -51,9 +51,12 @@ export function ClientSection({ client }: { client: NetworkClient }) {
           Flush lease
         </ButtonRow>
       ) : (
-        <ButtonRow key="disconnect" action={() => disconnectClient(client.mac)} busyLabel="Disconnecting…">
-          Disconnect
-        </ButtonRow>
+        // A device on the cable can't be sent off like a Wi-Fi device.
+        !client.wired && (
+          <ButtonRow key="disconnect" action={() => disconnectClient(client.mac)} busyLabel="Disconnecting…">
+            Disconnect
+          </ButtonRow>
+        )
       )}
     </section>
   );

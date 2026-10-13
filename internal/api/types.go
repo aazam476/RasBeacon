@@ -622,3 +622,19 @@ type LoginRequest struct {
 	Password     string `json:"password"`
 	StayLoggedIn bool   `json:"stayLoggedIn"`
 }
+
+// DNSSettings is the Internet page's DNS servers (GET/PUT /settings/dns):
+// used while devices' traffic isn't going through the VPN. Empty uses the
+// current network's.
+type DNSSettings struct {
+	Servers []string `json:"servers"`
+}
+
+// SwapSettings is the System page's swap file (GET/PUT /settings/swap).
+type SwapSettings struct {
+	// SizeGB is the size in whole gigabytes; 0 is off.
+	SizeGB int `json:"sizeGb"`
+	// MaxGB is the largest size that fits: the free space on the SD card,
+	// counting the swap file itself, minus 1 GB kept free (read-only).
+	MaxGB int `json:"maxGb"`
+}

@@ -137,6 +137,8 @@ func newTestEnv(t *testing.T) *testEnv {
 	a.afterFunc = timers.afterFunc
 	a.usbRadioWait = 0
 	a.sleep = func(time.Duration) {} // don't really wait in tests
+	// A card with 10 GB free, whatever this computer's disk holds.
+	a.diskFree = func(string) (int64, error) { return 10 << 30, nil }
 	e := &testEnv{t: t, paths: p, runner: runner, timers: timers, agent: a}
 	a.dhcpProbe = e.fakeDHCPProbe
 	return e

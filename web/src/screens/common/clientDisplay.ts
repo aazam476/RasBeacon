@@ -1,7 +1,7 @@
 import type { Client, Status } from '@/data/types';
 import { formatBand, formatClientRate, formatDbm, formatDuration } from '@/lib/format';
 
-/** A device on one of RasBeacon's two Wi-Fi networks. */
+/** A device on one of RasBeacon's networks: the hotspot (Wi-Fi or the Ethernet cable) or the guests'. */
 export interface NetworkClient extends Client {
   network: 'hotspot' | 'guest';
 }
@@ -37,7 +37,9 @@ export interface ClientDetail {
  */
 export function clientDetails(client: Client): ClientDetail[] {
   const address = { label: 'IP address', value: client.ip || 'waiting for address' };
-  const radio = { label: 'Radio', value: `${formatBand(client.band)}, ${formatDbm(client.signalDbm)}` };
+  const radio = client.wired
+    ? { label: 'Connection', value: 'Ethernet cable' }
+    : { label: 'Radio', value: `${formatBand(client.band)}, ${formatDbm(client.signalDbm)}` };
   const mac = { label: 'MAC address', value: client.mac };
 
   if (!client.internetAccess) {
@@ -55,7 +57,8 @@ export function clientDetails(client: Client): ClientDetail[] {
 
   return [
     address,
-    { label: 'Traffic', value: formatClientRate(client) },
+    // Traffic is measured per device on the Wi-Fi only.
+    { label: 'Traffic', value: client.wired ? 'Not measured' : formatClientRate(client) },
     radio,
     { label: 'Connected for', value: formatDuration(client.connectedSeconds) },
     mac,

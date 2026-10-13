@@ -39,7 +39,7 @@ export function Disclosure({
       <summary
         className={cn(
           'row-pressable flex min-h-11 list-none items-center gap-3 px-4 py-2.5 lg:min-h-10 lg:gap-2.5 lg:px-3.5 lg:py-2',
-          'focus-visible:-outline-offset-2 [&::-webkit-details-marker]:hidden',
+          'focus-visible:rounded-group focus-visible:-outline-offset-2 [&::-webkit-details-marker]:hidden',
         )}
       >
         {leading &&

@@ -6,6 +6,7 @@ import { PortalNotice } from '../common/PortalNotice';
 import { AddNetworkSection } from './AddNetworkSection';
 import { AddNetworkSheet, type AddNetworkStart } from './AddNetworkSheet';
 import { ConnectionSection } from './ConnectionSection';
+import { DnsSection } from './DnsSection';
 import { EthernetSection } from './EthernetSection';
 import { SavedNetworksSection } from './SavedNetworksSection';
 import { SpeedtestSection } from './SpeedtestSection';
@@ -59,6 +60,7 @@ function NetworkSettings({ settings, status }: { settings: UplinkSettings; statu
           diagnostics={status?.ethernetDiagnostics}
         />
       )}
+      <DnsSection />
       {adding && (
         <AddNetworkSheet start={adding} list={draft.networks} onAdd={draft.add} onClose={() => setAdding(null)} />
       )}

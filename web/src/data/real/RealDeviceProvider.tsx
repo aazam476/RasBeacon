@@ -12,6 +12,7 @@ import {
 } from '../device';
 import { FieldErrors } from '../errors';
 import type {
+  DNSSettings,
   GuestSettings,
   HotspotSettings,
   HTTPSSettings,
@@ -19,6 +20,7 @@ import type {
   PortalStatus,
   SetupState,
   SSHSettings,
+  SwapSettings,
   Status,
   UplinkSettings,
   VPNSettings,
@@ -34,6 +36,7 @@ import {
   pageSizeFor,
   sameNames,
   screenError,
+  splitList,
   toSavedNetwork,
   vpnDetailsRequest,
 } from './logic';
@@ -46,6 +49,8 @@ interface DataTypes {
   uplinkSettings: UplinkSettings;
   vpnSettings: VPNSettings;
   sshSettings: SSHSettings;
+  dnsSettings: DNSSettings;
+  swapSettings: SwapSettings;
   httpsSettings: HTTPSSettings;
   portal: PortalStatus;
 }
@@ -59,6 +64,8 @@ const LOADERS: { [K in DataKey]: () => Promise<DataTypes[K]> } = {
   uplinkSettings: api.getUplinkSettings,
   vpnSettings: api.getVPNSettings,
   sshSettings: api.getSSHSettings,
+  dnsSettings: api.getDNSSettings,
+  swapSettings: api.getSwapSettings,
   httpsSettings: api.getHTTPSSettings,
   portal: api.getPortalStatus,
 };
@@ -71,6 +78,8 @@ const NO_DATA: AllData = {
   uplinkSettings: NOTHING,
   vpnSettings: NOTHING,
   sshSettings: NOTHING,
+  dnsSettings: NOTHING,
+  swapSettings: NOTHING,
   httpsSettings: NOTHING,
   portal: NOTHING,
 };
@@ -82,20 +91,22 @@ const SETTINGS: DataKey[] = [
   'uplinkSettings',
   'vpnSettings',
   'sshSettings',
+  'dnsSettings',
+  'swapSettings',
   'httpsSettings',
 ];
 
 /** What each page loads again when it opens. */
 const PAGE_DATA: Record<string, DataKey[]> = {
   '/': ['status'],
-  '/internet': ['uplinkSettings', 'status'],
+  '/internet': ['uplinkSettings', 'dnsSettings', 'status'],
   '/vpn': ['vpnSettings', 'status'],
   '/hotspot': ['hotspotSettings'],
   '/guests': ['guestSettings'],
   '/clients': ['status'],
   '/ssh': ['sshSettings'],
   '/https': ['httpsSettings'],
-  '/system': ['status'],
+  '/system': ['status', 'swapSettings'],
   '/more': ['sshSettings', 'httpsSettings'],
 };
 
@@ -436,6 +447,10 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
         await attempt(() => api.uplinkAction('ethernet/scan'));
         await refreshStatus();
       },
+      saveDnsSettings: async (servers) => {
+        const saved = await attempt(() => api.putDNSSettings({ servers: splitList(servers) }), sameNames('servers'));
+        store('dnsSettings', saved);
+      },
       runSpeedtest: async () => {
         const speedtest = await attempt(api.runSpeedtest);
         patchStatus((status) => ({ ...status, speedtest }));
@@ -523,6 +538,10 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
       installUpdate: async (file) => {
         const update = await attempt(() => api.installUpdate(file));
         patchStatus((status) => ({ ...status, update }));
+      },
+      saveSwapSettings: async (sizeGb) => {
+        store('swapSettings', await attempt(() => api.putSwapSettings(sizeGb), sameNames('sizeGb')));
+        await refreshStatus();
       },
       setCheckOnline: async (enabled) => {
         const update = await attempt(() => api.setCheckOnline(enabled));

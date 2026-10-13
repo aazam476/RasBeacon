@@ -1,4 +1,6 @@
 import type {
+  DNSSettings,
+  SwapSettings,
   Client,
   GuestSettings,
   HotspotSettings,
@@ -23,6 +25,8 @@ export interface MockRouter {
   uplinkSettings: UplinkSettings;
   vpnSettings: VPNSettings;
   sshSettings: SSHSettings;
+  dnsSettings: DNSSettings;
+  swapSettings: SwapSettings;
   httpsSettings: HTTPSSettings;
   nearbyNetworks: NearbyNetwork[];
   /** What "Show password" reveals. */
@@ -52,6 +56,19 @@ const clients: Client[] = [
     downMbps: 15.1,
     upMbps: 11.4,
     internetAccess: true,
+  },
+  {
+    // On the Ethernet client port: no band, signal or measured traffic.
+    hostname: 'desktop-office.lan',
+    mac: 'a4:83:e7:12:34:56',
+    ip: '192.168.8.131',
+    signalDbm: 0,
+    connectedSeconds: 7_260,
+    band: '',
+    downMbps: 0,
+    upMbps: 0,
+    internetAccess: true,
+    wired: true,
   },
   {
     hostname: 'ipad-air-livingroom.lan',
@@ -374,6 +391,9 @@ export function createMockRouter(): MockRouter {
         },
       ],
     },
+
+    dnsSettings: { servers: [] },
+    swapSettings: { sizeGb: 4, maxGb: 26 },
 
     sshSettings: {
       enabled: true,

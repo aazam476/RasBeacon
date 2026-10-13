@@ -74,7 +74,8 @@ export interface Client {
   connectedSeconds: number;
 
   // Live traffic and the per-device controls.
-  band: Band;
+  /** "" for a device on the Ethernet cable. */
+  band: Band | '';
   downMbps: number;
   upMbps: number;
   /** False while the owner has paused this device's internet access. */
@@ -83,6 +84,11 @@ export interface Client {
   pausedSeconds?: number;
   /** The phone or laptop that is viewing this page (only the router can tell, by its address). */
   isThisDevice?: boolean;
+  /**
+   * On the Ethernet client port instead of the Wi-Fi: no band or signal, traffic isn't measured,
+   * and it can't be disconnected from here (it can be paused).
+   */
+  wired?: boolean;
 }
 
 export interface HotspotStatus {
@@ -351,6 +357,22 @@ export interface GuestSettings {
   hasPassword: boolean;
   /** False when the Wi-Fi adapter can only broadcast one network (read-only). */
   supported: boolean;
+}
+
+/** GET/PUT /api/v1/settings/swap: the swap file on the SD card, in whole gigabytes. */
+export interface SwapSettings {
+  /** 0 = off. */
+  sizeGb: number;
+  /** The largest size that fits (the card's free space minus 1 GB); read-only. */
+  maxGb: number;
+}
+
+/**
+ * GET/PUT /api/v1/settings/dns: the DNS servers devices use while their traffic isn't going
+ * through the VPN. Empty uses the current network's.
+ */
+export interface DNSSettings {
+  servers: string[];
 }
 
 /** GET/PUT /api/v1/settings/ssh. `authorizedKeys` is the text of the keys, one per line. */

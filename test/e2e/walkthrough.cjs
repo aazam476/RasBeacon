@@ -73,6 +73,9 @@ async function main() {
   };
   // A dialog (sheet or alert) on the page.
   const dialog = () => page.getByRole("dialog");
+  // The Internet page's network list saves from its floating bar (the page has other Save buttons).
+  const saveNetworks = () =>
+    page.getByRole("region", { name: "Unsaved changes" }).getByRole("button", { name: "Save", exact: true }).click();
 
   await step("setup page opens", async () => {
     await page.goto(BASE_URL + "/");
@@ -111,7 +114,7 @@ async function main() {
     await page.getByRole("button", { name: "Hotel Guest" }).click();
     await dialog().getByRole("button", { name: "Add to list" }).click();
     await page.getByText("You have changes that are not saved yet.").waitFor();
-    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await saveNetworks();
     await page.getByText("Saved. RasBeacon is joining the networks now").waitFor();
   });
 
@@ -126,7 +129,7 @@ async function main() {
     await sheet.getByLabel(/^CA certificate file/).setInputFiles(__dirname + "/fixtures/test-campus-ca.pem");
     await sheet.getByLabel("Login server name").fill("*.example.edu");
     await sheet.getByRole("button", { name: "Add to list" }).click();
-    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await saveNetworks();
     // The router reads the certificate and describes it.
     await page.getByText("RasBeacon Test Campus CA (valid until").waitFor();
   });

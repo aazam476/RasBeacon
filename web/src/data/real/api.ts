@@ -6,6 +6,7 @@
 
 import type {
   ClaimResponse,
+  DNSSettings,
   GuestSettings,
   HotspotSettings,
   HTTPSSettings,
@@ -14,6 +15,7 @@ import type {
   SetupState,
   Speedtest,
   SSHSettings,
+  SwapSettings,
   Status,
   UpdateStatus,
   UplinkSettings,
@@ -218,6 +220,15 @@ export const uplinkAction = (action: 'disconnect' | 'renew' | 'ethernet/scan') =
   request<void>('POST', `/uplink/${action}`, { timeoutMs: 30_000 });
 /** Cloudflare's speed test: about 20 seconds; the router stops it after 3 minutes. */
 export const runSpeedtest = () => request<Speedtest>('POST', '/speedtest', { timeoutMs: 200_000 });
+
+export const getSwapSettings = () => request<SwapSettings>('GET', '/settings/swap');
+/** Making a large swap file can take a little while on a slow card. */
+export const putSwapSettings = (sizeGb: number) =>
+  request<SwapSettings>('PUT', '/settings/swap', { body: { sizeGb, maxGb: 0 }, timeoutMs: 120_000 });
+
+export const getDNSSettings = () => request<DNSSettings>('GET', '/settings/dns');
+export const putDNSSettings = (settings: DNSSettings) =>
+  request<DNSSettings>('PUT', '/settings/dns', { body: settings, timeoutMs: 30_000 });
 
 export const getVPNSettings = () => request<VPNSettings>('GET', '/settings/vpn');
 export const putVPNSwitches = (switches: { enabled: boolean; killSwitch: boolean }) =>

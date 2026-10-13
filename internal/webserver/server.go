@@ -124,6 +124,8 @@ func (s *Server) Handler() http.Handler {
 		"POST /api/v1/uplink/disconnect":                 "/uplink/disconnect",
 		"POST /api/v1/uplink/renew":                      "/uplink/renew",
 		"POST /api/v1/uplink/ethernet/scan":              "/uplink/ethernet/scan",
+		"GET /api/v1/settings/dns":                       "/settings/dns",
+		"PUT /api/v1/settings/dns":                       "/settings/dns",
 		"GET /api/v1/settings/vpn":                       "/settings/vpn",
 		"PUT /api/v1/settings/vpn":                       "/settings/vpn",
 		"POST /api/v1/settings/vpn/import":               "/settings/vpn/import",
