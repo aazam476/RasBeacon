@@ -393,7 +393,7 @@ export function createMockRouter(): MockRouter {
     },
 
     dnsSettings: { servers: [] },
-    swapSettings: { sizeGb: 4, maxGb: 26 },
+    swapSettings: { sizeGb: 2, maxGb: 26 },
 
     sshSettings: {
       enabled: true,

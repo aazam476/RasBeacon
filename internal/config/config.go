@@ -88,7 +88,7 @@ type SwapConfig struct {
 }
 
 // DefaultSwapGB is the swap file's size until the owner changes it.
-const DefaultSwapGB = 4
+const DefaultSwapGB = 2
 
 // DNSConfig chooses the DNS servers devices use while their traffic isn't
 // going through the VPN (with the VPN in use, its own servers are used).

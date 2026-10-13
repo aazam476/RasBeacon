@@ -13,20 +13,20 @@ func TestSwap_DefaultSizeChangeAndOff(t *testing.T) {
 	e := newClaimedEnv(t, false)
 	file := e.paths.SwapFile()
 
-	// Started with the default 4 GB.
-	if !e.runner.ran("fallocate -l 4294967296 "+file) || !e.runner.ran("mkswap "+file) || !e.runner.ran("swapon "+file) {
+	// Started with the default 2 GB.
+	if !e.runner.ran("fallocate -l 2147483648 "+file) || !e.runner.ran("mkswap "+file) || !e.runner.ran("swapon "+file) {
 		t.Fatalf("commands: %v", e.runner.commands)
 	}
 	if info, err := os.Stat(file); err != nil || info.Mode().Perm() != 0o600 {
 		t.Errorf("the swap file must be readable by root only: %v %v", info, err)
 	}
 	// 10 GB free, plus the swap file itself (empty in this test), minus 1 GB.
-	if s := e.agent.SwapSettings(); s.SizeGB != 4 || s.MaxGB != 9 {
+	if s := e.agent.SwapSettings(); s.SizeGB != 2 || s.MaxGB != 9 {
 		t.Errorf("settings = %+v", s)
 	}
 
 	// Bigger: swap goes off, the file is made again, swap comes on.
-	mustWrite(t, e.paths.ProcSwaps(), "Filename Type Size Used Priority\n"+file+" file 4194300 0 -2\n")
+	mustWrite(t, e.paths.ProcSwaps(), "Filename Type Size Used Priority\n"+file+" file 2097148 0 -2\n")
 	e.runner.commands = nil
 	if err := e.agent.UpdateSwapSettings(api.SwapSettings{SizeGB: 8}); err != nil {
 		t.Fatal(err)
