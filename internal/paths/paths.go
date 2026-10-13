@@ -131,6 +131,9 @@ func (p Paths) HostapdConfig() string { return filepath.Join(p.RunDir(), "hostap
 // DnsmasqConfig is the generated DHCP/DNS server configuration.
 func (p Paths) DnsmasqConfig() string { return filepath.Join(p.RunDir(), "dnsmasq.conf") }
 
+// DoHEnv is the DoH forwarder's settings (see cmd/rbdoh).
+func (p Paths) DoHEnv() string { return filepath.Join(p.RunDir(), "doh.env") }
+
 // DnsmasqLeases lists the addresses handed out to connected devices.
 func (p Paths) DnsmasqLeases() string { return filepath.Join(p.RunDir(), "dnsmasq.leases") }
 

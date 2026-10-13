@@ -19,6 +19,7 @@ import (
 	"net"
 	"net/netip"
 	"slices"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -318,7 +319,8 @@ type DnsmasqInput struct {
 	Captive bool
 	// Upstream lists the DNS servers that questions about internet names are
 	// passed on to (normally 127.0.0.53, the device's own resolver, which
-	// uses the DNS servers of the current uplink). Ignored when Captive.
+	// uses the DNS servers of the current uplink): addresses, or address#port
+	// (the DoH forwarder, 127.0.0.1#5053). Ignored when Captive.
 	Upstream []string
 	// NoticeHostnames, when set, are answered with RasBeacon's own address,
 	// so devices' connectivity checks open RasBeacon's "this network needs
@@ -389,8 +391,13 @@ func Dnsmasq(in DnsmasqInput) (string, error) {
 		}
 	}
 	for _, server := range in.Upstream {
-		if _, err := netip.ParseAddr(server); err != nil {
+		// An address, or an address and port in dnsmasq's form (127.0.0.1#5053).
+		host, port, hasPort := strings.Cut(server, "#")
+		if _, err := netip.ParseAddr(host); err != nil {
 			return "", fmt.Errorf("upstream DNS server %q is not an IP address", server)
+		}
+		if n, err := strconv.Atoi(port); hasPort && (err != nil || n < 1 || n > 65535) {
+			return "", fmt.Errorf("upstream DNS server %q has no valid port", server)
 		}
 	}
 	return execute("dnsmasq.conf.tmpl", data)

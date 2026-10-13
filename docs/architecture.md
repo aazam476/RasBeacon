@@ -31,6 +31,14 @@ The reasons behind the big decisions are in [design.md](design.md) and
 - **hostapd** turns the USB Wi-Fi adapter into an *access point*.
 - **dnsmasq** hands out addresses (*DHCP*) and answers name lookups (*DNS*)
   for devices on the hotspot.
+- **rbdoh** (`cmd/rbdoh`, logic in `internal/doh`) is the
+  *DNS-over-HTTPS* forwarder. It runs only while DoH servers are chosen on
+  the Internet page and in use: dnsmasq passes devices' lookups to it on
+  127.0.0.1:5053, and it asks the DoH servers over HTTPS. It looks up the
+  DoH servers' own names with the plain DNS servers in the list, then the
+  network's (127.0.0.53), and keeps the last addresses found in case those
+  fail later. It runs as a throwaway unprivileged user (systemd
+  `DynamicUser`).
 - **nftables** is the Linux firewall. It also does the *NAT* that lets all
   your devices share RasBeacon's one address on the upstream network.
 - **wpa_supplicant** joins upstream Wi-Fi networks with the built-in radio.
@@ -221,6 +229,7 @@ Settings live on the shared `/persistent` partition, so they carry over.
 | `/persistent/rasbeacon/certs/` (directory 0700) | Certificates and keys for WPA-Enterprise networks, named after each network's ID | rbd |
 | `/persistent/rasbeacon/identity.json` | Device ID, IPv6 prefix, suggested password | rbd, once |
 | `/persistent/swapfile` (mode 0600) | Swap space (System → Swap) | rbd |
+| `/run/rbd/doh.env` | The DoH servers and their bootstrap servers, for rbdoh (in memory) | rbd |
 | `/run/rbd/*.conf`, `firewall.nft` | Generated configs (in memory) | rbd |
 | `/run/systemd/network/00-rasbeacon-*.network` | Generated networkd settings (in memory) | rbd |
 | `/bootfs/setup.txt`, `/bootfs/factory-reset` | Files the owner can create from a computer | the owner |

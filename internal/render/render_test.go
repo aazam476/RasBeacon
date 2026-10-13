@@ -622,3 +622,18 @@ func TestWireGuard(t *testing.T) {
 		t.Error("keys with line breaks must be rejected")
 	}
 }
+
+func TestDnsmasq_UpstreamWithAPort(t *testing.T) {
+	got, err := Dnsmasq(DnsmasqInput{LAN: DefaultLAN, LeaseFile: "x", Upstream: []string{"9.9.9.9", "127.0.0.1#5053"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "server=9.9.9.9\nserver=127.0.0.1#5053\n") {
+		t.Errorf("dnsmasq.conf:\n%s", got)
+	}
+	for _, bad := range []string{"127.0.0.1#", "127.0.0.1#99999", "dns.google#53", "1.1.1.1\nserver=6.6.6.6"} {
+		if _, err := Dnsmasq(DnsmasqInput{LAN: DefaultLAN, LeaseFile: "x", Upstream: []string{bad}}); err == nil {
+			t.Errorf("%q should be refused", bad)
+		}
+	}
+}

@@ -18,7 +18,9 @@ import (
 	"fmt"
 	"maps"
 	"net/netip"
+	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -97,15 +99,24 @@ type DNSConfig struct {
 	// network's (the default). While a login page is in the way, the
 	// network's are used anyway: many only work with them.
 	Servers []netip.Addr `json:"servers,omitempty"`
+	// DoH are DNS-over-HTTPS servers (https://host/path, see ParseDoH),
+	// asked through RasBeacon's DoH forwarder (cmd/rbdoh) alongside Servers.
+	DoH []string `json:"doh,omitempty"`
 }
 
 // MaxDNSServers keeps the list short; dnsmasq asks them in turn.
 const MaxDNSServers = 4
 
-// Validate checks the DNS servers: real addresses of other machines.
+// Validate checks the DNS servers: real addresses of other machines, and
+// DoH addresses as ParseDoH writes them.
 func (d DNSConfig) Validate() error {
-	if len(d.Servers) > MaxDNSServers {
+	if len(d.Servers)+len(d.DoH) > MaxDNSServers {
 		return &ValidationError{Field: "servers", Message: fmt.Sprintf("At most %d DNS servers.", MaxDNSServers)}
+	}
+	for _, u := range d.DoH {
+		if parsed, err := ParseDoH(u); err != nil || parsed != u {
+			return &ValidationError{Field: "servers", Message: fmt.Sprintf("%q is not a DNS-over-HTTPS address like https://dns.example/dns-query.", u)}
+		}
 	}
 	for _, s := range d.Servers {
 		if !s.IsValid() || s.IsUnspecified() || s.IsLoopback() || s.IsMulticast() || s.IsLinkLocalUnicast() {
@@ -688,6 +699,7 @@ func (c Config) Clone() Config {
 	}
 	c.Clients.Paused = maps.Clone(c.Clients.Paused)
 	c.DNS.Servers = slices.Clone(c.DNS.Servers)
+	c.DNS.DoH = slices.Clone(c.DNS.DoH)
 	if c.Swap.SizeGB != nil {
 		size := *c.Swap.SizeGB
 		c.Swap.SizeGB = &size
@@ -788,6 +800,61 @@ func isDomainName(name string) bool {
 		}
 		for _, r := range label {
 			if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-') {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// ParseDoH reads a DNS-over-HTTPS server as people write it and returns
+// it in full: "https://dns.google/dns-query", or just "dns.google", which
+// means the usual path, /dns-query (RFC 8484). Only https is accepted, with
+// a host name or address and no user name or password. Spaces and commas
+// commas, quotes and backslashes can't appear (the list is passed on
+// space-separated, in a systemd environment file).
+func ParseDoH(text string) (string, error) {
+	text = strings.TrimSpace(text)
+	if !strings.Contains(text, "://") {
+		text = "https://" + text
+	}
+	u, err := url.Parse(text)
+	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.Fragment != "" || u.Opaque != "" ||
+		len(text) > 200 || strings.ContainsAny(text, " \t\r\n,\"'\\") {
+		return "", errors.New("not a DNS-over-HTTPS address")
+	}
+	host := u.Hostname()
+	if addr, err := netip.ParseAddr(host); err == nil {
+		if addr.IsUnspecified() || addr.IsLoopback() || addr.IsMulticast() {
+			return "", errors.New("not a DNS server's address")
+		}
+	} else if !validHostname(host) {
+		return "", errors.New("not a host name")
+	}
+	if port := u.Port(); port != "" {
+		if n, err := strconv.Atoi(port); err != nil || n < 1 || n > 65535 {
+			return "", errors.New("not a port")
+		}
+	}
+	if u.Path == "" || u.Path == "/" {
+		u.Path = "/dns-query"
+	}
+	u.Host = strings.ToLower(u.Host)
+	return u.String(), nil
+}
+
+// validHostname accepts DNS names with at least one dot: letters, digits
+// and hyphens in labels of 1 to 63 characters.
+func validHostname(host string) bool {
+	if len(host) > 253 || !strings.Contains(host, ".") {
+		return false
+	}
+	for _, label := range strings.Split(strings.TrimSuffix(host, "."), ".") {
+		if label == "" || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for _, c := range label {
+			if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-') {
 				return false
 			}
 		}

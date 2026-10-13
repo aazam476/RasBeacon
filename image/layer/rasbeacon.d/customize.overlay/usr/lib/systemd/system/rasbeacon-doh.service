@@ -1,0 +1,33 @@
+# rbdoh: the DNS-over-HTTPS forwarder (see cmd/rbdoh). rbd starts it while
+# DoH servers are chosen on the Internet page and in use, and writes them to
+# /run/rbd/doh.env. It runs as a throwaway unprivileged user, may only use
+# the network, and listens on 127.0.0.1:5053 for dnsmasq.
+[Unit]
+Description=RasBeacon DNS-over-HTTPS forwarder (rbdoh)
+
+[Service]
+EnvironmentFile=/run/rbd/doh.env
+ExecStart=/usr/bin/rbdoh
+DynamicUser=yes
+Restart=always
+RestartSec=3
+CapabilityBoundingSet=
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+MemoryMax=64M

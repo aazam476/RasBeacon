@@ -301,3 +301,44 @@ func TestValidateRoutedIPv6Prefix(t *testing.T) {
 		t.Errorf("no prefix is fine: %v", err)
 	}
 }
+
+func TestParseDoH(t *testing.T) {
+	for in, want := range map[string]string{
+		"dns.google":                           "https://dns.google/dns-query",
+		" https://Cloudflare-DNS.com/ ":        "https://cloudflare-dns.com/dns-query",
+		"https://dns.quad9.net:5053/dns-query": "https://dns.quad9.net:5053/dns-query",
+		"https://1.1.1.1/dns-query":            "https://1.1.1.1/dns-query",
+		"https://[2606:4700::1111]/dns-query":  "https://[2606:4700::1111]/dns-query",
+		"https://doh.example/q?ct=dns":         "https://doh.example/q?ct=dns",
+	} {
+		if got, err := ParseDoH(in); err != nil || got != want {
+			t.Errorf("ParseDoH(%q) = %q, %v; want %q", in, got, err, want)
+		}
+	}
+	for _, bad := range []string{
+		"", "http://dns.google/dns-query", "tls://dns.google", "https://", "localhost", "https://127.0.0.1/dns-query",
+		"https://u:p@dns.google/", "https://dns.google/a b", "https://dns.google/a,b", "https://dns.google/q?x='y'",
+		"https://-bad-.example/", "https://dns.google:99999/", "https://dns.google/#frag",
+	} {
+		if got, err := ParseDoH(bad); err == nil {
+			t.Errorf("ParseDoH(%q) = %q, want an error", bad, got)
+		}
+	}
+}
+
+func TestDNSConfig_CountsDoHServersTowardTheLimit(t *testing.T) {
+	d := DNSConfig{
+		Servers: []netip.Addr{netip.MustParseAddr("1.1.1.1"), netip.MustParseAddr("9.9.9.9")},
+		DoH:     []string{"https://dns.google/dns-query", "https://cloudflare-dns.com/dns-query"},
+	}
+	if err := d.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	d.DoH = append(d.DoH, "https://dns.quad9.net/dns-query")
+	if err := d.Validate(); err == nil {
+		t.Error("five servers should be refused")
+	}
+	if err := (DNSConfig{DoH: []string{"dns.google"}}).Validate(); err == nil {
+		t.Error("DoH servers are saved in full")
+	}
+}

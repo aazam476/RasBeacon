@@ -369,7 +369,8 @@ export interface SwapSettings {
 
 /**
  * GET/PUT /api/v1/settings/dns: the DNS servers devices use while their traffic isn't going
- * through the VPN. Empty uses the current network's.
+ * through the VPN. Empty uses the current network's. Each is an IP address (plain DNS) or a
+ * DNS-over-HTTPS address (https://dns.example/dns-query; a bare host name means that path).
  */
 export interface DNSSettings {
   servers: string[];

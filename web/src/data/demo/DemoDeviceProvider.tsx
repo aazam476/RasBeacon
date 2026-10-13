@@ -485,9 +485,23 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
           .split(/[,\s]+/)
           .map((item) => item.trim())
           .filter(Boolean);
-        const bad = servers.find((server) => !/^[\d.]+$|^[\da-f:]+$/i.test(server));
-        if (bad) throw new FieldErrors({ servers: `"${bad}" is not an IP address.` });
-        change((d) => void (d.router.dnsSettings = { servers }));
+        // Like the router: addresses stay as typed; DoH addresses are written in full.
+        const isIp = (server: string) => /^[\d.]+$|^[\da-f:]+$/i.test(server);
+        const full = (server: string) => {
+          const url = server.includes('://') ? server : `https://${server}`;
+          if (!/^https:\/\/[a-z0-9.-]+\.[a-z]{2,}(:\d+)?(\/\S*)?$/i.test(url)) return null;
+          return /^https:\/\/[^/]+\/?$/.test(url) ? `${url.replace(/\/$/, '')}/dns-query` : url;
+        };
+        const bad = servers.find((server) => !isIp(server) && !full(server));
+        if (bad) {
+          throw new FieldErrors({
+            servers: `"${bad}" is not an IP address or a DNS-over-HTTPS address like https://dns.example/dns-query.`,
+          });
+        }
+        if (servers.length > 4) throw new FieldErrors({ servers: 'At most 4 DNS servers.' });
+        const plain = servers.filter(isIp);
+        const doh = servers.filter((server) => !isIp(server)).map((server) => full(server)!.toLowerCase());
+        change((d) => void (d.router.dnsSettings = { servers: [...plain, ...doh] }));
       },
       saveSshSettings: async (settings) => {
         await wait(900);
