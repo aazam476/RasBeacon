@@ -20,15 +20,16 @@ skip them freely. The report template at the end has one line per section.
 | Section 8 | A WireGuard `.conf` for RasBeacon ([server guide](../wireguard-server.md)); a second one for profiles if you can. |
 | Section 10 | A network with a login page (hotel, café, library, campus guest). |
 | Section 4.6 | Being on campus, with eduroam's certificates ([guide](../eduroam.md)). |
-| Section 13 (Pi 4/5 only) | The `.rbupdate` file from a build **newer** than the image you flashed (same Artifacts download). |
+| Section 13 | A USB stick (exFAT) for Samba; an Argon ONE V2 case for a Pi 4, if you have one. |
+| Section 14 (Pi 4/5 only) | The `.rbupdate` file from a build **newer** than the image you flashed (same Artifacts download). |
 | Optional | A USB power meter, `iperf3` on two computers, a push button and two jumper wires. |
 
 **Pi Zero 2 W, 3B or 3B+:** flash `rasbeacon-pi3-zero2w-…` instead, and skip
-what the board doesn't have: the updates section (13; the System page should
+what the board doesn't have: the updates section (14; the System page should
 say *New versions are flashed*), on the Zero 2 W the Ethernet steps (4.1,
 4.5, 7) unless you add a USB Ethernet adapter through a powered hub, and on
 the Zero 2 W and 3B 5 GHz on the built-in Wi-Fi. Its card drive is called
-`BOOT`, not `BOOTCONFIG` (section 15). In section
+`BOOT`, not `BOOTCONFIG` (section 16). In section
 3, the Storage total is the card minus about 0.3 GB. Note how fast the
 login page and speed test are (512 MB of memory on the Zero 2 W, 1 GB on the
 3B/3B+), and on the 3B/3B+ the speed with Ethernet and the USB adapter both
@@ -329,7 +330,58 @@ Keep the VPN on with the kill switch.
    the page's *SHA-256 fingerprint*; `http://` redirects to `https://`.
    Turn it off again if you prefer.
 
-## 13. Updates (Pi 4/5 only)
+## 13. Plugins (new)
+
+The Pi needs internet. Have a USB stick (exFAT) ready for Samba, and on a
+Pi 4 in an Argon ONE V2 case, test that plugin too.
+
+1. **More → Plugins** says *No plugins yet*. **Browse plugins**: the catalog
+   lists AdGuard Home, Samba and Argon ONE V2 from
+   aazam476/RasBeacon-plugins, with icons.
+2. **AdGuard Home → Get.** **Expect** the sheet: *Signed* with a key ID, *It
+   will be able to: Use the internet*, the port 3000, an admin password,
+   *Download* about 20 MB. With **Metered connection** on (Hotspot), a
+   warning about the download. Type a password, **Install**.
+3. **Expect** its page: *Installing* (*Downloading its image…*), then
+   *Running* within a few minutes, and four numbers after half a minute.
+   **Open** shows AdGuard Home's login; the password works.
+4. **VPN + kill switch:** break the tunnel (see section 8) and install Samba:
+   **expect** *Waiting for the VPN*, and the install continuing once the VPN
+   is back. Fix the tunnel.
+5. **DNS:** do what *Next steps* says (DNS servers = its address, **Also use
+   while the VPN is on**). **Expect** ads blocked on phone A
+   (<https://d3ward.github.io/toolz/adblock>), and AdGuard's *Queries today*
+   growing. Guests' lookups are filtered too, but on a guest phone
+   `http://10.87.0.1:3000` doesn't load.
+6. **Isolation:** from the laptop on the hotspot, `http://10.89.0.2:3000`
+   doesn't load (only the chosen port on RasBeacon's address works). From a
+   computer on the network RasBeacon joined, `http://<RasBeacon's uplink
+   address>:3000` doesn't load.
+7. **Ports:** change the port to 80, **Save**: "Port 80 is RasBeacon's own".
+   Change it to 3001, **Save**: it restarts, Open uses 3001.
+8. **Samba** (Install from the catalog, choose the USB stick): from the
+   laptop, `smb://10.87.0.1` shows the share with the stick's files; a program
+   copied onto the stick can't be run from it on RasBeacon (*SSH:* `mount`
+   shows `noexec`).
+9. **Running switch:** turn Samba off, reboot: it stays off; AdGuard Home
+   starts by itself.
+10. **Crash:** *SSH:* `podman kill rasbeacon-adguard-home` five times, a minute
+    apart. **Expect** it restarted each time, then *Stopped after crashing*;
+    turning it on works.
+11. **Log:** open *Log*: AdGuard's last lines.
+12. **Argon ONE V2 (Pi 4 in the case):** install it; the fan runs at the set
+    speeds (warm the Pi with `yes > /dev/null &` four times over SSH and stop
+    them afterwards). Press the power button twice: RasBeacon restarts. Hold
+    it 3 s: it shuts down.
+13. **File and signature:** download `adguard-home.rba` from the release on a
+    computer, change one byte of `README.md` inside it (any zip tool), and
+    **Install from a file**: **expect** "the plugin's signature doesn't match".
+14. **Remove** Samba with **Keep its data**, install it again: its settings
+    are new, its data is back. Remove AdGuard Home without keeping data.
+15. *SSH:* `podman ps` shows only plugins RasBeacon runs; `nft list ruleset`
+    has the `plugin_ports` chain.
+
+## 14. Updates (Pi 4/5 only)
 
 The image you flashed was built with the update signing key, so it can
 install updates (on the Pi 3/Zero 2 W image, check instead that System says
@@ -354,7 +406,7 @@ install updates (on the Pi 3/Zero 2 W image, check instead that System says
    power, wait 5 s, plug it back in. **Expect:** RasBeacon comes back on the
    **old** version and System says *The update to … didn't start correctly, so RasBeacon went back to …*.
 
-## 14. Robustness
+## 15. Robustness
 
 1. **Power cuts:** three times, pull the power while running, wait 5 s,
    plug back in. **Expect** each time: same hotspot, same settings, the
@@ -376,7 +428,7 @@ install updates (on the Pi 3/Zero 2 W image, check instead that System says
    username. **Expect:** none appear (usernames only masked, like
    `N***@…`).
 
-## 15. Erasing (do these last)
+## 16. Erasing (do these last)
 
 1. **Factory reset:** System → *Factory reset* → **Erase everything** with
    the admin password. **Expect:** it restarts into `RasBeacon-Setup-XXXX`.
@@ -393,7 +445,7 @@ install updates (on the Pi 3/Zero 2 W image, check instead that System says
    (ground). A short press does nothing; holding 10 s erases everything
    like step 1.
 
-## 16. Measurements (if you can)
+## 17. Measurements (if you can)
 
 1. **Power:** a USB meter between supply and Pi: watts idle with 5 devices,
    and during a download. With a power bank: does it stay on after 30
@@ -405,7 +457,7 @@ install updates (on the Pi 3/Zero 2 W image, check instead that System says
    (the radio alone), and to a computer on your home network (hotspot plus
    uplink), with the hotspot on 2.4 GHz and on 5 GHz.
 
-## 17. If something fails: what to send
+## 18. If something fails: what to send
 
 1. **System → Download diagnostics** (passwords removed, MAC addresses
    partly hidden).

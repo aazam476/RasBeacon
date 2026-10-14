@@ -46,12 +46,23 @@ export function Section({ title, level = 2, action, footer, children, className 
   );
 }
 
-/** The leading part of a row: a colored tile or a plain symbol. */
-export type RowLeading = { tile: BaseIconName; color: TileColor } | { icon: BaseIconName; className?: string };
+/** The leading part of a row: a colored tile, a plain symbol, or a picture (a plugin's icon). */
+export type RowLeading =
+  { tile: BaseIconName; color: TileColor } | { icon: BaseIconName; className?: string } | { image: string };
 
-function Leading({ leading }: { leading?: RowLeading }) {
+export function Leading({ leading }: { leading?: RowLeading }) {
   if (!leading) return null;
   if ('tile' in leading) return <IconTile icon={leading.tile} color={leading.color} />;
+  if ('image' in leading) {
+    return (
+      <img
+        src={leading.image}
+        alt=""
+        draggable={false}
+        className="row-tile size-[1.8125rem] shrink-0 rounded-[7px] object-cover lg:size-6 lg:rounded-[6px]"
+      />
+    );
+  }
   return (
     <span className="row-tile grid w-[1.8125rem] shrink-0 place-items-center lg:w-6">
       <Icon name={leading.icon} size={22} className={cn('text-label-2 lg:size-[1.125rem]', leading.className)} />

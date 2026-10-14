@@ -1,8 +1,9 @@
 import { useRef } from 'react';
-import { Outlet } from 'react-router';
+import { Link, Outlet, useLocation } from 'react-router';
 import { cn } from '@/lib/cn';
 import { useScrollEdge } from '@/lib/useScrollEdge';
-import { useCurrentPage } from './navigation';
+import { Icon } from '@/ui';
+import { isSubPage, useCurrentPage, usePageTitleOverride } from './navigation';
 import { Sidebar } from './Sidebar';
 
 /**
@@ -12,6 +13,10 @@ import { Sidebar } from './Sidebar';
  */
 export function DesktopLayout() {
   const page = useCurrentPage();
+  const { pathname } = useLocation();
+  const sub = isSubPage(pathname);
+  const override = usePageTitleOverride();
+  const title = (sub && override) || page.label;
   const barRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const { underBar, titleGone } = useScrollEdge(barRef, titleRef);
@@ -35,13 +40,23 @@ export function DesktopLayout() {
             titleGone ? 'opacity-100' : 'opacity-0',
           )}
         >
-          {page.label}
+          {title}
         </p>
       </div>
       <main className="pl-64">
         <div className={cn('mx-auto box-content px-8 pt-10 pb-16', page.wide ? 'max-w-[72rem]' : 'max-w-[44rem]')}>
-          <h1 ref={titleRef} className="pb-5 text-large-title text-label">
-            {page.label}
+          {sub && (
+            // A sub-page (a plugin) leads back to its page.
+            <Link
+              to={page.path}
+              className="pressable -ml-1.5 mb-2 inline-flex items-center text-body text-tint hover:underline"
+            >
+              <Icon name="chevron_left" size={22} />
+              {page.label}
+            </Link>
+          )}
+          <h1 ref={titleRef} className="pb-5 text-large-title wrap-break-word text-label">
+            {title}
           </h1>
           <div className="flex flex-col gap-7">
             <Outlet />

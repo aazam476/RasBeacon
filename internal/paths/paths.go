@@ -36,6 +36,38 @@ func (p Paths) join(parts ...string) string {
 
 // --- Persistent data (survives reboots and updates) ---
 
+// PluginsDir holds the installed plugins: a folder per plugin (manifest,
+// icon, templates, data.img), downloads waiting to be installed
+// (staging/), data kept after removing a plugin (kept/), and the saved
+// catalog.
+func (p Paths) PluginsDir() string { return filepath.Join(p.DataDir(), "plugins") }
+
+// PluginDir is one installed plugin's folder.
+func (p Paths) PluginDir(id string) string { return filepath.Join(p.PluginsDir(), "installed", id) }
+
+// PluginStagingDir holds plugin files waiting for the owner to install them.
+func (p Paths) PluginStagingDir() string { return filepath.Join(p.PluginsDir(), "staging") }
+
+// PluginKeptDir holds the data of removed plugins whose data was kept.
+func (p Paths) PluginKeptDir() string { return filepath.Join(p.PluginsDir(), "kept") }
+
+// PluginCatalogFile is the catalog as last fetched.
+func (p Paths) PluginCatalogFile() string { return filepath.Join(p.PluginsDir(), "catalog.json") }
+
+// ContainersDir is Podman's storage (images and containers), set in the
+// image's /etc/containers/storage.conf. A factory reset deletes it.
+func (p Paths) ContainersDir() string { return p.join("persistent", "containers") }
+
+// PluginRunDir is where a running plugin's data is mounted, its log is
+// written, and its socket to rbd is.
+func (p Paths) PluginRunDir(id string) string { return filepath.Join(p.RunDir(), "plugins", id) }
+
+// DriveMountDir is where a USB drive is mounted for a plugin.
+func (p Paths) DriveMountDir(uuid string) string { return filepath.Join(p.RunDir(), "drives", uuid) }
+
+// DevDir is /dev (I²C and GPIO devices for plugins).
+func (p Paths) DevDir() string { return p.join("dev") }
+
 // SwapFile is the swap file, on the data partition but outside DataDir
 // (see agent/swap.go).
 func (p Paths) SwapFile() string { return p.join("persistent", "swapfile") }

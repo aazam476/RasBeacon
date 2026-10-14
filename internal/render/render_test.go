@@ -654,3 +654,62 @@ func TestWPASupplicant_RandomMACPerNetwork(t *testing.T) {
 		t.Errorf("only the hotel network, and the random MAC is kept until a restart:\n%s", got)
 	}
 }
+
+func TestFirewall_Plugins(t *testing.T) {
+	adguard := PluginRule{Address: netip.MustParseAddr("10.89.0.2"), Internet: true,
+		Ports: []PluginPort{{Protocol: "tcp", Host: 3000, Container: 3000}}}
+	samba := PluginRule{Address: netip.MustParseAddr("10.89.0.3"), LANAccess: true,
+		Ports: []PluginPort{{Protocol: "tcp", Host: 445, Container: 445}}}
+	got, err := Firewall(FirewallInput{Egress: []string{"wg0"}, TunnelInterface: "wg0", Guest: true,
+		LANAddress: netip.MustParseAddr("10.87.0.1"), Plugins: []PluginRule{adguard, samba}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkGolden(t, "firewall_plugins", got)
+	for _, want := range []string{
+		// Only from the hotspot, only to RasBeacon's own address.
+		`iifname "br-lan" ip daddr 10.87.0.1 tcp dport 3000 dnat ip to 10.89.0.2:3000`,
+		`iifname "br-lan" oifname "rbplug0" ct status dnat accept`,
+		// Only AdGuard may use the internet and RasBeacon's DNS.
+		`iifname "rbplug0" ip saddr { 10.89.0.2 } oifname @egress accept`,
+		`iifname "rbplug0" ip saddr { 10.89.0.2 } ip daddr 10.89.0.1 meta l4proto { tcp, udp } th dport 53 accept`,
+		`iifname "rbplug0" reject`,
+		// Only Samba may reach your devices.
+		`iifname "rbplug0" ip saddr { 10.89.0.3 } oifname "br-lan" accept`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	if strings.Contains(got, `iifname "br-guest" ip daddr`) || strings.Contains(got, `oifname "br-guest"`) {
+		t.Error("guests must not reach plugins, nor plugins guests")
+	}
+
+	// In login mode plugins don't get out (devices only reach the login page).
+	portal, _ := Firewall(FirewallInput{Egress: []string{"wlan0"}, PortalOnly: true,
+		LANAddress: netip.MustParseAddr("10.87.0.1"), Plugins: []PluginRule{adguard}})
+	if strings.Contains(portal, `ip saddr { 10.89.0.2 } oifname @egress accept`) {
+		t.Error("plugins must not use the internet in login mode")
+	}
+
+	for _, bad := range []FirewallInput{
+		{LANAddress: netip.MustParseAddr("10.87.0.1"), Plugins: []PluginRule{{Address: netip.MustParseAddr("10.87.0.9")}}},
+		{LANAddress: netip.MustParseAddr("10.87.0.1"), Plugins: []PluginRule{adguard, {Address: netip.MustParseAddr("10.89.0.4"),
+			Ports: []PluginPort{{Protocol: "tcp", Host: 3000, Container: 80}}}}},
+		{Plugins: []PluginRule{adguard}},
+	} {
+		if _, err := Firewall(bad); err == nil {
+			t.Errorf("accepted %+v", bad)
+		}
+	}
+}
+
+func TestDnsmasq_AnswersPlugins(t *testing.T) {
+	got, err := Dnsmasq(DnsmasqInput{LAN: DefaultLAN, LeaseFile: "/l", Upstream: []string{"127.0.0.53"}, Plugins: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "interface=rbplug0\nno-dhcp-interface=rbplug0\n") {
+		t.Errorf("dnsmasq must answer plugins' DNS, without DHCP:\n%s", got)
+	}
+}

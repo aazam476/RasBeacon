@@ -288,6 +288,42 @@ export function applyWorstCase(demo: DemoState) {
     ],
     withVpn: true,
   };
+  // Plugins in every state, with the longest names and messages.
+  const base = router.plugins.plugins[0];
+  router.plugins.plugins = [
+    ...router.plugins.plugins,
+    {
+      ...base,
+      id: 'home-assistant-companion-bridge-xl',
+      name: 'Home Assistant Companion Bridge',
+      state: 'failed',
+      message:
+        "Installing failed: its image can't be downloaded: the image registry answered 429 Too Many Requests (registry-1.docker.io/library/home-assistant-companion-bridge-extended-edition).",
+      metrics: [],
+      healthy: undefined,
+    },
+    { ...base, id: 'crashy', name: 'J', state: 'crashed', metrics: [], healthy: undefined },
+    {
+      ...base,
+      id: 'waiting',
+      name: 'Grafana Ünïcode Dashböard für Reisende',
+      state: 'waiting',
+      message: 'Waiting for the VPN to connect before downloading.',
+      metrics: [],
+    },
+    {
+      ...base,
+      id: 'metrics',
+      name: 'Long numbers',
+      metrics: [
+        { label: 'Queries in the last 24 hours', value: '1,234,567,890' },
+        { label: 'Blocked', value: '100.0%' },
+        { label: 'Average answer', value: '1,234\u00a0ms' },
+        { label: 'Rules', value: '' },
+      ],
+    },
+  ];
+
   // The largest data limit, on a metered connection, with two devices over it.
   router.usageSettings = { limitMb: 1_000_000, since: '2024-02-29T23:59:59Z', metered: true, devicesPaused: 2 };
   // A 2 TB SSD instead of an SD card: nearly 1,900 sizes to choose from.
@@ -309,6 +345,7 @@ export function applyNoClients(demo: DemoState) {
   // And no room: a card too full for any swap file, and no DNS servers of its own.
   demo.router.swapSettings = { sizeGb: 0, maxGb: 0 };
   demo.router.dnsSettings = { servers: [], withVpn: false };
+  demo.router.plugins.plugins = [];
 }
 
 /** Exactly one of everything that is counted, for "1 device", "1 guest". */

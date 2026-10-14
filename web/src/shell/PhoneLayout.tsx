@@ -1,10 +1,10 @@
 import { useRef } from 'react';
-import { Link, Outlet } from 'react-router';
+import { Link, Outlet, useLocation } from 'react-router';
 import { cn } from '@/lib/cn';
 import { useScrollEdge } from '@/lib/useScrollEdge';
 import { Icon } from '@/ui';
 import { LogoutButton } from './LogoutButton';
-import { MORE_ITEM, MORE_ITEMS, useCurrentPage } from './navigation';
+import { isSubPage, MORE_ITEM, MORE_ITEMS, useCurrentPage, usePageTitleOverride } from './navigation';
 import { TabBar } from './TabBar';
 
 /**
@@ -14,11 +14,16 @@ import { TabBar } from './TabBar';
  */
 export function PhoneLayout() {
   const page = useCurrentPage();
+  const { pathname } = useLocation();
+  const sub = isSubPage(pathname);
+  const override = usePageTitleOverride();
+  const title = (sub && override) || page.label;
   const barRef = useRef<HTMLElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const { underBar, titleGone } = useScrollEdge(barRef, titleRef);
-  // Pages listed under More have no tab of their own, so their bar leads back to it.
-  const underMore = MORE_ITEMS.includes(page);
+  // Pages listed under More have no tab of their own, so their bar leads back to it; a
+  // sub-page's leads back to its page.
+  const back = sub ? page : MORE_ITEMS.includes(page) ? MORE_ITEM : undefined;
 
   return (
     <div className="min-h-dvh">
@@ -31,14 +36,14 @@ export function PhoneLayout() {
           )}
         />
         <div className="relative mx-auto flex h-13 max-w-[40rem] items-center gap-2 px-4">
-          {underMore && (
+          {back && (
             <Link
-              to={MORE_ITEM.path}
-              aria-label={`Back to ${MORE_ITEM.label}`}
+              to={back.path}
+              aria-label={`Back to ${back.label}`}
               className="glass pressable flex h-9 items-center rounded-full pr-3.5 pl-1.5 text-body text-label"
             >
               <Icon name="chevron_left" size={24} />
-              {MORE_ITEM.label}
+              {back.label}
             </Link>
           )}
           {/* The title moves up here once the large one has scrolled away. */}
@@ -49,7 +54,7 @@ export function PhoneLayout() {
               titleGone ? 'opacity-100' : 'opacity-0',
             )}
           >
-            {page.label}
+            {title}
           </p>
           <div className="ml-auto">
             <LogoutButton look="bar" />
@@ -58,8 +63,8 @@ export function PhoneLayout() {
       </header>
 
       <main className="mx-auto w-full max-w-[40rem] px-4 pt-[calc(env(safe-area-inset-top)+3.25rem)] pb-[calc(max(env(safe-area-inset-bottom),0.75rem)+6rem)]">
-        <h1 ref={titleRef} className="pt-1 pb-4 text-large-title text-label">
-          {page.label}
+        <h1 ref={titleRef} className="pt-1 pb-4 text-large-title wrap-break-word text-label">
+          {title}
         </h1>
         <div className="flex flex-col gap-7">
           <Outlet />

@@ -10,6 +10,16 @@
 //	    Makes a signed update file. The private key is read from the
 //	    RASBEACON_UPDATE_SIGNING_KEY environment variable, never from the
 //	    command line (which other users of the computer could see).
+//
+//	rbsign plugin-keygen
+//	    Prints a new key for signing plugins: the private key (keep it
+//	    secret, e.g. as the RASBEACON_PLUGIN_SIGNING_KEY secret of the
+//	    plugins' repository) and its public key. See docs/plugins.md.
+//
+//	rbsign plugin-sign -in plugin.rba -out signed.rba
+//	    Signs a plugin file with the key in RASBEACON_PLUGIN_SIGNING_KEY.
+//	    RasBeacon remembers the key at the first install and accepts updates
+//	    only when they are signed by the same key.
 package main
 
 import (
@@ -20,6 +30,7 @@ import (
 	"fmt"
 	"os"
 
+	"rasbeacon/internal/plugin"
 	"rasbeacon/internal/update"
 )
 
@@ -33,6 +44,10 @@ func main() {
 		err = keygen()
 	case "pack":
 		err = pack(os.Args[2:])
+	case "plugin-keygen":
+		err = pluginKeygen()
+	case "plugin-sign":
+		err = pluginSign(os.Args[2:])
 	default:
 		usage()
 	}
@@ -44,6 +59,7 @@ func main() {
 
 func usage() {
 	fmt.Fprintln(os.Stderr, "usage: rbsign keygen | rbsign pack -board B -version V -bundle FILE -out FILE")
+	fmt.Fprintln(os.Stderr, "       rbsign plugin-keygen | rbsign plugin-sign -in FILE.rba -out FILE.rba")
 	os.Exit(2)
 }
 
@@ -89,4 +105,42 @@ func pack(args []string) error {
 		return err
 	}
 	return out.Close()
+}
+
+func pluginKeygen() error {
+	public, private, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return err
+	}
+	fmt.Println("Private key (store as the secret RASBEACON_PLUGIN_SIGNING_KEY; never commit it):")
+	fmt.Println(base64.StdEncoding.EncodeToString(private.Seed()))
+	fmt.Println()
+	fmt.Println("Public key (RasBeacon shows its ID when installing your plugins):")
+	fmt.Println(base64.StdEncoding.EncodeToString(public))
+	fmt.Println("Key ID:", plugin.KeyID(public))
+	return nil
+}
+
+func pluginSign(args []string) error {
+	flags := flag.NewFlagSet("plugin-sign", flag.ExitOnError)
+	in := flags.String("in", "", "plugin file to sign (.rba)")
+	out := flags.String("out", "", "signed plugin file to write (.rba)")
+	_ = flags.Parse(args)
+	if *in == "" || *out == "" {
+		usage()
+	}
+	key, err := update.ParsePrivateKey(os.Getenv("RASBEACON_PLUGIN_SIGNING_KEY"))
+	if err != nil {
+		return fmt.Errorf("RASBEACON_PLUGIN_SIGNING_KEY: %w", err)
+	}
+	if err := plugin.Sign(*in, *out, key); err != nil {
+		return err
+	}
+	// Check the result the way RasBeacon will.
+	a, err := plugin.Open(*out)
+	if err != nil {
+		return fmt.Errorf("the signed file doesn't open: %w", err)
+	}
+	fmt.Printf("Signed %s %s (key ID %s)\n", a.Manifest.ID, a.Manifest.Version, plugin.KeyID(a.PublicKey))
+	return nil
 }

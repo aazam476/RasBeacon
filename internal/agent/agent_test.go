@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -26,16 +27,33 @@ import (
 
 // fakeRunner records commands instead of running them.
 type fakeRunner struct {
+	mu       sync.Mutex
 	commands []string
 	// outputs maps a command line (e.g. "iw phy phy1 info") to its output.
 	outputs map[string]string
+	// prefixOutputs answer every command line starting with a key.
+	prefixOutputs map[string]string
+	// failing makes command lines starting with one of these fail.
+	failing []string
 }
 
 func (f *fakeRunner) Run(name string, args ...string) (string, error) {
 	line := strings.TrimSpace(name + " " + strings.Join(args, " "))
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.commands = append(f.commands, line)
 	if out, ok := f.outputs[line]; ok {
 		return out, nil
+	}
+	for _, prefix := range f.failing {
+		if strings.HasPrefix(line, prefix) {
+			return "", errors.New("failed: " + line)
+		}
+	}
+	for prefix, out := range f.prefixOutputs {
+		if strings.HasPrefix(line, prefix) {
+			return out, nil
+		}
 	}
 	if strings.HasPrefix(line, "ip link show") {
 		return "", errors.New("does not exist") // pretend links don't exist yet
@@ -43,8 +61,23 @@ func (f *fakeRunner) Run(name string, args ...string) (string, error) {
 	return "", nil
 }
 
+// count reports how many commands containing text were run.
+func (f *fakeRunner) count(text string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	n := 0
+	for _, c := range f.commands {
+		if strings.Contains(c, text) {
+			n++
+		}
+	}
+	return n
+}
+
 // ran reports whether a command containing text was run.
 func (f *fakeRunner) ran(text string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	for _, c := range f.commands {
 		if strings.Contains(c, text) {
 			return true
@@ -94,6 +127,26 @@ type testEnv struct {
 	// dhcpServer is the address the fake DHCP probe reports ("" = none).
 	dhcpServer string
 	probes     int
+
+	backgroundMu sync.Mutex
+	pending      []func()
+}
+
+// runBackground runs the background work scheduled so far, and what it
+// schedules in turn.
+func (e *testEnv) runBackground() {
+	for {
+		e.backgroundMu.Lock()
+		work := e.pending
+		e.pending = nil
+		e.backgroundMu.Unlock()
+		if len(work) == 0 {
+			return
+		}
+		for _, f := range work {
+			f()
+		}
+	}
 }
 
 // fakeDHCPProbe stands in for dhcpprobe.Probe.
@@ -140,6 +193,9 @@ func newTestEnv(t *testing.T) *testEnv {
 	// A card with 10 GB free, whatever this computer's disk holds.
 	a.diskFree = func(string) (int64, error) { return 10 << 30, nil }
 	e := &testEnv{t: t, paths: p, runner: runner, timers: timers, agent: a}
+	// Background work (plugins) waits until a test runs it.
+	a.background = func(f func()) { e.backgroundMu.Lock(); e.pending = append(e.pending, f); e.backgroundMu.Unlock() }
+	a.plugins.watchEvery = 0
 	a.dhcpProbe = e.fakeDHCPProbe
 	return e
 }

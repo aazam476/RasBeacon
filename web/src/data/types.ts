@@ -314,6 +314,8 @@ export interface Status {
   deviceId: string;
   uptimeSeconds: number;
   mode: Mode;
+  /** The installed plugins and their state. */
+  plugins: PluginSummary[];
   hotspot: HotspotStatus;
   uplink: UplinkStatus;
   vpn: VPNStatus;
@@ -590,3 +592,173 @@ export interface PictureBox {
 }
 
 export type PortalKey = 'Enter' | 'Backspace' | 'Tab';
+
+// --- Plugins (docs/plugins.md) ------------------------------------------------------------------
+
+/** A permission a plugin asks for, in plain words. */
+export interface PluginPermission {
+  id: string;
+  title: string;
+  detail: string;
+}
+
+/** One of a plugin's ports: `key` ("tcp/3000") names it in requests, `host` is the port on RasBeacon. */
+export interface PluginPort {
+  key: string;
+  name: string;
+  protocol: 'tcp' | 'udp';
+  container: number;
+  host: number;
+  /** Where to open it, for a web page. */
+  url?: string;
+}
+
+/** A field of a plugin's settings form. Passwords are never sent back: `hasValue` says one is saved. */
+export interface PluginSetting {
+  key: string;
+  label: string;
+  type: 'text' | 'password' | 'number' | 'switch' | 'select';
+  help?: string;
+  unit?: string;
+  required?: boolean;
+  options?: { value: string; label: string }[];
+  min?: number;
+  max?: number;
+  value: string;
+  hasValue?: boolean;
+}
+
+export type PluginState = 'installing' | 'waiting' | 'starting' | 'running' | 'stopped' | 'crashed' | 'failed';
+
+/** An installed plugin (GET /api/v1/plugins). */
+export interface Plugin {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  author?: string;
+  homepage?: string;
+  /** A data: URL. */
+  icon: string;
+  readme?: string;
+  /** "file", or the catalog's "owner/repo". */
+  source: string;
+  signed: boolean;
+  keyId?: string;
+  state: PluginState;
+  /** Progress, or what went wrong. */
+  message?: string;
+  healthy?: boolean;
+  address: string;
+  permissions: PluginPermission[];
+  ports: PluginPort[];
+  settings: PluginSetting[];
+  usesDrive: boolean;
+  driveOptional?: boolean;
+  drive?: string;
+  afterInstall?: string;
+  /** Up to 4; an empty value can't be read right now. */
+  metrics: { label: string; value: string }[];
+  memoryMb: number;
+  cpus: number;
+  storageMb: number;
+  /** A newer version in the catalog. */
+  updateVersion?: string;
+  /** The update installs from the catalog (signed plugins only; unsigned ones update from a file). */
+  canUpdate: boolean;
+}
+
+export interface PluginsState {
+  plugins: Plugin[];
+  sources: { source: string; builtIn: boolean }[];
+  board: string;
+  memoryMb: number;
+  swapMb: number;
+  metered: boolean;
+  checkedAt?: string;
+  checkError?: string;
+}
+
+/** A plugin on the status page. */
+export interface PluginSummary {
+  id: string;
+  name: string;
+  state: PluginState;
+  icon: string;
+}
+
+/** What the install sheet shows before installing. */
+export interface PluginPreview {
+  stagingId: string;
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  author?: string;
+  homepage?: string;
+  icon: string;
+  source: string;
+  signed: boolean;
+  keyId?: string;
+  update: boolean;
+  fromVersion?: string;
+  permissions: PluginPermission[];
+  /** Permissions an update adds. */
+  newPermissions?: string[];
+  ports: PluginPort[];
+  settings: PluginSetting[];
+  usesDrive: boolean;
+  driveOptional?: boolean;
+  drive?: string;
+  /** What installing still downloads, in bytes (-1: unknown). */
+  downloadSize: number;
+  metered: boolean;
+  memoryMb: number;
+  cpus: number;
+  storageMb: number;
+  warnings?: string[];
+}
+
+/** The owner's choices in the install sheet or on a plugin's page. */
+export interface PluginChoices {
+  /** By port key ("tcp/3000"). */
+  ports: Record<string, number>;
+  /** By setting key; an empty password keeps the saved one. */
+  settings: Record<string, string>;
+  /** The USB drive's UUID, "" for none. */
+  drive: string;
+}
+
+export interface PluginCatalogEntry {
+  source: string;
+  file: string;
+  id?: string;
+  name: string;
+  version?: string;
+  description?: string;
+  permissions?: string[];
+  size: number;
+  downloadSize?: number;
+  icon?: string;
+  installedVersion?: string;
+  runsHere: boolean;
+}
+
+export interface PluginCatalog {
+  entries: PluginCatalogEntry[];
+  checkedAt?: string;
+  /** By source. */
+  errors?: Record<string, string>;
+}
+
+export interface PluginDrive {
+  uuid: string;
+  label: string;
+  fsType: string;
+  size: number;
+  usedBy?: string;
+}
+
+export interface PluginLogsResponse {
+  lines: string[];
+}

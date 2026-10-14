@@ -40,6 +40,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"net/netip"
 	"os"
 	"sync"
@@ -108,6 +109,14 @@ type Agent struct {
 	speedtest  speedtestState
 	update     updateState
 	usage      usageState
+	plugins    pluginsState
+	// powerSockets are the plugins' power sockets (see pluginsrun.go).
+	powerSockets map[string]*http.Server
+	// pluginBridge is true once the plugins' network exists.
+	pluginBridge bool
+	// background runs slow work (plugins) without blocking: a goroutine,
+	// or a list a test runs when it wants.
+	background func(f func())
 	// decompress is zstdDecompress, or a stand-in in tests.
 	decompress func(io.Reader) (io.Reader, func() error, error)
 
@@ -136,7 +145,7 @@ type Agent struct {
 // New creates an agent that uses the given file locations and command
 // runner. Production code passes paths.Default() and system.ExecRunner{}.
 func New(p paths.Paths, runner system.Runner) *Agent {
-	return &Agent{
+	a := &Agent{
 		paths:      p,
 		runner:     runner,
 		afterFunc:  time.AfterFunc,
@@ -150,9 +159,18 @@ func New(p paths.Paths, runner system.Runner) *Agent {
 		diskFree:   diskFreeBytes,
 		dohEnv:     "?",
 		speedtest:  speedtestState{server: speedtest.DefaultServer, run: runSpeedtest},
+		plugins:    pluginsState{runner: runner},
 		// USB adapters usually appear within a few seconds of power-on.
 		usbRadioWait: 20 * time.Second,
 	}
+	a.plugins.client = a.pluginHTTPClient
+	a.plugins.watchEvery = pluginWatchEvery
+	a.background = func(f func()) { go f() }
+	if _, real := runner.(system.ExecRunner); real {
+		// Podman downloads and loads images: much longer than other commands.
+		a.plugins.runner = system.ExecRunner{Timeout: 45 * time.Minute}
+	}
+	return a
 }
 
 // Start runs the boot sequence. It returns an error only for problems that
@@ -197,12 +215,15 @@ func (a *Agent) Start() error {
 		return err
 	}
 
-	// 2a. The swap file (its size is a setting; a problem isn't fatal).
+	// 2a. The installed plugins (started once the network is up).
+	a.loadPlugins()
+
+	// 2b. The swap file (its size is a setting; a problem isn't fatal).
 	if err := a.applySwap(); err != nil {
 		slog.Warn("swap could not be set up", "error", err)
 	}
 
-	// 2b. The HTTPS certificate for rbweb, if HTTPS is on. (rbweb waits
+	// 2c. The HTTPS certificate for rbweb, if HTTPS is on. (rbweb waits
 	//     for rbd before starting, so it finds the files.)
 	if _, err := a.applyHTTPS(); err != nil {
 		slog.Error("HTTPS could not be set up; the web UI stays on HTTP", "error", err)
@@ -254,10 +275,15 @@ func (a *Agent) handleFactoryResetFile() error {
 	return nil
 }
 
-// wipeData deletes everything in RasBeacon's data directory.
+// wipeData deletes everything in RasBeacon's data directory, and the
+// plugins' images and containers.
 func (a *Agent) wipeData() error {
+	a.stopAllPlugins()
 	if err := os.RemoveAll(a.paths.DataDir()); err != nil {
 		return fmt.Errorf("erasing settings: %w", err)
+	}
+	if err := os.RemoveAll(a.paths.ContainersDir()); err != nil {
+		slog.Warn("could not erase the plugins' images", "error", err)
 	}
 	return os.MkdirAll(a.paths.DataDir(), 0o700)
 }
@@ -472,8 +498,10 @@ func (a *Agent) startNormalMode() error {
 		Password:  a.secrets.HotspotPassword,
 		Guest:     a.guestHostapd(),
 	}
-	// The guest network's bridge must exist before hostapd starts.
+	// The guest network's bridge must exist before hostapd starts, and
+	// the plugins' before dnsmasq does (it answers plugins' DNS).
 	a.applyGuestBridge(hotspot.Guest != nil)
+	a.pluginBridge = a.ensurePluginNetwork()
 	// The VPN first, so DNS for devices goes to the VPN from the start.
 	if err := a.applyVPNConfig(); err != nil {
 		slog.Error("could not set up the VPN", "error", err)
@@ -493,6 +521,7 @@ func (a *Agent) startNormalMode() error {
 	}
 	a.checkUplink() // fill in the status page right away
 	slog.Info("hotspot started", "ssid", h.SSID, "band", h.Band)
+	a.background(a.startPlugins)
 	return nil
 }
 
@@ -521,6 +550,7 @@ func (a *Agent) applyDHCP(captive bool) error {
 		LeaseFile:        a.paths.DnsmasqLeases(),
 		Captive:          captive,
 		Upstream:         a.upstreamDNS(),
+		Plugins:          a.pluginBridge,
 		IPv6DefaultRoute: a.devicesHaveIPv6Internet(),
 		Guest:            a.guestLAN(),
 		Metered:          a.cfg.Hotspot.Metered,
@@ -560,6 +590,10 @@ func (a *Agent) applyFirewall() error {
 		Guest:           a.guestActive(),
 		RoutedIPv6:      a.wantedRoutedIPv6(),
 		PausedMACs:      a.pausedMACs(),
+	}
+	if a.mode == api.ModeNormal {
+		input.Plugins = a.pluginRules()
+		input.LANAddress = a.lan.Prefix.Addr()
 	}
 	if a.browser.uid > 0 {
 		input.Browser = &render.BrowserRule{UID: a.browser.uid, Uplinks: a.uplinkInterfaces()}

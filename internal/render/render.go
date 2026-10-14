@@ -340,6 +340,9 @@ type DnsmasqInput struct {
 	// Metered tells Android devices the connection is limited (see
 	// config.HotspotConfig.Metered).
 	Metered bool
+	// Plugins makes dnsmasq answer plugins' DNS questions too, on the
+	// plugins' network (PluginBridge must exist). Ignored when Captive.
+	Plugins bool
 }
 
 type dnsmasqData struct {
@@ -361,6 +364,7 @@ type dnsmasqData struct {
 	IPv6             bool
 	IPv6DefaultRoute bool
 	NoticeHostnames  []string
+	PluginBridge     string
 }
 
 // Dnsmasq produces dnsmasq.conf text.
@@ -381,6 +385,9 @@ func Dnsmasq(in DnsmasqInput) (string, error) {
 	if !in.Captive {
 		data.NoticeHostnames = in.NoticeHostnames
 		data.Metered = in.Metered
+		if in.Plugins {
+			data.PluginBridge = PluginBridge
+		}
 		if g := in.Guest; g != nil {
 			data.GuestBridge = GuestBridgeName
 			data.GuestAddress = g.Address()
@@ -439,6 +446,44 @@ type FirewallInput struct {
 	// RasBeacon (see config.VPNConfig.RoutedIPv6Prefix). Devices' traffic
 	// from it leaves through the tunnel without NAT. Needs TunnelInterface.
 	RoutedIPv6 netip.Prefix
+	// Plugins are the installed plugins (see internal/plugin): what each
+	// may reach, and its ports on RasBeacon.
+	Plugins []PluginRule
+	// LANAddress is RasBeacon's address on the hotspot, where devices reach
+	// plugins' ports. Needed with Plugins.
+	LANAddress netip.Addr
+}
+
+// PluginRule is one plugin's place in the firewall.
+type PluginRule struct {
+	// Address is its address on the plugins' network (PluginSubnet).
+	Address netip.Addr
+	// Internet lets it reach the internet the way devices do (through the
+	// VPN when that is in use); LANAccess lets it reach your devices.
+	Internet  bool
+	LANAccess bool
+	Ports     []PluginPort
+}
+
+// PluginPort sends a port on RasBeacon (Host) to a plugin's port.
+type PluginPort struct {
+	Protocol  string
+	Host      int
+	Container int
+}
+
+// PluginBridge is the plugins' network's interface, and PluginGateway
+// RasBeacon's address on it.
+const (
+	PluginBridge  = "rbplug0"
+	PluginGateway = "10.89.0.1"
+)
+
+type pluginPortData struct {
+	Protocol  string
+	Host      int
+	Container int
+	Address   string
 }
 
 // BrowserRule says which user runs the login browser and where it may go.
@@ -463,6 +508,12 @@ type firewallData struct {
 	TunnelDNS4      []string
 	TunnelDNS6      []string
 	TunnelInterface string
+	PluginBridge    string
+	PluginGateway   string
+	PluginInternet  []string
+	PluginLAN       []string
+	PluginPorts     []pluginPortData
+	LANAddress      string
 }
 
 // Firewall produces the nftables ruleset.
@@ -480,6 +531,35 @@ func Firewall(in FirewallInput) (string, error) {
 		PortalOnly:      in.PortalOnly,
 		Guest:           in.Guest,
 		GuestBridge:     GuestBridgeName,
+		PluginBridge:    PluginBridge,
+		PluginGateway:   PluginGateway,
+	}
+	if len(in.Plugins) > 0 && !in.LANAddress.Is4() {
+		return "", fmt.Errorf("plugins need RasBeacon's hotspot address")
+	}
+	data.LANAddress = in.LANAddress.String()
+	usedPorts := map[string]bool{}
+	for _, p := range in.Plugins {
+		if !PluginSubnet.Contains(p.Address) || p.Address.String() == PluginGateway {
+			return "", fmt.Errorf("plugin address %s is not on the plugins' network", p.Address)
+		}
+		if p.Internet {
+			data.PluginInternet = append(data.PluginInternet, p.Address.String())
+		}
+		if p.LANAccess {
+			data.PluginLAN = append(data.PluginLAN, p.Address.String())
+		}
+		for _, port := range p.Ports {
+			key := fmt.Sprintf("%s/%d", port.Protocol, port.Host)
+			if port.Protocol != "tcp" && port.Protocol != "udp" || port.Host < 1 || port.Host > 65535 ||
+				port.Container < 1 || port.Container > 65535 || usedPorts[key] {
+				return "", fmt.Errorf("invalid or repeated plugin port %s", key)
+			}
+			usedPorts[key] = true
+			data.PluginPorts = append(data.PluginPorts, pluginPortData{
+				Protocol: port.Protocol, Host: port.Host, Container: port.Container, Address: p.Address.String(),
+			})
+		}
 	}
 	if len(in.TunnelDNS) > 0 && in.TunnelInterface == "" {
 		return "", fmt.Errorf("tunnel DNS servers need a tunnel interface")

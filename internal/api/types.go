@@ -104,19 +104,21 @@ type SessionInfo struct {
 
 // Status is the overview shown on the status page.
 type Status struct {
-	Version       string             `json:"version"`
-	BoardModel    string             `json:"boardModel"`
-	DeviceID      string             `json:"deviceId"`
-	UptimeSeconds int                `json:"uptimeSeconds"`
-	Mode          Mode               `json:"mode"`
-	Hotspot       HotspotStatus      `json:"hotspot"`
-	Uplink        UplinkStatus       `json:"uplink"`
-	VPN           VPNStatus          `json:"vpn"`
-	Portal        PortalStatus       `json:"portal"`
-	Update        UpdateStatus       `json:"update"`
-	Radios        []radio.Radio      `json:"radios"`
-	Clients       []stations.Station `json:"clients"`
-	Guest         GuestStatus        `json:"guest"`
+	Version       string `json:"version"`
+	BoardModel    string `json:"boardModel"`
+	DeviceID      string `json:"deviceId"`
+	UptimeSeconds int    `json:"uptimeSeconds"`
+	Mode          Mode   `json:"mode"`
+	// Plugins are the installed plugins and their state.
+	Plugins []PluginSummary    `json:"plugins"`
+	Hotspot HotspotStatus      `json:"hotspot"`
+	Uplink  UplinkStatus       `json:"uplink"`
+	VPN     VPNStatus          `json:"vpn"`
+	Portal  PortalStatus       `json:"portal"`
+	Update  UpdateStatus       `json:"update"`
+	Radios  []radio.Radio      `json:"radios"`
+	Clients []stations.Station `json:"clients"`
+	Guest   GuestStatus        `json:"guest"`
 	// Warnings are problems the owner should know about, in plain words.
 	Warnings []string `json:"warnings"`
 
@@ -681,4 +683,268 @@ type SwapSettings struct {
 	// MaxGB is the largest size that fits: the free space on the SD card,
 	// counting the swap file itself, minus 1 GB kept free (read-only).
 	MaxGB int `json:"maxGb"`
+}
+
+// --- Plugins (see internal/plugin and docs/plugins.md) ---
+
+// PluginPermission is a permission in plain words.
+type PluginPermission struct {
+	ID     string `json:"id"`
+	Title  string `json:"title"`
+	Detail string `json:"detail"`
+}
+
+// PluginPort is one of a plugin's ports: Key ("tcp/3000") names it in
+// requests, Host is the port on RasBeacon.
+type PluginPort struct {
+	Key       string `json:"key"`
+	Name      string `json:"name"`
+	Protocol  string `json:"protocol"`
+	Container int    `json:"container"`
+	Host      int    `json:"host"`
+	// URL is the address to open it at, for ports marked "open".
+	URL string `json:"url,omitempty"`
+}
+
+// PluginOption is a choice of a select setting.
+type PluginOption struct {
+	Value string `json:"value"`
+	Label string `json:"label"`
+}
+
+// PluginSetting is a field of a plugin's settings form, with its value.
+// Passwords are never sent back: HasValue says one is saved.
+type PluginSetting struct {
+	Key      string         `json:"key"`
+	Label    string         `json:"label"`
+	Type     string         `json:"type"`
+	Help     string         `json:"help,omitempty"`
+	Unit     string         `json:"unit,omitempty"`
+	Required bool           `json:"required,omitempty"`
+	Options  []PluginOption `json:"options,omitempty"`
+	Min      *float64       `json:"min,omitempty"`
+	Max      *float64       `json:"max,omitempty"`
+	Value    string         `json:"value"`
+	HasValue bool           `json:"hasValue,omitempty"`
+}
+
+// PluginMetric is a number on a plugin's page; Value is "" when it can't
+// be read now.
+type PluginMetric struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
+}
+
+// Plugin states.
+const (
+	PluginInstalling = "installing" // getting its image, setting it up
+	PluginWaiting    = "waiting"    // waiting for the VPN before downloading
+	PluginStarting   = "starting"
+	PluginRunning    = "running"
+	PluginStopped    = "stopped"
+	PluginCrashed    = "crashed" // stopped after crashing too often
+	PluginFailed     = "failed"  // couldn't install or start; see Message
+)
+
+// Plugin is an installed plugin (GET /plugins).
+type Plugin struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Version     string `json:"version"`
+	Description string `json:"description"`
+	Author      string `json:"author,omitempty"`
+	Homepage    string `json:"homepage,omitempty"`
+	// Icon is a data: URL.
+	Icon   string `json:"icon"`
+	Readme string `json:"readme,omitempty"`
+	// Source is "file" or the catalog's "owner/repo".
+	Source string `json:"source"`
+	Signed bool   `json:"signed"`
+	KeyID  string `json:"keyId,omitempty"`
+	State  string `json:"state"`
+	// Message explains the state (progress, or what went wrong).
+	Message string `json:"message,omitempty"`
+	// Healthy is the health check's last answer (nil: no check, or not yet).
+	Healthy     *bool              `json:"healthy,omitempty"`
+	Address     string             `json:"address"`
+	Permissions []PluginPermission `json:"permissions"`
+	Ports       []PluginPort       `json:"ports"`
+	Settings    []PluginSetting    `json:"settings"`
+	// UsesDrive: it can use a USB drive; Drive is the chosen one's UUID.
+	UsesDrive     bool           `json:"usesDrive"`
+	DriveOptional bool           `json:"driveOptional,omitempty"`
+	Drive         string         `json:"drive,omitempty"`
+	AfterInstall  string         `json:"afterInstall,omitempty"`
+	Metrics       []PluginMetric `json:"metrics"`
+	MemoryMB      int            `json:"memoryMb"`
+	CPUs          float64        `json:"cpus"`
+	StorageMB     int            `json:"storageMb"`
+	// UpdateVersion is a newer version in the catalog ("" = none known).
+	UpdateVersion string `json:"updateVersion,omitempty"`
+	// CanUpdate: the update can be installed from the catalog (signed
+	// plugins only; unsigned ones are updated from a file).
+	CanUpdate bool `json:"canUpdate"`
+}
+
+// PluginSource is a catalog source.
+type PluginSource struct {
+	Source  string `json:"source"`
+	BuiltIn bool   `json:"builtIn"`
+}
+
+// PluginsState is GET /plugins.
+type PluginsState struct {
+	Plugins []Plugin       `json:"plugins"`
+	Sources []PluginSource `json:"sources"`
+	// Board is this Pi (pi5, pi4, pi3, zero2w, or "").
+	Board    string `json:"board"`
+	MemoryMB int    `json:"memoryMb"`
+	SwapMB   int    `json:"swapMb"`
+	Metered  bool   `json:"metered"`
+	// CheckedAt is when the catalog was last fetched ("" = never).
+	CheckedAt  string `json:"checkedAt,omitempty"`
+	CheckError string `json:"checkError,omitempty"`
+}
+
+// PluginSummary is a plugin on the status page.
+type PluginSummary struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	State string `json:"state"`
+	Icon  string `json:"icon"`
+}
+
+// PluginPreview is what the install sheet shows before installing (from
+// POST /plugins/upload or /plugins/catalog/download).
+type PluginPreview struct {
+	StagingID   string `json:"stagingId"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Version     string `json:"version"`
+	Description string `json:"description"`
+	Author      string `json:"author,omitempty"`
+	Homepage    string `json:"homepage,omitempty"`
+	Icon        string `json:"icon"`
+	Source      string `json:"source"`
+	Signed      bool   `json:"signed"`
+	KeyID       string `json:"keyId,omitempty"`
+	// Update is true when it replaces an installed version (FromVersion).
+	Update      bool   `json:"update"`
+	FromVersion string `json:"fromVersion,omitempty"`
+	// Permissions it asks for; NewPermissions are those an update adds.
+	Permissions    []PluginPermission `json:"permissions"`
+	NewPermissions []string           `json:"newPermissions,omitempty"`
+	Ports          []PluginPort       `json:"ports"`
+	Settings       []PluginSetting    `json:"settings"`
+	UsesDrive      bool               `json:"usesDrive"`
+	DriveOptional  bool               `json:"driveOptional,omitempty"`
+	Drive          string             `json:"drive,omitempty"`
+	// DownloadSize is what installing still downloads (the image from its
+	// registry; -1: unknown); Metered warns it counts against a limit.
+	DownloadSize int64   `json:"downloadSize"`
+	Metered      bool    `json:"metered"`
+	MemoryMB     int     `json:"memoryMb"`
+	CPUs         float64 `json:"cpus"`
+	StorageMB    int     `json:"storageMb"`
+	// Warnings are shown above the Install button (e.g. little memory).
+	Warnings []string `json:"warnings,omitempty"`
+}
+
+// PluginInstallRequest installs a previewed plugin (POST /plugins/install):
+// ports by key ("tcp/3000"), settings by key (an empty password keeps the
+// saved one on an update), and the USB drive's UUID.
+type PluginInstallRequest struct {
+	StagingID string            `json:"stagingId"`
+	Ports     map[string]int    `json:"ports"`
+	Settings  map[string]string `json:"settings"`
+	Drive     string            `json:"drive"`
+}
+
+// PluginSettingsRequest changes an installed plugin's settings (PUT
+// /plugins/settings); it restarts.
+type PluginSettingsRequest struct {
+	ID       string            `json:"id"`
+	Ports    map[string]int    `json:"ports"`
+	Settings map[string]string `json:"settings"`
+	Drive    string            `json:"drive"`
+}
+
+// PluginIDRequest names a plugin.
+type PluginIDRequest struct {
+	ID string `json:"id"`
+}
+
+// PluginRemoveRequest removes a plugin; KeepData keeps its data for a
+// later install of the same plugin.
+type PluginRemoveRequest struct {
+	ID       string `json:"id"`
+	KeepData bool   `json:"keepData"`
+}
+
+// PluginCatalogRequest asks for the catalog; Refresh asks GitHub again
+// ("Check now") instead of using the saved copy.
+type PluginCatalogRequest struct {
+	Refresh bool `json:"refresh"`
+}
+
+// PluginCatalogEntry is a plugin a source offers.
+type PluginCatalogEntry struct {
+	Source       string   `json:"source"`
+	File         string   `json:"file"`
+	ID           string   `json:"id,omitempty"`
+	Name         string   `json:"name"`
+	Version      string   `json:"version,omitempty"`
+	Description  string   `json:"description,omitempty"`
+	Permissions  []string `json:"permissions,omitempty"`
+	Size         int64    `json:"size"`
+	DownloadSize int64    `json:"downloadSize,omitempty"`
+	Icon         string   `json:"icon,omitempty"`
+	// InstalledVersion is set when it is installed; RunsHere is false for
+	// plugins made for other boards.
+	InstalledVersion string `json:"installedVersion,omitempty"`
+	RunsHere         bool   `json:"runsHere"`
+}
+
+// PluginCatalog is POST /plugins/catalog's answer.
+type PluginCatalog struct {
+	Entries   []PluginCatalogEntry `json:"entries"`
+	CheckedAt string               `json:"checkedAt,omitempty"`
+	// Errors by source (e.g. "no releases", GitHub asking to wait).
+	Errors map[string]string `json:"errors,omitempty"`
+}
+
+// PluginDownloadRequest downloads a catalog plugin for the install sheet.
+type PluginDownloadRequest struct {
+	Source string `json:"source"`
+	File   string `json:"file"`
+}
+
+// PluginLogs are a plugin's last lines of output.
+type PluginLogs struct {
+	Lines []string `json:"lines"`
+}
+
+// PluginSourcesRequest sets the extra catalog sources.
+type PluginSourcesRequest struct {
+	Sources []string `json:"sources"`
+}
+
+// PluginDrive is a USB drive's partition; UsedBy names the plugin using it.
+type PluginDrive struct {
+	UUID   string `json:"uuid"`
+	Label  string `json:"label"`
+	FSType string `json:"fsType"`
+	Size   int64  `json:"size"`
+	UsedBy string `json:"usedBy,omitempty"`
+}
+
+// PluginDrives is GET /plugins/drives.
+type PluginDrives struct {
+	Drives []PluginDrive `json:"drives"`
+}
+
+// PluginPowerRequest is what a plugin with the power-button permission
+// sends on its socket: shutdown or reboot.
+type PluginPowerRequest struct {
+	Action string `json:"action"`
 }

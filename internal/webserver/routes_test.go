@@ -17,6 +17,8 @@ var rbdOnlyRoutes = []string{
 	"GET /portal", "GET /portal/browser/frame", "POST /portal/browser/input",
 	"POST /portal/browser/start", "POST /portal/browser/stop",
 	"POST /portal/start", "POST /portal/stop", "POST /portal/extend", "POST /portal/check",
+	// Streamed or slow: rbweb has its own handlers (see Handler).
+	"POST /plugins/upload", "POST /plugins/catalog", "POST /plugins/catalog/download", "POST /plugins/update",
 }
 
 // Every route rbd offers must be reachable through rbweb: a settings page

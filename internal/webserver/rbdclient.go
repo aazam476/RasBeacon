@@ -59,7 +59,7 @@ func (c *RBDClient) Stream(path string, body io.Reader) (int, []byte, error) {
 		return 0, nil, fmt.Errorf("contacting rbd: %w", err)
 	}
 	defer resp.Body.Close()
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
 	return resp.StatusCode, respBody, err
 }
 

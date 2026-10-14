@@ -20,10 +20,16 @@ export interface Stat {
  * number, the same in every column.
  */
 export function StatRow({ stats, className }: { stats: Stat[]; className?: string }) {
+  // Four readings go two by two on phones rather than three and one.
+  const pairs = stats.length === 4;
   return (
     <dl
-      className={cn('row grid items-start gap-x-4 gap-y-3 py-3 lg:py-2.5', className)}
-      style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 4.5rem), 1fr))' }}
+      className={cn(
+        'row grid items-start gap-x-4 gap-y-3 py-3 lg:py-2.5',
+        pairs && 'grid-cols-2 sm:grid-cols-4',
+        className,
+      )}
+      style={pairs ? undefined : { gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 4.5rem), 1fr))' }}
     >
       {stats.map((stat) => (
         <div key={stat.label} className="@container flex min-w-0 flex-col">

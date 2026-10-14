@@ -76,6 +76,14 @@ table inet rasbeacon {
 		iifname "{{.GuestBridge}}" reject
 {{- end}}
 
+		# --- From plugins ("{{.PluginBridge}}") ---
+		# Plugins that may use the internet may ask RasBeacon's DNS server.
+		# Nothing else on RasBeacon answers them (not these settings).
+{{- if .PluginInternet}}
+		iifname "{{.PluginBridge}}" ip saddr { {{range $i, $a := .PluginInternet}}{{if $i}}, {{end}}{{$a}}{{end}} } ip daddr {{.PluginGateway}} meta l4proto { tcp, udp } th dport 53 accept
+{{- end}}
+		iifname "{{.PluginBridge}}" reject
+
 		# Everything else is dropped by the policy above. In particular,
 		# nothing from the upstream network can reach the web UI or SSH.
 	}
@@ -84,6 +92,20 @@ table inet rasbeacon {
 	# internet). Anything not allowed here is dropped.
 	chain forward {
 		type filter hook forward priority filter; policy drop;
+{{- if or .PluginPorts .PluginLAN}}
+
+		# Plugins: devices on your hotspot may reach the ports you gave them
+		# (see plugin_ports below), and the plugins may answer. Guests and
+		# the internet can't reach them.
+{{- if .PluginPorts}}
+		iifname "{{.Bridge}}" oifname "{{.PluginBridge}}" ct status dnat accept
+{{- end}}
+		iifname "{{.PluginBridge}}" oifname "{{.Bridge}}" ct state established,related accept
+{{- end}}
+{{- if .PluginLAN}}
+		# Plugins allowed to reach your devices (not guests).
+		iifname "{{.PluginBridge}}" ip saddr { {{range $i, $a := .PluginLAN}}{{if $i}}, {{end}}{{$a}}{{end}} } oifname "{{.Bridge}}" accept
+{{- end}}
 {{- if .Egress}}
 
 		# Make new TCP connections use packets small enough for every link on
@@ -105,6 +127,8 @@ table inet rasbeacon {
 		# of carrying on outside the tunnel.
 		iifname @lans oifname @egress ct state established,related accept
 		iifname @egress oifname @lans ct state established,related accept
+		iifname "{{.PluginBridge}}" oifname @egress ct state established,related accept
+		iifname @egress oifname "{{.PluginBridge}}" ct state established,related accept
 {{- if .PortalOnly}}
 
 		# LOGIN MODE (captive portal): for a few minutes, devices may reach
@@ -119,6 +143,11 @@ table inet rasbeacon {
 		# a connection to a device{{if .Guest}}, and the two networks can't reach
 		# each other{{end}}.
 		iifname @lans oifname @egress accept
+{{- if .PluginInternet}}
+		# Plugins that may use the internet: the same way as your devices
+		# (through the VPN when it is in use). Not in login mode above.
+		iifname "{{.PluginBridge}}" ip saddr { {{range $i, $a := .PluginInternet}}{{if $i}}, {{end}}{{$a}}{{end}} } oifname @egress accept
+{{- end}}
 {{- end}}
 {{- else}}
 		# Nothing is forwarded (for example during first-boot setup).
@@ -145,6 +174,18 @@ table inet rasbeacon {
 		oifname "{{.TunnelInterface}}" ip6 saddr {{.RoutedIPv6}} accept
 {{- end}}
 		oifname @egress masquerade
+	}
+{{- end}}
+
+{{- if .PluginPorts}}
+
+	# Plugins' ports: a device on your hotspot reaches a plugin at
+	# RasBeacon's address and the port you chose for it.
+	chain plugin_ports {
+		type nat hook prerouting priority dstnat;
+{{- range .PluginPorts}}
+		iifname "{{$.Bridge}}" ip daddr {{$.LANAddress}} {{.Protocol}} dport {{.Host}} dnat ip to {{.Address}}:{{.Container}}
+{{- end}}
 	}
 {{- end}}
 

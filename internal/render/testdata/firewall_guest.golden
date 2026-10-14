@@ -69,6 +69,11 @@ table inet rasbeacon {
 		iifname "br-guest" meta l4proto { tcp, udp } th dport 53 accept
 		iifname "br-guest" reject
 
+		# --- From plugins ("rbplug0") ---
+		# Plugins that may use the internet may ask RasBeacon's DNS server.
+		# Nothing else on RasBeacon answers them (not these settings).
+		iifname "rbplug0" reject
+
 		# Everything else is dropped by the policy above. In particular,
 		# nothing from the upstream network can reach the web UI or SSH.
 	}
@@ -91,6 +96,8 @@ table inet rasbeacon {
 		# of carrying on outside the tunnel.
 		iifname @lans oifname @egress ct state established,related accept
 		iifname @egress oifname @lans ct state established,related accept
+		iifname "rbplug0" oifname @egress ct state established,related accept
+		iifname @egress oifname "rbplug0" ct state established,related accept
 
 		# Devices on the hotspot and guests may reach the internet, only
 		# through the interfaces in "egress". Nothing from outside may start

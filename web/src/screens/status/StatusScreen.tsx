@@ -6,6 +6,7 @@ import { describeWiFiState } from '../common/describe';
 import { PortalNotice } from '../common/PortalNotice';
 import { HardwareSection } from './HardwareSection';
 import { InternetSection } from './InternetSection';
+import { PluginsSection } from './PluginsSection';
 import { DevicesSection, GuestSection, HotspotSection } from './NetworkSections';
 import { StatusHero } from './StatusHero';
 import { TrafficSection } from './TrafficSection';
@@ -47,6 +48,7 @@ export function StatusScreen() {
             <DevicesSection clients={status.clients} guests={status.guest.clients.length} />
             <HotspotSection hotspot={status.hotspot} />
             <GuestSection guest={status.guest} />
+            <PluginsSection plugins={status.plugins} />
             <HardwareSection status={status} />
           </div>
         </>

@@ -131,6 +131,12 @@ func (s *Server) Handler() http.Handler {
 	})))
 	// Update files are large, so they are streamed to rbd.
 	mux.Handle("POST /api/v1/system/update", s.requireLogin(http.HandlerFunc(s.handleUpdate)))
+	// So are plugin files; and the catalog and plugin downloads take a
+	// while (GitHub and image registries, through the VPN).
+	mux.Handle("POST /api/v1/plugins/upload", s.requireLogin(http.HandlerFunc(s.handlePluginUpload)))
+	for _, route := range []string{"/plugins/catalog", "/plugins/catalog/download", "/plugins/update"} {
+		mux.Handle("POST /api/v1"+route, s.requireLogin(s.slowForward(route)))
+	}
 
 	// Factory reset also logs everyone out.
 	mux.Handle("POST /api/v1/system/factory-reset", s.requireLogin(s.handleFactoryReset()))
@@ -342,6 +348,41 @@ func (s *Server) handleUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeRaw(w, status, "application/json", body)
+}
+
+// handlePluginUpload streams an uploaded plugin file to rbd, which checks
+// it and answers what installing it means.
+func (s *Server) handlePluginUpload(w http.ResponseWriter, r *http.Request) {
+	rc := http.NewResponseController(w)
+	_ = rc.SetReadDeadline(time.Now().Add(updateUploadTime))
+	_ = rc.SetWriteDeadline(time.Now().Add(updateUploadTime + 5*time.Minute))
+	status, body, err := s.rbd.Stream("/plugins/upload", http.MaxBytesReader(w, r.Body, maxUpdateSize))
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, api.ErrorResponse{Error: err.Error()})
+		return
+	}
+	writeRaw(w, status, "application/json", body)
+}
+
+// pluginDownloadTime is how long a catalog request or plugin download may
+// take (a large .rba on a slow connection).
+const pluginDownloadTime = 30 * time.Minute
+
+// slowForward forwards a JSON request that may take minutes.
+func (s *Server) slowForward(rbdPath string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, ok := readBody(w, r)
+		if !ok {
+			return
+		}
+		_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(pluginDownloadTime))
+		status, respBody, err := s.rbd.DoSlow(http.MethodPost, rbdPath, body)
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, api.ErrorResponse{Error: err.Error()})
+			return
+		}
+		writeRaw(w, status, "application/json", respBody)
+	})
 }
 
 // requireJSON only lets through requests with a JSON body type. Other
@@ -576,4 +617,14 @@ var forwardedRoutes = map[string]string{
 	"POST /api/v1/clients/usage/reset":               "/clients/usage/reset",
 	"GET /api/v1/settings/swap":                      "/settings/swap",
 	"PUT /api/v1/settings/swap":                      "/settings/swap",
+	"GET /api/v1/plugins":                            "/plugins",
+	"POST /api/v1/plugins/install":                   "/plugins/install",
+	"POST /api/v1/plugins/cancel":                    "/plugins/cancel",
+	"PUT /api/v1/plugins/settings":                   "/plugins/settings",
+	"POST /api/v1/plugins/start":                     "/plugins/start",
+	"POST /api/v1/plugins/stop":                      "/plugins/stop",
+	"POST /api/v1/plugins/remove":                    "/plugins/remove",
+	"POST /api/v1/plugins/logs":                      "/plugins/logs",
+	"GET /api/v1/plugins/drives":                     "/plugins/drives",
+	"PUT /api/v1/plugins/sources":                    "/plugins/sources",
 }

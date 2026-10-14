@@ -16,6 +16,11 @@ function summary(item: NavItem, device: DeviceState): string | undefined {
       return device.sshSettings.data && (device.sshSettings.data.enabled ? 'On' : 'Off');
     case '/https':
       return device.httpsSettings.data && (device.httpsSettings.data.enabled ? 'On' : 'Off');
+    case '/plugins': {
+      const count = status?.plugins.length;
+      if (count === undefined) return undefined;
+      return count === 0 ? 'None' : count === 1 ? '1 installed' : `${count} installed`;
+    }
     case '/system':
       if (!status) return undefined;
       return status.update.latestVersion ? `${status.update.latestVersion} available` : status.version;

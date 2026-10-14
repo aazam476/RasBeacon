@@ -44,6 +44,14 @@ mmdebstrap:
     # (grow-data-partition): sfdisk, and resize2fs for ext4
     - fdisk
     - e2fsprogs
+    # Plugins run in Podman containers (see internal/agent/plugins.go):
+    # Podman, its container runtime and monitor, and its network helper.
+    - podman
+    - crun
+    - conmon
+    - netavark
+    # Plugins' USB drives: exFAT (NTFS is in the kernel, ntfs3)
+    - exfatprogs
     # The login browser for hotel networks (zero-leak login, see
     # internal/browser): Chromium without a window, and a font for it
     - chromium-headless-shell
@@ -83,6 +91,10 @@ mmdebstrap:
 
       # RasBeacon: optional factory-reset button (GPIO 17 to ground, hold 10 s)
       dtoverlay=gpio-key,gpio=17,active_low=1,gpio_pull=up,keycode=0x198,label=rasbeacon-reset
+
+      # RasBeacon: the I²C bus on GPIO 2 and 3, for plugins that drive a
+      # case's fan (for example the Argon ONE V2)
+      dtparam=i2c_arm=on
 
       # RasBeacon: one image for the Pi 4 and Pi 5. The Pi 5 starts the same
       # 64-bit kernel as the Pi 4 (its own, kernel_2712.img, isn't installed).

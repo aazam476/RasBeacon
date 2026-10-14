@@ -54,6 +54,11 @@ table inet rasbeacon {
 		# Web UI (HTTP and HTTPS). Only reachable from the hotspot side.
 		iifname "br-lan" tcp dport { 80, 443 } accept
 
+		# --- From plugins ("rbplug0") ---
+		# Plugins that may use the internet may ask RasBeacon's DNS server.
+		# Nothing else on RasBeacon answers them (not these settings).
+		iifname "rbplug0" reject
+
 		# Everything else is dropped by the policy above. In particular,
 		# nothing from the upstream network can reach the web UI or SSH.
 	}
