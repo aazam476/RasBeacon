@@ -103,6 +103,52 @@ func (a *Agent) Handler() http.Handler {
 		}
 		w.WriteHeader(http.StatusNoContent)
 	})
+	mux.HandleFunc("POST /clients/name", func(w http.ResponseWriter, r *http.Request) {
+		var req api.ClientNameRequest
+		if !readJSON(w, r, &req) {
+			return
+		}
+		if err := a.SetClientName(req.MAC, req.Name); err != nil {
+			writeError(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("POST /wifi-qr", func(w http.ResponseWriter, r *http.Request) {
+		var req api.WiFiQRRequest
+		if !readJSON(w, r, &req) {
+			return
+		}
+		code, err := a.WiFiQR(req)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, code)
+	})
+	mux.HandleFunc("GET /settings/usage", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, a.UsageSettings())
+	})
+	mux.HandleFunc("PUT /settings/usage", func(w http.ResponseWriter, r *http.Request) {
+		var req api.UsageSettings
+		if !readJSON(w, r, &req) {
+			return
+		}
+		settings, err := a.UpdateUsageSettings(req)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, settings)
+	})
+	mux.HandleFunc("POST /clients/usage/reset", func(w http.ResponseWriter, r *http.Request) {
+		settings, err := a.ResetUsage()
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, settings)
+	})
 	clientActions := map[string]func(string) error{
 		"POST /clients/disconnect":  a.DisconnectClient,
 		"POST /clients/flush-lease": a.FlushClientLease,

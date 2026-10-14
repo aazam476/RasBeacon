@@ -47,6 +47,15 @@ type Station struct {
 	// Wired marks a device on the Ethernet client port. It has no band,
 	// signal or measured traffic, and can't be sent off like a Wi-Fi device.
 	Wired bool `json:"wired,omitempty"`
+	// Name is the owner's name for the device ("" if none).
+	Name string `json:"name,omitempty"`
+	// DownBytes and UpBytes are the data it used since the counters were
+	// reset (Wi-Fi devices only; the radio counts them).
+	DownBytes uint64 `json:"downBytes"`
+	UpBytes   uint64 `json:"upBytes"`
+	// LimitReached is true while it is paused for using more than the data
+	// limit on a metered connection.
+	LimitReached bool `json:"limitReached,omitempty"`
 
 	// RxBytes and TxBytes are the radio's byte counters for the device
 	// (Tx is towards it), used to work out the rates.

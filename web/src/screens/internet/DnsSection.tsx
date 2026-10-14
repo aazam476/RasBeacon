@@ -4,11 +4,12 @@ import type { DNSSettings } from '@/data/types';
 import { keepTogether } from '@/lib/format';
 import { useForm } from '@/lib/useForm';
 import { Loaded } from '@/shell/Loaded';
-import { Disclosure, FormActions, Section, TextAreaField } from '@/ui';
+import { Disclosure, FormActions, FormSwitchRow, Section, TextAreaField } from '@/ui';
 
 /**
- * The DNS servers devices use while their traffic isn't going through the VPN. Few people change
- * them, so they are one level down, with the servers in use shown on the row.
+ * The DNS servers devices use: while their traffic isn't going through the VPN, and, with the
+ * switch on, while it is (then reached through the VPN). Few people change them, so they are one
+ * level down, with the servers in use shown on the row.
  */
 export function DnsSection() {
   const { dnsSettings, reload } = useDevice();
@@ -16,7 +17,13 @@ export function DnsSection() {
   return (
     <Loaded data={dnsSettings} what="the DNS servers" onRetry={() => reload('dnsSettings')}>
       {(settings) => (
-        <Section footer="For your devices while the VPN is off; the VPN brings its own. Hotel login pages always use the network's own servers.">
+        <Section
+          footer={
+            settings.withVpn && settings.servers.length > 0
+              ? "For your devices, also while the VPN is on (then through the VPN). Hotel login pages always use the network's own servers."
+              : "For your devices while the VPN is off; the VPN brings its own. Hotel login pages always use the network's own servers."
+          }
+        >
           <Disclosure
             title="DNS servers"
             subtitle={
@@ -35,7 +42,9 @@ export function DnsSection() {
 
 function DnsForm({ settings }: { settings: DNSSettings }) {
   const { saveDnsSettings } = useDevice();
-  const form = useForm({ servers: settings.servers.join('\n') }, (values) => saveDnsSettings(values.servers));
+  const form = useForm({ servers: settings.servers.join('\n'), withVpn: settings.withVpn }, (values) =>
+    saveDnsSettings(values.servers, values.withVpn),
+  );
   const { values, setField, fieldErrors } = form;
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -55,6 +64,13 @@ function DnsForm({ settings }: { settings: DNSSettings }) {
         value={values.servers}
         onChange={(servers) => setField('servers', servers)}
         error={fieldErrors.servers}
+      />
+      <FormSwitchRow
+        label="Also use while the VPN is on"
+        description="Lookups go through the VPN to these servers instead of the VPN's. Turn on for a server on RasBeacon, like AdGuard Home."
+        checked={values.withVpn}
+        onChange={(withVpn) => setField('withVpn', withVpn)}
+        disabled={values.servers.trim() === ''}
       />
       <div className="row">
         <FormActions

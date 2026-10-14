@@ -89,6 +89,13 @@ export interface Client {
    * and it can't be disconnected from here (it can be paused).
    */
   wired?: boolean;
+  /** The owner's name for the device; the screens prefer it over `hostname`. */
+  name?: string;
+  /** Data used since the counters were reset (Wi-Fi devices; 0 for wired ones). */
+  downBytes: number;
+  upBytes: number;
+  /** Paused for going over the data limit on a metered connection. */
+  limitReached?: boolean;
 }
 
 export interface HotspotStatus {
@@ -376,6 +383,30 @@ export interface SwapSettings {
  */
 export interface DNSSettings {
   servers: string[];
+  /** Use the servers while the VPN is on too (they are then reached through it). */
+  withVpn: boolean;
+}
+
+/**
+ * GET/PUT /api/v1/settings/usage: a data limit per device that applies while the connection is
+ * marked metered.
+ */
+export interface UsageSettings {
+  /** 0 = no limit. */
+  limitMb: number;
+  /** When counting started (RFC 3339); read-only. */
+  since?: string;
+  /** Whether the limit applies now (the hotspot's metered setting); read-only. */
+  metered: boolean;
+  /** How many devices the limit pauses now; read-only. */
+  devicesPaused: number;
+}
+
+/** POST /api/v1/wifi-qr: a QR code phones scan to join a network. */
+export interface WiFiQR {
+  ssid: string;
+  /** An SVG image, black on white. */
+  svg: string;
 }
 
 /** GET/PUT /api/v1/settings/ssh. `authorizedKeys` is the text of the keys, one per line. */
@@ -418,6 +449,8 @@ export interface SavedNetwork {
   ssid: string;
   security: UplinkSecurity;
   hidden: boolean;
+  /** Join with a random MAC address instead of the Pi's own (a new one at each restart). */
+  randomMac?: boolean;
   hasPassword: boolean;
   /** Network password, Enterprise password, or EAP-TLS key passphrase. */
   password?: string;

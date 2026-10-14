@@ -7,6 +7,7 @@ import { Loaded } from '@/shell/Loaded';
 import { ButtonRow, Icon, Row, Section, StatRow } from '@/ui';
 import { allClients, type NetworkClient } from '../common/clientDisplay';
 import { ClientSection } from './ClientSection';
+import { UsageSection } from './UsageSection';
 import { CLIENT_FILTERS, filterClients, type ClientFilter } from './clientFilters';
 
 /** Every device on RasBeacon's networks, with live readings and a switch for its internet access. */
@@ -63,6 +64,8 @@ function ClientList({ status }: { status: Status }) {
           ))}
         </ul>
       )}
+
+      <UsageSection />
     </>
   );
 }

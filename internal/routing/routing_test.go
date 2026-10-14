@@ -69,3 +69,21 @@ func TestNoIPv6CommandsWithoutKernelIPv6(t *testing.T) {
 		t.Errorf("IPv6 commands with IPv6 off in the kernel:\n%s", got)
 	}
 }
+
+func TestProgramThroughTunnel(t *testing.T) {
+	got := joined(ProgramThroughTunnel(996, true))
+	for _, want := range []string{
+		"ip -4 rule add priority 110 uidrange 996-996 lookup 51820",
+		"ip -6 rule add priority 110 uidrange 996-996 lookup 51820",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in:\n%s", want, got)
+		}
+	}
+	if got := joined(ProgramThroughTunnel(996, false)); strings.Contains(got, "-6") {
+		t.Errorf("no IPv6 rule without IPv6:\n%s", got)
+	}
+	if got := joined(ProgramDirect()); !strings.Contains(got, "ip -4 rule delete priority 110") {
+		t.Errorf("got:\n%s", got)
+	}
+}

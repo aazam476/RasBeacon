@@ -2,6 +2,8 @@ import { createContext, useContext } from 'react';
 import type {
   ClaimResponse,
   DNSSettings,
+  UsageSettings,
+  WiFiQR,
   EthernetRole,
   GuestSettings,
   HotspotSettings,
@@ -57,6 +59,7 @@ export type DataKey =
   | 'sshSettings'
   | 'dnsSettings'
   | 'swapSettings'
+  | 'usageSettings'
   | 'httpsSettings'
   | 'portal';
 
@@ -84,6 +87,7 @@ export interface DeviceState {
   sshSettings: Loadable<SSHSettings>;
   dnsSettings: Loadable<DNSSettings>;
   swapSettings: Loadable<SwapSettings>;
+  usageSettings: Loadable<UsageSettings>;
   httpsSettings: Loadable<HTTPSSettings>;
   /** The last scan's results; null before the first scan. */
   nearbyNetworks: NearbyNetwork[] | null;
@@ -184,11 +188,10 @@ export interface DeviceActions {
   /** Check the Ethernet port again. */
   rescanEthernetPort: () => Promise<void>;
   /**
-   * The DNS servers for devices while the VPN isn't in use: the text as typed, one per line or
-   * comma-separated;
-   * empty uses the network's. Field key: servers.
+   * The DNS servers for devices: the text as typed, one per line or comma-separated; empty uses
+   * the network's. `withVpn` uses them while the VPN is on too. Field key: servers.
    */
-  saveDnsSettings: (servers: string) => Promise<void>;
+  saveDnsSettings: (servers: string, withVpn: boolean) => Promise<void>;
   /**
    * Run Cloudflare's speed test (about 20 seconds) and update
    * `status.speedtest`.
@@ -222,6 +225,11 @@ export interface DeviceActions {
   saveHotspotSettings: (settings: HotspotSettings) => Promise<void>;
   /** Answer with the current Wi-Fi password. Reject when the admin password is wrong. */
   revealHotspotPassword: (adminPassword: string) => Promise<string>;
+  /**
+   * A QR code to join a network: the hotspot (needs the admin password; reject when it is wrong)
+   * or the guest network.
+   */
+  wifiQr: (network: 'hotspot' | 'guest', adminPassword?: string) => Promise<WiFiQR>;
   /** Field keys: enabled, ssid, password. */
   saveGuestSettings: (settings: GuestSettings) => Promise<void>;
 
@@ -230,6 +238,12 @@ export interface DeviceActions {
   setClientInternetAccess: (mac: string, allowed: boolean) => Promise<void>;
   disconnectClient: (mac: string) => Promise<void>;
   flushClientLease: (mac: string) => Promise<void>;
+  /** Name a device; "" goes back to the name it sends. Field key: name. */
+  renameClient: (mac: string, name: string) => Promise<void>;
+  /** The data limit per device on metered connections, in MB (0 = none). Field key: limitMb. */
+  saveUsageLimit: (limitMb: number) => Promise<void>;
+  /** Start counting data use again from zero (the screen has already asked). */
+  resetUsage: () => Promise<void>;
 
   // --- SSH and HTTPS -----------------------------------------------------------------------
 

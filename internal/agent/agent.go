@@ -107,6 +107,7 @@ type Agent struct {
 	readings   readingsState
 	speedtest  speedtestState
 	update     updateState
+	usage      usageState
 	// decompress is zstdDecompress, or a stand-in in tests.
 	decompress func(io.Reader) (io.Reader, func() error, error)
 

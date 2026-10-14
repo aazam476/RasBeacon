@@ -27,6 +27,8 @@ type WPANetwork struct {
 	// TLS). Ignored for open networks.
 	Password string
 	Hidden   bool
+	// RandomMAC joins with a random MAC address (mac_addr=1).
+	RandomMAC bool
 	// Enterprise is set for enterprise networks.
 	Enterprise *WPAEnterprise
 }

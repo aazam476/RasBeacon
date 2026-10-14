@@ -315,7 +315,7 @@ These features of the mockups were added to the router for this UI (see `docs/ap
   of the sidebar on computers.
 - **Wording:** labels are in sentence case ("Erase everything", "Install update", "Add
   manually"), which Playwright's default name matching ignores; `exact: true` does not. Renamed:
-  "Restart RasBeacon" is "Reboot", "Show password" (Hotspot) is "Show Wi-Fi password", and "Make
+  "Restart RasBeacon" is "Reboot", "Show password" (Hotspot) is "Show password and QR code", and "Make
   a new key pair" is "Generate new key".
 
 ## Design

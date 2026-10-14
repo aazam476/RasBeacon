@@ -1,11 +1,12 @@
-import type { FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useDevice } from '@/data/device';
-import type { GuestSettings, GuestStatus } from '@/data/types';
+import type { GuestSettings, GuestStatus, WiFiQR } from '@/data/types';
 import { cn } from '@/lib/cn';
 import { useForm } from '@/lib/useForm';
 import { Loaded } from '@/shell/Loaded';
 import {
   BreakableText,
+  ButtonRow,
   FormActions,
   FormError,
   FormSwitchRow,
@@ -17,6 +18,7 @@ import {
   TextField,
   type BaseIconName,
 } from '@/ui';
+import { QrCode } from '../common/QrCode';
 
 /** A second Wi-Fi network for visitors, kept apart from your devices. */
 export function GuestsScreen() {
@@ -99,13 +101,35 @@ function GuestForm({ settings }: { settings: GuestSettings }) {
   );
 }
 
-/** The guest network as it runs now. */
+/** The guest network as it runs now, and a QR code visitors scan to join it. */
 function GuestNow({ guest }: { guest: GuestStatus }) {
+  const { wifiQr } = useDevice();
+  const [qr, setQr] = useState<WiFiQR | null>(null);
+
   return (
-    <Section title="Now">
+    <Section
+      title="Now"
+      footer={qr ? "Visitors point their phone's camera at the code to join without typing." : undefined}
+    >
       <Row title="Network name" value={<BreakableText>{guest.ssid}</BreakableText>} />
       <Row title="State" value={guest.running ? 'Running' : 'Not running'} />
       <Row title="Guests connected" value={guest.clients.length} />
+      {qr ? (
+        <>
+          <div className="row justify-center">
+            <QrCode qr={qr} />
+          </div>
+          <ButtonRow onClick={() => setQr(null)}>Hide QR code</ButtonRow>
+        </>
+      ) : (
+        <ButtonRow
+          leading={{ icon: 'qr_code' }}
+          action={async () => setQr(await wifiQr('guest'))}
+          busyLabel="Making the QR code…"
+        >
+          Show QR code
+        </ButtonRow>
+      )}
     </Section>
   );
 }

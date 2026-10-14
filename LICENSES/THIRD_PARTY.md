@@ -22,6 +22,7 @@ This file lists what, and what redistributing the images requires.
 | Tailwind CSS base styles (in the web UI's built CSS) | npm | MIT |
 | Material Symbols Rounded icon shapes (SVG paths in `web/src/ui/icons.ts`, in the web UI) | fonts.google.com/icons (github.com/google/material-design-icons) | Apache-2.0 |
 | golang.org/x/crypto (in rbd and rbweb) | Go module | BSD-3-Clause |
+| rsc.io/qr 0.2.0 (QR codes, in rbd) | Go module | BSD-3-Clause |
 | Cloudflare speed test library 1.14.1 (in rbd, run in the headless browser) | github.com/cloudflare/speedtest (npm `@cloudflare/speedtest`) | MIT (`internal/speedtest/cloudflare/LICENSE`) |
 | Go standard library (in rbd and rbweb) | go.dev | BSD-3-Clause |
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import type { SavedNetwork } from '@/data/types';
 import {
   BreakableText,
@@ -10,6 +10,7 @@ import {
   Row,
   RowText,
   Section,
+  FormSwitch,
   Sheet,
 } from '@/ui';
 import { methodName, SECURITY_NAMES } from './networkDisplay';
@@ -44,7 +45,7 @@ export function SavedNetworksSection({ draft, wifiUplinkAvailable, connectedSsid
       )}
       <Section
         title="Wi-Fi networks to join"
-        footer="Most preferred first. RasBeacon uses a plugged-in Ethernet cable first, otherwise the first network in range."
+        footer="Most preferred first. RasBeacon uses a plugged-in Ethernet cable first, otherwise the first network in range. With a random MAC address, the network sees a made-up address instead of the Pi's, new at each restart."
       >
         {networks.length === 0 ? (
           <Row title={<span className="text-label-2">No networks saved yet. Add one below.</span>} />
@@ -62,6 +63,7 @@ export function SavedNetworksSection({ draft, wifiUplinkAvailable, connectedSsid
                 onMove={(delta) => draft.move(index, delta)}
                 onRemove={() => draft.remove(index)}
                 onChangePassword={() => setChangingPassword(index)}
+                onRandomMac={(randomMac) => draft.setRandomMac(index, randomMac)}
               />
             ))}
           </ol>
@@ -90,6 +92,7 @@ interface NetworkRowProps {
   onMove: (delta: -1 | 1) => void;
   onRemove: () => void;
   onChangePassword: () => void;
+  onRandomMac: (randomMac: boolean) => void;
 }
 
 function NetworkRow({
@@ -102,7 +105,9 @@ function NetworkRow({
   onMove,
   onRemove,
   onChangePassword,
+  onRandomMac,
 }: NetworkRowProps) {
+  const randomMacId = useId();
   const isNew = network.id === '';
   const details = [SECURITY_NAMES[network.security], network.hidden && 'Hidden', network.password && 'New password']
     .filter(Boolean)
@@ -149,6 +154,12 @@ function NetworkRow({
 
       <div className="flex flex-col gap-2.5 pl-[2.5625rem] lg:pl-[2.125rem]">
         {network.enterprise && <EnterpriseSummary network={network} />}
+        <label className="flex cursor-pointer items-center gap-3">
+          <span id={randomMacId} className="min-w-0 flex-1 text-subhead text-label">
+            Random MAC address
+          </span>
+          <FormSwitch checked={network.randomMac ?? false} onChange={onRandomMac} labelledBy={randomMacId} />
+        </label>
         <div className="-my-1 flex flex-wrap gap-x-5">
           {network.security !== 'open' && !isNew && (
             <Button

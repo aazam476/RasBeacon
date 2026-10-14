@@ -163,6 +163,32 @@ func ClientsDirect() [][]string {
 	return cmds
 }
 
+// programRulePriority is the rule for RasBeacon's own programs whose
+// traffic belongs in the tunnel (see ProgramThroughTunnel).
+const programRulePriority = "110"
+
+// ProgramThroughTunnel returns the commands that send one of RasBeacon's
+// own programs' traffic, by its user ID, to table 51820, like devices'
+// traffic: the DoH forwarder asks devices' questions, so they must not
+// leave outside the VPN. Run ProgramDirect first.
+func ProgramThroughTunnel(uid int, kernelIPv6 bool) [][]string {
+	uids := fmt.Sprintf("%d-%d", uid, uid)
+	cmds := [][]string{{"ip", "-4", "rule", "add", "priority", programRulePriority, "uidrange", uids, "lookup", TunnelTable}}
+	if kernelIPv6 {
+		cmds = append(cmds, []string{"ip", "-6", "rule", "add", "priority", programRulePriority, "uidrange", uids, "lookup", TunnelTable})
+	}
+	return cmds
+}
+
+// ProgramDirect removes ProgramThroughTunnel's rules. Errors mean a rule
+// was not there.
+func ProgramDirect() [][]string {
+	return [][]string{
+		{"ip", "-4", "rule", "delete", "priority", programRulePriority},
+		{"ip", "-6", "rule", "delete", "priority", programRulePriority},
+	}
+}
+
 // SetEndpoint returns the command that (re)sets the server's address. The
 // wg tool looks up the host name when it runs, so running this again after
 // the uplink changes picks up a new address.

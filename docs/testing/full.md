@@ -122,6 +122,12 @@ first if you want them; everything else works from the web pages alone.
    with two saved networks in range: it joins the other within a minute.
 9. **Priority (if you can):** with two networks saved and in range, move
    one up, **Save**. **Expect:** it moves to the top one within a minute.
+10. **Random MAC address (new):** turn on **Random MAC address** for the
+    Wi-Fi network in use, **Save**. **Expect:** it reconnects within about
+    30 s; Status shows a different MAC address for the uplink (and the
+    network's router, if you can see its device list, shows a new device).
+    Reboot: another new address. Turn it off, **Save**: the Pi's own
+    address is back.
 
 ## 5. Your own DNS servers and DNS-over-HTTPS (new)
 
@@ -163,6 +169,20 @@ The VPN stays **off** for this section.
    rejoins within a minute.
 5. **Flush lease** on phone B. **Expect:** no error; it gets an address
    again when it next joins.
+6. **Rename (new):** **Rename** on phone B, type `Test phone`, **Save**.
+   **Expect:** the card and Status show *Test phone*, and *Calls itself*
+   shows its own name. Disconnect it and let it rejoin: the name stays.
+   Rename it to nothing: its own name is back.
+7. **Data used (new):** after the download in step 2, phone B's card shows
+   *Data used* close to what phone B says it downloaded. Reboot: the
+   counts are kept (within the last 10 minutes of use).
+8. **Data limit (new):** Hotspot → tick **Metered connection**, **Save**.
+   Clients → *Data use* → **Limit per device** *500 MB* → **Save**, then
+   download more than 500 MB on phone B. **Expect:** phone B is paused
+   with *Data limit reached* and its switch can't be turned on; the
+   footer says one device is paused. **Reset counts** → **Reset**: phone B
+   has internet again, and every count is 0. Set *No limit* and untick
+   **Metered connection** again.
 
 ## 7. The Ethernet port as a client port
 
@@ -191,7 +211,15 @@ The VPN stays **off** for this section.
 3. **DNS:** the leak test shows your VPN's DNS. Set your own DNS servers
    (section 5) to `dns.google` while the VPN is on: **expect** the leak
    test still shows the VPN's DNS (the VPN's DNS wins), and *SSH:*
-   `rasbeacon-doh` is inactive. Empty the DNS box again.
+   `rasbeacon-doh` is inactive.
+   **Also use while the VPN is on (new):** turn the switch on under the
+   DNS box, **Save**. **Expect:** the leak test shows Google's DNS, reached
+   from the VPN server's address (not your home address); *SSH:*
+   `rasbeacon-doh` is active and `ip rule` lists a `uidrange` rule for the
+   `rbdoh` user. With plain `9.9.9.9` instead: the leak test shows Quad9,
+   and `ip route show table 51820` has a route for 9.9.9.9 via `wg0`. Break
+   the tunnel with the kill switch on: no lookups leak (the leak test
+   doesn't load at all). Turn the switch off and empty the DNS box again.
 4. **Kill switch on:** break the tunnel (stop the server, or change the
    port in *Server details* to a wrong one, **Save**). After 3 to 4
    minutes, **expect** *Not connected. The kill switch is on…*, and no
@@ -273,7 +301,9 @@ Keep the VPN on with the kill switch.
    characters long." Leave it empty and set band **5 GHz** → **Save**:
    *Saved.*, the hotspot comes back on 5 GHz, devices rejoin. Switch back to
    2.4 GHz if you like.
-2. **Show Wi-Fi password** with the admin password: shows the current one.
+2. **Show password and QR code** with the admin password: shows the current
+   one and a QR code. Scan it with a phone's camera: the phone offers to
+   join the hotspot and joins it.
 3. **Metered:** tick it, **Save**: devices do **not** disconnect; Status
    shows *Metered connection On*; Android (after Wi-Fi off/on) treats the
    network as metered. Untick it.
@@ -284,6 +314,8 @@ Keep the VPN on with the kill switch.
    the guest network has internet (through the VPN if on), can't open
    `http://10.87.0.1` or `http://10.87.1.1`, and can't see or ping phone A;
    Status shows the guest network running with 1 guest.
+   **Show QR code** (new) under *Now*: scanning it with a phone's camera
+   offers to join the guest network, and joins it.
 5. **Public IPv6 (if your WireGuard server routes a /64 to RasBeacon, and
    its `.conf` gives RasBeacon an IPv6 address and `::/0`):** VPN →
    *Server details* → *Public IPv6 network* → the /64 (like

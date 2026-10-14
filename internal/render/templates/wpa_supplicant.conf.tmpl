@@ -14,6 +14,10 @@ update_config=0
 country={{.Country}}
 # Allow both WPA3 password methods (hunting-and-pecking and hash-to-element).
 sae_pwe=2
+# Networks set to use a random MAC address keep the same one until
+# RasBeacon restarts (instead of a new one every minute), so a hotel's login
+# isn't lost when the connection briefly drops.
+rand_addr_lifetime=2147483647
 {{- range .Networks}}
 
 # Name: {{.SSIDForComment}}
@@ -26,6 +30,10 @@ network={
 {{- if .Hidden}}
 	# Hidden network: ask for it by name while scanning.
 	scan_ssid=1
+{{- end}}
+{{- if .RandomMAC}}
+	# Join with a random MAC address instead of the Pi's own.
+	mac_addr=1
 {{- end}}
 {{- if eq .Security "open"}}
 	# Open network: no password.

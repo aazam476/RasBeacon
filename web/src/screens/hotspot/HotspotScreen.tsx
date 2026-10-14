@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { HOTSPOT_CHANNELS } from '@/data/constants';
 import { useDevice } from '@/data/device';
-import type { HotspotSettings } from '@/data/types';
+import type { HotspotSettings, WiFiQR } from '@/data/types';
 import { useAction } from '@/lib/useAction';
 import { useForm } from '@/lib/useForm';
 import { Loaded } from '@/shell/Loaded';
@@ -18,6 +18,7 @@ import {
   SelectField,
   TextField,
 } from '@/ui';
+import { QrCode } from '../common/QrCode';
 import { BAND_OPTIONS, HOTSPOT_SECURITY_OPTIONS } from '../common/wifiOptions';
 
 /** The settings that restart the hotspot when they change; only `metered` doesn't. */
@@ -157,25 +158,34 @@ function HotspotForm({ settings }: { settings: HotspotSettings }) {
   );
 }
 
-/** Shows the hotspot's current password after the admin password is typed again. */
+/**
+ * Shows the hotspot's current password and a QR code to join it, after the admin password is
+ * typed again.
+ */
 function CurrentPassword() {
-  const { revealHotspotPassword } = useDevice();
+  const { revealHotspotPassword, wifiQr } = useDevice();
   const [adminPassword, setAdminPassword] = useState('');
-  const [revealed, setRevealed] = useState<string | null>(null);
+  const [revealed, setRevealed] = useState<{ password: string; qr: WiFiQR } | null>(null);
   const revealing = useAction(async () => {
-    setRevealed(await revealHotspotPassword(adminPassword));
+    const [password, qr] = await Promise.all([revealHotspotPassword(adminPassword), wifiQr('hotspot', adminPassword)]);
+    setRevealed({ password, qr });
     setAdminPassword('');
   });
 
   if (revealed !== null) {
     return (
-      <Section title="Current Wi-Fi password">
+      <Section title="Join the hotspot" footer="Point a phone's camera at the code to join without typing.">
         <Row
           title={
             // One tap selects the whole password, ready to copy.
-            <span className="selectable font-mono text-title3 break-all text-label select-all">{revealed}</span>
+            <span className="selectable font-mono text-title3 break-all text-label select-all">
+              {revealed.password}
+            </span>
           }
         />
+        <div className="row justify-center">
+          <QrCode qr={revealed.qr} />
+        </div>
         <ButtonRow onClick={() => setRevealed(null)}>Hide</ButtonRow>
       </Section>
     );
@@ -189,7 +199,7 @@ function CurrentPassword() {
       }}
       noValidate
     >
-      <Section title="Current Wi-Fi password" footer="Type the admin password to see it.">
+      <Section title="Join the hotspot" footer="Type the admin password to see the Wi-Fi password and a QR code.">
         <PasswordField
           label="Admin password"
           autoComplete="current-password"
@@ -205,11 +215,11 @@ function CurrentPassword() {
           <Button
             type="submit"
             variant="secondary"
-            icon="visibility"
+            icon="qr_code"
             loading={revealing.pending}
             disabled={adminPassword === ''}
           >
-            Show Wi-Fi password
+            Show password and QR code
           </Button>
         </div>
       </Section>

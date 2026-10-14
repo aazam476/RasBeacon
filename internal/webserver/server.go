@@ -110,39 +110,7 @@ func (s *Server) Handler() http.Handler {
 
 	// --- Login required: forwarded to rbd unchanged ---
 	// Each entry maps a public API route to rbd's internal route.
-	forwarded := map[string]string{
-		"GET /api/v1/settings/hotspot":                   "/settings/hotspot",
-		"PUT /api/v1/settings/hotspot":                   "/settings/hotspot",
-		"POST /api/v1/settings/hotspot/reveal-password":  "/settings/hotspot/reveal-password",
-		"GET /api/v1/settings/guest":                     "/settings/guest",
-		"PUT /api/v1/settings/guest":                     "/settings/guest",
-		"GET /api/v1/settings/ssh":                       "/settings/ssh",
-		"PUT /api/v1/settings/ssh":                       "/settings/ssh",
-		"GET /api/v1/settings/uplink":                    "/settings/uplink",
-		"PUT /api/v1/settings/uplink":                    "/settings/uplink",
-		"POST /api/v1/uplink/scan":                       "/uplink/scan",
-		"POST /api/v1/uplink/disconnect":                 "/uplink/disconnect",
-		"POST /api/v1/uplink/renew":                      "/uplink/renew",
-		"POST /api/v1/uplink/ethernet/scan":              "/uplink/ethernet/scan",
-		"GET /api/v1/settings/dns":                       "/settings/dns",
-		"PUT /api/v1/settings/dns":                       "/settings/dns",
-		"GET /api/v1/settings/vpn":                       "/settings/vpn",
-		"PUT /api/v1/settings/vpn":                       "/settings/vpn",
-		"POST /api/v1/settings/vpn/import":               "/settings/vpn/import",
-		"POST /api/v1/settings/vpn/profile/save":         "/settings/vpn/profile/save",
-		"POST /api/v1/settings/vpn/profile/activate":     "/settings/vpn/profile/activate",
-		"POST /api/v1/settings/vpn/profile/remove":       "/settings/vpn/profile/remove",
-		"POST /api/v1/settings/vpn/profile/generate-key": "/settings/vpn/profile/generate-key",
-		"GET /api/v1/settings/https":                     "/settings/https",
-		"PUT /api/v1/settings/https":                     "/settings/https",
-		"PUT /api/v1/settings/updates":                   "/settings/updates",
-		"POST /api/v1/system/reboot":                     "/system/reboot",
-		"GET /api/v1/diagnostics":                        "/diagnostics",
-		"POST /api/v1/clients/internet-access":           "/clients/internet-access",
-		"POST /api/v1/clients/disconnect":                "/clients/disconnect",
-		"POST /api/v1/clients/flush-lease":               "/clients/flush-lease",
-	}
-	for route, rbdPath := range forwarded {
+	for route, rbdPath := range forwardedRoutes {
 		mux.Handle(route, s.requireLogin(s.forwardTo(rbdPath)))
 	}
 	// The status tells rbd who is looking, so the client list can mark
@@ -566,4 +534,46 @@ func clientIP(r *http.Request) string {
 		return r.RemoteAddr
 	}
 	return host
+}
+
+// forwardedRoutes are the routes that need a login and go to rbd unchanged:
+// each public API route and rbd's internal route.
+var forwardedRoutes = map[string]string{
+	"GET /api/v1/settings/hotspot":                   "/settings/hotspot",
+	"PUT /api/v1/settings/hotspot":                   "/settings/hotspot",
+	"POST /api/v1/settings/hotspot/reveal-password":  "/settings/hotspot/reveal-password",
+	"GET /api/v1/settings/guest":                     "/settings/guest",
+	"PUT /api/v1/settings/guest":                     "/settings/guest",
+	"GET /api/v1/settings/ssh":                       "/settings/ssh",
+	"PUT /api/v1/settings/ssh":                       "/settings/ssh",
+	"GET /api/v1/settings/uplink":                    "/settings/uplink",
+	"PUT /api/v1/settings/uplink":                    "/settings/uplink",
+	"POST /api/v1/uplink/scan":                       "/uplink/scan",
+	"POST /api/v1/uplink/disconnect":                 "/uplink/disconnect",
+	"POST /api/v1/uplink/renew":                      "/uplink/renew",
+	"POST /api/v1/uplink/ethernet/scan":              "/uplink/ethernet/scan",
+	"GET /api/v1/settings/dns":                       "/settings/dns",
+	"PUT /api/v1/settings/dns":                       "/settings/dns",
+	"GET /api/v1/settings/vpn":                       "/settings/vpn",
+	"PUT /api/v1/settings/vpn":                       "/settings/vpn",
+	"POST /api/v1/settings/vpn/import":               "/settings/vpn/import",
+	"POST /api/v1/settings/vpn/profile/save":         "/settings/vpn/profile/save",
+	"POST /api/v1/settings/vpn/profile/activate":     "/settings/vpn/profile/activate",
+	"POST /api/v1/settings/vpn/profile/remove":       "/settings/vpn/profile/remove",
+	"POST /api/v1/settings/vpn/profile/generate-key": "/settings/vpn/profile/generate-key",
+	"GET /api/v1/settings/https":                     "/settings/https",
+	"PUT /api/v1/settings/https":                     "/settings/https",
+	"PUT /api/v1/settings/updates":                   "/settings/updates",
+	"POST /api/v1/system/reboot":                     "/system/reboot",
+	"GET /api/v1/diagnostics":                        "/diagnostics",
+	"POST /api/v1/clients/internet-access":           "/clients/internet-access",
+	"POST /api/v1/clients/disconnect":                "/clients/disconnect",
+	"POST /api/v1/clients/flush-lease":               "/clients/flush-lease",
+	"POST /api/v1/wifi-qr":                           "/wifi-qr",
+	"POST /api/v1/clients/name":                      "/clients/name",
+	"GET /api/v1/settings/usage":                     "/settings/usage",
+	"PUT /api/v1/settings/usage":                     "/settings/usage",
+	"POST /api/v1/clients/usage/reset":               "/clients/usage/reset",
+	"GET /api/v1/settings/swap":                      "/settings/swap",
+	"PUT /api/v1/settings/swap":                      "/settings/swap",
 }
