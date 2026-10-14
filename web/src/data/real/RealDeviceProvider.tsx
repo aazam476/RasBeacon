@@ -23,6 +23,7 @@ import type {
   SwapSettings,
   Status,
   UplinkSettings,
+  UsageSettings,
   VPNSettings,
 } from '../types';
 import * as api from './api';
@@ -51,6 +52,7 @@ interface DataTypes {
   sshSettings: SSHSettings;
   dnsSettings: DNSSettings;
   swapSettings: SwapSettings;
+  usageSettings: UsageSettings;
   httpsSettings: HTTPSSettings;
   portal: PortalStatus;
 }
@@ -66,6 +68,7 @@ const LOADERS: { [K in DataKey]: () => Promise<DataTypes[K]> } = {
   sshSettings: api.getSSHSettings,
   dnsSettings: api.getDNSSettings,
   swapSettings: api.getSwapSettings,
+  usageSettings: api.getUsageSettings,
   httpsSettings: api.getHTTPSSettings,
   portal: api.getPortalStatus,
 };
@@ -80,6 +83,7 @@ const NO_DATA: AllData = {
   sshSettings: NOTHING,
   dnsSettings: NOTHING,
   swapSettings: NOTHING,
+  usageSettings: NOTHING,
   httpsSettings: NOTHING,
   portal: NOTHING,
 };
@@ -93,6 +97,7 @@ const SETTINGS: DataKey[] = [
   'sshSettings',
   'dnsSettings',
   'swapSettings',
+  'usageSettings',
   'httpsSettings',
 ];
 
@@ -103,7 +108,7 @@ const PAGE_DATA: Record<string, DataKey[]> = {
   '/vpn': ['vpnSettings', 'status'],
   '/hotspot': ['hotspotSettings'],
   '/guests': ['guestSettings'],
-  '/clients': ['status'],
+  '/clients': ['status', 'usageSettings'],
   '/ssh': ['sshSettings'],
   '/https': ['httpsSettings'],
   '/system': ['status', 'swapSettings'],
@@ -447,8 +452,11 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
         await attempt(() => api.uplinkAction('ethernet/scan'));
         await refreshStatus();
       },
-      saveDnsSettings: async (servers) => {
-        const saved = await attempt(() => api.putDNSSettings({ servers: splitList(servers) }), sameNames('servers'));
+      saveDnsSettings: async (servers, withVpn) => {
+        const saved = await attempt(
+          () => api.putDNSSettings({ servers: splitList(servers), withVpn }),
+          sameNames('servers', 'withVpn'),
+        );
         store('dnsSettings', saved);
       },
       runSpeedtest: async () => {
@@ -496,6 +504,7 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
         const { hotspotPassword } = await attempt(() => api.revealHotspotPassword(adminPassword));
         return hotspotPassword;
       },
+      wifiQr: (network, adminPassword) => attempt(() => api.wifiQr(network, adminPassword)),
       saveGuestSettings: async (settings) => {
         const problems = checkGuestForm(settings);
         if (Object.keys(problems).length > 0) throw new FieldErrors(problems);
@@ -517,6 +526,18 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
       },
       flushClientLease: async (mac) => {
         await attempt(() => api.clientAction('flush-lease', mac));
+        await refreshStatus();
+      },
+      renameClient: async (mac, name) => {
+        await attempt(() => api.renameClient(mac, name), sameNames('name'));
+        await refreshStatus();
+      },
+      saveUsageLimit: async (limitMb) => {
+        store('usageSettings', await attempt(() => api.putUsageSettings(limitMb), sameNames('limitMb')));
+        await refreshStatus();
+      },
+      resetUsage: async () => {
+        store('usageSettings', await attempt(() => api.resetUsage()));
         await refreshStatus();
       },
 

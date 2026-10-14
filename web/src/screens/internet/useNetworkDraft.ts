@@ -40,6 +40,9 @@ export function useNetworkDraft(settings: UplinkSettings) {
     /** A new password for a saved network; "" keeps the saved one. */
     setPassword: (index: number, password: string) =>
       change((list) => list.map((network, i) => (i === index ? { ...network, password } : network))),
+    /** Join this network with a random MAC address instead of the Pi's own. */
+    setRandomMac: (index: number, randomMac: boolean) =>
+      change((list) => list.map((network, i) => (i === index ? { ...network, randomMac } : network))),
   };
 }
 

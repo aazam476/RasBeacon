@@ -86,6 +86,9 @@ func (p Paths) RememberedLoginsFile() string {
 // regularly so the clock never goes backwards across a reboot.
 func (p Paths) ClockFile() string { return filepath.Join(p.DataDir(), "clock") }
 
+// UsageFile keeps each device's data use since the counters were reset.
+func (p Paths) UsageFile() string { return filepath.Join(p.DataDir(), "usage.json") }
+
 // TLSDir holds the web UI's HTTPS certificate and key (cert.pem, key.pem).
 func (p Paths) TLSDir() string { return filepath.Join(p.DataDir(), "tls") }
 

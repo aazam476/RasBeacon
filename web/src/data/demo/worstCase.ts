@@ -76,6 +76,22 @@ export function applyWorstCase(demo: DemoState) {
     band: index % 3 === 0 ? '2.4GHz' : '5GHz',
     downMbps: [942.7, 0, 0.1, 12.5, 99.9, 100, 0, 3.2, 25.6, 0.4, 0, 1.1, 0, 488.2][index],
     upMbps: [88.4, 0, 0, 1.2, 9.9, 10, 0, 0.3, 2.2, 0, 0, 0.1, 0, 41.9][index],
+    // From nothing to over a terabyte.
+    downBytes: [
+      1_234_567_890_123, 0, 512, 99_999_999, 7_340_032_000, 1_000_000_000, 0, 3, 25_600_000, 400, 0, 1_100, 0,
+      488_200_000_000,
+    ][index],
+    upBytes: [88_400_000_000, 0, 0, 1_200_000, 990_000_000, 10_000_000, 0, 0, 2_200_000, 0, 0, 100, 0, 41_900_000_000][
+      index
+    ],
+    // The longest name allowed, and one in another script.
+    name:
+      index === 6
+        ? 'Büro-Drucker im zweiten Stock (Flur, links)'.slice(0, 40)
+        : index === 10
+          ? '温度传感器'
+          : undefined,
+    limitReached: index === 9 ? true : undefined,
     internetAccess: index !== 1 && index !== 9,
     pausedSeconds: index === 1 ? 2_592_000 : index === 9 ? 30 : undefined,
     isThisDevice: index === 3,
@@ -92,6 +108,8 @@ export function applyWorstCase(demo: DemoState) {
       wired: true,
       downMbps: 0,
       upMbps: 0,
+      downBytes: 0,
+      upBytes: 0,
       internetAccess: false,
       pausedSeconds: 600,
     },
@@ -105,6 +123,8 @@ export function applyWorstCase(demo: DemoState) {
       wired: true,
       downMbps: 0,
       upMbps: 0,
+      downBytes: 0,
+      upBytes: 0,
       internetAccess: true,
     },
   );
@@ -123,6 +143,8 @@ export function applyWorstCase(demo: DemoState) {
         band: '2.4GHz',
         downMbps: 0.1,
         upMbps: 0,
+        downBytes: 18_000_000_000,
+        upBytes: 950_000_000,
         internetAccess: true,
       },
       {
@@ -134,6 +156,8 @@ export function applyWorstCase(demo: DemoState) {
         band: '5GHz',
         downMbps: 5,
         upMbps: 0.5,
+        downBytes: 1,
+        upBytes: 0,
         internetAccess: true,
       },
     ],
@@ -262,7 +286,10 @@ export function applyWorstCase(demo: DemoState) {
       'https://dns.adguard-dns.com/dns-query',
       'https://doh.mullvad.net:443/dns-query?ct=application/dns-message',
     ],
+    withVpn: true,
   };
+  // The largest data limit, on a metered connection, with two devices over it.
+  router.usageSettings = { limitMb: 1_000_000, since: '2024-02-29T23:59:59Z', metered: true, devicesPaused: 2 };
   // A 2 TB SSD instead of an SD card: nearly 1,900 sizes to choose from.
   router.swapSettings = { sizeGb: 0, maxGb: 1_862 };
   router.httpsSettings = {
@@ -281,7 +308,7 @@ export function applyNoClients(demo: DemoState) {
   status.throughput = { ...status.throughput, downMbps: 0, upMbps: 0 };
   // And no room: a card too full for any swap file, and no DNS servers of its own.
   demo.router.swapSettings = { sizeGb: 0, maxGb: 0 };
-  demo.router.dnsSettings = { servers: [] };
+  demo.router.dnsSettings = { servers: [], withVpn: false };
 }
 
 /** Exactly one of everything that is counted, for "1 device", "1 guest". */
@@ -294,5 +321,6 @@ export function applyOneOfEach(demo: DemoState) {
   demo.router.uplinkSettings.networks = demo.router.uplinkSettings.networks.slice(0, 1);
   demo.nearbyNetworks = (demo.nearbyNetworks ?? []).slice(0, 1);
   demo.router.swapSettings = { sizeGb: 1, maxGb: 1 };
-  demo.router.dnsSettings = { servers: ['1.1.1.1'] };
+  demo.router.dnsSettings = { servers: ['1.1.1.1'], withVpn: false };
+  demo.router.usageSettings = { limitMb: 1, since: new Date().toISOString(), metered: true, devicesPaused: 1 };
 }

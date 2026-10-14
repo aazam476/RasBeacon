@@ -246,6 +246,18 @@ async function main() {
     await page.getByRole("switch", { name: "Internet access for Pixel-8", checked: true }).waitFor();
   });
 
+  await step("clients: a device can be renamed, and the data limit saved", async () => {
+    const card = page.getByRole("switch", { name: "Internet access for Pixel-8" }).locator("xpath=ancestor::section[1]");
+    await card.getByRole("button", { name: "Rename" }).click();
+    await dialog().getByRole("textbox", { name: "Name" }).fill("Ali's phone");
+    await dialog().getByRole("button", { name: "Save" }).click();
+    await page.getByRole("switch", { name: "Internet access for Ali's phone" }).waitFor();
+    await page.getByText("Calls itself").first().waitFor();
+    await page.getByLabel("Limit per device").selectOption("2000");
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await page.getByText(/only applies while the hotspot is set as a metered connection/).waitFor();
+  });
+
   await step("HTTPS can be turned on and shows the certificate fingerprint", async () => {
     await open("HTTPS");
     await page.getByRole("switch", { name: "Use HTTPS for these settings pages" }).click();
@@ -267,11 +279,12 @@ async function main() {
     await page.getByText("Saved.", { exact: true }).waitFor();
   });
 
-  await step("the current Wi-Fi password is shown with the admin password", async () => {
+  await step("the current Wi-Fi password and a QR code are shown with the admin password", async () => {
     await page.getByLabel("Admin password").fill("tangerine-orbit-42");
-    await page.getByRole("button", { name: "Show Wi-Fi password" }).click();
+    await page.getByRole("button", { name: "Show password and QR code" }).click();
     // The password setup suggested (four groups of four letters and digits).
     await page.getByText(/^[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}$/).waitFor();
+    await page.getByRole("img", { name: /^QR code to join / }).waitFor();
   });
 
   await step("the metered setting saves and shows on the status page", async () => {
@@ -291,6 +304,8 @@ async function main() {
     await page.getByLabel("Guest password").fill("visitors-welcome");
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await page.getByText("Saved. The hotspot has restarted.").waitFor();
+    await page.getByRole("button", { name: "Show QR code" }).click();
+    await page.getByRole("img", { name: "QR code to join Ali's Guests" }).waitFor();
     await open("Status");
     await page.getByRole("heading", { name: "Guest network" }).waitFor();
     await page.getByText("Ali's Guests").waitFor();

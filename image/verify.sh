@@ -27,6 +27,7 @@ check "rbd is installed and executable" test -x "$root/usr/bin/rbd"
 check "rbweb is installed and executable" test -x "$root/usr/bin/rbweb"
 check "rbdoh is installed and executable" test -x "$root/usr/bin/rbdoh"
 check "the DoH forwarder's unit is installed (rbd starts it)" test -f "$root/usr/lib/systemd/system/rasbeacon-doh.service"
+check "the DoH forwarder has its own user" grep -q "^rbdoh:" "$root/etc/passwd"
 
 # The network programs rbd drives.
 for tool in usr/sbin/hostapd usr/sbin/dnsmasq usr/sbin/nft usr/sbin/iw usr/sbin/rfkill \

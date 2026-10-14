@@ -156,7 +156,7 @@ func (a *Agent) applyVPNConfig() error {
 		ConfigFile: a.paths.WireGuardConfig(),
 		Addresses:  wg.Addresses,
 		MTU:        wg.EffectiveMTU(),
-		DNS:        wg.DNS,
+		DNS:        append(slices.Clone(wg.DNS), a.ownDNSThroughTunnel()...),
 		IPv6:       wg.CarriesIPv6(),
 		KernelIPv6: routing.KernelHasIPv6(a.paths.ProcSysNetIPv6()),
 	}) {
@@ -270,12 +270,18 @@ func (a *Agent) applyClientPath() error {
 			return err
 		}
 	}
-	// 2. Routing: devices' traffic into table 51820 (tunnel) or not.
-	for _, cmd := range routing.ClientsDirect() {
+	// 2. Routing: devices' traffic into table 51820 (tunnel) or not, and
+	//    the DoH forwarder's with it (it asks devices' questions).
+	for _, cmd := range append(routing.ClientsDirect(), routing.ProgramDirect()...) {
 		_, _ = a.runner.Run(cmd[0], cmd[1:]...) // error: no rule yet
 	}
 	if a.clientsThroughTunnel() {
-		for _, cmd := range routing.ClientsThroughTunnel(routing.KernelHasIPv6(a.paths.ProcSysNetIPv6())) {
+		kernelIPv6 := routing.KernelHasIPv6(a.paths.ProcSysNetIPv6())
+		cmds := routing.ClientsThroughTunnel(kernelIPv6)
+		if uid, ok := dohUID(); ok {
+			cmds = append(cmds, routing.ProgramThroughTunnel(uid, kernelIPv6)...)
+		}
+		for _, cmd := range cmds {
 			if _, err := a.runner.Run(cmd[0], cmd[1:]...); err != nil {
 				return fmt.Errorf("routing devices into the tunnel: %w", err)
 			}
@@ -303,14 +309,14 @@ func (a *Agent) egressInterfaces() []string {
 
 // upstreamDNS returns the DNS servers dnsmasq passes devices' questions to.
 func (a *Agent) upstreamDNS() []string {
-	if !a.clientsThroughTunnel() {
-		if a.ownDNSInUse() {
-			servers := addrStrings(a.cfg.DNS.Servers)
-			if len(a.cfg.DNS.DoH) > 0 {
-				servers = append(servers, dohForwarder)
-			}
-			return servers
+	if a.ownDNSInUse() {
+		servers := addrStrings(a.cfg.DNS.Servers)
+		if len(a.cfg.DNS.DoH) > 0 {
+			servers = append(servers, dohForwarder)
 		}
+		return servers
+	}
+	if !a.clientsThroughTunnel() {
 		return []string{deviceResolver}
 	}
 	var servers []string
@@ -338,7 +344,7 @@ func (a *Agent) tunnelDNSGuard() []netip.Addr {
 		return nil
 	}
 	p, _ := a.activeProfile()
-	return p.DNS
+	return append(slices.Clone(p.DNS), a.ownDNSThroughTunnel()...)
 }
 
 // vpnStatus describes the tunnel for the status page.

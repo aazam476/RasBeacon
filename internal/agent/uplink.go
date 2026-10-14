@@ -155,6 +155,7 @@ func (a *Agent) applyUplinkConfig() error {
 			Security:   n.Security,
 			Password:   a.secrets.UplinkPasswords[n.ID],
 			Hidden:     n.Hidden,
+			RandomMAC:  n.RandomMAC,
 			Enterprise: a.wpaEnterprise(n),
 		})
 	}
@@ -568,6 +569,7 @@ func (a *Agent) UplinkSettings() api.UplinkSettings {
 			SSID:        n.SSID,
 			Security:    n.Security,
 			Hidden:      n.Hidden,
+			RandomMAC:   n.RandomMAC,
 			HasPassword: a.secrets.UplinkPasswords[n.ID] != "",
 			Enterprise:  a.enterpriseSettings(n),
 		})
@@ -604,7 +606,7 @@ func (a *Agent) UpdateUplinkSettings(req api.UplinkSettings) error {
 		} else if !a.isSavedNetworkID(id) {
 			return &config.ValidationError{Field: fmt.Sprintf("networks.%d.id", i), Message: "This network is not saved (reload the page)."}
 		}
-		saved := config.SavedNetwork{ID: id, SSID: n.SSID, Security: n.Security, Hidden: n.Hidden}
+		saved := config.SavedNetwork{ID: id, SSID: n.SSID, Security: n.Security, Hidden: n.Hidden, RandomMAC: n.RandomMAC}
 
 		if n.Security == config.UplinkEnterprise && n.Enterprise != nil {
 			e := n.Enterprise

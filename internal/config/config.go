@@ -102,6 +102,11 @@ type DNSConfig struct {
 	// DoH are DNS-over-HTTPS servers (https://host/path, see ParseDoH),
 	// asked through RasBeacon's DoH forwarder (cmd/rbdoh) alongside Servers.
 	DoH []string `json:"doh,omitempty"`
+	// WithVPN uses these servers while devices' traffic goes through the
+	// VPN too (normally the VPN's own DNS servers are used then). They are
+	// then reached through the tunnel, and the DoH forwarder's traffic goes
+	// through it as well.
+	WithVPN bool `json:"withVpn,omitempty"`
 }
 
 // MaxDNSServers keeps the list short; dnsmasq asks them in turn.
@@ -132,7 +137,20 @@ type ClientsConfig struct {
 	// MAC address (lower case), with when it was paused. They stay paused
 	// until the owner allows them again, also after a restart.
 	Paused map[string]time.Time `json:"paused,omitempty"`
+	// Names are the owner's names for devices ("Ali's iPhone"), by MAC
+	// address (lower case). They replace the name a device sends.
+	Names map[string]string `json:"names,omitempty"`
+	// UsageLimitMB pauses a device that has used this much data (down and
+	// up) since the counters were last reset, while the connection is
+	// marked metered. 0 is no limit.
+	UsageLimitMB int `json:"usageLimitMb,omitempty"`
 }
+
+// MaxDeviceNameLength keeps device names to one line on a phone.
+const MaxDeviceNameLength = 40
+
+// MaxUsageLimitMB is 1 TB, far above any real limit.
+const MaxUsageLimitMB = 1_000_000
 
 // UpdatesConfig holds the update settings.
 type UpdatesConfig struct {
@@ -426,6 +444,11 @@ type SavedNetwork struct {
 	// Hidden networks don't announce their name, so RasBeacon has to ask
 	// for them by name.
 	Hidden bool `json:"hidden"`
+	// RandomMAC joins this network with a random MAC address instead of
+	// the Pi's own, so the network can't recognize the Pi across visits.
+	// wpa_supplicant 2.10 keeps it while RasBeacon runs and picks a new one
+	// at the next start.
+	RandomMAC bool `json:"randomMac,omitempty"`
 	// Enterprise is set only when Security is UplinkEnterprise.
 	Enterprise *EnterpriseConfig `json:"enterprise,omitempty"`
 }
@@ -698,6 +721,7 @@ func (c Config) Clone() Config {
 		c.VPN.Profiles[i] = p.Clone()
 	}
 	c.Clients.Paused = maps.Clone(c.Clients.Paused)
+	c.Clients.Names = maps.Clone(c.Clients.Names)
 	c.DNS.Servers = slices.Clone(c.DNS.Servers)
 	c.DNS.DoH = slices.Clone(c.DNS.DoH)
 	if c.Swap.SizeGB != nil {

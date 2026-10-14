@@ -97,6 +97,11 @@ func (a *Agent) sampleReadings() {
 			}
 		}
 	}
+	// Each device's data use (not on the first sample: the counters then
+	// include whatever a device used before RasBeacon restarted).
+	if !first {
+		a.addUsage(r.stationBytes, bytes)
+	}
 	r.stationBytes, r.stationRates = bytes, rates
 }
 

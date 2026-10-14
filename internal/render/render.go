@@ -308,6 +308,10 @@ func commentSafe(s string) string {
 	}, s)
 }
 
+// PluginSubnet is the network RasBeacon's plugins run in (see
+// internal/plugins). Each plugin has a fixed address in it.
+var PluginSubnet = netip.MustParsePrefix("10.89.0.0/24")
+
 // --- dnsmasq (DHCP and DNS) ---
 
 // DnsmasqInput is everything needed to write dnsmasq.conf.

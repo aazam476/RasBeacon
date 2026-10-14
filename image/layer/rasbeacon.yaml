@@ -51,6 +51,9 @@ mmdebstrap:
   customize-hooks:
     # rbweb runs as its own unprivileged user.
     - chroot $1 useradd --system --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin rbweb
+    # The DNS-over-HTTPS forwarder runs as its own unprivileged user, so its
+    # traffic can be routed through the VPN by user (see internal/routing).
+    - chroot $1 useradd --system --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin rbdoh
     # The login browser runs as its own unprivileged user; the firewall
     # only lets it reach the uplink.
     - chroot $1 useradd --system --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin rbbrowser

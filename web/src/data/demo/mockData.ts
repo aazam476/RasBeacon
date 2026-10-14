@@ -10,6 +10,7 @@ import type {
   SSHSettings,
   Status,
   UplinkSettings,
+  UsageSettings,
   VPNSettings,
 } from '../types';
 
@@ -27,6 +28,7 @@ export interface MockRouter {
   sshSettings: SSHSettings;
   dnsSettings: DNSSettings;
   swapSettings: SwapSettings;
+  usageSettings: UsageSettings;
   httpsSettings: HTTPSSettings;
   nearbyNetworks: NearbyNetwork[];
   /** What "Show password" reveals. */
@@ -43,11 +45,14 @@ const clients: Client[] = [
     band: '5GHz',
     downMbps: 32.4,
     upMbps: 2.1,
+    downBytes: 1_840_000_000,
+    upBytes: 212_000_000,
     internetAccess: true,
     isThisDevice: true,
   },
   {
     hostname: 'mbp-16-m2-max.lan',
+    name: 'Work laptop',
     mac: 'f4:d4:88:62:3b:01',
     ip: '192.168.8.140',
     signalDbm: -48,
@@ -55,6 +60,8 @@ const clients: Client[] = [
     band: '5GHz',
     downMbps: 15.1,
     upMbps: 11.4,
+    downBytes: 6_420_000_000,
+    upBytes: 1_150_000_000,
     internetAccess: true,
   },
   {
@@ -67,6 +74,8 @@ const clients: Client[] = [
     band: '',
     downMbps: 0,
     upMbps: 0,
+    downBytes: 0,
+    upBytes: 0,
     internetAccess: true,
     wired: true,
   },
@@ -79,6 +88,8 @@ const clients: Client[] = [
     band: '2.4GHz',
     downMbps: 1.3,
     upMbps: 0.7,
+    downBytes: 388_000_000,
+    upBytes: 41_000_000,
     internetAccess: true,
   },
   {
@@ -90,6 +101,8 @@ const clients: Client[] = [
     band: '5GHz',
     downMbps: 0,
     upMbps: 0,
+    downBytes: 2_310_000_000,
+    upBytes: 96_000_000,
     internetAccess: false,
     pausedSeconds: 1_320,
   },
@@ -102,6 +115,8 @@ const clients: Client[] = [
     band: '2.4GHz',
     downMbps: 0,
     upMbps: 0,
+    downBytes: 12_400_000,
+    upBytes: 3_100_000,
     internetAccess: true,
   },
 ];
@@ -116,6 +131,8 @@ const guestClients: Client[] = [
     band: '5GHz',
     downMbps: 3.2,
     upMbps: 0.4,
+    downBytes: 146_000_000,
+    upBytes: 18_000_000,
     internetAccess: true,
   },
 ];
@@ -392,8 +409,9 @@ export function createMockRouter(): MockRouter {
       ],
     },
 
-    dnsSettings: { servers: [] },
+    dnsSettings: { servers: [], withVpn: false },
     swapSettings: { sizeGb: 2, maxGb: 26 },
+    usageSettings: { limitMb: 0, since: '2026-10-01T08:00:00Z', metered: false, devicesPaused: 0 },
 
     sshSettings: {
       enabled: true,

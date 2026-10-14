@@ -126,6 +126,7 @@ func (a *Agent) wiredClients() []stations.Station {
 		c := &wired[i]
 		c.Wired = true
 		a.setInternetAccess(c)
+		a.setUsage(c)
 	}
 	return wired
 }
@@ -157,6 +158,7 @@ func (a *Agent) stationsOn(iface string) []stations.Station {
 		rate := a.readings.stationRates[c.MAC]
 		c.DownMbps, c.UpMbps = rate[0], rate[1]
 		a.setInternetAccess(c)
+		a.setUsage(c)
 	}
 	return clients
 }

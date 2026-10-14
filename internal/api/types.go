@@ -533,6 +533,8 @@ type SavedNetwork struct {
 	SSID     string                `json:"ssid"`
 	Security config.UplinkSecurity `json:"security"`
 	Hidden   bool                  `json:"hidden"`
+	// RandomMAC joins with a random MAC address (new at each restart).
+	RandomMAC bool `json:"randomMac"`
 	// HasPassword is true when a password is saved (it is never returned).
 	HasPassword bool `json:"hasPassword"`
 	// Password is write-only: set it to add or change the password, leave it
@@ -609,6 +611,40 @@ type ClientRequest struct {
 	MAC string `json:"mac"`
 }
 
+// ClientNameRequest names a device (POST /clients/name); an empty name
+// removes the owner's name.
+type ClientNameRequest struct {
+	MAC  string `json:"mac"`
+	Name string `json:"name"`
+}
+
+// WiFiQRRequest asks for a QR code to join a network (POST /wifi-qr):
+// "hotspot" (needs the admin password) or "guest".
+type WiFiQRRequest struct {
+	Network       string `json:"network"`
+	AdminPassword string `json:"adminPassword,omitempty"`
+}
+
+// WiFiQR is a QR code phones scan to join a network: an SVG image.
+type WiFiQR struct {
+	SSID string `json:"ssid"`
+	SVG  string `json:"svg"`
+}
+
+// UsageSettings is the data limit (GET/PUT /settings/usage).
+type UsageSettings struct {
+	// LimitMB pauses a device after it used this much (down and up) since
+	// Since, while the connection is marked metered. 0: no limit.
+	LimitMB int `json:"limitMb"`
+	// Since is when counting started (RFC 3339); read-only.
+	Since string `json:"since,omitempty"`
+	// Metered says whether the limit applies now (the hotspot's metered
+	// setting); read-only.
+	Metered bool `json:"metered"`
+	// DevicesPaused is how many devices the limit pauses now; read-only.
+	DevicesPaused int `json:"devicesPaused"`
+}
+
 // ClientInternetAccessRequest pauses (allowed false) or allows a device's
 // internet access (POST /clients/internet-access).
 type ClientInternetAccessRequest struct {
@@ -634,6 +670,8 @@ type LoginRequest struct {
 // current network's.
 type DNSSettings struct {
 	Servers []string `json:"servers"`
+	// WithVPN uses the servers while the VPN is on too.
+	WithVPN bool `json:"withVpn"`
 }
 
 // SwapSettings is the System page's swap file (GET/PUT /settings/swap).

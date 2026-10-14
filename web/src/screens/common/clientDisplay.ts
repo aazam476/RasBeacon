@@ -1,5 +1,5 @@
 import type { Client, Status } from '@/data/types';
-import { formatBand, formatClientRate, formatDbm, formatDuration } from '@/lib/format';
+import { formatBand, formatBytes, formatClientRate, formatDbm, formatDuration } from '@/lib/format';
 
 /** A device on one of RasBeacon's networks: the hotspot (Wi-Fi or the Ethernet cable) or the guests'. */
 export interface NetworkClient extends Client {
@@ -19,9 +19,9 @@ export function networkName(client: NetworkClient): string {
   return client.network === 'guest' ? 'Guest network' : 'Your network';
 }
 
-/** The device's name, or its MAC address when it didn't send one. */
+/** The name the owner gave the device, else the one it sends, else its MAC address. */
 export function clientName(client: Client): string {
-  return client.hostname || client.mac;
+  return client.name || client.hostname || client.mac;
 }
 
 export interface ClientDetail {
@@ -41,16 +41,26 @@ export function clientDetails(client: Client): ClientDetail[] {
     ? { label: 'Connection', value: 'Ethernet cable' }
     : { label: 'Radio', value: `${formatBand(client.band)}, ${formatDbm(client.signalDbm)}` };
   const mac = { label: 'MAC address', value: client.mac };
+  // Data use is counted per device on the Wi-Fi only.
+  const used: ClientDetail[] = client.wired
+    ? []
+    : [{ label: 'Data used', value: `↓\u00a0${formatBytes(client.downBytes)} ↑\u00a0${formatBytes(client.upBytes)}` }];
+  // With a name of the owner's, the one the device sends is still worth knowing.
+  const own: ClientDetail[] = client.name && client.hostname ? [{ label: 'Calls itself', value: client.hostname }] : [];
 
   if (!client.internetAccess) {
     return [
       address,
       { label: 'Traffic', value: 'Stopped', alert: true },
       radio,
-      {
-        label: 'Paused',
-        value: client.pausedSeconds ? `${formatDuration(client.pausedSeconds)} ago` : 'just now',
-      },
+      client.limitReached
+        ? { label: 'Paused', value: 'Data limit reached', alert: true }
+        : {
+            label: 'Paused',
+            value: client.pausedSeconds ? `${formatDuration(client.pausedSeconds)} ago` : 'just now',
+          },
+      ...used,
+      ...own,
       mac,
     ];
   }
@@ -61,6 +71,8 @@ export function clientDetails(client: Client): ClientDetail[] {
     { label: 'Traffic', value: client.wired ? 'Not measured' : formatClientRate(client) },
     radio,
     { label: 'Connected for', value: formatDuration(client.connectedSeconds) },
+    ...used,
+    ...own,
     mac,
   ];
 }

@@ -19,8 +19,10 @@ import type {
   Status,
   UpdateStatus,
   UplinkSettings,
+  UsageSettings,
   VPNProfile,
   VPNSettings,
+  WiFiQR,
 } from '../types';
 
 /** The API's answer when something went wrong. `field` names the rejected input, if any. */
@@ -201,6 +203,9 @@ export const revealHotspotPassword = (adminPassword: string) =>
   request<{ hotspotPassword: string }>('POST', '/settings/hotspot/reveal-password', {
     body: { password: adminPassword },
   });
+/** A QR code to join the hotspot (needs the admin password) or the guest network. */
+export const wifiQr = (network: 'hotspot' | 'guest', adminPassword?: string) =>
+  request<WiFiQR>('POST', '/wifi-qr', { body: { network, adminPassword } });
 
 export const getGuestSettings = () => request<GuestSettings>('GET', '/settings/guest');
 export const putGuestSettings = (settings: GuestSettings) =>
@@ -244,6 +249,13 @@ export const clientAction = (action: 'disconnect' | 'flush-lease', mac: string) 
   request<void>('POST', `/clients/${action}`, { body: { mac } });
 export const setClientInternetAccess = (mac: string, allowed: boolean) =>
   request<void>('POST', '/clients/internet-access', { body: { mac, allowed } });
+export const renameClient = (mac: string, name: string) =>
+  request<void>('POST', '/clients/name', { body: { mac, name } });
+
+export const getUsageSettings = () => request<UsageSettings>('GET', '/settings/usage');
+export const putUsageSettings = (limitMb: number) =>
+  request<UsageSettings>('PUT', '/settings/usage', { body: { limitMb } });
+export const resetUsage = () => request<UsageSettings>('POST', '/clients/usage/reset');
 
 export const getHTTPSSettings = () => request<HTTPSSettings>('GET', '/settings/https');
 /** `generateNew`, `certificate` and `privateKey` are write-only actions. */

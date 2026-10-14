@@ -14,6 +14,7 @@ import { DemoIndex } from './DemoIndex';
 import { DemoTag } from './DemoTag';
 import { StressToggle } from './StressToggle';
 import { LOGIN_PAGE_PICTURE } from './loginPagePicture';
+import { demoQrSvg } from './qrPicture';
 import {
   checkGuestSettings,
   checkHotspotSettings,
@@ -23,6 +24,25 @@ import {
   checkWireGuardFile,
 } from './rules';
 import { CLOSED_BROWSER, createDemoState, SCENARIOS, UNREACHABLE, type DemoState } from './scenarios';
+
+/**
+ * Like the router: on a metered connection, devices that used the data limit are paused until the
+ * counters are reset or the limit is raised.
+ */
+function applyUsageLimit(d: DemoState) {
+  const { limitMb } = d.router.usageSettings;
+  const limit = d.router.hotspotSettings.metered && limitMb > 0 ? limitMb * 1_000_000 : 0;
+  let paused = 0;
+  for (const client of d.router.status.clients) {
+    const over = limit > 0 && client.downBytes + client.upBytes >= limit;
+    if (over) paused += 1;
+    if (over === Boolean(client.limitReached)) continue;
+    client.limitReached = over || undefined;
+    client.internetAccess = !over;
+    if (over) Object.assign(client, { downMbps: 0, upMbps: 0 });
+  }
+  d.router.usageSettings.devicesPaused = paused;
+}
 
 /** Waits a moment, so the screens' busy states can be seen while there is no real router. */
 function wait(ms: number): Promise<void> {
@@ -113,7 +133,7 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
   const { failActions } = demo;
 
   // Every action but one, made once: they change the state with `setDemo`.
-  const actions = useMemo<Omit<DeviceActions, 'revealHotspotPassword'>>(() => {
+  const actions = useMemo<Omit<DeviceActions, 'revealHotspotPassword' | 'wifiQr'>>(() => {
     /** Applies a change to a copy of the demo state. */
     function change(mutate: (draft: DemoState) => void) {
       setDemo((current) => {
@@ -144,7 +164,7 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
       });
     }
 
-    const all: Omit<DeviceActions, 'revealHotspotPassword'> = {
+    const all: Omit<DeviceActions, 'revealHotspotPassword' | 'wifiQr'> = {
       retry: async () => {
         await wait(900);
         change((d) => {
@@ -438,6 +458,7 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
           // Channel 0 means the band's default channel.
           const shown = channel || (band === '5GHz' ? 36 : 6);
           Object.assign(d.router.status.hotspot, { ssid, band, channel: shown, security, metered });
+          applyUsageLimit(d);
         });
       },
       saveGuestSettings: async (settings) => {
@@ -470,6 +491,36 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
       },
       disconnectClient: () => wait(900),
       flushClientLease: () => wait(900),
+      renameClient: async (mac, name) => {
+        await wait(600);
+        const trimmed = name.trim();
+        if ([...trimmed].length > 40) throw new FieldErrors({ name: 'Use at most 40 characters.' });
+        change((d) => {
+          const { status } = d.router;
+          for (const client of [...status.clients, ...status.guest.clients]) {
+            if (client.mac === mac) client.name = trimmed || undefined;
+          }
+        });
+      },
+      saveUsageLimit: async (limitMb) => {
+        await wait(700);
+        change((d) => {
+          d.router.usageSettings.limitMb = limitMb;
+          applyUsageLimit(d);
+        });
+      },
+      resetUsage: async () => {
+        await wait(700);
+        change((d) => {
+          const { status } = d.router;
+          for (const client of [...status.clients, ...status.guest.clients]) {
+            client.downBytes = 0;
+            client.upBytes = 0;
+          }
+          d.router.usageSettings.since = new Date().toISOString();
+          applyUsageLimit(d);
+        });
+      },
 
       saveSwapSettings: async (sizeGb) => {
         await wait(1500);
@@ -479,7 +530,7 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
           d.router.status.system.swapUsedMb = Math.min(d.router.status.system.swapUsedMb, sizeGb * 1024);
         });
       },
-      saveDnsSettings: async (text) => {
+      saveDnsSettings: async (text, withVpn) => {
         await wait(800);
         const servers = text
           .split(/[,\s]+/)
@@ -501,7 +552,7 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
         if (servers.length > 4) throw new FieldErrors({ servers: 'At most 4 DNS servers.' });
         const plain = servers.filter(isIp);
         const doh = servers.filter((server) => !isIp(server)).map((server) => full(server)!.toLowerCase());
-        change((d) => void (d.router.dnsSettings = { servers: [...plain, ...doh] }));
+        change((d) => void (d.router.dnsSettings = { servers: [...plain, ...doh], withVpn }));
       },
       saveSshSettings: async (settings) => {
         await wait(900);
@@ -617,6 +668,7 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
       sshSettings: loadable('sshSettings', router.sshSettings),
       dnsSettings: loadable('dnsSettings', router.dnsSettings),
       swapSettings: loadable('swapSettings', router.swapSettings),
+      usageSettings: loadable('usageSettings', { ...router.usageSettings, metered: router.hotspotSettings.metered }),
       httpsSettings: loadable('httpsSettings', router.httpsSettings),
       nearbyNetworks: demo.nearbyNetworks,
       portal: loadable('portal', router.status.portal),
@@ -636,10 +688,25 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
     },
     [hotspotPassword, failActions],
   );
+  const { ssid: hotspotSsid } = demo.router.hotspotSettings;
+  const { enabled: guestEnabled, ssid: guestSsid } = demo.router.guestSettings;
+  const wifiQr = useCallback(
+    async (network: 'hotspot' | 'guest', adminPassword?: string) => {
+      await wait(600);
+      if (failActions) throw new Error(UNREACHABLE);
+      if (network === 'hotspot') {
+        if (!adminPassword || adminPassword === 'wrong') throw new Error('Wrong password.');
+        return { ssid: hotspotSsid, svg: demoQrSvg(`${hotspotSsid}:${hotspotPassword}`) };
+      }
+      if (!guestEnabled) throw new Error('The guest network is off.');
+      return { ssid: guestSsid, svg: demoQrSvg(guestSsid) };
+    },
+    [failActions, hotspotSsid, hotspotPassword, guestEnabled, guestSsid],
+  );
 
   const value = useMemo<Device>(
-    () => ({ ...state, ...actions, revealHotspotPassword }),
-    [state, actions, revealHotspotPassword],
+    () => ({ ...state, ...actions, revealHotspotPassword, wifiQr }),
+    [state, actions, revealHotspotPassword, wifiQr],
   );
 
   return (

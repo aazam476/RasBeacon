@@ -637,3 +637,20 @@ func TestDnsmasq_UpstreamWithAPort(t *testing.T) {
 		}
 	}
 }
+
+func TestWPASupplicant_RandomMACPerNetwork(t *testing.T) {
+	got, err := WPASupplicant(WPAInput{Country: "US", Networks: []WPANetwork{
+		{SSID: "Hotel", Security: config.UplinkOpen, RandomMAC: true},
+		{SSID: "Home", Security: config.UplinkPersonal, Password: "espresso-1"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hotel, _, _ := strings.Cut(got[strings.Index(got, "# Name: Hotel"):], "# Name: Home")
+	if !strings.Contains(hotel, "mac_addr=1") {
+		t.Errorf("the hotel network uses a random MAC:\n%s", hotel)
+	}
+	if strings.Count(got, "mac_addr=1") != 1 || !strings.Contains(got, "rand_addr_lifetime=2147483647") {
+		t.Errorf("only the hotel network, and the random MAC is kept until a restart:\n%s", got)
+	}
+}

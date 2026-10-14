@@ -49,6 +49,12 @@ func (a *Agent) pausedMACs() []string {
 	for mac := range a.cfg.Clients.Paused {
 		macs = append(macs, mac)
 	}
+	// And those over their data limit (see usage.go).
+	for _, mac := range a.usage.overLimit {
+		if !slices.Contains(macs, mac) {
+			macs = append(macs, mac)
+		}
+	}
 	slices.Sort(macs)
 	return macs
 }

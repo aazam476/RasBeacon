@@ -150,3 +150,35 @@ func TestDNS_TheForwarderStopsWhileTheVPNIsInUse(t *testing.T) {
 		t.Error("the forwarder isn't needed while the VPN carries the devices' traffic")
 	}
 }
+
+func TestDNS_AlsoWhileTheVPNIsOn(t *testing.T) {
+	e, _ := newVPNEnv(t, true)
+	dnsmasq := func() string { return e.readFile(e.paths.DnsmasqConfig()) }
+	// AdGuard as a plugin (on RasBeacon itself) and a public server.
+	err := e.agent.UpdateDNSSettings(api.DNSSettings{Servers: []string{"10.89.0.2", "9.9.9.9"}, WithVPN: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := dnsmasq(); !strings.Contains(got, "server=10.89.0.2\nserver=9.9.9.9") || strings.Contains(got, "server=10.66.0.1") {
+		t.Errorf("with the VPN on, the owner's servers are used:\n%s", got)
+	}
+	// The public server is reached through the tunnel only; the plugin's
+	// address stays on RasBeacon.
+	if !e.runner.ran("ip route replace 9.9.9.9/32 dev wg0") || e.runner.ran("ip route replace 10.89.0.2/32 dev wg0") {
+		t.Errorf("commands: %v", e.runner.commands)
+	}
+	if rules := e.readFile(e.paths.FirewallRules()); !strings.Contains(rules, "9.9.9.9") || strings.Contains(rules, "10.89.0.2 }") {
+		t.Errorf("the firewall keeps 9.9.9.9 inside the tunnel:\n%s", rules)
+	}
+	if s := e.agent.DNSSettings(); !s.WithVPN {
+		t.Errorf("settings = %+v", s)
+	}
+
+	// Switched off again: the VPN's own DNS.
+	if err := e.agent.UpdateDNSSettings(api.DNSSettings{Servers: []string{"9.9.9.9"}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := dnsmasq(); !strings.Contains(got, "server=10.66.0.1") || strings.Contains(got, "server=9.9.9.9") {
+		t.Errorf("without the switch, the VPN's DNS is used:\n%s", got)
+	}
+}
