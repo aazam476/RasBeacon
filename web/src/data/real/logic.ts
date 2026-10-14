@@ -21,6 +21,7 @@ import type {
   SetupForm,
   SetupState,
   VPNDetailsForm,
+  PluginChoices,
 } from '../types';
 import { ApiError, type BrowserInput, type VPNProfileDetails } from './api';
 
@@ -323,4 +324,13 @@ export function networkErrorKey(field: string): string | null {
 /** Field names of the forms whose router names are the same as the screen's keys. */
 export function sameNames(...keys: string[]): Record<string, string> {
   return Object.fromEntries(keys.map((key) => [key, key]));
+}
+
+/** The field keys of a plugin's form (ports.<key>, settings.<key>, drive), as the router names them. */
+export function pluginFields(choices: PluginChoices): Record<string, string> {
+  return sameNames(
+    'drive',
+    ...Object.keys(choices.ports).map((key) => `ports.${key}`),
+    ...Object.keys(choices.settings).map((key) => `settings.${key}`),
+  );
 }

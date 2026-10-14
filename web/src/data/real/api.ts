@@ -20,6 +20,13 @@ import type {
   UpdateStatus,
   UplinkSettings,
   UsageSettings,
+  PluginCatalog,
+  PluginChoices,
+  PluginDrive,
+  PluginLogsResponse,
+  Plugin,
+  PluginPreview,
+  PluginsState,
   VPNProfile,
   VPNSettings,
   WiFiQR,
@@ -274,3 +281,30 @@ export const factoryReset = (adminPassword: string) =>
 
 /** The diagnostics report is a plain download. */
 export const DIAGNOSTICS_URL = '/api/v1/diagnostics';
+
+// --- Plugins (slow ones: GitHub and image registries through the VPN) ------------------------
+
+export const getPlugins = () => request<PluginsState>('GET', '/plugins');
+/** Uploads a .rba; it is checked before the install sheet opens. */
+export const uploadPlugin = (file: File) =>
+  request<PluginPreview>('POST', '/plugins/upload', { file, timeoutMs: 30 * 60_000 });
+export const getPluginCatalog = (refresh: boolean) =>
+  request<PluginCatalog>('POST', '/plugins/catalog', { body: { refresh }, timeoutMs: 120_000 });
+export const downloadCatalogPlugin = (source: string, file: string) =>
+  request<PluginPreview>('POST', '/plugins/catalog/download', { body: { source, file }, timeoutMs: 30 * 60_000 });
+export const downloadPluginUpdate = (id: string) =>
+  request<PluginPreview>('POST', '/plugins/update', { body: { id }, timeoutMs: 30 * 60_000 });
+export const installPlugin = (stagingId: string, choices: PluginChoices) =>
+  request<Plugin>('POST', '/plugins/install', { body: { stagingId, ...choices } });
+export const cancelPluginInstall = (stagingId: string) =>
+  request<void>('POST', '/plugins/cancel', { body: { stagingId } });
+export const putPluginSettings = (id: string, choices: PluginChoices) =>
+  request<Plugin>('PUT', '/plugins/settings', { body: { id, ...choices }, timeoutMs: 120_000 });
+export const pluginAction = (action: 'start' | 'stop', id: string) =>
+  request<PluginsState>('POST', `/plugins/${action}`, { body: { id }, timeoutMs: 120_000 });
+export const removePlugin = (id: string, keepData: boolean) =>
+  request<PluginsState>('POST', '/plugins/remove', { body: { id, keepData }, timeoutMs: 120_000 });
+export const getPluginLogs = (id: string) => request<PluginLogsResponse>('POST', '/plugins/logs', { body: { id } });
+export const getPluginDrives = () => request<{ drives: PluginDrive[] }>('GET', '/plugins/drives');
+export const putPluginSources = (sources: string[]) =>
+  request<PluginsState>('PUT', '/plugins/sources', { body: { sources } });

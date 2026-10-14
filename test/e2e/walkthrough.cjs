@@ -32,7 +32,7 @@ AllowedIPs = 0.0.0.0/0, ::/0
 `;
 
 // Pages that phones reach through "More" (computers have them in the sidebar).
-const ON_MORE_PAGE = new Set(["Hotspot", "Guests", "SSH", "HTTPS", "System"]);
+const ON_MORE_PAGE = new Set(["Hotspot", "Guests", "Plugins", "SSH", "HTTPS", "System"]);
 
 async function main() {
   const browser = await chromium.launch(
@@ -309,6 +309,17 @@ async function main() {
     await open("Status");
     await page.getByRole("heading", { name: "Guest network" }).waitFor();
     await page.getByText("Ali's Guests").waitFor();
+  });
+
+  await step("plugins: none yet, and a file that isn't a plugin is refused", async () => {
+    await open("Plugins");
+    await page.getByText("No plugins yet").waitFor();
+    await page.getByLabel("Install from a file").setInputFiles({
+      name: "not-a-plugin.rba",
+      mimeType: "application/octet-stream",
+      buffer: Buffer.from("hello"),
+    });
+    await page.getByText("This is not a RasBeacon plugin (.rba) file.").waitFor();
   });
 
   await step("system: reboot and factory reset ask first", async () => {

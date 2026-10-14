@@ -11,8 +11,10 @@ import type {
   Status,
   UplinkSettings,
   UsageSettings,
+  PluginsState,
   VPNSettings,
 } from '../types';
+import { createMockPlugins } from './plugins';
 
 /**
  * One consistent sample router for the demo, merged from the design mockups and the original
@@ -29,6 +31,7 @@ export interface MockRouter {
   dnsSettings: DNSSettings;
   swapSettings: SwapSettings;
   usageSettings: UsageSettings;
+  plugins: PluginsState;
   httpsSettings: HTTPSSettings;
   nearbyNetworks: NearbyNetwork[];
   /** What "Show password" reveals. */
@@ -157,6 +160,7 @@ export function createMockRouter(): MockRouter {
       deviceId: 'rb-7f3a9c2e4b1d7162',
       uptimeSeconds: 1_233_720,
       mode: 'normal',
+      plugins: [],
       hotspot: {
         running: true,
         ssid: 'RasBeacon-7162',
@@ -411,6 +415,7 @@ export function createMockRouter(): MockRouter {
 
     dnsSettings: { servers: [], withVpn: false },
     swapSettings: { sizeGb: 2, maxGb: 26 },
+    plugins: createMockPlugins(),
     usageSettings: { limitMb: 0, since: '2026-10-01T08:00:00Z', metered: false, devicesPaused: 0 },
 
     sshSettings: {

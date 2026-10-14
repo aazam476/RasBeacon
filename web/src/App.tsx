@@ -12,6 +12,9 @@ import { InternetScreen } from '@/screens/internet/InternetScreen';
 import { LoginScreen } from '@/screens/phases/LoginScreen';
 import { LoadingScreen, NoticeScreen } from '@/screens/phases/NoticeScreen';
 import { SetupScreen } from '@/screens/phases/SetupScreen';
+import { CatalogScreen } from '@/screens/plugins/CatalogScreen';
+import { PluginScreen } from '@/screens/plugins/PluginScreen';
+import { PluginsScreen } from '@/screens/plugins/PluginsScreen';
 import { PortalScreen } from '@/screens/portal/PortalScreen';
 import { SshScreen } from '@/screens/ssh/SshScreen';
 import { StatusScreen } from '@/screens/status/StatusScreen';
@@ -99,6 +102,9 @@ function Pages() {
         <Route path="ssh" element={<SshScreen />} />
         <Route path="https" element={<HttpsScreen />} />
         <Route path="system" element={<SystemScreen />} />
+        <Route path="plugins" element={<PluginsScreen />} />
+        <Route path="plugins/catalog" element={<CatalogScreen />} />
+        <Route path="plugins/:id" element={<PluginScreen />} />
         <Route path="more" element={<MoreScreen />} />
       </Route>
       {/* The original UI's addresses (/#hotspot, /#portal, …) match the routes by themselves, except

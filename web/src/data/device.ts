@@ -4,6 +4,11 @@ import type {
   DNSSettings,
   UsageSettings,
   WiFiQR,
+  PluginCatalog,
+  PluginChoices,
+  PluginDrive,
+  PluginPreview,
+  PluginsState,
   EthernetRole,
   GuestSettings,
   HotspotSettings,
@@ -60,6 +65,7 @@ export type DataKey =
   | 'dnsSettings'
   | 'swapSettings'
   | 'usageSettings'
+  | 'plugins'
   | 'httpsSettings'
   | 'portal';
 
@@ -88,6 +94,7 @@ export interface DeviceState {
   dnsSettings: Loadable<DNSSettings>;
   swapSettings: Loadable<SwapSettings>;
   usageSettings: Loadable<UsageSettings>;
+  plugins: Loadable<PluginsState>;
   httpsSettings: Loadable<HTTPSSettings>;
   /** The last scan's results; null before the first scan. */
   nearbyNetworks: NearbyNetwork[] | null;
@@ -266,6 +273,30 @@ export interface DeviceActions {
   reboot: () => Promise<void>;
   /** Erase everything; afterwards the phase is `setup`. Reject when the admin password is wrong. */
   factoryReset: (adminPassword: string) => Promise<void>;
+
+  // --- Plugins -----------------------------------------------------------------------------
+
+  /** Check a .rba file and answer what installing it means. Field key: file. */
+  previewPluginFile: (file: File) => Promise<PluginPreview>;
+  /** The catalog; `refresh` asks GitHub again ("Check now"). */
+  pluginCatalog: (refresh: boolean) => Promise<PluginCatalog>;
+  /** Download a catalog plugin (through the VPN) for the install sheet. Field key: file. */
+  previewCatalogPlugin: (source: string, file: string) => Promise<PluginPreview>;
+  /** Download an installed plugin's update from the catalog for the install sheet. */
+  previewPluginUpdate: (id: string) => Promise<PluginPreview>;
+  /** Install a previewed plugin; it then shows as installing. Field keys: ports.<key>, settings.<key>, drive. */
+  installPlugin: (stagingId: string, choices: PluginChoices) => Promise<void>;
+  /** The install sheet was closed without installing. */
+  cancelPluginInstall: (stagingId: string) => Promise<void>;
+  /** Save a plugin's settings; it restarts if it runs. Field keys as installPlugin's. */
+  savePluginSettings: (id: string, choices: PluginChoices) => Promise<void>;
+  setPluginRunning: (id: string, running: boolean) => Promise<void>;
+  removePlugin: (id: string, keepData: boolean) => Promise<void>;
+  /** Its last 500 lines of output. */
+  pluginLogs: (id: string) => Promise<string[]>;
+  pluginDrives: () => Promise<PluginDrive[]>;
+  /** The extra catalog sources ("owner/repo"). Field keys: sources.<n>. */
+  savePluginSources: (sources: string[]) => Promise<void>;
 }
 
 export type Device = DeviceState & DeviceActions;

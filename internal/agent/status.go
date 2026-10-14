@@ -43,6 +43,7 @@ func (a *Agent) StatusFor(viewer string) api.Status {
 		DeviceID:      a.identity.DeviceID,
 		UptimeSeconds: a.uptimeSeconds(),
 		Mode:          a.mode,
+		Plugins:       a.pluginSummaries(),
 		Hotspot: api.HotspotStatus{
 			Running:    a.serviceIsActive(hostapdService),
 			SSID:       h.SSID,
@@ -244,6 +245,7 @@ func (a *Agent) Diagnostics() string {
 		}
 	}
 	wifiUplink := a.wifiUplinkInterface()
+	plugins := a.pluginDiagnostics()
 	a.mu.Unlock()
 
 	var report strings.Builder
@@ -254,6 +256,7 @@ func (a *Agent) Diagnostics() string {
 		status.Hotspot.Running, len(status.Clients), status.Hotspot.Metered)
 	fmt.Fprintf(&report, "guest: enabled=%v running=%v ssid=%q clients=%d\n",
 		status.Guest.Enabled, status.Guest.Running, status.Guest.SSID, len(status.Guest.Clients))
+	report.WriteString(plugins)
 	u := status.Uplink
 	fmt.Fprintf(&report, "uplink: connected=%v kind=%s interface=%s address=%s gateway=%s ipv6=%v\n",
 		u.Connected, u.Kind, u.Interface, u.Address, u.Gateway, u.IPv6)

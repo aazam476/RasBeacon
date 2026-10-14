@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router';
 import {
   DeviceContext,
@@ -9,11 +9,21 @@ import {
   type Loadable,
 } from '../device';
 import { FieldErrors } from '../errors';
-import type { SavedNetwork, VPNProfile } from '../types';
+import type { Plugin, PluginChoices, PluginPreview, SavedNetwork, VPNProfile } from '../types';
 import { DemoIndex } from './DemoIndex';
 import { DemoTag } from './DemoTag';
 import { StressToggle } from './StressToggle';
 import { LOGIN_PAGE_PICTURE } from './loginPagePicture';
+import {
+  catalogEntries,
+  DEMO_DRIVES,
+  DEMO_LOG,
+  definitionOf,
+  demoMetrics,
+  installedPlugin,
+  PLUGIN_DEFINITIONS,
+  previewOf,
+} from './plugins';
 import { demoQrSvg } from './qrPicture';
 import {
   checkGuestSettings,
@@ -42,6 +52,57 @@ function applyUsageLimit(d: DemoState) {
     if (over) Object.assign(client, { downMbps: 0, upMbps: 0 });
   }
   d.router.usageSettings.devicesPaused = paused;
+}
+
+/** The demo state as last shown, for actions that answer from it (plugin previews). */
+let currentDemo: DemoState = createDemoState();
+
+/** A new name for a plugin file waiting in the install sheet. */
+let stagingCount = 0;
+function newStagingId(kind: string): string {
+  stagingCount += 1;
+  return `${kind}-${stagingCount}`;
+}
+
+/** Now, as the router writes times. */
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+/** The plugin files waiting in the install sheet: staging ID → plugin ID and where it came from. */
+const staged = new Map<string, { id: string; source: string }>();
+
+/** Like the router: the choices for a plugin's ports and settings, checked. */
+function checkPluginChoices(
+  preview: Pick<PluginPreview, 'ports' | 'settings'>,
+  choices: PluginChoices,
+  taken: number[],
+) {
+  const errors: Record<string, string> = {};
+  for (const port of preview.ports) {
+    const host = choices.ports[port.key] ?? port.host;
+    if (!(host >= 1 && host <= 65535)) errors[`ports.${port.key}`] = 'Choose a port from 1 to 65535.';
+    else if ([22, 53, 67, 80, 443].includes(host))
+      errors[`ports.${port.key}`] = `Port ${host} is RasBeacon's own. Choose another.`;
+    else if (taken.includes(host)) errors[`ports.${port.key}`] = `Another plugin already uses port ${host}.`;
+  }
+  for (const setting of preview.settings) {
+    const value = (choices.settings[setting.key] ?? '').trim();
+    if (setting.required && value === '' && !(setting.type === 'password' && setting.hasValue)) {
+      errors[`settings.${setting.key}`] = 'Fill this in.';
+    }
+    if (setting.type === 'number' && value !== '') {
+      const n = Number(value);
+      if (
+        Number.isNaN(n) ||
+        (setting.min !== undefined && n < setting.min) ||
+        (setting.max !== undefined && n > setting.max)
+      ) {
+        errors[`settings.${setting.key}`] = `Must be from ${setting.min ?? 'any'} to ${setting.max ?? 'any'}.`;
+      }
+    }
+  }
+  if (Object.keys(errors).length > 0) throw new FieldErrors(errors);
 }
 
 /** Waits a moment, so the screens' busy states can be seen while there is no real router. */
@@ -131,6 +192,10 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
   const [demo, setDemo] = useState(initialState);
   const { pathname } = useLocation();
   const { failActions } = demo;
+  // The actions are made once; the plugin previews read the state as it is now.
+  useEffect(() => {
+    currentDemo = demo;
+  });
 
   // Every action but one, made once: they change the state with `setDemo`.
   const actions = useMemo<Omit<DeviceActions, 'revealHotspotPassword' | 'wifiQr'>>(() => {
@@ -517,7 +582,7 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
             client.downBytes = 0;
             client.upBytes = 0;
           }
-          d.router.usageSettings.since = new Date().toISOString();
+          d.router.usageSettings.since = nowIso();
           applyUsageLimit(d);
         });
       },
@@ -639,6 +704,153 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
         });
       },
       reboot: () => wait(3000),
+      previewPluginFile: async (file) => {
+        await wait(1200);
+        if (!file.name.endsWith('.rba')) throw new FieldErrors({ file: 'This is not a RasBeacon plugin (.rba) file.' });
+        // The file's name says which of the sample plugins it is; anything else is Trip Notes.
+        const definition =
+          PLUGIN_DEFINITIONS.find((d) => file.name.startsWith(d.id.split('-')[0])) ?? definitionOf('trip-notes')!;
+        const stagingId = newStagingId('file');
+        staged.set(stagingId, { id: definition.id, source: 'file' });
+        return { ...previewOf(definition, currentDemo.router.plugins, stagingId), source: 'file' };
+      },
+      pluginCatalog: async (refresh) => {
+        await wait(refresh ? 1600 : 500);
+        if (refresh) change((d) => void (d.router.plugins.checkedAt = nowIso()));
+        const plugins = currentDemo.router.plugins;
+        return { entries: catalogEntries(plugins), checkedAt: refresh ? nowIso() : plugins.checkedAt };
+      },
+      previewCatalogPlugin: async (source, file) => {
+        await wait(1800);
+        const definition = PLUGIN_DEFINITIONS.find((d) => d.source === source && d.file === file);
+        if (!definition)
+          throw new FieldErrors({ file: "This plugin isn't in the catalog any more. Check the catalog again." });
+        const stagingId = newStagingId('catalog');
+        staged.set(stagingId, { id: definition.id, source });
+        return previewOf(definition, currentDemo.router.plugins, stagingId);
+      },
+      previewPluginUpdate: async (id) => {
+        await wait(1800);
+        const definition = definitionOf(id);
+        if (!definition) throw new Error('No update for this plugin is in the catalog.');
+        const stagingId = newStagingId('update');
+        staged.set(stagingId, { id, source: definition.source });
+        return previewOf(definition, currentDemo.router.plugins, stagingId);
+      },
+      installPlugin: async (stagingId, choices) => {
+        await wait(700);
+        const entry = staged.get(stagingId);
+        const definition = entry && definitionOf(entry.id);
+        if (!entry || !definition) throw new Error('This plugin file is gone. Choose it again.');
+        const plugins = currentDemo.router.plugins;
+        const preview = previewOf(definition, plugins, stagingId);
+        const taken = plugins.plugins
+          .filter((p) => p.id !== definition.id)
+          .flatMap((p) => p.ports.map((port) => port.host));
+        checkPluginChoices(preview, choices, taken);
+        staged.delete(stagingId);
+        const existing = plugins.plugins.find((p) => p.id === definition.id);
+        const address = existing?.address ?? `10.89.0.${2 + plugins.plugins.length}`;
+        change((d) => {
+          const list = d.router.plugins.plugins;
+          const plugin: Plugin = {
+            ...installedPlugin(definition, address, choices, 'installing'),
+            source: entry.source,
+            message: definition.downloadSize > 0 ? 'Downloading its image…' : 'Unpacking its image…',
+          };
+          const index = list.findIndex((p) => p.id === definition.id);
+          if (index >= 0) list[index] = plugin;
+          else list.push(plugin);
+        });
+        // A moment later it runs.
+        setTimeout(
+          () =>
+            change((d) => {
+              const plugin = d.router.plugins.plugins.find((p) => p.id === definition.id);
+              if (!plugin || plugin.state !== 'installing') return;
+              Object.assign(plugin, {
+                state: 'running',
+                message: undefined,
+                healthy: true,
+                metrics: demoMetrics(plugin.id),
+              });
+            }),
+          3000,
+        );
+      },
+      cancelPluginInstall: async (stagingId) => {
+        staged.delete(stagingId);
+      },
+      savePluginSettings: async (id, choices) => {
+        await wait(1000);
+        const plugins = currentDemo.router.plugins;
+        const plugin = plugins.plugins.find((p) => p.id === id);
+        if (!plugin) throw new Error('No such plugin is installed.');
+        const taken = plugins.plugins.filter((p) => p.id !== id).flatMap((p) => p.ports.map((port) => port.host));
+        checkPluginChoices(plugin, choices, taken);
+        change((d) => {
+          const target = d.router.plugins.plugins.find((p) => p.id === id);
+          if (!target) return;
+          target.ports = target.ports.map((port) => {
+            const host = choices.ports[port.key] ?? port.host;
+            return { ...port, host, url: port.url ? `http://192.168.8.1:${host}/` : undefined };
+          });
+          target.settings = target.settings.map((setting) =>
+            setting.type === 'password'
+              ? { ...setting, hasValue: setting.hasValue || Boolean(choices.settings[setting.key]) }
+              : { ...setting, value: choices.settings[setting.key] ?? setting.value },
+          );
+          target.drive = choices.drive || undefined;
+        });
+      },
+      setPluginRunning: async (id, running) => {
+        await wait(1200);
+        change((d) => {
+          const plugin = d.router.plugins.plugins.find((p) => p.id === id);
+          if (!plugin) return;
+          Object.assign(
+            plugin,
+            running
+              ? { state: 'running', message: undefined, healthy: true, metrics: demoMetrics(id) }
+              : {
+                  state: 'stopped',
+                  message: undefined,
+                  healthy: undefined,
+                  metrics: plugin.metrics.map((m) => ({ ...m, value: '' })),
+                },
+          );
+        });
+      },
+      removePlugin: async (id) => {
+        await wait(1200);
+        change((d) => void (d.router.plugins.plugins = d.router.plugins.plugins.filter((p) => p.id !== id)));
+      },
+      pluginLogs: async (id) => {
+        await wait(400);
+        return id === 'adguard-home' ? DEMO_LOG : [];
+      },
+      pluginDrives: async () => {
+        await wait(500);
+        const plugins = currentDemo.router.plugins.plugins;
+        return DEMO_DRIVES.map((drive) => ({ ...drive, usedBy: plugins.find((p) => p.drive === drive.uuid)?.name }));
+      },
+      savePluginSources: async (sources) => {
+        await wait(700);
+        const errors: Record<string, string> = {};
+        sources.forEach((source, index) => {
+          if (!/^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/.test(source.trim())) {
+            errors[`sources.${index}`] = 'Enter a GitHub repository like owner/repo.';
+          }
+        });
+        failIfAny(errors);
+        change((d) => {
+          d.router.plugins.sources = [
+            d.router.plugins.sources[0],
+            ...sources.map((source) => ({ source: source.trim(), builtIn: false })),
+          ];
+        });
+      },
+
       factoryReset: async (adminPassword) => {
         await wait(1500);
         if (adminPassword === '' || adminPassword === 'wrong') throw new Error('Wrong password.');
@@ -660,7 +872,10 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
     return {
       phase: demo.phase,
       setup: router.setup,
-      status: loadable('status', router.status),
+      status: loadable('status', {
+        ...router.status,
+        plugins: router.plugins.plugins.map(({ id, name, state, icon }) => ({ id, name, state, icon })),
+      }),
       hotspotSettings: loadable('hotspotSettings', router.hotspotSettings),
       guestSettings: loadable('guestSettings', router.guestSettings),
       uplinkSettings: loadable('uplinkSettings', router.uplinkSettings),
@@ -668,6 +883,7 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
       sshSettings: loadable('sshSettings', router.sshSettings),
       dnsSettings: loadable('dnsSettings', router.dnsSettings),
       swapSettings: loadable('swapSettings', router.swapSettings),
+      plugins: loadable('plugins', router.plugins),
       usageSettings: loadable('usageSettings', { ...router.usageSettings, metered: router.hotspotSettings.metered }),
       httpsSettings: loadable('httpsSettings', router.httpsSettings),
       nearbyNetworks: demo.nearbyNetworks,

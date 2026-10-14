@@ -1,8 +1,7 @@
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 import { Icon } from './Icon';
-import { IconTile } from './IconTile';
-import type { RowLeading } from './Section';
+import { Leading, type RowLeading } from './Section';
 
 interface DisclosureProps {
   title: string;
@@ -19,6 +18,8 @@ interface DisclosureProps {
    */
   content?: 'rows' | 'text';
   children: ReactNode;
+  /** Called when it opens or closes (to load what it shows). */
+  onToggle?: (open: boolean) => void;
 }
 
 /**
@@ -33,27 +34,21 @@ export function Disclosure({
   tone = 'default',
   content = 'text',
   children,
+  onToggle,
 }: DisclosureProps) {
   return (
-    <details open={defaultOpen} className="row group/disclosure block p-0 lg:p-0">
+    <details
+      open={defaultOpen}
+      onToggle={onToggle && ((event) => onToggle(event.currentTarget.open))}
+      className="row group/disclosure block p-0 lg:p-0"
+    >
       <summary
         className={cn(
           'row-pressable flex min-h-11 list-none items-center gap-3 px-4 py-2.5 lg:min-h-10 lg:gap-2.5 lg:px-3.5 lg:py-2',
           'focus-visible:rounded-group focus-visible:-outline-offset-2 [&::-webkit-details-marker]:hidden',
         )}
       >
-        {leading &&
-          ('tile' in leading ? (
-            <IconTile icon={leading.tile} color={leading.color} />
-          ) : (
-            <span className="row-tile grid w-[1.8125rem] shrink-0 place-items-center lg:w-6">
-              <Icon
-                name={leading.icon}
-                size={22}
-                className={cn('text-label-2 lg:size-[1.125rem]', leading.className)}
-              />
-            </span>
-          ))}
+        <Leading leading={leading} />
         <span className="min-w-0 flex-1">
           <span className={cn('block text-body', tone === 'danger' ? 'text-red' : 'text-label')}>{title}</span>
           {subtitle && <span className="mt-0.5 block text-subhead text-label-2">{subtitle}</span>}

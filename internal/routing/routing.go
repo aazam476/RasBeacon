@@ -12,6 +12,9 @@
 //
 //	rule 100:  traffic arriving from the hotspot (iif br-lan) -> table 51820
 //	rule 101:  traffic arriving from the guest network (iif br-guest) -> same
+//	rule 102:  plugins' traffic (iif rbplug0) to your devices -> main table
+//	rule 103:  the rest of plugins' traffic -> table 51820
+//	rule 111:  RasBeacon's downloads for plugins (fwmark PluginMark) -> same
 //	table 51820:  default route through wg0
 //	              "unreachable" default route as a fallback
 //
@@ -133,9 +136,25 @@ func TunnelDown() [][]string {
 // nothing), so turning it on can never skip the tunnel.
 var LANInterfaces = []string{"br-lan", "br-guest"}
 
+// PluginInterface is the plugins' network (see internal/plugin). Plugins
+// only have IPv4 addresses.
+const PluginInterface = "rbplug0"
+
+// pluginRulePriority is the first of the plugins' two rules: their replies
+// to your devices use the main table's routes to the hotspot (but not its
+// default route), everything else goes into the tunnel.
+const pluginRulePriority = firstRulePriority + 2
+
+// PluginMark marks RasBeacon's own connections made for plugins (image
+// downloads, the catalog), so they take the tunnel too.
+const PluginMark = "0x5242"
+
+const pluginMarkPriority = "111"
+
 // ClientsThroughTunnel returns the commands that send devices' traffic
-// (arriving on LANInterfaces) to table 51820. Run ClientsDirect first so
-// the rules are never added twice.
+// (arriving on LANInterfaces), plugins' traffic and RasBeacon's downloads
+// for plugins to table 51820. Run ClientsDirect first so the rules are
+// never added twice.
 func ClientsThroughTunnel(kernelIPv6 bool) [][]string {
 	var cmds [][]string
 	for i, lan := range LANInterfaces {
@@ -145,7 +164,13 @@ func ClientsThroughTunnel(kernelIPv6 bool) [][]string {
 			cmds = append(cmds, []string{"ip", "-6", "rule", "add", "priority", priority, "iif", lan, "lookup", TunnelTable})
 		}
 	}
-	return cmds
+	return append(cmds,
+		[]string{"ip", "-4", "rule", "add", "priority", strconv.Itoa(pluginRulePriority), "iif", PluginInterface,
+			"lookup", "main", "suppress_prefixlength", "0"},
+		[]string{"ip", "-4", "rule", "add", "priority", strconv.Itoa(pluginRulePriority + 1), "iif", PluginInterface,
+			"lookup", TunnelTable},
+		[]string{"ip", "-4", "rule", "add", "priority", pluginMarkPriority, "fwmark", PluginMark, "lookup", TunnelTable},
+	)
 }
 
 // ClientsDirect returns the commands that remove RasBeacon's rules, so
@@ -160,7 +185,11 @@ func ClientsDirect() [][]string {
 			[]string{"ip", "-6", "rule", "delete", "priority", priority},
 		)
 	}
-	return cmds
+	return append(cmds,
+		[]string{"ip", "-4", "rule", "delete", "priority", strconv.Itoa(pluginRulePriority)},
+		[]string{"ip", "-4", "rule", "delete", "priority", strconv.Itoa(pluginRulePriority + 1)},
+		[]string{"ip", "-4", "rule", "delete", "priority", pluginMarkPriority},
+	)
 }
 
 // programRulePriority is the rule for RasBeacon's own programs whose

@@ -56,6 +56,11 @@ table inet rasbeacon {
 		# SSH was turned on in the web UI (hotspot side only).
 		iifname "br-lan" tcp dport 22 accept
 
+		# --- From plugins ("rbplug0") ---
+		# Plugins that may use the internet may ask RasBeacon's DNS server.
+		# Nothing else on RasBeacon answers them (not these settings).
+		iifname "rbplug0" reject
+
 		# Everything else is dropped by the policy above. In particular,
 		# nothing from the upstream network can reach the web UI or SSH.
 	}

@@ -80,6 +80,51 @@ type Config struct {
 	Clients  ClientsConfig  `json:"clients"`
 	DNS      DNSConfig      `json:"dns"`
 	Swap     SwapConfig     `json:"swap"`
+	Plugins  PluginsConfig  `json:"plugins"`
+}
+
+// PluginsConfig is the installed plugins and where the catalog looks for
+// more (see internal/plugin and agent/plugins.go).
+type PluginsConfig struct {
+	// Installed plugins, by ID.
+	Installed map[string]InstalledPlugin `json:"installed,omitempty"`
+	// Sources are extra GitHub repositories ("owner/repo") for the catalog,
+	// besides the built-in one.
+	Sources []string `json:"sources,omitempty"`
+}
+
+// InstalledPlugin is one installed plugin's settings. Its manifest, icon and
+// templates are kept in its folder (paths.PluginDir).
+type InstalledPlugin struct {
+	Version string `json:"version"`
+	// Source is "file" (installed from a file) or the catalog's "owner/repo".
+	Source string `json:"source"`
+	// PublicKey is the signing key pinned at the first signed install
+	// (base64); updates must be signed by it. Empty: unsigned so far.
+	PublicKey string `json:"publicKey,omitempty"`
+	// Image is the local image name it runs.
+	Image string `json:"image"`
+	// Address is its fixed address on the plugins' network.
+	Address netip.Addr `json:"address"`
+	// Ports maps "tcp/3000" (protocol/container port) to the port on
+	// RasBeacon the owner chose.
+	Ports map[string]int `json:"ports,omitempty"`
+	// Settings are the non-secret settings (secrets are in Secrets.Plugins).
+	Settings map[string]string `json:"settings,omitempty"`
+	// Drive is the UUID of the USB drive it uses ("" = none).
+	Drive string `json:"drive,omitempty"`
+	// Running is whether it should run: kept across restarts.
+	Running bool `json:"running"`
+	// StoppedAfterCrashes is set when it crashed too often and was stopped;
+	// it starts again only when the owner starts it.
+	StoppedAfterCrashes bool `json:"stoppedAfterCrashes,omitempty"`
+}
+
+// Clone returns a copy that can be changed without affecting p.
+func (p InstalledPlugin) Clone() InstalledPlugin {
+	p.Ports = maps.Clone(p.Ports)
+	p.Settings = maps.Clone(p.Settings)
+	return p
 }
 
 // SwapConfig is the size of the swap file on the data partition.
@@ -551,6 +596,8 @@ type Secrets struct {
 	// WireGuardKeys.
 	WireGuardPrivateKey   string `json:"wireguardPrivateKey,omitempty"`
 	WireGuardPresharedKey string `json:"wireguardPresharedKey,omitempty"`
+	// Plugins holds plugins' password settings: plugin ID → key → value.
+	Plugins map[string]map[string]string `json:"plugins,omitempty"`
 }
 
 // WireGuardKeys are one VPN profile's secrets (base64).
@@ -724,6 +771,14 @@ func (c Config) Clone() Config {
 	c.Clients.Names = maps.Clone(c.Clients.Names)
 	c.DNS.Servers = slices.Clone(c.DNS.Servers)
 	c.DNS.DoH = slices.Clone(c.DNS.DoH)
+	c.Plugins.Sources = slices.Clone(c.Plugins.Sources)
+	if c.Plugins.Installed != nil {
+		installed := make(map[string]InstalledPlugin, len(c.Plugins.Installed))
+		for id, p := range c.Plugins.Installed {
+			installed[id] = p.Clone()
+		}
+		c.Plugins.Installed = installed
+	}
 	if c.Swap.SizeGB != nil {
 		size := *c.Swap.SizeGB
 		c.Swap.SizeGB = &size
@@ -739,6 +794,13 @@ func (s Secrets) Clone() Secrets {
 	}
 	s.UplinkPasswords = passwords
 	s.WireGuardKeys = maps.Clone(s.WireGuardKeys)
+	if s.Plugins != nil {
+		plugins := make(map[string]map[string]string, len(s.Plugins))
+		for id, values := range s.Plugins {
+			plugins[id] = maps.Clone(values)
+		}
+		s.Plugins = plugins
+	}
 	return s
 }
 

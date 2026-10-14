@@ -12,6 +12,12 @@ interface={{.Bridge}}
 # The guest network (its devices get addresses and DNS, nothing else).
 interface={{.GuestBridge}}
 {{- end}}
+{{- if .PluginBridge}}
+# Plugins ask RasBeacon's DNS too (only names; no addresses are handed out
+# there: Podman gives each plugin a fixed one).
+interface={{.PluginBridge}}
+no-dhcp-interface={{.PluginBridge}}
+{{- end}}
 bind-interfaces
 # Don't read /etc/resolv.conf or /etc/hosts: everything is configured here.
 no-resolv

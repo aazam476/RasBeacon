@@ -24,6 +24,7 @@ import type {
   Status,
   UplinkSettings,
   UsageSettings,
+  PluginsState,
   VPNSettings,
 } from '../types';
 import * as api from './api';
@@ -35,6 +36,7 @@ import {
   classifyGesture,
   decidePhase,
   pageSizeFor,
+  pluginFields,
   sameNames,
   screenError,
   splitList,
@@ -53,6 +55,7 @@ interface DataTypes {
   dnsSettings: DNSSettings;
   swapSettings: SwapSettings;
   usageSettings: UsageSettings;
+  plugins: PluginsState;
   httpsSettings: HTTPSSettings;
   portal: PortalStatus;
 }
@@ -69,6 +72,7 @@ const LOADERS: { [K in DataKey]: () => Promise<DataTypes[K]> } = {
   dnsSettings: api.getDNSSettings,
   swapSettings: api.getSwapSettings,
   usageSettings: api.getUsageSettings,
+  plugins: api.getPlugins,
   httpsSettings: api.getHTTPSSettings,
   portal: api.getPortalStatus,
 };
@@ -84,6 +88,7 @@ const NO_DATA: AllData = {
   dnsSettings: NOTHING,
   swapSettings: NOTHING,
   usageSettings: NOTHING,
+  plugins: NOTHING,
   httpsSettings: NOTHING,
   portal: NOTHING,
 };
@@ -116,6 +121,8 @@ const PAGE_DATA: Record<string, DataKey[]> = {
 };
 
 const STATUS_EVERY_MS = 10_000;
+/** The plugins' pages follow installs, starts and metrics. */
+const PLUGINS_EVERY_MS = 4_000;
 const PORTAL_EVERY_MS = 5_000;
 
 const CLOSED_BROWSER: PortalBrowserState = { frame: undefined, imageSrc: '', error: null };
@@ -218,6 +225,16 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
     // oxlint-disable-next-line react/set-state-in-effect -- the state changes when the router answers
     for (const key of PAGE_DATA[pathname] ?? []) void load(key);
   }, [ready, pathname, load]);
+
+  // The plugins' pages (and each plugin's own) refresh every few seconds.
+  const onPluginPages = ready && (pathname === '/plugins' || pathname.startsWith('/plugins/'));
+  useEffect(() => {
+    if (!onPluginPages) return;
+    // oxlint-disable-next-line react/set-state-in-effect -- the state changes when the router answers
+    void load('plugins');
+    const timer = setInterval(() => void load('plugins'), PLUGINS_EVERY_MS);
+    return () => clearInterval(timer);
+  }, [onPluginPages, load]);
 
   // The login page screen refreshes the portal status every 5 seconds, logged in or not.
   const onPortalScreen = pathname === '/portal' && setupDone;
@@ -574,6 +591,33 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
         // The session may have ended with the restart ("Stay logged in" keeps it).
         await loadStartup();
       },
+      previewPluginFile: (file) => attempt(() => api.uploadPlugin(file), sameNames('file')),
+      pluginCatalog: (refresh) => attempt(() => api.getPluginCatalog(refresh)),
+      previewCatalogPlugin: (source, file) => attempt(() => api.downloadCatalogPlugin(source, file), sameNames('file')),
+      previewPluginUpdate: (id) => attempt(() => api.downloadPluginUpdate(id), sameNames('id')),
+      installPlugin: async (stagingId, choices) => {
+        await attempt(() => api.installPlugin(stagingId, choices), pluginFields(choices));
+        await load('plugins');
+      },
+      cancelPluginInstall: async (stagingId) => {
+        await api.cancelPluginInstall(stagingId).catch(() => undefined);
+      },
+      savePluginSettings: async (id, choices) => {
+        await attempt(() => api.putPluginSettings(id, choices), pluginFields(choices));
+        await load('plugins');
+      },
+      setPluginRunning: async (id, running) => {
+        store('plugins', await attempt(() => api.pluginAction(running ? 'start' : 'stop', id)));
+      },
+      removePlugin: async (id, keepData) => {
+        store('plugins', await attempt(() => api.removePlugin(id, keepData)));
+      },
+      pluginLogs: async (id) => (await attempt(() => api.getPluginLogs(id))).lines,
+      pluginDrives: async () => (await attempt(() => api.getPluginDrives())).drives,
+      savePluginSources: async (sources) => {
+        store('plugins', await attempt(() => api.putPluginSources(sources)));
+      },
+
       factoryReset: async (adminPassword) => {
         await attempt(() => api.factoryReset(adminPassword));
         setData(NO_DATA);

@@ -36,6 +36,14 @@ for tool in usr/sbin/hostapd usr/sbin/dnsmasq usr/sbin/nft usr/sbin/iw usr/sbin/
   check "$tool is installed" test -x "$root/$tool"
 done
 
+# Plugins: Podman and its settings.
+for tool in usr/bin/podman usr/bin/crun usr/bin/conmon usr/lib/podman/netavark; do
+  check "$tool is installed (plugins)" test -x "$root/$tool"
+done
+check "Podman keeps images on the data partition" grep -q 'graphroot = "/persistent/containers/storage"' "$root/etc/containers/storage.conf"
+check "Podman adds no firewall rules of its own" grep -q 'firewall_driver = "none"' "$root/etc/containers/containers.conf"
+check "the I2C bus is on for plugins" grep -q '^dtparam=i2c_arm=on' "$root/boot/firmware/config.txt"
+
 # Firmware for the supported USB Wi-Fi adapters (drivers alone are not enough).
 check "Realtek RTL8812BU firmware (TP-Link Archer T3U)" test -f "$root/usr/lib/firmware/rtw88/rtw8822b_fw.bin"
 check "Realtek RTL8812AU firmware (TP-Link Archer T4U v1/v2)" test -f "$root/usr/lib/firmware/rtw88/rtw8812a_fw.bin"

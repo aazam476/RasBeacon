@@ -456,6 +456,105 @@ func (a *Agent) Handler() http.Handler {
 		writeJSON(w, http.StatusOK, status)
 	})
 
+	// Plugins (plugins.go). Their actions' problems are explained to the
+	// owner, so they are answered as 400 with the reason.
+	mux.HandleFunc("GET /plugins", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, a.PluginsState())
+	})
+	// The body is the .rba file itself, streamed like updates.
+	mux.HandleFunc("POST /plugins/upload", func(w http.ResponseWriter, r *http.Request) {
+		preview, err := a.StagePluginFile(r.Body)
+		pluginAnswer(w, preview, err)
+	})
+	mux.HandleFunc("POST /plugins/catalog", func(w http.ResponseWriter, r *http.Request) {
+		var req api.PluginCatalogRequest
+		if !readJSON(w, r, &req) {
+			return
+		}
+		writeJSON(w, http.StatusOK, a.PluginCatalog(req))
+	})
+	mux.HandleFunc("POST /plugins/catalog/download", func(w http.ResponseWriter, r *http.Request) {
+		var req api.PluginDownloadRequest
+		if !readJSON(w, r, &req) {
+			return
+		}
+		preview, err := a.StagePluginFromCatalog(req)
+		pluginAnswer(w, preview, err)
+	})
+	mux.HandleFunc("POST /plugins/update", func(w http.ResponseWriter, r *http.Request) {
+		var req api.PluginIDRequest
+		if !readJSON(w, r, &req) {
+			return
+		}
+		preview, err := a.UpdatePluginFromCatalog(req.ID)
+		pluginAnswer(w, preview, err)
+	})
+	mux.HandleFunc("POST /plugins/install", func(w http.ResponseWriter, r *http.Request) {
+		var req api.PluginInstallRequest
+		if !readJSON(w, r, &req) {
+			return
+		}
+		p, err := a.InstallPlugin(req)
+		pluginAnswer(w, p, err)
+	})
+	mux.HandleFunc("POST /plugins/cancel", func(w http.ResponseWriter, r *http.Request) {
+		var req api.PluginInstallRequest
+		if !readJSON(w, r, &req) {
+			return
+		}
+		a.CancelPluginInstall(req.StagingID)
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("PUT /plugins/settings", func(w http.ResponseWriter, r *http.Request) {
+		var req api.PluginSettingsRequest
+		if !readJSON(w, r, &req) {
+			return
+		}
+		p, err := a.UpdatePluginSettings(req)
+		pluginAnswer(w, p, err)
+	})
+	for route, action := range map[string]func(string) error{
+		"POST /plugins/start": a.StartPlugin,
+		"POST /plugins/stop":  a.StopPlugin,
+	} {
+		mux.HandleFunc(route, func(w http.ResponseWriter, r *http.Request) {
+			var req api.PluginIDRequest
+			if !readJSON(w, r, &req) {
+				return
+			}
+			err := action(req.ID)
+			pluginAnswer(w, a.PluginsState(), err)
+		})
+	}
+	mux.HandleFunc("POST /plugins/remove", func(w http.ResponseWriter, r *http.Request) {
+		var req api.PluginRemoveRequest
+		if !readJSON(w, r, &req) {
+			return
+		}
+		err := a.RemovePlugin(req)
+		pluginAnswer(w, a.PluginsState(), err)
+	})
+	mux.HandleFunc("POST /plugins/logs", func(w http.ResponseWriter, r *http.Request) {
+		var req api.PluginIDRequest
+		if !readJSON(w, r, &req) {
+			return
+		}
+		logs, err := a.PluginLogs(req.ID)
+		pluginAnswer(w, logs, err)
+	})
+	mux.HandleFunc("GET /plugins/drives", func(w http.ResponseWriter, r *http.Request) {
+		drives, err := a.PluginDrives()
+		pluginAnswer(w, drives, err)
+	})
+	mux.HandleFunc("PUT /plugins/sources", func(w http.ResponseWriter, r *http.Request) {
+		var req api.PluginSourcesRequest
+		if !readJSON(w, r, &req) {
+			return
+		}
+		state, err := a.SetPluginSources(req)
+		pluginAnswer(w, state, err)
+	})
+
 	mux.HandleFunc("PUT /settings/updates", func(w http.ResponseWriter, r *http.Request) {
 		var req api.UpdateSettings
 		if !readJSON(w, r, &req) {
@@ -538,6 +637,21 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 }
 
 // writeError turns an error into the right HTTP status and message.
+// pluginAnswer answers a plugin action: the value, or why it failed.
+func pluginAnswer(w http.ResponseWriter, value any, err error) {
+	var validation *config.ValidationError
+	switch {
+	case err == nil:
+		writeJSON(w, http.StatusOK, value)
+	case errors.As(err, &validation), errors.Is(err, ErrWrongMode):
+		writeError(w, err)
+	case errors.Is(err, errPluginBusy):
+		writeJSON(w, http.StatusConflict, api.ErrorResponse{Error: err.Error()})
+	default:
+		writeJSON(w, http.StatusBadRequest, api.ErrorResponse{Error: sentence(err.Error())})
+	}
+}
+
 func writeError(w http.ResponseWriter, err error) {
 	var validation *config.ValidationError
 	switch {
