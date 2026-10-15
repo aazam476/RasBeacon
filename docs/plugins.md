@@ -5,7 +5,10 @@ case's fan. Each runs in its own Podman container with its own address, and
 can only do what the owner allowed when installing it.
 
 - **For owners:** [Installing and using plugins](#installing-and-using-plugins)
-- **For authors:** [Making a plugin](#making-a-plugin), [the manifest](#the-manifest),
+- **For authors:** start from
+  [RasBeacon-plugin-template](https://github.com/aazam476/RasBeacon-plugin-template)
+  (a working plugin, the build and release tools, and a step-by-step guide);
+  this page is the reference: [making a plugin](#making-a-plugin), [the manifest](#the-manifest),
   [signing](#signing), [publishing in a catalog](#publishing-a-catalog)
 - **For contributors:** [How it works](#how-it-works)
 
