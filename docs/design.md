@@ -218,10 +218,10 @@ per-device is generated on first boot.
   An "I understand the risk" override exists only under an expanded Advanced
   section and shows a persistent warning banner. The default is never "no
   validation".
-- **eduroam preset:** SSID `eduroam`, TTLS/PAP, empty fields for identity and
-  anonymous identity (hint: `anonymous@<realm>`), CA upload and server name.
-  Rutgers is documented as an example in `docs/eduroam.md`, not built into the
-  code.
+- **No eduroam preset:** RasBeacon is a general travel router, so eduroam
+  is added like any WPA-Enterprise network (from the scan, or Add manually),
+  with TTLS/PAP as the default login method. `docs/eduroam.md` explains it,
+  with Rutgers as an example; nothing about it is built into the code.
 - **Regulatory:** one country setting is applied to cfg80211 (`iw reg set`),
   hostapd and wpa_supplicant.
 

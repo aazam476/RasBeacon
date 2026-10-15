@@ -102,7 +102,9 @@ first if you want them; everything else works from the web pages alone.
 5. Plug Ethernet back in. **Expect:** it switches back to Ethernet. Unplug
    it again for the next sections.
 6. **eduroam (if you can, on campus):** connect RasBeacon to any network
-   once first, so its clock is set. Then **Set up eduroam**: login method
+   once first, so its clock is set. Then tap **eduroam** in the nearby
+   networks list (or **Add manually**: name `eduroam`, security *Username
+   and password*): login method
    *EAP-TTLS with PAP* (try PEAP if it doesn't connect), username
    `NetID@rutgers.edu`, anonymous username `anonymous@rutgers.edu`, your
    password, **both** CA certificate files and the login server name

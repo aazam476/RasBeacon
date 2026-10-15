@@ -17,7 +17,7 @@ interface AddNetworkSectionProps {
   onAdd: (start: AddNetworkStart) => void;
 }
 
-/** Ways to add a network: from a scan of the networks around, the eduroam preset, or by name. */
+/** Ways to add a network: from a scan of the networks around, or by name. */
 export function AddNetworkSection({ draft, wifiUplinkAvailable, connectedSsid, onAdd }: AddNetworkSectionProps) {
   const { nearbyNetworks, scanNearbyNetworks } = useDevice();
   // The scan's problems are shown in place: they can explain why a network is missing.
@@ -57,9 +57,6 @@ export function AddNetworkSection({ draft, wifiUplinkAvailable, connectedSsid, o
           onPick={() => canJoin(network) && onAdd({ from: 'scan', network })}
         />
       ))}
-      <ButtonRow leading={{ icon: 'school', className: 'text-tint' }} onClick={() => onAdd({ from: 'eduroam' })}>
-        Set up eduroam
-      </ButtonRow>
       <ButtonRow leading={{ icon: 'add', className: 'text-tint' }} onClick={() => onAdd({ from: 'manual' })}>
         Add manually
       </ButtonRow>

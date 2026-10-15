@@ -121,9 +121,11 @@ async function main() {
     await page.getByText("Saved. RasBeacon is joining the networks now").waitFor();
   });
 
-  await step("eduroam needs a CA certificate, then saves", async () => {
-    await page.getByRole("button", { name: "Set up eduroam" }).click();
+  await step("a WPA-Enterprise network (eduroam) needs a CA certificate, then saves", async () => {
+    await page.getByRole("button", { name: "Add manually" }).click();
     const sheet = dialog();
+    await sheet.getByLabel("Network name").fill("eduroam");
+    await sheet.getByLabel("Security").selectOption("enterprise");
     await sheet.getByLabel("Username", { exact: true }).fill("NetID@example.edu");
     await sheet.getByLabel("Your password").fill("campus-password");
     await sheet.getByRole("button", { name: "Add to list" }).click();

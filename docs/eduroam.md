@@ -51,9 +51,11 @@ as the network is saved.
 
 ## Setting it up
 
-1. Open the **Internet** page and tap **Set up eduroam** (or tap your
-   network in the *Look for nearby networks* list).
-2. Choose the **login method**.
+1. Open the **Internet** page and tap your network in the *Look for nearby
+   networks* list. (Out of range, or hidden? Tap **Add manually**, type the
+   network name, e.g. `eduroam`, and choose **Username and password
+   (WPA2/WPA3-Enterprise)** as the security.)
+2. Choose the **login method** (for eduroam usually *EAP-TTLS with PAP*).
 3. Enter your **username**, the **anonymous username** (optional) and your
    **password**.
 4. Under **CA certificate file**, choose the certificate file(s). `.pem`,
