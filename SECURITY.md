@@ -34,7 +34,12 @@ For example:
   getting outside the VPN while the kill switch is on;
 - the zero-leak login browser reaching anything but the uplink (your
   devices, the web UI, the VPN), reading RasBeacon's files, or keeping
-  data after it closes.
+  data after it closes;
+- a plugin doing more than the permissions it was installed with (reaching
+  the internet outside the VPN, your devices, guests, the web UI, other
+  files or devices), or being reachable by guests or from the uplink;
+- a plugin update accepted that isn't signed by the key of the installed
+  version, or a changed `.rba` passing its signature check.
 
 ## Supported versions
 
