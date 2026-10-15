@@ -22,9 +22,7 @@ export type AddNetworkStart =
   /** A network found by a scan: its name and security are known. */
   | { from: 'scan'; network: NearbyNetwork & { security: UplinkSecurity } }
   /** "Add manually": for hidden networks or ones not in range now. */
-  | { from: 'manual' }
-  /** "Set up eduroam": the name and the most common login method filled in. */
-  | { from: 'eduroam' };
+  | { from: 'manual' };
 
 const EMPTY_FORM: NewNetworkForm = {
   ssid: '',
@@ -45,8 +43,6 @@ function initialForm(start: AddNetworkStart): NewNetworkForm {
   switch (start.from) {
     case 'scan':
       return { ...EMPTY_FORM, ssid: start.network.ssid, security: start.network.security };
-    case 'eduroam':
-      return { ...EMPTY_FORM, ssid: 'eduroam', security: 'enterprise', method: 'ttls-pap' };
     case 'manual':
       return EMPTY_FORM;
   }
@@ -84,7 +80,7 @@ export function AddNetworkSheet({ start, list, onAdd, onClose }: AddNetworkSheet
   return (
     <Sheet
       size={form.security === 'enterprise' ? 'lg' : 'md'}
-      title={start.from === 'eduroam' ? 'Set up eduroam' : 'Add a Wi-Fi network'}
+      title="Add a Wi-Fi network"
       confirmLabel="Add to list"
       busyLabel="Adding…"
       onConfirm={async () => {
