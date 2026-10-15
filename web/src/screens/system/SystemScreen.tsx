@@ -4,6 +4,7 @@ import { formatDuration } from '@/lib/format';
 import { Loaded } from '@/shell/Loaded';
 import { Badge, Icon, Meter, Row, Section, type Tone } from '@/ui';
 import { getResourceMetrics } from '../common/resourceMetrics';
+import { BackupSection } from './BackupSection';
 import { FactoryResetSection, RebootSection } from './RestartSections';
 import { SoftwareSection } from './SoftwareSection';
 import { StorageSection } from './StorageSection';
@@ -24,6 +25,7 @@ export function SystemScreen() {
           <AboutSection status={status} />
           <RadiosSection status={status} />
           <DiagnosticsSection />
+          <BackupSection />
           <RebootSection />
           <FactoryResetSection />
         </>

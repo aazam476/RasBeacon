@@ -127,6 +127,16 @@ const PORTAL_EVERY_MS = 5_000;
 
 const CLOSED_BROWSER: PortalBrowserState = { frame: undefined, imageSrc: '', error: null };
 
+/** Hands a file to the browser to save. */
+function saveFile(file: Blob, name: string) {
+  const url = URL.createObjectURL(file);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = name;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -616,6 +626,17 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
       pluginDrives: async () => (await attempt(() => api.getPluginDrives())).drives,
       savePluginSources: async (sources) => {
         store('plugins', await attempt(() => api.putPluginSources(sources)));
+      },
+
+      backUp: async (adminPassword, backupPassword, includePlugins) => {
+        const fields = { password: 'adminPassword', backupPassword: 'backupPassword' };
+        const file = await attempt(() => api.downloadBackup(adminPassword, backupPassword, includePlugins), fields);
+        saveFile(file, `rasbeacon-backup-${new Date().toISOString().slice(0, 10)}.rbbackup`);
+      },
+      restore: async (file, adminPassword, backupPassword) => {
+        const fields = { file: 'file', password: 'adminPassword', backupPassword: 'backupPassword' };
+        await attempt(() => api.uploadBackup(file), fields);
+        await attempt(() => api.restoreBackup(adminPassword, backupPassword), fields);
       },
 
       factoryReset: async (adminPassword) => {

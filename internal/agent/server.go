@@ -555,6 +555,48 @@ func (a *Agent) Handler() http.Handler {
 		pluginAnswer(w, state, err)
 	})
 
+	// Backups (backup.go). The backup is streamed as it is made: plugin
+	// data can be large.
+	mux.HandleFunc("POST /system/backup", func(w http.ResponseWriter, r *http.Request) {
+		var req api.BackupRequest
+		if !readJSON(w, r, &req) {
+			return
+		}
+		out := &startedWriter{w: w, start: func() {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Header().Set("Content-Disposition", `attachment; filename="`+a.backupFileName()+`"`)
+		}}
+		if err := a.Backup(out, req); err != nil {
+			if !out.started {
+				writeError(w, err)
+				return
+			}
+			// Too late for an error answer: cut the download off, so it
+			// can't be mistaken for a whole backup.
+			slog.Error("backup failed", "error", err)
+			panic(http.ErrAbortHandler)
+		}
+	})
+	mux.HandleFunc("POST /system/restore/upload", func(w http.ResponseWriter, r *http.Request) {
+		if err := a.StageRestore(r.Body); err != nil {
+			writeError(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("POST /system/restore", func(w http.ResponseWriter, r *http.Request) {
+		var req api.RestoreRequest
+		if !readJSON(w, r, &req) {
+			return
+		}
+		result, err := a.Restore(req)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, result)
+	})
+
 	mux.HandleFunc("PUT /settings/updates", func(w http.ResponseWriter, r *http.Request) {
 		var req api.UpdateSettings
 		if !readJSON(w, r, &req) {
@@ -637,6 +679,22 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 }
 
 // writeError turns an error into the right HTTP status and message.
+// startedWriter calls start before the first byte is written, and
+// remembers that writing began.
+type startedWriter struct {
+	w       http.ResponseWriter
+	start   func()
+	started bool
+}
+
+func (s *startedWriter) Write(p []byte) (int, error) {
+	if !s.started {
+		s.started = true
+		s.start()
+	}
+	return s.w.Write(p)
+}
+
 // pluginAnswer answers a plugin action: the value, or why it failed.
 func pluginAnswer(w http.ResponseWriter, value any, err error) {
 	var validation *config.ValidationError

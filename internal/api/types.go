@@ -948,3 +948,25 @@ type PluginDrives struct {
 type PluginPowerRequest struct {
 	Action string `json:"action"`
 }
+
+// BackupRequest makes a backup (POST /system/backup): the admin password
+// again, the password that encrypts the file, and whether the plugins
+// (their images and data) are in it.
+type BackupRequest struct {
+	AdminPassword  string `json:"adminPassword"`
+	Password       string `json:"password"`
+	IncludePlugins bool   `json:"includePlugins"`
+}
+
+// RestoreRequest restores the uploaded backup (POST /system/restore).
+type RestoreRequest struct {
+	AdminPassword string `json:"adminPassword"`
+	Password      string `json:"password"`
+}
+
+// RestoreResult describes the restored backup; RasBeacon restarts.
+type RestoreResult struct {
+	Version string `json:"version"`
+	Created string `json:"created"`
+	Plugins bool   `json:"plugins"`
+}

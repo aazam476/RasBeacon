@@ -134,7 +134,11 @@ func (s *Server) Handler() http.Handler {
 	// So are plugin files; and the catalog and plugin downloads take a
 	// while (GitHub and image registries, through the VPN).
 	mux.Handle("POST /api/v1/plugins/upload", s.requireLogin(http.HandlerFunc(s.handlePluginUpload)))
-	for _, route := range []string{"/plugins/catalog", "/plugins/catalog/download", "/plugins/update"} {
+	// Backups stream both ways: the download as it is made, the upload to
+	// rbd; restoring one takes a while.
+	mux.Handle("POST /api/v1/system/backup", s.requireLogin(http.HandlerFunc(s.handleBackup)))
+	mux.Handle("POST /api/v1/system/restore/upload", s.requireLogin(http.HandlerFunc(s.handleRestoreUpload)))
+	for _, route := range []string{"/plugins/catalog", "/plugins/catalog/download", "/plugins/update", "/system/restore"} {
 		mux.Handle("POST /api/v1"+route, s.requireLogin(s.slowForward(route)))
 	}
 
@@ -363,6 +367,46 @@ func (s *Server) handlePluginUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	writeRaw(w, status, "application/json", body)
 }
+
+// handleBackup streams a backup from rbd to the browser.
+func (s *Server) handleBackup(w http.ResponseWriter, r *http.Request) {
+	body, ok := readBody(w, r)
+	if !ok {
+		return
+	}
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(updateUploadTime))
+	resp, err := s.rbd.Open(http.MethodPost, "/system/backup", body)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, api.ErrorResponse{Error: err.Error()})
+		return
+	}
+	defer resp.Body.Close()
+	for _, header := range []string{"Content-Type", "Content-Disposition"} {
+		if value := resp.Header.Get(header); value != "" {
+			w.Header().Set(header, value)
+		}
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(resp.StatusCode)
+	_, _ = io.Copy(w, resp.Body)
+}
+
+// handleRestoreUpload streams an uploaded backup to rbd, which keeps it
+// until its password is given.
+func (s *Server) handleRestoreUpload(w http.ResponseWriter, r *http.Request) {
+	rc := http.NewResponseController(w)
+	_ = rc.SetReadDeadline(time.Now().Add(updateUploadTime))
+	_ = rc.SetWriteDeadline(time.Now().Add(updateUploadTime + time.Minute))
+	status, body, err := s.rbd.Stream("/system/restore/upload", http.MaxBytesReader(w, r.Body, maxBackupSize))
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, api.ErrorResponse{Error: err.Error()})
+		return
+	}
+	writeRaw(w, status, "application/json", body)
+}
+
+// maxBackupSize limits backup uploads (plugins' data included).
+const maxBackupSize = 32 << 30
 
 // pluginDownloadTime is how long a catalog request or plugin download may
 // take (a large .rba on a slow connection).

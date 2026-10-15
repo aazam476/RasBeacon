@@ -851,6 +851,31 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
         });
       },
 
+      backUp: async (adminPassword, backupPassword) => {
+        await wait(1500);
+        const errors: Record<string, string> = {};
+        if (adminPassword === '' || adminPassword === 'wrong') errors.adminPassword = 'Wrong password.';
+        if (backupPassword.length < 8) errors.backupPassword = 'Use at least 8 characters.';
+        failIfAny(errors);
+        // The demo's "backup" is a small text file.
+        const url = URL.createObjectURL(new Blob(['RasBeacon demo backup\n'], { type: 'application/octet-stream' }));
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'rasbeacon-backup-demo.rbbackup';
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      },
+      restore: async (file, adminPassword, backupPassword) => {
+        await wait(2000);
+        const errors: Record<string, string> = {};
+        if (!file.name.endsWith('.rbbackup')) errors.file = 'This is not a RasBeacon backup (.rbbackup) file.';
+        if (adminPassword === '' || adminPassword === 'wrong') errors.adminPassword = 'Wrong password.';
+        if (backupPassword === 'wrong' || backupPassword.length < 8) {
+          errors.backupPassword = 'The password is wrong, or the backup file is damaged.';
+        }
+        failIfAny(errors);
+      },
+
       factoryReset: async (adminPassword) => {
         await wait(1500);
         if (adminPassword === '' || adminPassword === 'wrong') throw new Error('Wrong password.');

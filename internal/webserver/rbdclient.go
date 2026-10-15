@@ -63,6 +63,21 @@ func (c *RBDClient) Stream(path string, body io.Reader) (int, []byte, error) {
 	return resp.StatusCode, respBody, err
 }
 
+// Open sends a JSON request to rbd without a time limit and returns the
+// response for the caller to stream (and close).
+func (c *RBDClient) Open(method, path string, body []byte) (*http.Response, error) {
+	req, err := http.NewRequest(method, c.baseURL+path, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.stream.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("contacting rbd: %w", err)
+	}
+	return resp, nil
+}
+
 // Do sends a request to rbd and returns the status code and response body.
 // body may be nil for requests without one.
 func (c *RBDClient) Do(method, path string, body []byte) (int, []byte, error) {
