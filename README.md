@@ -140,6 +140,17 @@ on a check for new versions there; it is off by default.)
 - **HTTPS** for the settings pages: the **HTTPS** page. Your browser warns
   about RasBeacon's own certificate the first time; compare the
   fingerprint shown on that page.
+- **Plugins:** the **Plugins** page adds features like ad blocking (AdGuard
+  Home), file sharing (Samba) or the Argon ONE V2 case's fan. Each runs on
+  its own with only the permissions you allow, and reaches the internet
+  through the VPN. See [docs/plugins.md](docs/plugins.md).
+- **Your own DNS servers**, also through the VPN: the **Internet** page.
+- **Share the Wi-Fi with a QR code:** the **Hotspot** and **Guests** pages.
+- **Name your devices, see their data use** and set a limit on metered
+  connections: the **Clients** page.
+- **Backups:** the **System** page saves every setting (and plugins, if
+  you like) in a password-encrypted file, to restore or move to another
+  RasBeacon.
 - **SSH** for advanced users: the **SSH** page (keys only, hotspot side
   only).
 - **Factory-reset button:** connect a push button between pin 11 (GPIO 17)

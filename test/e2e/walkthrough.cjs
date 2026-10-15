@@ -11,6 +11,9 @@
 // the wording listed in docs/ui-contract.md.
 
 const { chromium } = require("playwright");
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
 
 const BASE_URL = process.env.RASBEACON_URL ?? "http://127.0.0.1:8080";
 const SCREENSHOT_DIR = process.env.SCREENSHOT_DIR ?? "";
@@ -320,6 +323,31 @@ async function main() {
       buffer: Buffer.from("hello"),
     });
     await page.getByText("This is not a RasBeacon plugin (.rba) file.").waitFor();
+  });
+
+  await step("system: a backup downloads, and restores with its password", async () => {
+    await open("System");
+    await page.getByRole("button", { name: "Back up settings" }).click();
+    await dialog().getByLabel("Admin password").fill("tangerine-orbit-42");
+    await dialog().getByLabel("Password for the backup").fill("backup-pass-42");
+    const downloading = page.waitForEvent("download");
+    await dialog().getByRole("button", { name: "Back up" }).click();
+    const download = await downloading;
+    if (!download.suggestedFilename().endsWith(".rbbackup")) throw new Error(`file name ${download.suggestedFilename()}`);
+    const file = path.join(os.tmpdir(), `rasbeacon-e2e-${process.pid}.rbbackup`);
+    await download.saveAs(file);
+
+    await page.getByRole("button", { name: "Restore from a backup" }).click();
+    await dialog().getByLabel("Backup file (.rbbackup)").setInputFiles(file);
+    await dialog().getByLabel("The backup's password").fill("not-the-password");
+    await dialog().getByLabel("Admin password (this RasBeacon's)").fill("tangerine-orbit-42");
+    await dialog().getByRole("button", { name: "Restore" }).click();
+    await dialog().getByText("The password is wrong, or the backup file is damaged.").waitFor();
+    await dialog().getByLabel("The backup's password").fill("backup-pass-42");
+    await dialog().getByRole("button", { name: "Restore" }).click();
+    await page.getByText("RasBeacon is restarting with the backup's settings.", { exact: false }).waitFor();
+    await dialog().getByRole("button", { name: "OK" }).click();
+    fs.unlinkSync(file);
   });
 
   await step("system: reboot and factory reset ask first", async () => {

@@ -61,6 +61,8 @@ offers **Update to …**. Updates keep the plugin's settings and data.
 
 **Removing** deletes the plugin and its image. **Keep its data** saves its
 data, for installing it again later. A factory reset removes all plugins.
+A backup (System → Back up settings) can include the plugins with their
+images and data.
 
 ## Permissions
 

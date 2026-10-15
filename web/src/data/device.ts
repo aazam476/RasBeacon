@@ -273,6 +273,15 @@ export interface DeviceActions {
   reboot: () => Promise<void>;
   /** Erase everything; afterwards the phase is `setup`. Reject when the admin password is wrong. */
   factoryReset: (adminPassword: string) => Promise<void>;
+  /**
+   * Make an encrypted backup and save it as a file. Field keys: adminPassword, backupPassword.
+   */
+  backUp: (adminPassword: string, backupPassword: string, includePlugins: boolean) => Promise<void>;
+  /**
+   * Restore a backup: RasBeacon restarts with its settings (log in with the backup's admin
+   * password). Field keys: file, adminPassword, backupPassword.
+   */
+  restore: (file: File, adminPassword: string, backupPassword: string) => Promise<void>;
 
   // --- Plugins -----------------------------------------------------------------------------
 

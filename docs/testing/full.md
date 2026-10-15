@@ -430,6 +430,14 @@ install updates (on the Pi 3/Zero 2 W image, check instead that System says
 
 ## 16. Erasing (do these last)
 
+0. **Backup (new):** System → **Back up settings** with a password (with
+   **Include plugins** if any are installed). **Expect** a `.rbbackup` file
+   (opening it in a text editor shows nothing readable). Change the hotspot's
+   name and remove a plugin, then **Restore from a backup** with that file:
+   a wrong password says so; the right one restarts RasBeacon with the old
+   name and the plugin back (its data too). After the factory reset below,
+   set RasBeacon up and restore the backup again: everything comes back.
+
 1. **Factory reset:** System → *Factory reset* → **Erase everything** with
    the admin password. **Expect:** it restarts into `RasBeacon-Setup-XXXX`.
 2. **setup.txt:** power off, create `setup.txt` on the card's `BOOTCONFIG`
