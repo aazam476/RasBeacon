@@ -20,6 +20,10 @@
 //	    Signs a plugin file with the key in RASBEACON_PLUGIN_SIGNING_KEY.
 //	    RasBeacon remembers the key at the first install and accepts updates
 //	    only when they are signed by the same key.
+//
+//	rbsign plugin-check FILE.rba...
+//	    Checks plugin files the way RasBeacon does before installing them,
+//	    and prints what each is and asks for.
 package main
 
 import (
@@ -48,6 +52,8 @@ func main() {
 		err = pluginKeygen()
 	case "plugin-sign":
 		err = pluginSign(os.Args[2:])
+	case "plugin-check":
+		err = pluginCheck(os.Args[2:])
 	default:
 		usage()
 	}
@@ -59,7 +65,7 @@ func main() {
 
 func usage() {
 	fmt.Fprintln(os.Stderr, "usage: rbsign keygen | rbsign pack -board B -version V -bundle FILE -out FILE")
-	fmt.Fprintln(os.Stderr, "       rbsign plugin-keygen | rbsign plugin-sign -in FILE.rba -out FILE.rba")
+	fmt.Fprintln(os.Stderr, "       rbsign plugin-keygen | rbsign plugin-sign -in FILE.rba -out FILE.rba | rbsign plugin-check FILE.rba...")
 	os.Exit(2)
 }
 
@@ -142,5 +148,28 @@ func pluginSign(args []string) error {
 		return fmt.Errorf("the signed file doesn't open: %w", err)
 	}
 	fmt.Printf("Signed %s %s (key ID %s)\n", a.Manifest.ID, a.Manifest.Version, plugin.KeyID(a.PublicKey))
+	return nil
+}
+
+func pluginCheck(files []string) error {
+	if len(files) == 0 {
+		usage()
+	}
+	for _, file := range files {
+		a, err := plugin.Open(file)
+		if err != nil {
+			return fmt.Errorf("%s: %w", file, err)
+		}
+		m := a.Manifest
+		signed := "not signed"
+		if a.PublicKey != nil {
+			signed = "signed, key ID " + plugin.KeyID(a.PublicKey)
+		}
+		image := "image.tar"
+		if m.Image != nil {
+			image = m.Image.Ref + "@" + m.Image.Digest
+		}
+		fmt.Printf("%s: %s %s (%s), %s, permissions %v, image %s\n", file, m.ID, m.Version, m.Name, signed, m.Permissions, image)
+	}
 	return nil
 }
