@@ -59,11 +59,62 @@ export function choicesOf(draft: ChoicesDraft): PluginChoices {
   };
 }
 
-/** A metric's "14 ms" as the number and its unit, for the large figures. */
+/**
+ * A metric's "14 ms" as the number and its unit, for the large figures. RasBeacon writes a
+ * non-breaking space (\u00a0) before a unit, so only that space splits: a text metric with
+ * ordinary spaces ("All good") stays whole.
+ */
 export function splitMetric(value: string): { value: string; unit?: string } {
   if (value === '') return { value: '—' };
-  const [number, unit] = value.split(' ');
+  const [number, unit] = value.split('\u00a0');
   return unit ? { value: number, unit } : { value };
+}
+
+/** The text color for a state's tone, as on the badges. */
+export function toneText(tone: Tone): string {
+  switch (tone) {
+    case 'green':
+      return 'text-green';
+    case 'red':
+      return 'text-red';
+    case 'orange':
+      return 'text-orange';
+    case 'tint':
+      return 'text-tint';
+    default:
+      return '';
+  }
+}
+
+/**
+ * Whether version a is newer than b, compared as RasBeacon does (internal/plugin/catalog.go):
+ * the numbers in them in order, so "1.10.0" is newer than "1.9.2"; other parts as text.
+ */
+export function isNewerVersion(a: string, b: string): boolean {
+  const parts = (version: string) =>
+    version
+      .replace(/^[vV]/, '')
+      .split(/[.\-+_]/)
+      .filter(Boolean);
+  const pa = parts(a);
+  const pb = parts(b);
+  for (let i = 0; i < Math.min(pa.length, pb.length); i++) {
+    const bothNumbers = /^\d+$/.test(pa[i]) && /^\d+$/.test(pb[i]);
+    if (bothNumbers && Number(pa[i]) !== Number(pb[i])) return Number(pa[i]) > Number(pb[i]);
+    if (!bothNumbers && pa[i] !== pb[i]) return pa[i] > pb[i];
+  }
+  return pa.length > pb.length;
+}
+
+/** What a number setting takes, next to its label: "(°C, 0 to 85)", "(at least 1)". */
+export function numberNote(setting: Pick<PluginSetting, 'unit' | 'min' | 'max'>): string | undefined {
+  const { unit, min, max } = setting;
+  let range = '';
+  if (min !== undefined && max !== undefined) range = `${min} to ${max}`;
+  else if (min !== undefined) range = `at least ${min}`;
+  else if (max !== undefined) range = `at most ${max}`;
+  const parts = [unit, range].filter(Boolean);
+  return parts.length > 0 ? `(${parts.join(', ')})` : undefined;
 }
 
 /** "Version 1.2 · by RasBeacon" */

@@ -619,3 +619,21 @@ func TestPlugins_DownloadProxyTunnelsHTTPS(t *testing.T) {
 		t.Errorf("through the proxy: %q", body)
 	}
 }
+
+func TestPlugins_UnreadableFilesMarkItBroken(t *testing.T) {
+	e := newPluginEnv(t)
+	if _, err := e.installTestPlugin(writeTestPlugin(t, testPluginManifest("1.0"), nil), nil); err != nil {
+		t.Fatal(err)
+	}
+	os.Remove(filepath.Join(e.paths.PluginDir("adguard-home"), plugin.ManifestFile))
+	e.agent.mu.Lock()
+	e.agent.loadPlugins()
+	e.agent.mu.Unlock()
+	p := e.plugin("adguard-home")
+	if !p.Broken || p.State != api.PluginFailed || p.Name != "adguard-home" {
+		t.Errorf("a plugin whose files can't be read: %+v", p)
+	}
+	if err := e.agent.RemovePlugin(api.PluginRemoveRequest{ID: "adguard-home"}); err != nil {
+		t.Errorf("it can still be removed: %v", err)
+	}
+}

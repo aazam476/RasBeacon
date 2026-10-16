@@ -89,7 +89,8 @@ A plugin is a zip file renamed to `.rba`:
 ```
 manifest.json   what the plugin is and needs (below)
 icon.png        a square PNG, 128×128 to 1024×1024 (256×256 is best), at most 512 KB
-README.md       optional: shown on its page
+README.md       optional: shown on its page (Markdown: paragraphs, lists,
+                **bold**, *italic*, `code`, links; at most 64 KB)
 templates/      optional: files filled in from its settings
 image.tar       its container image (`docker save` / `podman save`, arm64), or
                 nothing when the manifest names an image in a registry

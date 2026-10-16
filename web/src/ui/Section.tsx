@@ -46,13 +46,19 @@ export function Section({ title, level = 2, action, footer, children, className 
   );
 }
 
-/** The leading part of a row: a colored tile, a plain symbol, or a picture (a plugin's icon). */
+/**
+ * The leading part of a row: a colored tile, a plain symbol, or a picture (a plugin's icon).
+ * A picture that is missing shows as a gray tile with `fallback` (a puzzle piece by default).
+ */
 export type RowLeading =
-  { tile: BaseIconName; color: TileColor } | { icon: BaseIconName; className?: string } | { image: string };
+  | { tile: BaseIconName; color: TileColor }
+  | { icon: BaseIconName; className?: string }
+  | { image: string; fallback?: BaseIconName };
 
 export function Leading({ leading }: { leading?: RowLeading }) {
   if (!leading) return null;
   if ('tile' in leading) return <IconTile icon={leading.tile} color={leading.color} />;
+  if ('image' in leading && !leading.image) return <IconTile icon={leading.fallback ?? 'extension'} color="gray" />;
   if ('image' in leading) {
     return (
       <img

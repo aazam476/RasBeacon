@@ -784,6 +784,9 @@ type Plugin struct {
 	// CanUpdate: the update can be installed from the catalog (signed
 	// plugins only; unsigned ones are updated from a file).
 	CanUpdate bool `json:"canUpdate"`
+	// Broken: its files (its manifest) can't be read, so all that is known
+	// is its ID. Only removing it, or installing it again, helps.
+	Broken bool `json:"broken,omitempty"`
 }
 
 // PluginSource is a catalog source.
