@@ -1,7 +1,11 @@
 package plugin
 
+// This file turns a plugin's JSON answer into the text of one metric tile
+// on its page (see Metric in manifest.go).
+
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"strconv"
@@ -9,29 +13,39 @@ import (
 )
 
 // ReadMetric picks a metric's value out of a JSON answer and formats it for
-// the screen, e.g. "12,345", "8.1%", "1.2 GB" or "14 ms".
+// the screen, e.g. "12,345", "8.1%", "1.2 GB" or "14 ms" (with a
+// non-breaking space before the unit).
 func ReadMetric(m Metric, body []byte) (string, error) {
+	// "any" holds whatever the JSON is: a map for an object, a slice for a
+	// list, float64 for a number, string, bool or nil.
 	var doc any
 	if err := json.Unmarshal(body, &doc); err != nil {
-		return "", fmt.Errorf("the answer is not JSON")
+		return "", errors.New("the answer is not JSON")
 	}
 	value, ok := lookup(doc, m.Path)
 	if !ok {
 		return "", fmt.Errorf("%s is not in the answer", m.Path)
 	}
 	if m.Format == "text" {
-		return fmt.Sprint(value), nil
+		text := fmt.Sprint(value)
+		// A tile has room for a word or two, not a whole document.
+		if len([]rune(text)) > 40 {
+			text = string([]rune(text)[:39]) + "…"
+		}
+		return text, nil
 	}
 	n, ok := number(value)
 	if !ok {
 		return "", fmt.Errorf("%s is not a number", m.Path)
 	}
 	if m.DivideBy != "" {
-		d, ok := lookup(doc, m.DivideBy)
+		d, found := lookup(doc, m.DivideBy)
 		dn, isNumber := number(d)
-		if !ok || !isNumber {
+		if !found || !isNumber {
 			return "", fmt.Errorf("%s is not a number", m.DivideBy)
 		}
+		// Nothing divided by nothing (no queries yet) shows as 0, not as an
+		// error.
 		if dn == 0 {
 			n = 0
 		} else {
@@ -41,22 +55,27 @@ func ReadMetric(m Metric, body []byte) (string, error) {
 	if m.Scale != 0 {
 		n *= m.Scale
 	}
+	if math.IsNaN(n) || math.IsInf(n, 0) {
+		return "", errors.New("the number is too large")
+	}
 	switch m.Format {
 	case "percent":
 		return strconv.FormatFloat(n*100, 'f', 1, 64) + "%", nil
 	case "bytes":
 		return formatBytes(n), nil
 	case "ms":
-		return trimNumber(n) + " ms", nil
+		return trimNumber(n) + "\u00a0ms", nil
 	case "seconds":
-		return trimNumber(n) + " s", nil
+		return trimNumber(n) + "\u00a0s", nil
 	}
 	return groupThousands(n), nil
 }
 
-// lookup follows a dotted path: object keys, or list positions.
+// lookup follows a dotted path: object keys, or list positions. For
+// {"a": {"b": [5, 6]}}, "a.b.1" is 6.
 func lookup(doc any, path string) (any, bool) {
 	for _, part := range strings.Split(path, ".") {
+		// A "type switch": v is doc as the type each case names.
 		switch v := doc.(type) {
 		case map[string]any:
 			next, ok := v[part]
@@ -77,13 +96,15 @@ func lookup(doc any, path string) (any, bool) {
 	return doc, true
 }
 
+// number reads a JSON value as a number: numbers, numbers written as text
+// ("12.5"), and true/false as 1/0.
 func number(v any) (float64, bool) {
 	switch n := v.(type) {
 	case float64:
 		return n, true
 	case string:
 		f, err := strconv.ParseFloat(n, 64)
-		return f, err == nil
+		return f, err == nil && !math.IsNaN(f) && !math.IsInf(f, 0)
 	case bool:
 		if n {
 			return 1, true
@@ -108,6 +129,7 @@ func groupThousands(n float64) string {
 	s = strings.TrimPrefix(s, "-")
 	var b strings.Builder
 	for i, c := range s {
+		// A comma before every group of three digits, counted from the end.
 		if i > 0 && (len(s)-i)%3 == 0 {
 			b.WriteByte(',')
 		}
@@ -120,6 +142,8 @@ func groupThousands(n float64) string {
 }
 
 // formatBytes writes a size in decimal units, as the rest of the UI does.
+// The space before a unit is a non-breaking one (\u00a0), so "12.3" and
+// "MB" never end up on different lines.
 func formatBytes(n float64) string {
 	units := []string{"B", "KB", "MB", "GB", "TB"}
 	unit := 0
@@ -128,7 +152,7 @@ func formatBytes(n float64) string {
 		unit++
 	}
 	if unit == 0 || n >= 100 {
-		return strconv.FormatFloat(math.Round(n), 'f', 0, 64) + " " + units[unit]
+		return strconv.FormatFloat(math.Round(n), 'f', 0, 64) + "\u00a0" + units[unit]
 	}
-	return strconv.FormatFloat(n, 'f', 1, 64) + " " + units[unit]
+	return strconv.FormatFloat(n, 'f', 1, 64) + "\u00a0" + units[unit]
 }

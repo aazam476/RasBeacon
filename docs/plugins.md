@@ -88,7 +88,7 @@ A plugin is a zip file renamed to `.rba`:
 
 ```
 manifest.json   what the plugin is and needs (below)
-icon.png        square, at least 128×128 (at most 512 KB)
+icon.png        a square PNG, 128×128 to 1024×1024 (256×256 is best), at most 512 KB
 README.md       optional: shown on its page
 templates/      optional: files filled in from its settings
 image.tar       its container image (`docker save` / `podman save`, arm64), or
@@ -151,22 +151,26 @@ Or name a published image in the manifest (pinned by digest) and leave
 | Field | |
 |---|---|
 | `id` | 2 to 32 lowercase letters, digits and dashes. Updates must keep it. |
-| `name`, `version`, `description`, `author`, `homepage` | Shown to the owner. `homepage` must be `https://`. |
+| `name`, `version`, `description`, `author`, `homepage` | Shown to the owner. `name` at most 40 characters, `version` without spaces or `/`, `description` at most 300, `homepage` an `https://` address. |
 | `boards` | `pi5`, `pi4`, `pi3` (3B, 3B+), `zero2w`; empty: all. Others refuse it. |
-| `image` | A registry image, `ref` without a digest plus `digest` (`sha256:…`, the image index or the arm64 image). Leave it out with `image.tar`. |
+| `image` | A registry image: `ref` starting with its registry (`docker.io/…`, `ghcr.io/…`) without a digest, plus `digest` (`sha256:…`, the image index or the arm64 image). Leave it out with `image.tar`. |
 | `permissions` | See [Permissions](#permissions). |
-| `ports` | `name`, `container` (its port), `protocol` (`tcp` or `udp`, default `tcp`), `default` (the suggested port on RasBeacon; default the container's), `open` (an Open button for a web page), `https`. Ports 22, 53, 67, 80 and 443 are RasBeacon's. |
+| `ports` | `name` (at most 40 characters), `container` (its port), `protocol` (`tcp` or `udp`, default `tcp`), `default` (the suggested port on RasBeacon, 1 to 65535; default the container's), `open` (an Open button for a web page), `https`. Ports 22, 53, 67, 80 and 443 are RasBeacon's. |
 | `memoryMb`, `cpus` | Limits; default 256 MB and half a core. |
 | `minMemoryMb`, `minSwapMb` | Refuse the install on a Pi with less memory, or less swap (the owner is pointed to System → Swap file). |
 | `storageMb` | Its data, one fixed-size file on the SD card (default 256 MB), shared by its `volumes`. It grows when a new version asks for more. |
-| `volumes` | Folders of its data: `name` and `path` in the container. They survive updates. |
+| `volumes` | Folders of its data: `name` and `path` in the container (each path once). They survive updates. |
 | `usbDrive` | `path` where the chosen drive appears, `optional`. With the `usb-drive` permission. A chosen drive replaces a volume at the same path. |
-| `env`, `command` | Fixed environment variables, and a command replacing the image's. |
-| `settings` | The form RasBeacon draws: `key`, `label`, `type` (`text`, `password`, `number`, `switch`, `select`), `help`, `default`, `required`, `options` (`value`, `label`), `min`, `max`, `unit`, `env` (the environment variable that gets the value). Passwords are kept with RasBeacon's secrets and never shown again. Values are one line. |
-| `templates` | Files in `templates/` written into a volume before each start, filled in with Go's `text/template`: `{{.Settings.key}}`, `{{.Address}}`, `{{.Host}}`, `{{port 3000}}`, `{{bcrypt .Settings.password}}`, `{{json .Settings.key}}`. `once` writes it only the first time, so changes the plugin makes are kept. |
+| `env`, `command` | Fixed environment variables (one line each), and a command replacing the image's. |
+| `settings` | The form RasBeacon draws: `key`, `label`, `type` (`text`, `password`, `number`, `switch`, `select`), `help`, `default`, `required`, `options` (`value`, `label`), `min`, `max`, `unit`, `env` (the environment variable that gets the value). Labels are at most 40 characters, help 300, units 20, option labels 60; option values are distinct. Passwords are kept with RasBeacon's secrets, exactly as typed, and never shown again. Values are one line, at most 1000 characters. |
+| `templates` | Files in `templates/` written into a volume before each start (`path` names a file inside a volume), filled in with Go's `text/template`: `{{.Settings.key}}`, `{{.Address}}`, `{{.Host}}`, `{{port 3000}}`, `{{bcrypt .Settings.password}}` (at most 10 times), `{{json .Settings.key}}`, `{{html .Settings.key}}`. A filled-in file is at most 4 MB. `once` writes it only the first time, so changes the plugin makes are kept. RasBeacon stops the plugin before writing, and never writes through a symbolic link the plugin made: if a folder on the path is a link, the plugin doesn't start. |
 | `afterInstall` | What the owner should do next, shown after installing and on its page. |
-| `metrics` | Up to 4 numbers on its page, read every 30 s from its own HTTP API: `url`, `path` in the JSON answer (`a.b.0`), `divideBy` (another path), `format` (`number`, `percent` for 0 to 1, `bytes`, `ms`, `seconds`, `text`), `scale`, and `username`/`password` for Basic authentication. |
+| `metrics` | Up to 4 numbers on its page, read every 30 s from its own HTTP API: `label` (at most 30 characters), `url`, `path` in the JSON answer (`a.b.0`), `divideBy` (another path), `format` (`number`, `percent` for 0 to 1, `bytes`, `ms`, `seconds`, `text`), `scale`, and `username`/`password` for Basic authentication. |
 | `health` | A `url` that answers below 500 when it works. |
+
+Metric and health URLs reach only the plugin itself: `http://{address}`, then
+optionally `:port` and a path (`http://{address}:3000/control/stats`).
+RasBeacon doesn't follow redirects from them.
 
 Placeholders in `afterInstall`, metrics and health: `{address}` (the
 plugin's own address, e.g. `10.89.0.2`), `{host}` (RasBeacon's address on the
@@ -179,12 +183,12 @@ hotspot), `{port:3000}` (the port on RasBeacon chosen for container port
   `10.89.0.1` (with the internet permission).
 - Its volumes, its drive, and the devices its permissions give. No privileges,
   `no-new-privileges`, at most 512 processes.
-- Its output goes to its log (512 KB, in memory).
+- Its output goes to its log (256 KB, in memory; its page shows the last 500 lines).
 
 ### Power
 
-With `power-button`, `RASBEACON_SOCKET` names a Unix socket. To shut down or
-restart RasBeacon, send it:
+With `power-button`, `RASBEACON_SOCKET` names a Unix socket (only root in
+the container may use it). To shut down or restart RasBeacon, send it:
 
 ```
 POST /power  {"action": "shutdown"}   (or "reboot")

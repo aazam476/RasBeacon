@@ -1,5 +1,8 @@
 package plugin
 
+// This file opens .rba files (zip archives), checks what is in them and
+// their signature, and signs them (for rbsign).
+
 import (
 	"archive/zip"
 	"bytes"
@@ -10,21 +13,28 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image/png"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 )
 
-// Size limits for the parts of a .rba.
+// Size limits for the parts of a .rba. "<<" shifts bits: 1<<10 is 1024, so
+// 64<<10 is 64 KB, 2<<30 is 2 GB.
 const (
 	MaxArchiveSize   = 2 << 30 // the whole file, image included
+	maxImageSize     = 4 << 30 // image.tar once unpacked (zip may compress it)
 	maxManifestSize  = 64 << 10
 	maxIconSize      = 512 << 10
 	maxReadmeSize    = 64 << 10
 	maxTemplateSize  = 256 << 10
 	maxTemplates     = 20
 	maxSignatureSize = 4 << 10
+	// The icon's smallest and largest sides, in pixels.
+	minIconSide = 128
+	maxIconSide = 1024
 )
 
 // File names inside a .rba.
@@ -55,6 +65,8 @@ type Archive struct {
 	// Size is the .rba's size in bytes.
 	Size int64
 
+	// path and image are kept to unpack image.tar later (ExtractImage),
+	// which is too large to hold in memory.
 	path  string
 	image *zip.File
 }
@@ -79,11 +91,14 @@ func Open(file string) (*Archive, error) {
 	if err != nil {
 		return nil, errors.New("this is not a RasBeacon plugin (.rba) file")
 	}
+	// defer runs z.Close() when Open returns, whichever return it is.
 	defer z.Close()
 
 	a := &Archive{Templates: map[string][]byte{}, Size: info.Size(), path: file}
 	var manifestData, signatureData []byte
 	seen := map[string]bool{}
+	// Look at every entry in the zip. Only the names listed in the package
+	// comment are allowed; anything else is refused rather than ignored.
 	for _, f := range z.File {
 		name := f.Name
 		if f.FileInfo().IsDir() {
@@ -93,29 +108,36 @@ func Open(file string) (*Archive, error) {
 			continue
 		}
 		if seen[name] {
-			return nil, fmt.Errorf("%s is in the plugin file twice", name)
+			return nil, fmt.Errorf("the plugin file has %s twice", name)
 		}
 		seen[name] = true
 		switch {
 		case name == ManifestFile:
 			manifestData, err = readEntry(f, maxManifestSize)
 		case name == IconFile:
-			a.Icon, err = readEntry(f, maxIconSize)
-			if err == nil && !bytes.HasPrefix(a.Icon, []byte("\x89PNG\r\n\x1a\n")) {
-				err = errors.New("icon.png is not a PNG image")
+			if a.Icon, err = readEntry(f, maxIconSize); err == nil {
+				err = checkIcon(a.Icon)
 			}
 		case name == ReadmeFile:
 			var data []byte
 			data, err = readEntry(f, maxReadmeSize)
 			a.Readme = string(data)
 		case name == ImageFile:
+			// The zip states each entry's unpacked size, and Go's zip reader
+			// refuses data that doesn't match it, so this size is real.
+			if f.UncompressedSize64 > maxImageSize {
+				return nil, errors.New("its image (image.tar) is larger than 4 GB")
+			}
 			a.image = f
 		case name == SignatureFile:
 			signatureData, err = readEntry(f, maxSignatureSize)
 		case strings.HasPrefix(name, templatesDir):
 			base := strings.TrimPrefix(name, templatesDir)
-			if !templateFileRe.MatchString(base) || len(a.Templates) >= maxTemplates {
-				return nil, fmt.Errorf("unexpected template %q", name)
+			if !templateFileRe.MatchString(base) {
+				return nil, fmt.Errorf("unexpected template %q (plain file names only)", name)
+			}
+			if len(a.Templates) >= maxTemplates {
+				return nil, fmt.Errorf("the plugin file has more than %d templates", maxTemplates)
 			}
 			a.Templates[base], err = readEntry(f, maxTemplateSize)
 		default:
@@ -137,7 +159,7 @@ func Open(file string) (*Archive, error) {
 	}
 	for _, t := range a.Manifest.Templates {
 		if _, ok := a.Templates[t.File]; !ok {
-			return nil, fmt.Errorf("templates/%s is missing", t.File)
+			return nil, fmt.Errorf("the plugin file has no templates/%s", t.File)
 		}
 	}
 	if signatureData != nil {
@@ -152,22 +174,39 @@ func Open(file string) (*Archive, error) {
 	return a, nil
 }
 
+// checkIcon checks that icon.png is a square PNG of a sensible size. Only
+// the image's header is read, not its pixels.
+func checkIcon(data []byte) error {
+	config, err := png.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return errors.New("its icon (icon.png) is not a PNG image")
+	}
+	if config.Width != config.Height || config.Width < minIconSide || config.Width > maxIconSide {
+		return fmt.Errorf("its icon (icon.png) must be square, from %d×%d to %d×%d pixels (it is %d×%d)",
+			minIconSide, minIconSide, maxIconSide, maxIconSide, config.Width, config.Height)
+	}
+	return nil
+}
+
 // readEntry reads one file of the zip, refusing more than limit bytes.
 func readEntry(f *zip.File, limit int64) ([]byte, error) {
 	if f.UncompressedSize64 > uint64(limit) {
-		return nil, fmt.Errorf("%s is too large", f.Name)
+		return nil, fmt.Errorf("the plugin file's %s is too large", f.Name)
 	}
 	r, err := f.Open()
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", f.Name, err)
+		return nil, fmt.Errorf("the plugin file's %s can't be read: %w", f.Name, err)
 	}
 	defer r.Close()
+	// LimitReader stops after limit+1 bytes, so a file that lies about its
+	// size can't fill the memory; reading one byte more than allowed is how
+	// "too large" is noticed.
 	data, err := io.ReadAll(io.LimitReader(r, limit+1))
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", f.Name, err)
+		return nil, fmt.Errorf("the plugin file's %s can't be read: %w", f.Name, err)
 	}
 	if int64(len(data)) > limit {
-		return nil, fmt.Errorf("%s is too large", f.Name)
+		return nil, fmt.Errorf("the plugin file's %s is too large", f.Name)
 	}
 	return data, nil
 }
@@ -188,6 +227,7 @@ func (a *Archive) ExtractImage(dst string) error {
 	if a.image == nil {
 		return errors.New("the plugin file has no image.tar")
 	}
+	// The zip was closed when Open returned, so open it again.
 	z, err := zip.OpenReader(a.path)
 	if err != nil {
 		return err
@@ -206,10 +246,11 @@ func (a *Archive) ExtractImage(dst string) error {
 		if err != nil {
 			return err
 		}
-		// The zip reader checks the CRC at the end, so a damaged file fails.
-		if _, err := io.Copy(out, io.LimitReader(r, MaxArchiveSize)); err != nil {
+		// The zip reader checks the size and checksum at the end, so a
+		// damaged file fails here instead of reaching Podman.
+		if _, err := io.Copy(out, io.LimitReader(r, maxImageSize+1)); err != nil {
 			out.Close()
-			return fmt.Errorf("image.tar: %w", err)
+			return fmt.Errorf("unpacking image.tar: %w", err)
 		}
 		return out.Close()
 	}
@@ -229,17 +270,21 @@ func contentDigest(files []*zip.File) ([]byte, error) {
 			return nil, err
 		}
 		h := sha256.New()
-		_, err = io.Copy(h, io.LimitReader(r, MaxArchiveSize))
+		_, err = io.Copy(h, io.LimitReader(r, maxImageSize+1))
 		r.Close()
 		if err != nil {
-			return nil, fmt.Errorf("%s: %w", f.Name, err)
+			return nil, fmt.Errorf("the plugin file's %s can't be read: %w", f.Name, err)
 		}
 		lines = append(lines, hex.EncodeToString(h.Sum(nil))+"  "+f.Name+"\n")
 	}
+	// Each line is 64 hex digits, two spaces, then the name: [66:] is the
+	// name, which the lines are sorted by.
 	sort.Slice(lines, func(i, j int) bool { return lines[i][66:] < lines[j][66:] })
 	return []byte(signaturePrefix + strings.Join(lines, "")), nil
 }
 
+// checkSignature reads the signature file and checks it against digest. It
+// returns the key that signed the file.
 func checkSignature(data, digest []byte) (ed25519.PublicKey, error) {
 	var s signatureFile
 	if err := json.Unmarshal(data, &s); err != nil {
@@ -257,7 +302,8 @@ func checkSignature(data, digest []byte) (ed25519.PublicKey, error) {
 }
 
 // Sign adds a signature to a .rba: it copies src to dst with a signature
-// file made with key (replacing any old one).
+// file made with key (replacing any old one). src and dst may be the same
+// file: the signed copy is written beside dst first, then renamed over it.
 func Sign(src, dst string, key ed25519.PrivateKey) error {
 	z, err := zip.OpenReader(src)
 	if err != nil {
@@ -274,17 +320,25 @@ func Sign(src, dst string, key ed25519.PrivateKey) error {
 	if err != nil {
 		return err
 	}
-	sigJSON, _ := json.Marshal(signatureFile{
+	sigJSON, err := json.Marshal(signatureFile{
 		PublicKey: base64.StdEncoding.EncodeToString(key.Public().(ed25519.PublicKey)),
 		Signature: base64.StdEncoding.EncodeToString(ed25519.Sign(key, digest)),
 	})
-
-	out, err := os.Create(dst)
 	if err != nil {
 		return err
 	}
+
+	out, err := os.CreateTemp(filepath.Dir(dst), ".signing-*.rba")
+	if err != nil {
+		return err
+	}
+	// Until the rename below succeeds, a failure removes the half-written
+	// copy. After the rename the name is gone, and Remove does nothing.
+	defer os.Remove(out.Name())
 	w := zip.NewWriter(out)
 	for _, f := range files {
+		// Copy moves each entry over as it is, still compressed, so the
+		// signed file holds exactly the bytes the digest covers.
 		if err := w.Copy(f); err != nil {
 			out.Close()
 			return err
@@ -297,11 +351,16 @@ func Sign(src, dst string, key ed25519.PrivateKey) error {
 	if err == nil {
 		err = w.Close()
 	}
+	if cerr := out.Close(); err == nil {
+		err = cerr
+	}
 	if err != nil {
-		out.Close()
 		return err
 	}
-	return out.Close()
+	if err := os.Chmod(out.Name(), 0o644); err != nil {
+		return err
+	}
+	return os.Rename(out.Name(), dst)
 }
 
 // KeyID is a short, readable form of a public key for the screens: the

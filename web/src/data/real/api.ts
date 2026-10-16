@@ -106,13 +106,11 @@ interface RequestOptions {
   /** Sent as the raw body (update files). */
   file?: Blob;
   timeoutMs?: number;
-  /** Answer with the body as a file (backups) instead of JSON. */
-  blob?: boolean;
 }
 
 /** Sends one request and returns the parsed answer (undefined for 204). */
 async function request<T>(method: string, path: string, options: RequestOptions = {}): Promise<T> {
-  const { body, file, timeoutMs = DEFAULT_TIMEOUT_MS, blob = false } = options;
+  const { body, file, timeoutMs = DEFAULT_TIMEOUT_MS } = options;
   const headers: Record<string, string> = {};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   if (file !== undefined) headers['Content-Type'] = 'application/octet-stream';
@@ -150,7 +148,6 @@ async function request<T>(method: string, path: string, options: RequestOptions 
     throw new ApiError(response.status, message, field);
   }
   if (response.status === 204) return undefined as T;
-  if (blob) return (await response.blob()) as T;
   return (await response.json()) as T;
 }
 
@@ -314,13 +311,16 @@ export const putPluginSources = (sources: string[]) =>
 
 // --- Backups ---------------------------------------------------------------------------------
 
-/** Makes a backup and answers with the file (it can take minutes with plugins' data). */
-export const downloadBackup = (adminPassword: string, password: string, includePlugins: boolean) =>
-  request<Blob>('POST', '/system/backup', {
+/**
+ * Asks for a backup. The answer is a one-time link to it: the browser saves the file as it
+ * arrives (with its own progress), instead of holding a large backup in memory first.
+ */
+export const prepareBackup = (adminPassword: string, password: string, includePlugins: boolean) =>
+  request<{ token: string; fileName: string }>('POST', '/system/backup', {
     body: { adminPassword, password, includePlugins },
-    timeoutMs: 30 * 60_000,
-    blob: true,
   });
+/** Where the browser downloads a backup asked for with `prepareBackup`. */
+export const backupDownloadUrl = (token: string) => `/api/v1/system/backup/${encodeURIComponent(token)}`;
 export const uploadBackup = (file: File) =>
   request<void>('POST', '/system/restore/upload', { file, timeoutMs: 30 * 60_000 });
 export const restoreBackup = (adminPassword: string, password: string) =>

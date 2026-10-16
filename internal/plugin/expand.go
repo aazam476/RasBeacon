@@ -19,12 +19,15 @@ type Values struct {
 	Settings map[string]string
 }
 
+// placeholder matches one placeholder, such as {port:3000}.
 var placeholder = regexp.MustCompile(`\{(address|host|port:[0-9]{1,5}|setting:[A-Za-z][A-Za-z0-9_]*)\}`)
 
 // Expand fills in the placeholders; unknown ones stay as they are.
 func (v Values) Expand(text string) string {
+	// ReplaceAllStringFunc calls the function for each match, and puts what
+	// it returns in the match's place.
 	return placeholder.ReplaceAllStringFunc(text, func(match string) string {
-		name := match[1 : len(match)-1]
+		name := match[1 : len(match)-1] // without the { and }
 		switch {
 		case name == "address":
 			return v.Address

@@ -3,10 +3,19 @@ package agent
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
+	"image"
+	"image/png"
+	"io"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,6 +43,13 @@ func testPluginManifest(version string) map[string]any {
 	}
 }
 
+// testIcon is a real 128×128 PNG (plugin icons are checked).
+func testIcon() string {
+	var b bytes.Buffer
+	png.Encode(&b, image.NewGray(image.Rect(0, 0, 128, 128)))
+	return b.String()
+}
+
 // writeTestPlugin makes a .rba (signed with key unless nil) and returns its bytes.
 func writeTestPlugin(t *testing.T, manifest map[string]any, key ed25519.PrivateKey) []byte {
 	t.Helper()
@@ -45,13 +61,23 @@ func writeTestPlugin(t *testing.T, manifest map[string]any, key ed25519.PrivateK
 	}
 	w := zip.NewWriter(f)
 	m, _ := json.Marshal(manifest)
-	files := map[string]string{
-		plugin.ManifestFile: string(m), plugin.IconFile: "\x89PNG\r\n\x1a\nicon", plugin.ImageFile: "image tar",
-		"templates/AdGuardHome.yaml": "password: {{bcrypt .Settings.password}}\nupstream: {{.Settings.upstream}}\n",
-	}
-	for _, name := range []string{plugin.ManifestFile, plugin.IconFile, plugin.ImageFile, "templates/AdGuardHome.yaml"} {
+	add := func(name, content string) {
 		fw, _ := w.Create(name)
-		fw.Write([]byte(files[name]))
+		fw.Write([]byte(content))
+	}
+	add(plugin.ManifestFile, string(m))
+	add(plugin.IconFile, testIcon())
+	add(plugin.ImageFile, "image tar")
+	// Every template the manifest lists: AdGuardHome.yaml as AdGuard Home's,
+	// any other a line with a setting.
+	templates, _ := manifest["templates"].([]map[string]any)
+	for _, t := range templates {
+		file := t["file"].(string)
+		content := "upstream: {{.Settings.upstream}}\n"
+		if file == "AdGuardHome.yaml" {
+			content = "password: {{bcrypt .Settings.password}}\nupstream: {{.Settings.upstream}}\n"
+		}
+		add("templates/"+file, content)
 	}
 	w.Close()
 	f.Close()
@@ -422,4 +448,174 @@ func TestPlugins_PowerSocketShutsDown(t *testing.T) {
 		t.Fatalf("the power socket should exist: %v", err)
 	}
 	e.agent.closePowerSocket("adguard-home")
+}
+
+func TestPlugins_TemplatesAreNeverWrittenThroughLinks(t *testing.T) {
+	e := newPluginEnv(t)
+	m := testPluginManifest("1.0")
+	m["templates"] = []map[string]any{
+		{"file": "AdGuardHome.yaml", "path": "/opt/adguardhome/conf/AdGuardHome.yaml", "once": true},
+		{"file": "app.yaml", "path": "/opt/adguardhome/conf/sub/app.yaml"},
+		{"file": "top.yaml", "path": "/opt/adguardhome/conf/top.yaml"},
+	}
+	if _, err := e.installTestPlugin(writeTestPlugin(t, m, nil), nil); err != nil {
+		t.Fatal(err)
+	}
+	conf := filepath.Join(e.agent.pluginDataMount("adguard-home"), "conf")
+	if !strings.Contains(e.readFile(filepath.Join(conf, "sub", "app.yaml")), "upstream: quad9") {
+		t.Fatal("the template should be written at first")
+	}
+
+	// The plugin, while it ran, put links where RasBeacon writes: its
+	// folder "sub" now leads outside, and so does top.yaml (and the old
+	// fixed temporary name next to it).
+	outside := t.TempDir()
+	mustWrite(t, filepath.Join(outside, "victim"), "untouched")
+	os.RemoveAll(filepath.Join(conf, "sub"))
+	os.Remove(filepath.Join(conf, "top.yaml"))
+	for link, target := range map[string]string{
+		"sub":          outside,
+		"top.yaml":     filepath.Join(outside, "victim"),
+		"top.yaml.tmp": filepath.Join(outside, "victim"),
+	} {
+		if err := os.Symlink(target, filepath.Join(conf, link)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	err := e.agent.StartPlugin("adguard-home")
+	if err == nil || !strings.Contains(err.Error(), "not a folder") {
+		t.Errorf("a linked folder must stop the start, got %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(outside, "app.yaml")); err == nil {
+		t.Error("RasBeacon wrote through the plugin's link")
+	}
+	if e.readFile(filepath.Join(outside, "victim")) != "untouched" {
+		t.Error("a file outside the volume was changed")
+	}
+
+	// Without the folder link, the file link is replaced, not written through.
+	os.Remove(filepath.Join(conf, "sub"))
+	if err := e.agent.StartPlugin("adguard-home"); err != nil {
+		t.Fatal(err)
+	}
+	if e.readFile(filepath.Join(outside, "victim")) != "untouched" {
+		t.Error("a file outside the volume was changed")
+	}
+	if info, err := os.Lstat(filepath.Join(conf, "top.yaml")); err != nil || !info.Mode().IsRegular() {
+		t.Error("top.yaml should now be a plain file")
+	}
+}
+
+func TestPlugins_FailedUpdatePutsTheOldVersionBack(t *testing.T) {
+	e := newPluginEnv(t)
+	if _, err := e.installTestPlugin(writeTestPlugin(t, testPluginManifest("1.0"), nil), map[string]int{"tcp/3000": 3000}); err != nil {
+		t.Fatal(err)
+	}
+	e.runner.failing = append(e.runner.failing, "podman load")
+	if _, err := e.installTestPlugin(writeTestPlugin(t, testPluginManifest("2.0"), nil), map[string]int{"tcp/3000": 3001}); err != nil {
+		t.Fatal(err)
+	}
+	p := e.plugin("adguard-home")
+	if p.Version != "1.0" || p.Ports[0].Host != 3000 || p.State != api.PluginRunning {
+		t.Errorf("the old version should be back, running as before: %+v", p)
+	}
+	if !strings.Contains(p.Message, "Updating to 2.0 failed") {
+		t.Errorf("message = %q", p.Message)
+	}
+	if !strings.Contains(e.readFile(e.paths.SecretsFile()), "s3cret-pass") {
+		t.Error("its password should be kept")
+	}
+}
+
+func TestPlugins_GivingUpAfterCrashesLetsGoOfTheContainer(t *testing.T) {
+	e := newPluginEnv(t)
+	if _, err := e.installTestPlugin(writeTestPlugin(t, testPluginManifest("1.0"), nil), nil); err != nil {
+		t.Fatal(err)
+	}
+	for range maxCrashes {
+		e.agent.checkPluginContainers()
+	}
+	if e.plugin("adguard-home").State != api.PluginCrashed {
+		t.Fatal("it should have been given up on")
+	}
+	last := e.runner.commands[len(e.runner.commands)-1]
+	if !e.runner.ran("podman rm --force --ignore --time 10 rasbeacon-adguard-home") || strings.HasPrefix(last, "podman run") {
+		t.Error("the dead container should be removed, not started again")
+	}
+	if e.agent.plugins.live["adguard-home"].busy {
+		t.Error("it must not stay busy")
+	}
+}
+
+func TestPlugins_CheckURLsOnlyReachThePlugin(t *testing.T) {
+	values := plugin.Values{Address: "10.89.0.2", Settings: map[string]string{"path": "stats"}}
+	for text, ok := range map[string]bool{
+		"http://{address}:3000/{setting:path}": true,
+		"http://{address}/":                    true,
+		"http://{address}@192.168.1.1/":        false,
+		"http://{address}.example.com/":        false,
+		"https://{address}/":                   false,
+		"http://192.168.1.1/":                  false,
+	} {
+		if _, err := pluginURL(text, values); (err == nil) != ok {
+			t.Errorf("%s: err = %v", text, err)
+		}
+	}
+}
+
+func TestPlugins_PasswordsKeepTheirSpaces(t *testing.T) {
+	e := newPluginEnv(t)
+	if _, err := e.installTestPlugin(writeTestPlugin(t, testPluginManifest("1.0"), nil), nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.agent.UpdatePluginSettings(api.PluginSettingsRequest{ID: "adguard-home",
+		Settings: map[string]string{"password": " spaced pass "}}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(e.readFile(e.paths.SecretsFile()), `" spaced pass "`) {
+		t.Error("a password is kept exactly as typed")
+	}
+	_, err := e.agent.UpdatePluginSettings(api.PluginSettingsRequest{ID: "adguard-home", Drive: "../../etc"})
+	if err == nil {
+		t.Error("a plugin without a drive must refuse one")
+	}
+}
+
+func TestPlugins_LongLogLinesAreJoined(t *testing.T) {
+	text := "2026-10-14T10:00:00Z stdout P part one, \n2026-10-14T10:00:00Z stdout F part two\n"
+	lines := lastLogLines(text, 10)
+	if len(lines) != 1 || !strings.HasSuffix(lines[0], " part one, part two") {
+		t.Errorf("lines = %q", lines)
+	}
+}
+
+func TestPlugins_DownloadProxyTunnelsHTTPS(t *testing.T) {
+	// An HTTPS server stands for a registry; the proxy's dial goes to it
+	// whatever the client asked for.
+	registry := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("image layers"))
+	}))
+	defer registry.Close()
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		connectTunnel(w, r, func(ctx context.Context) (net.Conn, error) {
+			var d net.Dialer
+			return d.DialContext(ctx, "tcp", registry.Listener.Addr().String())
+		})
+	}))
+	defer proxy.Close()
+
+	proxyURL, _ := url.Parse(proxy.URL)
+	client := &http.Client{Transport: &http.Transport{
+		Proxy:           http.ProxyURL(proxyURL),
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // the test server's own certificate
+	}}
+	resp, err := client.Get("https://registry.example/v2/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if string(body) != "image layers" {
+		t.Errorf("through the proxy: %q", body)
+	}
 }

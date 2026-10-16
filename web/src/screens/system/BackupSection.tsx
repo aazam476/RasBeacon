@@ -61,7 +61,7 @@ function BackupSheet({ hasPlugins, onClose }: { hasPlugins: boolean; onClose: ()
     <Sheet
       title="Back up settings"
       confirmLabel="Back up"
-      busyLabel="Making the backup…"
+      busyLabel="Checking…"
       onConfirm={() => backUp(adminPassword, password, includePlugins)}
       onClose={onClose}
     >
@@ -78,7 +78,7 @@ function BackupSheet({ hasPlugins, onClose }: { hasPlugins: boolean; onClose: ()
           </Section>
           <Section
             level={3}
-            footer="At least 8 characters. Without it the backup can't be opened, by anyone: keep it somewhere safe."
+            footer="At least 8 characters. Without it the backup can't be opened, by anyone: keep it somewhere safe. Your browser then saves the file as RasBeacon makes it."
           >
             <PasswordField
               label="Password for the backup"
