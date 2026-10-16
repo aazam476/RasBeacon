@@ -410,6 +410,7 @@ func (s *Session) NextFrame(ctx context.Context, after int64) Frame {
 // commandTimeout limits each action.
 const commandTimeout = 10 * time.Second
 
+// pageCall sends a command to the page, with the usual time limit.
 func (s *Session) pageCall(method string, params any, result any) error {
 	ctx, cancel := context.WithTimeout(context.Background(), commandTimeout)
 	defer cancel()
@@ -579,6 +580,7 @@ type tailBuffer struct {
 	data []byte
 }
 
+// Write keeps p, dropping the oldest bytes beyond the last 600.
 func (b *tailBuffer) Write(p []byte) (int, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -589,6 +591,7 @@ func (b *tailBuffer) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+// String is what was kept, trimmed.
 func (b *tailBuffer) String() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()

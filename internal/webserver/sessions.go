@@ -48,6 +48,7 @@ type sessionStore struct {
 	now      func() time.Time
 }
 
+// newSessionStore makes an empty store on the real clock.
 func newSessionStore() *sessionStore {
 	return &sessionStore{sessions: map[string]*session{}, now: time.Now}
 }
@@ -141,6 +142,8 @@ func setRememberCookie(w http.ResponseWriter, r *http.Request, token string, exp
 	})
 }
 
+// clearRememberCookie tells the browser to delete its remembered-login
+// cookie.
 func clearRememberCookie(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{Name: rememberCookieName, Value: "", Path: "/", MaxAge: -1, HttpOnly: true})
 }

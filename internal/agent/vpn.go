@@ -218,6 +218,7 @@ func routerAddress(network netip.Prefix) netip.Prefix {
 	return netip.PrefixFrom(netip.AddrFrom16(a), network.Bits())
 }
 
+// presharedKeyText is a peer's preshared key as text ("" without one).
 func presharedKeyText(p wireguard.Peer) string {
 	if !p.HasPresharedKey {
 		return ""
@@ -715,6 +716,7 @@ func (a *Agent) saveVPN(newCfg config.Config, newSecrets config.Secrets, changed
 
 // --- Small helpers for text <-> addresses ---
 
+// prefixStrings writes network prefixes as text ("10.0.0.0/8").
 func prefixStrings(prefixes []netip.Prefix) []string {
 	out := []string{}
 	for _, p := range prefixes {
@@ -723,6 +725,7 @@ func prefixStrings(prefixes []netip.Prefix) []string {
 	return out
 }
 
+// addrStrings writes addresses as text (always a list, never nil).
 func addrStrings(addrs []netip.Addr) []string {
 	out := []string{}
 	for _, a := range addrs {
@@ -759,6 +762,8 @@ func parsePrefixes(items []string, field string, keepHost bool) ([]netip.Prefix,
 	return out, nil
 }
 
+// parseAddrs reads addresses typed by the owner; field names the form
+// field a mistake is shown under.
 func parseAddrs(items []string, field string) ([]netip.Addr, error) {
 	var out []netip.Addr
 	for _, item := range items {

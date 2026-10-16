@@ -39,6 +39,7 @@ type loginLimiter struct {
 	lockedUntil    time.Time
 }
 
+// newLoginLimiter makes an empty limiter on the real clock.
 func newLoginLimiter() *loginLimiter {
 	return &loginLimiter{
 		now:         time.Now,

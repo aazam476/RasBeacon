@@ -260,6 +260,8 @@ func (a *Agent) enableForwarding() error {
 	return nil
 }
 
+// writeKernelSetting writes one of the kernel's settings (a file under
+// /proc/sys).
 func writeKernelSetting(path, value string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err

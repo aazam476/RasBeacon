@@ -159,6 +159,7 @@ func (m *Machine) Update(in Inputs) State {
 	return m.state
 }
 
+// enterUp moves to Up, remembering since when.
 func (m *Machine) enterUp(now time.Time) {
 	m.state = Up
 	m.upSince = now

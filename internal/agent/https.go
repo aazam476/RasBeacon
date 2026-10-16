@@ -27,6 +27,8 @@ const rbwebService = "rbweb.service"
 // browser before rbweb restarts.
 const rbwebRestartDelay = 2 * time.Second
 
+// tlsCertFile and tlsKeyFile are where the HTTPS certificate and its key
+// are kept.
 func (a *Agent) tlsCertFile() string { return filepath.Join(a.paths.TLSDir(), "cert.pem") }
 func (a *Agent) tlsKeyFile() string  { return filepath.Join(a.paths.TLSDir(), "key.pem") }
 

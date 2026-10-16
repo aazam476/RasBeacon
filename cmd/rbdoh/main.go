@@ -24,6 +24,8 @@ import (
 	"rasbeacon/internal/version"
 )
 
+// main reads the servers from the environment and answers DNS questions on
+// the listen address until systemd stops it.
 func main() {
 	listen := flag.String("listen", "127.0.0.1:5053", "address and port to answer DNS on (UDP and TCP)")
 	caFile := flag.String("ca", "", "trust only the certificate authorities in this PEM file (tests)")

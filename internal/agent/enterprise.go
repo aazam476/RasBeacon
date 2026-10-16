@@ -187,6 +187,7 @@ func MaskIdentity(identity string) string {
 	return masked
 }
 
+// fileExists reports whether a file (or folder) exists at path.
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil

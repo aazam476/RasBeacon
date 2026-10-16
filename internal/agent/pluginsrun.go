@@ -211,6 +211,8 @@ type limitedBuffer struct {
 	limit int
 }
 
+// Write adds p, or fails (stopping the template) once the limit would be
+// passed.
 func (b *limitedBuffer) Write(p []byte) (int, error) {
 	if b.buf.Len()+len(p) > b.limit {
 		return 0, errors.New("it is too large")
