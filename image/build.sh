@@ -65,9 +65,20 @@ sudo "$repo_root/image/verify.sh" "$rootfs" "$board"
 
 # 4b. List every package and its source, so the matching source code can be
 #     found (see docs/source-code.md).
+#     The Pi 4/5 image's A/B layout moves /var (and with it the package
+#     database) to each system copy's folder on the /persistent partition.
 packages="$out/$name-$version.packages.txt"
-sudo dpkg-query --admindir="$rootfs/var/lib/dpkg" -W \
+admindir="$rootfs/var/lib/dpkg"
+if ! sudo test -f "$admindir/status"; then
+  admindir="$rootfs/persistent/slots/system_a/var/lib/dpkg"
+fi
+sudo dpkg-query --admindir="$admindir" -W \
   -f '${Package} ${Version} source=${source:Package} ${source:Version}\n' | sort > "$packages"
+# dpkg-query lists nothing, without an error, when it finds no database.
+if [ ! -s "$packages" ]; then
+  echo "The package list is empty: no package database at $admindir" >&2
+  exit 1
+fi
 
 # 5. Compress it for Raspberry Pi Imager / balenaEtcher and record its hash.
 # rpi-image-gen writes the raw image to <work dir>/image-<name>/<name>.img.
