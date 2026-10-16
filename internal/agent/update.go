@@ -56,6 +56,9 @@ type updateState struct {
 	message   string
 	// latest is the newest release found by the online check.
 	latest latestRelease
+	// refused is set when an update file was refused because it needs a
+	// newer RasBeacon to install it (update.NeedsReflashError).
+	refused *api.UpdateReflash
 }
 
 // pendingUpdate is saved after installing, so the next start knows what
@@ -109,10 +112,29 @@ func (a *Agent) updateStatus() api.UpdateStatus {
 		CanCheckOnline: version.Repository != "",
 		CheckOnline:    a.cfg.Updates.CheckOnline,
 	}
-	if a.update.latest.TagName != "" && a.update.latest.TagName != version.Version {
-		s.LatestVersion, s.LatestURL = a.update.latest.TagName, a.update.latest.HTMLURL
+	latest := a.update.latest
+	if result, ok := version.Compare(latest.TagName, version.Version); ok && result > 0 {
+		s.LatestVersion, s.LatestURL = latest.TagName, latest.HTMLURL
+		if min := latest.minFromVersion; min != "" {
+			if result, ok := version.Compare(version.Version, min); ok && result < 0 {
+				s.Reflash = &api.UpdateReflash{Version: latest.TagName, MinFromVersion: min, URL: latest.HTMLURL}
+			}
+		}
+	}
+	// A refused update file says the same more surely (it was signed).
+	if a.update.refused != nil {
+		s.Reflash = a.update.refused
 	}
 	return s
+}
+
+// releaseURL is the release page of a version, when this build knows its
+// repository.
+func releaseURL(tag string) string {
+	if version.Repository == "" {
+		return ""
+	}
+	return "https://github.com/" + version.Repository + "/releases/tag/" + tag
 }
 
 // InstallUpdate installs an update file read from r (streamed from the
@@ -139,10 +161,15 @@ func (a *Agent) InstallUpdate(r io.Reader) error {
 	a.update.installing = false
 	if err != nil {
 		slog.Error("update failed", "error", err)
+		var needs *update.NeedsReflashError
+		if errors.As(err, &needs) {
+			a.update.refused = &api.UpdateReflash{Version: needs.Version, MinFromVersion: needs.MinFromVersion, URL: releaseURL(needs.Version)}
+		}
 		a.update.message = "The update was not installed: " + err.Error()
 		return &config.ValidationError{Field: "update", Message: a.update.message}
 	}
 
+	a.update.refused = nil
 	pending, _ := json.Marshal(pendingUpdate{Version: newVersion, FromVersion: version.Version})
 	if err := config.WriteFileAtomic(a.paths.UpdatePendingFile(), pending, 0o644); err != nil {
 		return err
@@ -168,6 +195,10 @@ func (a *Agent) writeUpdate(r io.Reader) (string, error) {
 	}
 	pkg, err := update.Open(r, a.trustedUpdateKeys(), board)
 	if err != nil {
+		return "", err
+	}
+	// No older versions, and none that need a newer RasBeacon to install.
+	if err := update.CheckVersion(pkg.Manifest, version.Version); err != nil {
 		return "", err
 	}
 	slog.Info("update file signature is valid; writing the other slot", "version", pkg.Manifest.Version)
@@ -296,8 +327,18 @@ const updateCheckInterval = 6 * time.Hour
 
 // latestRelease is the part of GitHub's answer RasBeacon reads.
 type latestRelease struct {
-	TagName string `json:"tag_name"`
-	HTMLURL string `json:"html_url"`
+	TagName string         `json:"tag_name"`
+	HTMLURL string         `json:"html_url"`
+	Assets  []releaseAsset `json:"assets"`
+	// minFromVersion comes from the release's .update.json file (see
+	// update.Info): the oldest version that can install its update.
+	minFromVersion string
+}
+
+// releaseAsset is one file of a release.
+type releaseAsset struct {
+	Name string `json:"name"`
+	URL  string `json:"browser_download_url"`
 }
 
 // RunUpdateCheck asks GitHub for the newest release every few hours, while
@@ -352,7 +393,41 @@ func fetchLatestRelease(client *http.Client, apiURL, repository string) (latestR
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&release); err != nil {
 		return latestRelease{}, err
 	}
+	// The release's update info says whether this RasBeacon can install it.
+	// Without it (a release made before it existed), RasBeacon finds out
+	// when the update file is installed.
+	for _, asset := range release.Assets {
+		if strings.HasSuffix(asset.Name, ".update.json") {
+			info, err := fetchUpdateInfo(client, asset.URL)
+			if err != nil {
+				slog.Warn("could not read the release's update info", "error", err)
+			} else if info.Version == release.TagName {
+				release.minFromVersion = info.MinFromVersion
+			}
+			break
+		}
+	}
 	return release, nil
+}
+
+// fetchUpdateInfo downloads a release's small .update.json file.
+func fetchUpdateInfo(client *http.Client, url string) (update.Info, error) {
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return update.Info{}, err
+	}
+	req.Header.Set("User-Agent", "RasBeacon/"+version.Version)
+	resp, err := client.Do(req)
+	if err != nil {
+		return update.Info{}, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return update.Info{}, fmt.Errorf("GitHub answered %s", resp.Status)
+	}
+	var info update.Info
+	err = json.NewDecoder(io.LimitReader(resp.Body, 64*1024)).Decode(&info)
+	return info, err
 }
 
 // UpdateUpdateSettings saves the online check setting.

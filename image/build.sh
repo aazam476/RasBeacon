@@ -19,6 +19,9 @@
 #   <name>-<version>.rbupdate      signed update file (Pi 4/5 only, and only
 #                                   when the RASBEACON_UPDATE_SIGNING_KEY
 #                                   environment variable is set)
+#   <name>-<version>.update.json   the update's version and the oldest
+#                                   version that can install it (from
+#                                   image/update-from), for the online check
 #   <name>-<version>.packages.txt  every Debian package in the image, with
 #                                   its source package and version (for the
 #                                   GPL)
@@ -97,8 +100,11 @@ bundle="$(sudo find "$repo_root/build/rig-$board/image-$name" -maxdepth 1 -name 
 # The Pi 3/Zero 2 W image has one system copy and no update bundle.
 if [ "$board" = rpi64 ] && [ -n "${RASBEACON_UPDATE_SIGNING_KEY:-}" ] && [ -n "$bundle" ]; then
   sudo cat "$bundle" > "$out/bundle.tmp"
-  go run "$repo_root/cmd/rbsign" pack -board "$board" -version "$version" \
-    -bundle "$out/bundle.tmp" -out "$out/$name-$version.rbupdate"
+  # The oldest version that can install this update: image/update-from,
+  # without its comment lines (empty: any version).
+  min_from="$( { grep -v '^#' "$repo_root/image/update-from" || true; } | tr -d '[:space:]')"
+  go run "$repo_root/cmd/rbsign" pack -board "$board" -version "$version" -min-from "$min_from" \
+    -bundle "$out/bundle.tmp" -out "$out/$name-$version.rbupdate" -info "$out/$name-$version.update.json"
   rm -f "$out/bundle.tmp"
 else
   echo "No update file made (no signing key, or no update bundle at '$bundle')."

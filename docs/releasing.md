@@ -36,6 +36,7 @@ system copy, so it has no update file). Each release contains:
 | `rasbeacon-<version>.img.xz` | The SD card image for the Pi 4 and Pi 5 (flash it with Raspberry Pi Imager) |
 | `rasbeacon-pi3-zero2w-<version>.img.xz` | The SD card image for the Pi Zero 2 W, 3B and 3B+ |
 | `rasbeacon-<version>.rbupdate` | The signed update file (install it on the System page) |
+| `rasbeacon-<version>.update.json` | The update's version and the oldest version that can install it, for the online check |
 | `rasbeacon-<version>.packages.txt`, `rasbeacon-pi3-zero2w-<version>.packages.txt` | Every Debian package in the image, with its source package and version (see [source-code.md](source-code.md)) |
 | `SHA256SUMS` | Checksums of all of the above |
 
@@ -69,6 +70,27 @@ and, in a later release, remove the old public key.
 **Forks** don't have the secret, so their builds make images but no update
 files.
 
+## Versions an update can install over
+
+RasBeacon never installs an update older than the version it runs (the
+same version again is allowed, to repair a system copy). Normally any
+older version can install a new update. When a new version can't be
+installed over older ones (its settings, partitions or something else
+changed in a way the update can't carry), write the oldest version that
+can install it into [`image/update-from`](../image/update-from), e.g.
+`v2.0.0`, before releasing. The build signs it into the update file:
+
+- A RasBeacon older than that refuses the update file, and its System page
+  says the new version **needs a fresh install**: back up the settings,
+  flash the new image, set it up and restore the backup. Make sure that
+  version can still restore backups from the older ones.
+- The online check reads the same from the release's `.update.json` file,
+  so owners see it before downloading anything.
+
+Empty `image/update-from` again for the next release unless the reason
+still holds; a version that can install `v2.0.0` usually can install
+`v2.1.0`, so `v2.1.0` can keep `v2.0.0` there or leave it empty.
+
 ## Checklist for a release
 
 1. CI is green on the commit you'll tag.
@@ -79,8 +101,8 @@ files.
    which makes the tag and publishes the release at once (a test version as a
    pre-release), so skip the publishing in step 4.
 4. When the workflow finishes, open the draft release, check the files are
-   all there (the two images, the update file, the two package lists,
-   `SHA256SUMS`), write the notes, and publish (a test version: tick *Set as a
+   all there (the two images, the update file and its `.update.json`, the
+   two package lists, `SHA256SUMS`), write the notes, and publish (a test version: tick *Set as a
    pre-release* first).
 5. Test the update file on a device running the previous release (System
    page → Install update), and check it comes back on the new version.

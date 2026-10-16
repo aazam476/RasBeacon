@@ -92,7 +92,7 @@ func TestWriteBundle(t *testing.T) {
 func packed(t *testing.T, key ed25519.PrivateKey, bundle []byte) []byte {
 	t.Helper()
 	var out bytes.Buffer
-	if err := Pack(&out, bytes.NewReader(bundle), "pi4", "v1.2.0", key); err != nil {
+	if err := Pack(&out, bytes.NewReader(bundle), "pi4", "v1.2.0", "v1.0.0", key); err != nil {
 		t.Fatal(err)
 	}
 	return out.Bytes()
@@ -109,7 +109,7 @@ func TestOpen_VerifiesSignatureBoardAndChecksum(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Manifest.Version != "v1.2.0" {
+	if p.Manifest.Version != "v1.2.0" || p.Manifest.MinFromVersion != "v1.0.0" {
 		t.Errorf("manifest = %+v", p.Manifest)
 	}
 	if err := p.Verify(); err != nil {
@@ -138,6 +138,39 @@ func TestOpen_VerifiesSignatureBoardAndChecksum(t *testing.T) {
 	}
 	if err := p.Verify(); err == nil {
 		t.Error("a changed bundle must fail Verify")
+	}
+}
+
+func TestPack_RefusesAMinimumNewerThanTheVersion(t *testing.T) {
+	_, private, _ := ed25519.GenerateKey(rand.Reader)
+	for _, minFrom := range []string{"v1.3.0", "dev"} {
+		var out bytes.Buffer
+		if err := Pack(&out, strings.NewReader("bundle"), "pi4", "v1.2.0", minFrom, private); err == nil {
+			t.Errorf("min-from %q: an update no version can install must be refused", minFrom)
+		}
+	}
+}
+
+func TestCheckVersion(t *testing.T) {
+	cases := []struct {
+		version, minFrom, running string
+		ok, reflash               bool
+	}{
+		{"v1.2.0", "", "v1.1.0", true, false},
+		{"v1.2.0", "", "v1.2.0", true, false},              // the same again, to repair
+		{"v1.2.0", "", "v1.10.0", false, false},            // older: refused
+		{"v1.2.0-beta.1", "", "v1.2.0", true, false},       // only the numbers count
+		{"v2.0.0", "v1.5.0", "v1.5.0", true, false},        // new enough
+		{"v2.0.0", "v1.5.0", "v1.4.9", false, true},        // too old: flash instead
+		{"v2.0.0", "v1.5.0", "v1.5.0-beta.2", true, false}, // a beta of 1.5.0 counts as 1.5.0
+		{"v0.1.0", "v9.0.0", "dev", true, false},           // development builds install anything
+	}
+	for _, c := range cases {
+		err := CheckVersion(Manifest{Version: c.version, MinFromVersion: c.minFrom}, c.running)
+		var needs *NeedsReflashError
+		if (err == nil) != c.ok || errors.As(err, &needs) != c.reflash {
+			t.Errorf("%s (min %q) on %s: got %v", c.version, c.minFrom, c.running, err)
+		}
 	}
 }
 

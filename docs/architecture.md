@@ -194,7 +194,12 @@ Updates use the two copies ("slots", A and B) of the system on the SD card
 
 1. The owner uploads a `.rbupdate` file on the System page. Its manifest
    is signed with the release key (Ed25519); the public key is built into
-   the image. Nothing is written until the signature and board check out.
+   the image. Nothing is written until the signature and board check out,
+   and until the version does: never older than the one running, and the
+   running one must be at least the manifest's `minFromVersion` (the
+   oldest version that can install it; see docs/releasing.md). Too old a
+   RasBeacon refuses the file and the System page shows the way instead: a
+   backup, the new image flashed, the backup restored.
 2. rbd streams the new boot and system partitions into the slot that isn't
    running, then checks the SHA-256 of everything against the signed one.
 3. The device restarts into the new slot **on trial** (the bootloader's
@@ -203,6 +208,11 @@ Updates use the two copies ("slots", A and B) of the system on the SD card
    slot again.
 
 Settings live on the shared `/persistent` partition, so they carry over.
+
+The optional online check reads the latest release from GitHub, and its
+small `<name>-<version>.update.json` file (version and `minFromVersion`),
+so the System page can say a new version needs a fresh install before
+anyone downloads it. Installing still needs the signed `.rbupdate` file.
 
 ## HTTPS and the reset button
 

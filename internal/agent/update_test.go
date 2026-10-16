@@ -17,8 +17,10 @@ import (
 	"strings"
 	"testing"
 
+	"rasbeacon/internal/api"
 	"rasbeacon/internal/config"
 	"rasbeacon/internal/update"
+	"rasbeacon/internal/version"
 )
 
 // sparseImage makes a sparse image holding data (a multiple of 16 bytes)
@@ -70,11 +72,90 @@ func newUpdateEnv(t *testing.T) (*testEnv, ed25519.PrivateKey) {
 
 func updateFile(t *testing.T, key ed25519.PrivateKey, board string, bundle []byte) []byte {
 	t.Helper()
+	return versionedUpdateFile(t, key, board, "v9.9.9", "", bundle)
+}
+
+// versionedUpdateFile is an update file for newVersion that versions from
+// minFrom on can install.
+func versionedUpdateFile(t *testing.T, key ed25519.PrivateKey, board, newVersion, minFrom string, bundle []byte) []byte {
+	t.Helper()
 	var out bytes.Buffer
-	if err := update.Pack(&out, bytes.NewReader(bundle), board, "v9.9.9", key); err != nil {
+	if err := update.Pack(&out, bytes.NewReader(bundle), board, newVersion, minFrom, key); err != nil {
 		t.Fatal(err)
 	}
 	return out.Bytes()
+}
+
+// runningVersion pretends RasBeacon v is running, for one test.
+func runningVersion(t *testing.T, v string) {
+	t.Helper()
+	old := version.Version
+	version.Version = v
+	t.Cleanup(func() { version.Version = old })
+}
+
+func TestUpdate_RefusesOlderVersions(t *testing.T) {
+	e, key := newUpdateEnv(t)
+	runningVersion(t, "v1.2.0")
+	file := versionedUpdateFile(t, key, "pi4", "v1.1.0", "", testBundle(strings.Repeat("B", 32), strings.Repeat("S", 64)))
+	err := e.agent.InstallUpdate(bytes.NewReader(file))
+	var verr *config.ValidationError
+	if !errors.As(err, &verr) || !strings.Contains(verr.Message, "older") {
+		t.Fatalf("got %v, want a refusal", err)
+	}
+	if e.readFile(e.paths.SlotDevice("other", "system")) != strings.Repeat("o", 64) || e.runner.ran("tryboot") {
+		t.Error("nothing may be written or restarted")
+	}
+	if e.agent.Status().Update.Reflash != nil {
+		t.Error("an older version is no reason to flash")
+	}
+}
+
+func TestUpdate_TooNewAnUpdateAsksForAFreshInstall(t *testing.T) {
+	e, key := newUpdateEnv(t)
+	runningVersion(t, "v1.0.0")
+	bundle := testBundle(strings.Repeat("B", 32), strings.Repeat("S", 64))
+	err := e.agent.InstallUpdate(bytes.NewReader(versionedUpdateFile(t, key, "pi4", "v2.0.0", "v1.5.0", bundle)))
+	var verr *config.ValidationError
+	if !errors.As(err, &verr) || !strings.Contains(verr.Message, "Back up your settings") {
+		t.Fatalf("got %v, want a refusal that explains the way", err)
+	}
+	if e.readFile(e.paths.SlotDevice("other", "system")) != strings.Repeat("o", 64) || e.runner.ran("tryboot") {
+		t.Error("nothing may be written or restarted")
+	}
+	reflash := e.agent.Status().Update.Reflash
+	if reflash == nil || reflash.Version != "v2.0.0" || reflash.MinFromVersion != "v1.5.0" {
+		t.Errorf("reflash = %+v", reflash)
+	}
+
+	// A version this one can install clears it.
+	if err := e.agent.InstallUpdate(bytes.NewReader(versionedUpdateFile(t, key, "pi4", "v1.5.0", "v1.0.0", bundle))); err != nil {
+		t.Fatal(err)
+	}
+	if e.agent.Status().Update.Reflash != nil {
+		t.Error("the refusal should be forgotten after an update that worked")
+	}
+}
+
+func TestUpdateStatus_OnlineCheckOffersOnlyNewerVersions(t *testing.T) {
+	e, _ := newUpdateEnv(t)
+	runningVersion(t, "v1.2.0")
+	status := func(latest latestRelease) api.UpdateStatus {
+		e.agent.mu.Lock()
+		defer e.agent.mu.Unlock()
+		e.agent.update.latest = latest
+		return e.agent.updateStatus()
+	}
+	if s := status(latestRelease{TagName: "v1.1.0"}); s.LatestVersion != "" {
+		t.Errorf("an older release must not be offered: %+v", s)
+	}
+	if s := status(latestRelease{TagName: "v1.3.0", minFromVersion: "v1.0.0"}); s.LatestVersion != "v1.3.0" || s.Reflash != nil {
+		t.Errorf("a release this version can install: %+v", s)
+	}
+	s := status(latestRelease{TagName: "v2.0.0", HTMLURL: "https://example.com/v2", minFromVersion: "v1.5.0"})
+	if s.LatestVersion != "v2.0.0" || s.Reflash == nil || s.Reflash.MinFromVersion != "v1.5.0" || s.Reflash.URL == "" {
+		t.Errorf("a release that needs a fresh install: %+v", s)
+	}
 }
 
 func TestUpdate_InstallWritesTheOtherSlotAndTriesIt(t *testing.T) {
@@ -199,16 +280,21 @@ func TestUpdate_RealZstdDecompression(t *testing.T) {
 }
 
 func TestFetchLatestRelease(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/repos/owner/rasbeacon/releases/latest" {
-			http.NotFound(w, r)
-			return
-		}
-		w.Write([]byte(`{"tag_name":"v1.2.0","html_url":"https://github.com/owner/rasbeacon/releases/tag/v1.2.0"}`))
-	}))
+	var serverURL string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/owner/rasbeacon/releases/latest", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"tag_name":"v1.2.0","html_url":"https://github.com/owner/rasbeacon/releases/tag/v1.2.0",
+			"assets":[{"name":"rasbeacon-v1.2.0.img.xz","browser_download_url":"` + serverURL + `/img"},
+			{"name":"rasbeacon-v1.2.0.update.json","browser_download_url":"` + serverURL + `/info"}]}`))
+	})
+	mux.HandleFunc("/info", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"version":"v1.2.0","minFromVersion":"v1.1.0"}`))
+	})
+	server := httptest.NewServer(mux)
 	defer server.Close()
+	serverURL = server.URL
 	got, err := fetchLatestRelease(server.Client(), server.URL, "owner/rasbeacon")
-	if err != nil || got.TagName != "v1.2.0" || !strings.HasSuffix(got.HTMLURL, "v1.2.0") {
+	if err != nil || got.TagName != "v1.2.0" || !strings.HasSuffix(got.HTMLURL, "v1.2.0") || got.minFromVersion != "v1.1.0" {
 		t.Errorf("got %+v, %v", got, err)
 	}
 	if _, err := fetchLatestRelease(server.Client(), server.URL, "owner/missing"); err == nil {

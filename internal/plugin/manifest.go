@@ -39,6 +39,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"rasbeacon/internal/version"
 )
 
 // Manifest is manifest.json. The `json:"…"` after each field is the name
@@ -751,46 +753,11 @@ func rangeText(low, high *float64) string {
 // count: a beta of 0.2.0 is enough for a plugin needing 0.2.0. Development
 // builds ("dev", "dev-abc1234") take every plugin.
 func SupportedBy(min, running string) bool {
-	have := versionNumbers(running)
-	if min == "" || len(have) == 0 {
+	if min == "" {
 		return true
 	}
-	need := versionNumbers(min)
-	// Compare number by number; a missing number counts as 0.
-	for i := 0; i < max(len(need), len(have)); i++ {
-		var n, h int
-		if i < len(need) {
-			n = need[i]
-		}
-		if i < len(have) {
-			h = have[i]
-		}
-		if h != n {
-			return h > n
-		}
-	}
-	return true
-}
-
-// versionNumbers reads the leading numbers of a version: "v0.2.0-beta.1"
-// gives 0, 2, 0. A version that doesn't start with a number gives none.
-func versionNumbers(v string) []int {
-	var out []int
-	for _, part := range strings.Split(strings.TrimPrefix(v, "v"), ".") {
-		digits := part
-		if i := strings.IndexFunc(part, func(r rune) bool { return r < '0' || r > '9' }); i >= 0 {
-			digits = part[:i] // "0-beta" gives "0"
-		}
-		n, err := strconv.Atoi(digits)
-		if err != nil {
-			break
-		}
-		out = append(out, n)
-		if len(digits) < len(part) {
-			break // the rest is a label like "-beta"
-		}
-	}
-	return out
+	result, ok := version.Compare(running, min)
+	return !ok || result >= 0
 }
 
 // Reserved reports whether a port on RasBeacon belongs to RasBeacon itself.

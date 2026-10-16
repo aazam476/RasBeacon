@@ -114,7 +114,7 @@ hotel login pages.
 | The status page warns that the built-in Wi-Fi is running the hotspot | RasBeacon didn't find a USB adapter it can use. Plug one in and choose *Reboot* on the System page. |
 | Nothing works and you want to see why | Put the SD card in a computer and create an empty file named `debug` on the `BOOTCONFIG` drive. Boot the Pi and wait 3 minutes, then unplug it. Back on the computer, open `rasbeacon-debug.txt` from the same drive. It holds the startup logs (no passwords, but device names and MAC addresses, so delete it afterwards). |
 | Forgot the admin password | Factory reset: put the SD card in a computer and create an empty file named `factory-reset` on the `BOOTCONFIG` drive. At the next start, RasBeacon erases all settings and runs first-time setup again. (Or hold the optional reset button for 10 seconds.) |
-| An update didn't install | The System page says why. "not signed by a key this RasBeacon trusts": use update files from the official Releases page; images built before signing was set up can't install updates, so flash the new image once. "for rpi64, but this is a pi4": the device runs an image from before the Pi 4 and Pi 5 shared one; flash the new image once. |
+| An update didn't install | The System page says why. "not signed by a key this RasBeacon trusts": use update files from the official Releases page; images built before signing was set up can't install updates, so flash the new image once. "for rpi64, but this is a pi4": the device runs an image from before the Pi 4 and Pi 5 shared one; flash the new image once. "older than the version running": RasBeacon doesn't go back to older versions. "needs a fresh install" (or "can't be installed over"): that version changed too much to install over yours; follow [the steps below](#updating). |
 
 ## Checking your download
 
@@ -127,12 +127,21 @@ The result must match the line in `SHA256SUMS`.
 
 ## Updating
 
-On the **System** page, choose the release's `rasbeacon-<board>-<version>.rbupdate`
-file and tap **Install update**. RasBeacon checks that the file was signed
-by the RasBeacon release key, installs it next to the running version,
-and restarts into it. If the new version doesn't start correctly, it goes
-back to the old one by itself. Your settings are kept. (You can also turn
-on a check for new versions there; it is off by default.)
+Download the release's `rasbeacon-<version>.rbupdate` file (on any phone or
+computer), then on RasBeacon's **System** page choose it and tap **Install
+update**. RasBeacon itself doesn't need to be online for this. It checks
+that the file was signed by the RasBeacon release key, installs it next to
+the running version, and restarts into it. If the new version doesn't start
+correctly, it goes back to the old one by itself. Your settings are kept.
+(You can also turn on a check for new versions there; it is off by default.)
+
+RasBeacon never installs an older version than the one it runs. And
+sometimes a new version changes too much to be installed over an old one:
+then the System page says it **needs a fresh install** and walks you
+through it. Back up your settings there, flash the new image (the
+`.img.xz` file) onto the SD card, set RasBeacon up, and restore the backup
+on the System page. The Pi Zero 2 W, 3B and 3B+ always update this way,
+since their image has one copy of the system.
 
 ## Optional extras
 
