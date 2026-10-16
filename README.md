@@ -1,6 +1,13 @@
 <p align="center"><img src="docs/images/banner.png" alt="RasBeacon, an open-source travel router for the Raspberry Pi: its status page on an iPhone and a MacBook"></p>
 
-# RasBeacon
+<p align="center">
+  <a href="https://github.com/aazam476/RasBeacon/stargazers"><img src="https://img.shields.io/github/stars/aazam476/RasBeacon?style=flat-square&color=0c8a9c&label=stars" alt="Stars"></a>
+  <a href="https://github.com/aazam476/RasBeacon/releases/latest"><img src="https://img.shields.io/github/v/release/aazam476/RasBeacon?style=flat-square&color=0c8a9c&label=release" alt="Latest release"></a>
+  <a href="https://github.com/aazam476/RasBeacon/commits/main"><img src="https://img.shields.io/github/last-commit/aazam476/RasBeacon?style=flat-square&color=0c8a9c&label=last%20update" alt="Last update"></a>
+  <a href="https://github.com/aazam476/RasBeacon/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/aazam476/RasBeacon/ci.yml?branch=main&style=flat-square&label=CI" alt="CI status"></a>
+  <img src="https://img.shields.io/badge/Raspberry%20Pi-5%20%7C%204%20%7C%203B%2F3B%2B%20%7C%20Zero%202%20W-0c8a9c?style=flat-square" alt="Raspberry Pi 5, 4, 3B/3B+ and Zero 2 W">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-0c8a9c?style=flat-square" alt="Apache-2.0 license"></a>
+</p>
 
 An open-source Wi-Fi travel router for the Raspberry Pi.
 Your devices join RasBeacon's hotspot, and RasBeacon joins the network where
