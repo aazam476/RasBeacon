@@ -304,6 +304,27 @@ export function applyWorstCase(demo: DemoState) {
     },
     { ...base, id: 'crashy', name: 'J', state: 'crashed', metrics: [], healthy: undefined },
     {
+      // Its files can't be read: no manifest, so no name (its ID instead), icon or settings.
+      ...base,
+      id: 'old-weather-station',
+      name: 'old-weather-station',
+      state: 'failed',
+      message:
+        "Its files can't be read: open /var/lib/rasbeacon/plugins/installed/old-weather-station/manifest.json: no such file or directory. Remove it and install it again.",
+      icon: '',
+      description: '',
+      readme: '',
+      afterInstall: '',
+      permissions: [],
+      ports: [],
+      settings: [],
+      metrics: [],
+      healthy: undefined,
+      updateVersion: undefined,
+      canUpdate: false,
+      broken: true,
+    },
+    {
       ...base,
       id: 'waiting',
       name: 'Grafana Ünïcode Dashböard für Reisende',

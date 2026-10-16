@@ -3,7 +3,7 @@ import { useDevice } from '@/data/device';
 import type { PluginDrive, PluginPort, PluginSetting } from '@/data/types';
 import { formatBytes } from '@/lib/format';
 import { FormSwitchRow, PasswordField, Section, SelectField, TextField } from '@/ui';
-import type { ChoicesDraft } from './pluginDisplay';
+import { numberNote, type ChoicesDraft } from './pluginDisplay';
 
 interface PluginFieldsProps {
   ports: PluginPort[];
@@ -138,10 +138,8 @@ function SettingField({ setting, value, onChange, error }: SettingFieldProps) {
     case 'number':
       return (
         <TextField
-          label={label}
-          labelNote={
-            setting.min !== undefined && setting.max !== undefined ? `(${setting.min} to ${setting.max})` : undefined
-          }
+          label={setting.label}
+          labelNote={numberNote(setting)}
           hint={setting.help}
           inputMode="decimal"
           value={value}

@@ -1,11 +1,11 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useDevice } from '@/data/device';
 import type { PluginPreview, PluginsState } from '@/data/types';
 import { Loaded } from '@/shell/Loaded';
 import { ButtonRow, FormError, Icon, LinkRow, Section } from '@/ui';
 import { InstallSheet } from './InstallSheet';
-import { STATE_LABELS, errorText } from './pluginDisplay';
+import { STATE_LABELS, errorText, toneText } from './pluginDisplay';
 
 /**
  * Plugins: the installed ones (each opens its page), and where to get more: RasBeacon's catalog
@@ -39,9 +39,10 @@ function PluginList({ state }: { state: PluginsState }) {
                 leading={{ image: plugin.icon }}
                 title={plugin.name}
                 subtitle={
-                  <StateText tone={label.tone}>
-                    {plugin.updateVersion ? `${label.text} · Update available` : label.text}
-                  </StateText>
+                  <>
+                    <span className={toneText(label.tone)}>{label.text}</span>
+                    {plugin.updateVersion && <span className="text-tint"> · Update available</span>}
+                  </>
                 }
               />
             );
@@ -63,12 +64,6 @@ function PluginList({ state }: { state: PluginsState }) {
       </Section>
     </>
   );
-}
-
-/** A plugin's state in its color. */
-function StateText({ tone, children }: { tone: string; children: ReactNode }) {
-  const color = tone === 'green' ? 'text-green' : tone === 'red' ? 'text-red' : tone === 'orange' ? 'text-orange' : '';
-  return <span className={color}>{children}</span>;
 }
 
 function NoPlugins() {

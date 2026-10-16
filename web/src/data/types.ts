@@ -666,6 +666,8 @@ export interface Plugin {
   updateVersion?: string;
   /** The update installs from the catalog (signed plugins only; unsigned ones update from a file). */
   canUpdate: boolean;
+  /** Its files can't be read: only removing it, or installing it again, helps. */
+  broken?: boolean;
 }
 
 export interface PluginsState {

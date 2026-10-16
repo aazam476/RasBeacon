@@ -17,6 +17,7 @@ export { FormError, FormSuccess } from './FormMessage';
 export { Icon, type BaseIconName, type IconName } from './Icon';
 export { IconButton } from './IconButton';
 export { IconTile, type TileColor } from './IconTile';
+export { Markdown } from './Markdown';
 export { Meter } from './Meter';
 export { Notice, NoticeList, type NoticeTone } from './Notice';
 export { ButtonRow, FormSwitchRow, LinkRow, Row, RowText, Section, SwitchRow, type RowLeading } from './Section';

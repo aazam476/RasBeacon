@@ -16,6 +16,7 @@ import {
   FormSwitch,
   Icon,
   LinkRow,
+  Markdown,
   Notice,
   Row,
   Section,
@@ -52,7 +53,31 @@ export function PluginScreen() {
 }
 
 function PluginPage({ plugin }: { plugin: Plugin }) {
+  if (plugin.broken) return <BrokenPluginPage plugin={plugin} />;
+  return <WorkingPluginPage plugin={plugin} />;
+}
+
+/**
+ * A plugin whose files can't be read: nothing is known of it but its ID, so only what can
+ * help is offered: its log, installing it again from a file, and removing it.
+ */
+function BrokenPluginPage({ plugin }: { plugin: Plugin }) {
+  return (
+    <>
+      <Hero plugin={plugin} />
+      <LogSection plugin={plugin} />
+      <AboutSection plugin={plugin} />
+      <UpdateSection plugin={plugin} />
+      <RemoveSection plugin={plugin} />
+    </>
+  );
+}
+
+function WorkingPluginPage({ plugin }: { plugin: Plugin }) {
   const busy = isBusy(plugin.state);
+  // What to do next only applies once it is installed and works (not while it installs, or
+  // when installing failed).
+  const showNextSteps = plugin.afterInstall && !busy && plugin.state !== 'failed';
 
   return (
     <>
@@ -66,7 +91,7 @@ function PluginPage({ plugin }: { plugin: Plugin }) {
 
       <RunningSection plugin={plugin} />
 
-      {plugin.afterInstall && (
+      {showNextSteps && (
         <Notice tone="info" icon="info" title="Next steps">
           <p className="wrap-break-word">{plugin.afterInstall}</p>
         </Notice>
@@ -79,8 +104,8 @@ function PluginPage({ plugin }: { plugin: Plugin }) {
       <AboutSection plugin={plugin} />
       {plugin.readme && (
         <Section title="About this plugin">
-          <div className="row">
-            <p className="text-subhead whitespace-pre-line wrap-break-word text-label">{plugin.readme}</p>
+          <div className="row py-3">
+            <Markdown source={plugin.readme} />
           </div>
         </Section>
       )}
@@ -97,12 +122,22 @@ function Hero({ plugin }: { plugin: Plugin }) {
 
   return (
     <div className="flex items-start gap-4">
-      <img
-        src={plugin.icon}
-        alt=""
-        draggable={false}
-        className="size-20 shrink-0 rounded-[18px] shadow-sm lg:size-16 lg:rounded-[14px]"
-      />
+      {plugin.icon ? (
+        <img
+          src={plugin.icon}
+          alt=""
+          draggable={false}
+          className="size-20 shrink-0 rounded-[18px] shadow-sm lg:size-16 lg:rounded-[14px]"
+        />
+      ) : (
+        // Its icon can't be read (its files are damaged): a plain one instead.
+        <span
+          aria-hidden="true"
+          className="grid size-20 shrink-0 place-items-center rounded-[18px] bg-tile-gray text-white shadow-sm lg:size-16 lg:rounded-[14px]"
+        >
+          <Icon name="extension" filled size={44} className="lg:size-9" />
+        </span>
+      )}
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         <p className="text-subhead text-label-2">{byline(plugin)}</p>
         <span className="flex flex-wrap items-center gap-2">
@@ -147,7 +182,7 @@ function RunningSection({ plugin }: { plugin: Plugin }) {
         leading={{ tile: 'play_arrow', color: 'green' }}
         title="Running"
         checked={on}
-        disabled={isBusy(plugin.state) && plugin.state !== 'starting'}
+        disabled={isBusy(plugin.state)}
         onChange={(running) => setPluginRunning(plugin.id, running)}
       />
     </Section>
@@ -243,7 +278,7 @@ function LogSection({ plugin }: { plugin: Plugin }) {
           ) : lines.length === 0 ? (
             <p className="text-subhead text-label-2">Nothing yet.</p>
           ) : (
-            <pre className="selectable max-h-80 overflow-auto rounded-lg bg-fill-2 p-3 font-mono text-footnote whitespace-pre-wrap wrap-anywhere text-label">
+            <pre className="selectable max-h-80 overflow-auto overscroll-contain rounded-lg bg-fill-2 p-3 font-mono text-footnote whitespace-pre-wrap wrap-anywhere text-label">
               {lines.join('\n')}
             </pre>
           )}

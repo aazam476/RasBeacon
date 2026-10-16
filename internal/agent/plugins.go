@@ -271,6 +271,7 @@ func (a *Agent) pluginView(id string) api.Plugin {
 	}
 	m := live.manifest
 	if m == nil {
+		view.Broken = true
 		return view
 	}
 	view.Name, view.Description, view.Author, view.Homepage = m.Name, m.Description, m.Author, m.Homepage
