@@ -13,10 +13,14 @@ RasBeacon's versions are `vMAJOR.MINOR.PATCH`:
   change things plugins rely on.
 - **MAJOR** (`v1.0.0`): incompatible changes (after 1.0).
 
-A test version gets a label: `v0.2.0-beta.1`. Publish it as a GitHub
-**pre-release** (tick *Set as a pre-release*): devices' update check reads
-the latest release, which never includes pre-releases, so nobody is offered
-a beta by surprise.
+Versions before 1.0 are early versions: a `0` at the front already says
+so, and they are published as normal releases (`v0.1.0`), which devices are
+offered as updates.
+
+To try out a version before releasing it, give it a label:
+`v0.2.0-beta.1`. Publish it as a GitHub **pre-release** (tick *Set as a
+pre-release*): devices' update check reads the latest release, which never
+includes pre-releases, so nobody is offered a test version by surprise.
 
 Plugins follow along: the plugins repository's release tags start with the
 RasBeacon version they're made for (`v0.1.0`, `v0.1.1`, … for RasBeacon
@@ -70,13 +74,13 @@ files.
 1. CI is green on the commit you'll tag.
 2. Update `docs/compatibility.md` with any new hardware results.
 3. Either tag and push: `git tag -a v0.2.0 -m "RasBeacon v0.2.0" && git push origin v0.2.0`
-   (a beta: `v0.2.0-beta.1`), which makes a draft release; or open
+   (a test version: `v0.2.0-beta.1`), which makes a draft release; or open
    **Actions → Release images → Run workflow** and type the release name,
-   which makes the tag and publishes the release at once (a beta as a
+   which makes the tag and publishes the release at once (a test version as a
    pre-release), so skip the publishing in step 4.
 4. When the workflow finishes, open the draft release, check the files are
    all there (the two images, the update file, the two package lists,
-   `SHA256SUMS`), write the notes, and publish (a beta: tick *Set as a
+   `SHA256SUMS`), write the notes, and publish (a test version: tick *Set as a
    pre-release* first).
 5. Test the update file on a device running the previous release (System
    page → Install update), and check it comes back on the new version.
