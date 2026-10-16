@@ -346,7 +346,9 @@ Pi 4 in an Argon ONE V2 case, test that plugin too.
    warning about the download. Type a password, **Install**.
 3. **Expect** its page: *Installing* (*Downloading its image…*), then
    *Running* within a few minutes, and four numbers after half a minute.
-   **Open** shows AdGuard Home's login; the password works.
+   **Open** shows AdGuard Home's login; the password works. *About this
+   plugin* shows its README formatted (bold words, no `**` marks, sentences
+   not broken mid-line).
 4. **VPN + kill switch:** break the tunnel (see section 8) and install Samba:
    **expect** *Waiting for the VPN*, and the install continuing once the VPN
    is back. Fix the tunnel.
@@ -433,8 +435,11 @@ install updates (on the Pi 3/Zero 2 W image, check instead that System says
 ## 16. Erasing (do these last)
 
 0. **Backup (new):** System → **Back up settings** with a password (with
-   **Include plugins** if any are installed). **Expect** a `.rbbackup` file
-   (opening it in a text editor shows nothing readable). Change the hotspot's
+   **Include plugins** if any are installed). **Expect** the sheet to close
+   after a second and the browser to download a `.rbbackup` file with its own
+   progress (opening it in a text editor shows nothing readable). With
+   AdGuard Home as the DNS server, phone A keeps loading pages during the
+   download (AdGuard pauses only for the few seconds its data is copied). Change the hotspot's
    name and remove a plugin, then **Restore from a backup** with that file:
    a wrong password says so; the right one restarts RasBeacon with the old
    name and the plugin back (its data too). After the factory reset below,
