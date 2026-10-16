@@ -744,6 +744,8 @@ export interface PluginCatalogEntry {
   icon?: string;
   installedVersion?: string;
   runsHere: boolean;
+  /** Set when this RasBeacon is too old for it: the version it needs ("0.2.0"). */
+  needsRasBeacon?: string;
 }
 
 export interface PluginCatalog {

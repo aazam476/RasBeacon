@@ -29,6 +29,7 @@ import (
 	"rasbeacon/internal/config"
 	"rasbeacon/internal/plugin"
 	"rasbeacon/internal/routing"
+	"rasbeacon/internal/version"
 )
 
 // catalogCache is the catalog as last fetched, saved in PluginCatalogFile.
@@ -261,6 +262,9 @@ func (a *Agent) PluginCatalog(req api.PluginCatalogRequest) api.PluginCatalog {
 			Source: e.Source, File: e.File, ID: e.ID, Name: e.Name, Version: e.Version, Description: e.Description,
 			Permissions: e.Permissions, Size: e.Size, DownloadSize: e.DownloadSize, Icon: e.Icon,
 			RunsHere: (&plugin.Manifest{Boards: e.Boards}).RunsOn(board),
+		}
+		if !plugin.SupportedBy(e.MinRasBeacon, version.Version) {
+			entry.NeedsRasBeacon = e.MinRasBeacon
 		}
 		if p, ok := a.cfg.Plugins.Installed[e.ID]; ok && e.ID != "" {
 			entry.InstalledVersion = p.Version

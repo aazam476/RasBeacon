@@ -906,6 +906,9 @@ type PluginCatalogEntry struct {
 	// plugins made for other boards.
 	InstalledVersion string `json:"installedVersion,omitempty"`
 	RunsHere         bool   `json:"runsHere"`
+	// NeedsRasBeacon is set when this RasBeacon is too old for it: the
+	// version it needs ("0.2.0").
+	NeedsRasBeacon string `json:"needsRasBeacon,omitempty"`
 }
 
 // PluginCatalog is POST /plugins/catalog's answer.

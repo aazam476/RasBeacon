@@ -58,6 +58,8 @@ type Entry struct {
 	Description string   `json:"description,omitempty"`
 	Permissions []string `json:"permissions,omitempty"`
 	Boards      []string `json:"boards,omitempty"`
+	// MinRasBeacon is the oldest RasBeacon it works with ("" = any).
+	MinRasBeacon string `json:"minRasBeacon,omitempty"`
 	// Size is the .rba's size; DownloadSize adds the image download when
 	// the image comes from a registry.
 	Size         int64 `json:"size"`
@@ -80,6 +82,7 @@ type catalogEntry struct {
 	Description  string   `json:"description"`
 	Permissions  []string `json:"permissions"`
 	Boards       []string `json:"boards"`
+	MinRasBeacon string   `json:"minRasBeacon"`
 	DownloadSize int64    `json:"downloadSize"`
 	// IconFile is a .png in the same release.
 	IconFile string `json:"icon"`
@@ -144,7 +147,7 @@ func FetchSource(client *http.Client, source string) ([]Entry, error) {
 			}
 			e := Entry{
 				Source: source, File: c.File, ID: c.ID, Name: c.Name, Version: c.Version,
-				Description: c.Description, Permissions: c.Permissions, Boards: c.Boards,
+				Description: c.Description, Permissions: c.Permissions, Boards: c.Boards, MinRasBeacon: c.MinRasBeacon,
 				Size: release.Assets[j].Size, DownloadSize: c.DownloadSize, url: release.Assets[j].URL,
 			}
 			if k, ok := assets[c.IconFile]; ok && strings.HasSuffix(c.IconFile, ".png") && release.Assets[k].Size <= maxIconBytes {

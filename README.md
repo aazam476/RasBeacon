@@ -14,7 +14,7 @@ hotel login pages.
   like Cloudflare's own speed test page, it sends its result to Cloudflare.
 - **Licensed under Apache-2.0.**
 
-> **Status: all eight milestones are built and tested in CI; hardware
+> **Status: beta (v0.1). Everything is built and tested in CI; hardware
 > testing is in progress** (see the [full test plan](docs/testing/full.md)). RasBeacon
 > runs your hotspot (plus an optional guest network), connects it to the
 > internet through Ethernet or Wi-Fi (open, password, or WPA-Enterprise

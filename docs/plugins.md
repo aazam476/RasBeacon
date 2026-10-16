@@ -121,6 +121,7 @@ Or name a published image in the manifest (pinned by digest) and leave
   "author": "RasBeacon",
   "homepage": "https://github.com/AdguardTeam/AdGuardHome",
   "boards": ["pi5", "pi4", "pi3", "zero2w"],
+  "minRasBeacon": "0.1.0",
   "image": { "ref": "docker.io/adguard/adguardhome:v0.107.57", "digest": "sha256:…" },
   "permissions": ["internet"],
   "ports": [{ "name": "Web interface", "container": 3000, "open": true }],
@@ -154,6 +155,7 @@ Or name a published image in the manifest (pinned by digest) and leave
 | `id` | 2 to 32 lowercase letters, digits and dashes. Updates must keep it. |
 | `name`, `version`, `description`, `author`, `homepage` | Shown to the owner. `name` at most 40 characters, `version` without spaces or `/`, `description` at most 300, `homepage` an `https://` address. |
 | `boards` | `pi5`, `pi4`, `pi3` (3B, 3B+), `zero2w`; empty: all. Others refuse it. |
+| `minRasBeacon` | The oldest RasBeacon it works with, like `0.2.0` (empty: any). An older RasBeacon shows it in the catalog as *Needs RasBeacon 0.2.0 or newer* and refuses to install it. Set it when the plugin uses something a newer RasBeacon added. |
 | `image` | A registry image: `ref` starting with its registry (`docker.io/…`, `ghcr.io/…`) without a digest, plus `digest` (`sha256:…`, the image index or the arm64 image). Leave it out with `image.tar`. |
 | `permissions` | See [Permissions](#permissions). |
 | `ports` | `name` (at most 40 characters), `container` (its port), `protocol` (`tcp` or `udp`, default `tcp`), `default` (the suggested port on RasBeacon, 1 to 65535; default the container's), `open` (an Open button for a web page), `https`. Ports 22, 53, 67, 80 and 443 are RasBeacon's. |
@@ -234,6 +236,7 @@ them without downloading each one:
       "description": "Blocks ads and trackers for every device on your hotspot.",
       "permissions": ["internet"],
       "boards": [],
+      "minRasBeacon": "",
       "downloadSize": 21400000,
       "icon": "adguard-home.png"
     }
@@ -242,6 +245,12 @@ them without downloading each one:
 ```
 
 `icon` names a PNG asset of the same release (at most 128 KB).
+`minRasBeacon` is copied from the manifest, so the catalog can mark plugins a
+RasBeacon is too old for without downloading them.
+
+**Release names.** RasBeacon only reads the newest release and ignores its
+name. RasBeacon's own plugins name theirs after the RasBeacon version they're
+made for: `v0.1.0`, `v0.1.1`, … for RasBeacon 0.1.
 `downloadSize` is what installing downloads besides the `.rba` (a registry
 image).
 
