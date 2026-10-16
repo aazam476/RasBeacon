@@ -62,6 +62,8 @@ const (
 	kdfThreads = 2
 )
 
+// key derives the 32-byte AES key from the password with Argon2id, using
+// the header's salt and costs.
 func (h header) key(password string) []byte {
 	return argon2.IDKey([]byte(password), h.Salt, h.Time, h.Memory, h.Threads, 32)
 }
@@ -102,6 +104,8 @@ func NewWriter(w io.Writer, password string) (io.WriteCloser, error) {
 	return &writer{w: w, aead: aead, buf: make([]byte, 0, chunkSize)}, nil
 }
 
+// newAEAD makes the AES-256-GCM cipher: it encrypts a chunk and adds a tag
+// that proves nothing in it changed.
 func newAEAD(key []byte) (cipher.AEAD, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -110,6 +114,8 @@ func newAEAD(key []byte) (cipher.AEAD, error) {
 	return cipher.NewGCM(block)
 }
 
+// nonce is the 12-byte nonce for chunk number counter. Each chunk gets its
+// own, and the counter also fixes the chunks' order.
 func nonce(counter uint64) []byte {
 	n := make([]byte, 12)
 	binary.BigEndian.PutUint64(n[4:], counter)
@@ -122,6 +128,7 @@ var (
 	lastChunk   = []byte{1}
 )
 
+// Write collects the archive into 64 KB chunks and encrypts each full one.
 func (w *writer) Write(p []byte) (int, error) {
 	if w.closed {
 		return 0, errors.New("backup writer is closed")
@@ -143,6 +150,7 @@ func (w *writer) Write(p []byte) (int, error) {
 	return written, nil
 }
 
+// seal encrypts the collected chunk and writes it as length + ciphertext.
 func (w *writer) seal(last bool) error {
 	ad := middleChunk
 	if last {
@@ -242,6 +250,7 @@ func (rd *reader) next() error {
 	return nil
 }
 
+// Read hands out the decrypted archive, opening chunks as needed.
 func (rd *reader) Read(p []byte) (int, error) {
 	for len(rd.plain) == 0 {
 		if rd.done {

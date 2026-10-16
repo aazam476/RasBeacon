@@ -93,6 +93,7 @@ type Catalog struct {
 // RateLimited is GitHub refusing more questions for a while.
 type RateLimited struct{ Until time.Time }
 
+// Error says until when GitHub asks to wait.
 func (e *RateLimited) Error() string {
 	return "GitHub asks to wait before checking again (until " + e.Until.Local().Format("15:04") + ")"
 }

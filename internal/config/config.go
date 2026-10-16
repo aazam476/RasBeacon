@@ -662,6 +662,8 @@ type ValidationError struct {
 	Message string // for example "must be 1 to 32 bytes long"
 }
 
+// Error is "field: message", for logs; the web UI shows the message under
+// the field.
 func (e *ValidationError) Error() string {
 	return fmt.Sprintf("%s: %s", e.Field, e.Message)
 }

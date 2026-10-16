@@ -213,6 +213,7 @@ func (s *Server) forgetState() {
 
 // --- Public handlers ---
 
+// handleSetupState says whether RasBeacon is set up yet (no login needed).
 func (s *Server) handleSetupState(w http.ResponseWriter, r *http.Request) {
 	s.forward(w, http.MethodGet, "/state", nil)
 }
@@ -263,6 +264,8 @@ func (s *Server) currentSession(w http.ResponseWriter, r *http.Request) (*sessio
 	return sess, ok
 }
 
+// handleGetSession says whether this browser is logged in, and gives it
+// its CSRF token.
 func (s *Server) handleGetSession(w http.ResponseWriter, r *http.Request) {
 	sess, ok := s.currentSession(w, r)
 	if !ok {
@@ -325,6 +328,8 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, api.SessionInfo{LoggedIn: true, CSRFToken: csrf})
 }
 
+// handleLogout ends this browser's session and forgets its remembered
+// login.
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	if id, _, ok := s.sessions.fromRequest(r); ok {
 		s.sessions.remove(id)
@@ -530,6 +535,8 @@ func (s *Server) forward(w http.ResponseWriter, method, rbdPath string, body []b
 	writeRaw(w, status, contentType, respBody)
 }
 
+// handleFactoryReset forwards a factory reset to rbd and, when it is
+// accepted, logs every browser out.
 func (s *Server) handleFactoryReset() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, ok := readBody(w, r)
@@ -616,11 +623,13 @@ func readBody(w http.ResponseWriter, r *http.Request) ([]byte, bool) {
 	return body, true
 }
 
+// writeJSON answers with value as JSON.
 func writeJSON(w http.ResponseWriter, status int, value any) {
 	body, _ := json.Marshal(value)
 	writeRaw(w, status, "application/json", body)
 }
 
+// writeRaw answers with a status and a body as it is.
 func writeRaw(w http.ResponseWriter, status int, contentType string, body []byte) {
 	if len(body) > 0 {
 		w.Header().Set("Content-Type", contentType)

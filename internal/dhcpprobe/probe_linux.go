@@ -13,6 +13,8 @@ import (
 // as packet sockets expect it.
 var ethernetTypeIPv4 = htons(0x0800)
 
+// probe sends one DHCP discover on iface, from a raw packet socket, and
+// waits up to timeout for an offer (see Probe).
 func probe(iface string, timeout time.Duration) (Result, error) {
 	ifi, err := net.InterfaceByName(iface)
 	if err != nil {

@@ -46,6 +46,8 @@ func (a *Agent) readRememberedLogins() []rememberedLogin {
 	return slices.DeleteFunc(logins, func(l rememberedLogin) bool { return !now.Before(l.Expires) })
 }
 
+// hashToken is the SHA-256 of a remembered-login token, as kept on disk
+// (the token itself never is).
 func hashToken(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])

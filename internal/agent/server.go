@@ -698,6 +698,7 @@ type startedWriter struct {
 	started bool
 }
 
+// Write calls start before the first bytes go out, then passes p on.
 func (s *startedWriter) Write(p []byte) (int, error) {
 	if !s.started {
 		s.started = true

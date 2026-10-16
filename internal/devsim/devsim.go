@@ -273,6 +273,7 @@ func (Runner) Run(name string, args ...string) (string, error) {
 	return "", nil
 }
 
+// writeFile writes a file, making its folders first.
 func writeFile(path, content string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err

@@ -157,6 +157,8 @@ func (f *Forwarder) Exchange(ctx context.Context, query []byte) []byte {
 	return serverFailure(query)
 }
 
+// ask sends one DNS question to one DoH server (an HTTPS POST of the raw
+// message) and returns its answer.
 func (f *Forwarder) ask(ctx context.Context, server *url.URL, q []byte) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, f.timeout)
 	defer cancel()
@@ -296,6 +298,8 @@ func (f *Forwarder) ServeTCP(l net.Listener) error {
 	}
 }
 
+// serveConn answers DNS over TCP on one connection: each message is a
+// 2-byte length, then the message.
 func (f *Forwarder) serveConn(conn net.Conn) {
 	defer conn.Close()
 	for {

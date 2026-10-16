@@ -90,6 +90,7 @@ func (c *RBDClient) DoSlow(method, path string, body []byte) (int, []byte, error
 	return c.do(c.stream, method, path, body)
 }
 
+// do sends one request with client and reads the whole answer.
 func (c *RBDClient) do(client *http.Client, method, path string, body []byte) (int, []byte, error) {
 	var reader io.Reader
 	if body != nil {
@@ -127,6 +128,7 @@ func (c *RBDClient) GetJSON(path string, target any) error {
 // recording the response with the standard library's httptest recorder.
 type handlerTransport struct{ handler http.Handler }
 
+// RoundTrip answers a request by calling the handler directly.
 func (t handlerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	recorder := httptest.NewRecorder()
 	t.handler.ServeHTTP(recorder, req)

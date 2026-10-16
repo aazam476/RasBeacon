@@ -40,6 +40,7 @@ type cdpError struct {
 	Message string `json:"message"`
 }
 
+// Error describes the browser's error.
 func (e *cdpError) Error() string { return fmt.Sprintf("browser error %d: %s", e.Code, e.Message) }
 
 // event is a notification from the browser, passed to the event handler.
@@ -75,6 +76,8 @@ func newConn(w io.Writer, r io.Reader, onEvent func(event)) *conn {
 // largest (a few hundred KB).
 const maxMessage = 16 << 20
 
+// readLoop reads the browser's messages until the connection closes: each
+// answer goes to the call waiting for it, each event to the event handler.
 func (c *conn) readLoop(r io.Reader) {
 	reader := bufio.NewReaderSize(r, 64<<10)
 	var err error

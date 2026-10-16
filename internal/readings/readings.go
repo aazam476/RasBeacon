@@ -78,8 +78,10 @@ func (m Memory) UsedMB() float64 { return float64(m.TotalKB-m.AvailableKB) / 102
 // TotalMB is the memory size in mebibytes.
 func (m Memory) TotalMB() float64 { return float64(m.TotalKB) / 1024 }
 
-// SwapUsedMB and SwapTotalMB describe swap space in mebibytes.
-func (m Memory) SwapUsedMB() float64  { return float64(m.SwapTotalKB-m.SwapFreeKB) / 1024 }
+// SwapUsedMB is the swap space in use, in mebibytes.
+func (m Memory) SwapUsedMB() float64 { return float64(m.SwapTotalKB-m.SwapFreeKB) / 1024 }
+
+// SwapTotalMB is the swap space's size, in mebibytes.
 func (m Memory) SwapTotalMB() float64 { return float64(m.SwapTotalKB) / 1024 }
 
 // ParseMemory reads /proc/meminfo ("MemTotal:  3884332 kB" lines).

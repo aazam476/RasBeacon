@@ -62,6 +62,7 @@ func (s *StandIn) limit(r io.Reader) io.Reader {
 
 type zeros struct{}
 
+// Read fills p with zeros, endlessly.
 func (zeros) Read(p []byte) (int, error) {
 	clear(p)
 	return len(p), nil
@@ -74,6 +75,7 @@ type slowReader struct {
 	done           float64
 }
 
+// Read passes on data no faster than bytesPerSecond, waiting as needed.
 func (s *slowReader) Read(p []byte) (int, error) {
 	if len(p) > 64*1024 {
 		p = p[:64*1024]

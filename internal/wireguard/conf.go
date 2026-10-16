@@ -285,6 +285,7 @@ func parsePrefixList(value string, keepHost bool) ([]netip.Prefix, error) {
 	return result, nil
 }
 
+// splitList splits a comma-separated value, dropping empty items.
 func splitList(value string) []string {
 	var items []string
 	for _, item := range strings.Split(value, ",") {

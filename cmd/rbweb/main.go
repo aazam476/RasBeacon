@@ -20,6 +20,8 @@ import (
 	"rasbeacon/web"
 )
 
+// main reads the command line and serves the web UI and the API (on HTTP,
+// and on HTTPS while it is turned on) until systemd stops it.
 func main() {
 	listen := flag.String("listen", ":80", "address and port to listen on")
 	listenHTTPS := flag.String("listen-https", ":443", "address and port for HTTPS (used when HTTPS is on)")

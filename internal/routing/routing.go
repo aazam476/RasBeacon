@@ -225,6 +225,7 @@ func SetEndpoint(peerPublicKey, endpoint string) []string {
 	return []string{"wg", "set", TunnelInterface, "peer", peerPublicKey, "endpoint", endpoint}
 }
 
+// hostPrefix is a prefix for one address: "1.2.3.4/32" or "…/128".
 func hostPrefix(a netip.Addr) string {
 	return fmt.Sprintf("%s/%d", a, a.BitLen())
 }

@@ -38,6 +38,8 @@ import (
 	"rasbeacon/internal/update"
 )
 
+// main runs the command named by the first argument (see the package
+// comment for each one).
 func main() {
 	if len(os.Args) < 2 {
 		usage()
@@ -63,12 +65,14 @@ func main() {
 	}
 }
 
+// usage prints how to call rbsign, and exits.
 func usage() {
 	fmt.Fprintln(os.Stderr, "usage: rbsign keygen | rbsign pack -board B -version V -bundle FILE -out FILE")
 	fmt.Fprintln(os.Stderr, "       rbsign plugin-keygen | rbsign plugin-sign -in FILE.rba -out FILE.rba | rbsign plugin-check FILE.rba...")
 	os.Exit(2)
 }
 
+// keygen prints a new key pair for signing RasBeacon updates.
 func keygen() error {
 	public, private, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -82,6 +86,7 @@ func keygen() error {
 	return nil
 }
 
+// pack makes a signed update file from a RAUC bundle.
 func pack(args []string) error {
 	flags := flag.NewFlagSet("pack", flag.ExitOnError)
 	board := flags.String("board", "", "board the update is for: rpi64 (the Pi 4 and Pi 5 image)")
@@ -113,6 +118,8 @@ func pack(args []string) error {
 	return out.Close()
 }
 
+// pluginKeygen prints a new key pair for signing plugins, and the public
+// key's ID as RasBeacon shows it.
 func pluginKeygen() error {
 	public, private, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -127,6 +134,8 @@ func pluginKeygen() error {
 	return nil
 }
 
+// pluginSign signs a .rba with the key in RASBEACON_PLUGIN_SIGNING_KEY,
+// then opens the result the way RasBeacon will.
 func pluginSign(args []string) error {
 	flags := flag.NewFlagSet("plugin-sign", flag.ExitOnError)
 	in := flags.String("in", "", "plugin file to sign (.rba)")
@@ -151,6 +160,8 @@ func pluginSign(args []string) error {
 	return nil
 }
 
+// pluginCheck opens each .rba the way RasBeacon does before installing
+// it, and prints what it is and asks for.
 func pluginCheck(files []string) error {
 	if len(files) == 0 {
 		usage()

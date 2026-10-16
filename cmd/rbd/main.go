@@ -25,6 +25,8 @@ import (
 	"rasbeacon/internal/version"
 )
 
+// main reads the command line, starts the agent, and serves its API until
+// systemd stops it.
 func main() {
 	webGroup := flag.String("web-group", "rbweb", "group allowed to use the API socket (rbweb's group)")
 	debug := flag.Bool("debug", false, "log every command that is run")
