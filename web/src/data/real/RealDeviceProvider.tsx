@@ -127,14 +127,12 @@ const PORTAL_EVERY_MS = 5_000;
 
 const CLOSED_BROWSER: PortalBrowserState = { frame: undefined, imageSrc: '', error: null };
 
-/** Hands a file to the browser to save. */
-function saveFile(file: Blob, name: string) {
-  const url = URL.createObjectURL(file);
+/** Has the browser download a file from RasBeacon and save it, with its own progress. */
+function downloadFile(url: string, name: string) {
   const link = document.createElement('a');
   link.href = url;
   link.download = name;
   link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 function sleep(ms: number): Promise<void> {
@@ -630,8 +628,8 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
 
       backUp: async (adminPassword, backupPassword, includePlugins) => {
         const fields = { password: 'adminPassword', backupPassword: 'backupPassword' };
-        const file = await attempt(() => api.downloadBackup(adminPassword, backupPassword, includePlugins), fields);
-        saveFile(file, `rasbeacon-backup-${new Date().toISOString().slice(0, 10)}.rbbackup`);
+        const ticket = await attempt(() => api.prepareBackup(adminPassword, backupPassword, includePlugins), fields);
+        downloadFile(api.backupDownloadUrl(ticket.token), ticket.fileName);
       },
       restore: async (file, adminPassword, backupPassword) => {
         const fields = { file: 'file', password: 'adminPassword', backupPassword: 'backupPassword' };

@@ -555,24 +555,36 @@ func (a *Agent) Handler() http.Handler {
 		pluginAnswer(w, state, err)
 	})
 
-	// Backups (backup.go). The backup is streamed as it is made: plugin
-	// data can be large.
+	// Backups (backup.go): asked for with the passwords, then downloaded
+	// with the ticket's token. The download is streamed as it is made:
+	// plugin data can be large.
 	mux.HandleFunc("POST /system/backup", func(w http.ResponseWriter, r *http.Request) {
 		var req api.BackupRequest
 		if !readJSON(w, r, &req) {
 			return
 		}
+		ticket, err := a.PrepareBackup(req)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, ticket)
+	})
+	mux.HandleFunc("GET /system/backup/{token}", func(w http.ResponseWriter, r *http.Request) {
 		out := &startedWriter{w: w, start: func() {
 			w.Header().Set("Content-Type", "application/octet-stream")
 			w.Header().Set("Content-Disposition", `attachment; filename="`+a.backupFileName()+`"`)
 		}}
-		if err := a.Backup(out, req); err != nil {
+		if err := a.WriteBackup(out, r.PathValue("token")); err != nil {
 			if !out.started {
 				writeError(w, err)
 				return
 			}
-			// Too late for an error answer: cut the download off, so it
-			// can't be mistaken for a whole backup.
+			// Too late for an error answer: the file has begun. Cut the
+			// download off instead, so it can't be mistaken for a whole
+			// backup. Panicking with http.ErrAbortHandler is how Go's HTTP
+			// server is told to drop a connection mid-answer (it doesn't
+			// treat it as a crash).
 			slog.Error("backup failed", "error", err)
 			panic(http.ErrAbortHandler)
 		}
@@ -678,7 +690,6 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 	_ = json.NewEncoder(w).Encode(value)
 }
 
-// writeError turns an error into the right HTTP status and message.
 // startedWriter calls start before the first byte is written, and
 // remembers that writing began.
 type startedWriter struct {
@@ -710,6 +721,7 @@ func pluginAnswer(w http.ResponseWriter, value any, err error) {
 	}
 }
 
+// writeError turns an error into the right HTTP status and message.
 func writeError(w http.ResponseWriter, err error) {
 	var validation *config.ValidationError
 	switch {

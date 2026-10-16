@@ -19,7 +19,8 @@ var rbdOnlyRoutes = []string{
 	"POST /portal/start", "POST /portal/stop", "POST /portal/extend", "POST /portal/check",
 	// Streamed or slow: rbweb has its own handlers (see Handler).
 	"POST /plugins/upload", "POST /plugins/catalog", "POST /plugins/catalog/download", "POST /plugins/update",
-	"POST /system/backup", "POST /system/restore/upload", "POST /system/restore",
+	"POST /plugins/start", "POST /plugins/stop", "POST /plugins/remove", "PUT /plugins/settings",
+	"GET /system/backup/{token}", "POST /system/restore/upload", "POST /system/restore",
 }
 
 // Every route rbd offers must be reachable through rbweb: a settings page

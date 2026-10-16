@@ -6,7 +6,8 @@ package agent
 // the staging folder and checked; the install sheet shows what it asks for
 // (PluginPreview). Installing then runs in the background: it waits for the
 // VPN if the kill switch blocks, gets the image (from the file, or from its
-// registry through the VPN), saves the plugin's files and starts it.
+// registry through the VPN), saves the plugin's files and starts it. An
+// update that fails puts the old version back as it was.
 
 import (
 	"crypto/rand"
@@ -57,6 +58,8 @@ func (a *Agent) StagePluginFile(body io.Reader) (api.PluginPreview, error) {
 	if err != nil {
 		return api.PluginPreview{}, err
 	}
+	// Copy at most one byte more than allowed: that byte tells the file is
+	// too large, without reading all of it.
 	n, err := io.Copy(out, io.LimitReader(body, plugin.MaxArchiveSize+1))
 	if cerr := out.Close(); err == nil {
 		err = cerr
@@ -66,7 +69,7 @@ func (a *Agent) StagePluginFile(body io.Reader) (api.PluginPreview, error) {
 	}
 	if err != nil {
 		_ = os.Remove(file)
-		return api.PluginPreview{}, &config.ValidationError{Field: "file", Message: err.Error()}
+		return api.PluginPreview{}, &config.ValidationError{Field: "file", Message: sentence(err.Error())}
 	}
 	return a.stage(file, "file")
 }
@@ -137,6 +140,8 @@ func (a *Agent) newStagingFile() (string, error) {
 		}
 	}
 	a.mu.Unlock()
+	// A random name, which is also the staging ID the browser sends back:
+	// nobody can guess another sheet's file.
 	random := make([]byte, 12)
 	if _, err := rand.Read(random); err != nil {
 		return "", err
@@ -153,6 +158,7 @@ func (a *Agent) stage(file, source string) (api.PluginPreview, error) {
 	}
 	s := &stagedPlugin{file: file, archive: archive, source: source, created: a.now(), downloadSize: 0}
 	if archive.Manifest.Image != nil {
+		// Asked without the lock: the registry may take a few seconds.
 		if size, err := plugin.DownloadSize(a.plugins.client(), *archive.Manifest.Image); err == nil {
 			s.downloadSize = size
 		} else {
@@ -208,6 +214,8 @@ func (a *Agent) preview(s *stagedPlugin) (api.PluginPreview, error) {
 		return refuse(fmt.Sprintf("%s needs at least %d MB of swap. Make the swap file larger in System → Swap file, then try again.", m.Name, m.MinSwapMB))
 	}
 
+	// An update must come from the same author: once a version was signed,
+	// every later one must be signed with the same key (like Android apps).
 	installed, update := a.cfg.Plugins.Installed[m.ID]
 	var key string
 	if s.archive.PublicKey != nil {
@@ -262,6 +270,8 @@ func (a *Agent) preview(s *stagedPlugin) (api.PluginPreview, error) {
 		preview.Warnings = append(preview.Warnings, fmt.Sprintf(
 			"This Pi has little memory (%d MB). %s may use up to %d MB, which can slow RasBeacon down.", memory, m.Name, m.Memory()))
 	}
+	// Room on the SD card: its data, the image (unpacked, about twice the
+	// download), and 512 MB to spare for everything else.
 	if free, err := a.diskFree(a.paths.DataDir()); err == nil {
 		need := int64(m.Storage())<<20 + max(s.downloadSize, 0)*2 + s.archive.ImageSize()
 		if free < need+(512<<20) {
@@ -269,6 +279,16 @@ func (a *Agent) preview(s *stagedPlugin) (api.PluginPreview, error) {
 		}
 	}
 	return preview, nil
+}
+
+// previousVersion is the installed version an update replaces, kept to put
+// back if the update fails.
+type previousVersion struct {
+	manifest *plugin.Manifest
+	icon     string
+	readme   string
+	record   config.InstalledPlugin
+	secrets  map[string]string
 }
 
 // InstallPlugin installs a previewed plugin with the owner's choices. It
@@ -301,6 +321,21 @@ func (a *Agent) InstallPlugin(req api.PluginInstallRequest) (api.Plugin, error) 
 	}
 
 	old, update := a.cfg.Plugins.Installed[m.ID]
+	live := a.plugins.live[m.ID]
+	if live == nil {
+		live = &pluginLive{}
+		a.plugins.live[m.ID] = live
+	}
+	var previous *previousVersion // nil for a new install
+	if update {
+		previous = &previousVersion{
+			manifest: live.manifest, icon: live.icon, readme: live.readme,
+			record: old.Clone(), secrets: maps.Clone(a.secrets.Plugins[m.ID]),
+		}
+	}
+
+	// The new record keeps the old version's address and image until the
+	// new image is in place (installPluginSteps).
 	record := config.InstalledPlugin{
 		Version: m.Version, Source: s.source, PublicKey: old.PublicKey, Image: old.Image, Address: old.Address,
 		Ports: ports, Settings: values, Drive: req.Drive, Running: true,
@@ -327,44 +362,30 @@ func (a *Agent) InstallPlugin(req api.PluginInstallRequest) (api.Plugin, error) 
 	a.cfg = newCfg
 	delete(a.plugins.staged, req.StagingID)
 
-	live := a.plugins.live[m.ID]
-	if live == nil {
-		live = &pluginLive{}
-		a.plugins.live[m.ID] = live
-	}
 	// Until it is installed, its page shows the new version's details.
-	oldManifest := live.manifest
 	live.manifest, live.busy, live.crashes = m, true, 0
 	live.icon = preview.Icon
 	live.readme = s.archive.Readme
 	a.setPluginState(m.ID, api.PluginInstalling, "Getting ready…")
 	slog.Info("installing plugin", "plugin", m.ID, "version", m.Version, "source", s.source, "update", update)
-	a.background(func() { a.installPlugin(m.ID, s, oldManifest, old.Image) })
+	a.background(func() { a.installPlugin(m.ID, s, previous) })
 	return a.pluginView(m.ID), nil
 }
 
 // installPlugin does the slow part of installing, in the background.
-func (a *Agent) installPlugin(id string, s *stagedPlugin, oldManifest *plugin.Manifest, oldImage string) {
+// previous is the version an update replaces (nil for a new install).
+func (a *Agent) installPlugin(id string, s *stagedPlugin, previous *previousVersion) {
 	defer os.Remove(s.file)
-	err := a.installPluginSteps(id, s, oldImage)
-
-	a.mu.Lock()
+	oldImage := ""
+	if previous != nil {
+		oldImage = previous.record.Image
+	}
+	image, err := a.installPluginSteps(id, s, oldImage)
 	if err != nil {
-		slog.Error("plugin install failed", "plugin", id, "error", err)
-		live := a.plugins.live[id]
-		if oldManifest != nil && live != nil {
-			// The update failed: the old version stays (stopped).
-			live.manifest = oldManifest
-			_ = a.readPluginFiles(id, live)
-		}
-		_ = a.savePluginConfig(id, func(p *config.InstalledPlugin) { p.Running = false })
-		a.setPluginState(id, api.PluginFailed, "Installing failed: "+err.Error())
-		if live != nil {
-			live.busy = false
-		}
-		a.mu.Unlock()
+		a.installFailed(id, s.archive.Manifest, image, previous, err)
 		return
 	}
+	a.mu.Lock()
 	if err := a.applyFirewall(); err != nil {
 		slog.Error("could not apply the plugin's firewall rules", "error", err)
 	}
@@ -374,9 +395,47 @@ func (a *Agent) installPlugin(id string, s *stagedPlugin, oldManifest *plugin.Ma
 	a.endPluginWork(id)
 }
 
-// installPluginSteps gets the image, saves the files and the data. Called
-// without a.mu.
-func (a *Agent) installPluginSteps(id string, s *stagedPlugin, oldImage string) error {
+// installFailed cleans up after a failed install. A new plugin stays listed
+// as failed (its page says why; the owner removes it). An update puts the
+// old version back as it was: its settings, its passwords, and running if
+// it ran.
+func (a *Agent) installFailed(id string, m *plugin.Manifest, image string, previous *previousVersion, cause error) {
+	slog.Error("plugin install failed", "plugin", id, "error", cause)
+	// The new version's image, if it got that far, isn't used.
+	if image != "" && (previous == nil || image != previous.record.Image) {
+		_, _ = a.plugins.runner.Run("podman", "rmi", "--ignore", image)
+	}
+	a.mu.Lock()
+	live := a.plugins.live[id]
+	if previous == nil || live == nil {
+		_ = a.savePluginConfig(id, func(p *config.InstalledPlugin) { p.Running = false })
+		a.setPluginState(id, api.PluginFailed, "Installing failed: "+cause.Error())
+		if live != nil {
+			live.busy = false
+		}
+		a.mu.Unlock()
+		return
+	}
+	live.manifest, live.icon, live.readme = previous.manifest, previous.icon, previous.readme
+	_ = a.savePluginConfig(id, func(p *config.InstalledPlugin) { *p = previous.record })
+	_ = a.savePluginSecrets(id, previous.secrets)
+	a.setPluginState(id, api.PluginStopped, "")
+	a.mu.Unlock()
+
+	if previous.record.Running {
+		_ = a.runPlugin(id)
+	}
+	a.mu.Lock()
+	if live := a.plugins.live[id]; live != nil {
+		live.message = fmt.Sprintf("Updating to %s failed: %s", m.Version, cause.Error())
+	}
+	a.mu.Unlock()
+	a.endPluginWork(id)
+}
+
+// installPluginSteps gets the image, saves the files and the data. It
+// returns the image's local name once it is there. Called without a.mu.
+func (a *Agent) installPluginSteps(id string, s *stagedPlugin, oldImage string) (string, error) {
 	m := s.archive.Manifest
 	image := plugin.LocalImage(id, m.Version)
 	progress := func(message string) {
@@ -390,30 +449,32 @@ func (a *Agent) installPluginSteps(id string, s *stagedPlugin, oldImage string) 
 		tarFile := s.file + ".tar"
 		defer os.Remove(tarFile)
 		if err := s.archive.ExtractImage(tarFile); err != nil {
-			return err
+			return "", err
 		}
 		out, err := a.plugins.runner.Run("podman", "load", "--quiet", "--input", tarFile)
 		if err != nil {
-			return fmt.Errorf("its image can't be loaded: %w", err)
+			return "", fmt.Errorf("its image can't be loaded: %w", err)
 		}
 		loaded := loadedImage(out)
 		if loaded == "" {
-			return errors.New("its image can't be loaded: podman named no image")
+			return "", errors.New("its image can't be loaded: podman named no image")
 		}
+		// Give the image RasBeacon's own name for it, whatever the author
+		// called it.
 		if _, err := a.plugins.runner.Run("podman", "tag", loaded, image); err != nil {
-			return err
+			return "", err
 		}
 		if loaded != image {
 			_, _ = a.plugins.runner.Run("podman", "untag", loaded)
 		}
 	} else {
 		if err := a.waitForPluginPath(id); err != nil {
-			return err
+			return "", err
 		}
 		progress("Downloading its image…")
 		proxy, err := a.downloadProxy()
 		if err != nil {
-			return err
+			return "", err
 		}
 		ref := m.Image.Ref
 		if i := strings.LastIndex(ref, ":"); i > strings.LastIndex(ref, "/") {
@@ -422,22 +483,22 @@ func (a *Agent) installPluginSteps(id string, s *stagedPlugin, oldImage string) 
 		ref += "@" + m.Image.Digest
 		if _, err := a.plugins.runner.Run("env", "HTTPS_PROXY=http://"+proxy, "HTTP_PROXY=http://"+proxy,
 			"podman", "pull", "--quiet", "--arch", "arm64", ref); err != nil {
-			return fmt.Errorf("its image can't be downloaded: %w", err)
+			return "", fmt.Errorf("its image can't be downloaded: %w", err)
 		}
 		if _, err := a.plugins.runner.Run("podman", "tag", ref, image); err != nil {
-			return err
+			return "", err
 		}
 	}
 
 	progress("Saving its files…")
 	if err := a.savePluginFiles(id, s); err != nil {
-		return err
+		return image, err
 	}
 	a.mu.Lock()
 	err := a.savePluginConfig(id, func(p *config.InstalledPlugin) { p.Image = image })
 	a.mu.Unlock()
 	if err != nil {
-		return err
+		return image, err
 	}
 
 	// An update: stop the old version, then remove its image.
@@ -456,7 +517,7 @@ func (a *Agent) installPluginSteps(id string, s *stagedPlugin, oldImage string) 
 			}
 		}
 	}
-	return nil
+	return image, nil
 }
 
 // loadedImage reads the image name or ID from `podman load` output
@@ -496,14 +557,17 @@ func (a *Agent) savePluginFiles(id string, s *stagedPlugin) error {
 	return nil
 }
 
-// waitForPluginPath waits while plugin downloads can't go out: the VPN is
-// in use but not connected (the kill switch blocks), or a hotel login is
-// in the way. id names the plugin whose state shows it ("" = none: then
-// it doesn't wait, it fails).
+// waitForPluginPath waits while plugin downloads can't go out the way they
+// must (through the VPN, when it is in use): the tunnel isn't connected and
+// the kill switch blocks, or the tunnel is set aside for a hotel's login
+// page (downloads would leave outside the VPN). id names the plugin whose
+// state shows the wait ("" = none: then it doesn't wait, it fails).
 func (a *Agent) waitForPluginPath(id string) error {
 	for {
 		a.mu.Lock()
-		blocked := a.vpnActive() && (a.portal.loginMode || a.vpn.machine.State() != tunnel.Up && a.vpn.machine.State() != tunnel.Direct)
+		state := a.vpn.machine.State()
+		tunnelDown := state != tunnel.Up && state != tunnel.Direct
+		blocked := a.vpnActive() && (a.portal.loginMode || tunnelDown)
 		_, stillInstalled := a.cfg.Plugins.Installed[id]
 		if blocked && id != "" {
 			a.setPluginState(id, api.PluginWaiting, "Waiting for the VPN to connect before downloading.")

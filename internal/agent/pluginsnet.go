@@ -15,8 +15,10 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"maps"
 	"net"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -46,6 +48,7 @@ type catalogRecord struct {
 	DownloadURL string `json:"url"`
 }
 
+// find looks up a plugin by its source and ID (for updates).
 func (c *catalogCache) find(source, id string) (catalogRecord, bool) {
 	for _, e := range c.Entries {
 		if e.Source == source && e.ID == id {
@@ -55,6 +58,7 @@ func (c *catalogCache) find(source, id string) (catalogRecord, bool) {
 	return catalogRecord{}, false
 }
 
+// entry looks up a plugin by its source and file name (for downloads).
 func (c *catalogCache) entry(source, file string) (catalogRecord, bool) {
 	for _, e := range c.Entries {
 		if e.Source == source && e.File == file {
@@ -64,16 +68,24 @@ func (c *catalogCache) entry(source, file string) (catalogRecord, bool) {
 	return catalogRecord{}, false
 }
 
+// errorText joins the sources' problems into one line, in a stable order
+// (a map's order changes from one loop to the next).
 func (c *catalogCache) errorText() string {
 	var parts []string
-	for source, err := range c.Errors {
-		parts = append(parts, source+": "+err)
+	for _, source := range slices.Sorted(maps.Keys(c.Errors)) {
+		parts = append(parts, source+": "+c.Errors[source])
 	}
 	return strings.Join(parts, "; ")
 }
 
 // pluginDialer makes connections for plugins: marked for the tunnel, with
 // names looked up by RasBeacon's DNS server for devices.
+//
+// The mark is a number the kernel attaches to each packet of a connection
+// (SO_MARK). A routing rule (routing.PluginMark) sends marked packets the
+// way devices' traffic goes: into the VPN tunnel when it is in use.
+// Without the mark, RasBeacon's own connections would leave through the
+// uplink, outside the VPN.
 func (a *Agent) pluginDialer() *net.Dialer {
 	a.mu.Lock()
 	dns := net.JoinHostPort(a.lan.Address(), "53")
@@ -81,6 +93,8 @@ func (a *Agent) pluginDialer() *net.Dialer {
 	mark, _ := strconv.ParseUint(strings.TrimPrefix(routing.PluginMark, "0x"), 16, 32)
 	return &net.Dialer{
 		Timeout: 20 * time.Second,
+		// Control runs on each new socket before it connects: the place to
+		// set socket options such as the mark.
 		Control: func(network, address string, c syscall.RawConn) error {
 			var markErr error
 			err := c.Control(func(fd uintptr) {
@@ -91,6 +105,9 @@ func (a *Agent) pluginDialer() *net.Dialer {
 			}
 			return markErr
 		},
+		// Names are looked up with dnsmasq on RasBeacon's hotspot address,
+		// which asks the VPN's DNS servers when the VPN is in use (the
+		// uplink's resolver would ask outside the tunnel).
 		Resolver: &net.Resolver{
 			PreferGo: true,
 			Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
@@ -107,7 +124,7 @@ func (a *Agent) pluginHTTPClient() *http.Client {
 	return &http.Client{
 		Timeout: 30 * time.Minute,
 		Transport: &http.Transport{
-			Proxy:               nil,
+			Proxy:               nil, // never a proxy from the environment
 			DialContext:         dialer.DialContext,
 			TLSHandshakeTimeout: 20 * time.Second,
 			IdleConnTimeout:     30 * time.Second,
@@ -117,13 +134,16 @@ func (a *Agent) pluginHTTPClient() *http.Client {
 
 // downloadProxy starts (once) the proxy Podman downloads images through,
 // on 127.0.0.1, and returns its address. It only makes HTTPS connections
-// (CONNECT to port 443), marked like the other plugin downloads.
+// (CONNECT to port 443), marked like the other plugin downloads. (Podman is
+// a separate program, so it can't use pluginDialer; it can use a proxy,
+// given in its HTTPS_PROXY environment variable.)
 func (a *Agent) downloadProxy() (string, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.plugins.proxy != "" {
 		return a.plugins.proxy, nil
 	}
+	// Port 0: the system picks a free port.
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return "", err
@@ -137,39 +157,64 @@ func (a *Agent) downloadProxy() (string, error) {
 	return a.plugins.proxy, nil
 }
 
-// proxyConnect handles one CONNECT request.
+// proxyConnect handles one CONNECT request: "connect me to host:443".
 func (a *Agent) proxyConnect(w http.ResponseWriter, r *http.Request) {
 	_, port, err := net.SplitHostPort(r.Host)
 	if r.Method != http.MethodConnect || err != nil || port != "443" {
 		http.Error(w, "only HTTPS connections", http.StatusForbidden)
 		return
 	}
-	upstream, err := a.pluginDialer().DialContext(r.Context(), "tcp", r.Host)
+	connectTunnel(w, r, func(ctx context.Context) (net.Conn, error) {
+		return a.pluginDialer().DialContext(ctx, "tcp", r.Host)
+	})
+}
+
+// connectTunnel answers a CONNECT request: it opens the connection dial
+// makes, tells the client it is open, and then copies bytes both ways
+// until both sides are done. What goes through is encrypted (HTTPS), so
+// the proxy never sees it.
+func connectTunnel(w http.ResponseWriter, r *http.Request, dial func(context.Context) (net.Conn, error)) {
+	upstream, err := dial(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
+	// Hijack takes the connection over from Go's HTTP server, so it can be
+	// used as a plain two-way stream.
 	hijacker, ok := w.(http.Hijacker)
 	if !ok {
 		upstream.Close()
 		http.Error(w, "can't proxy", http.StatusInternalServerError)
 		return
 	}
-	w.WriteHeader(http.StatusOK)
 	client, buffered, err := hijacker.Hijack()
 	if err != nil {
 		upstream.Close()
 		return
 	}
+	// The answer is written by hand: after Hijack, the HTTP server no longer
+	// writes anything (and an answer it wrote could add headers, such as
+	// "Transfer-Encoding: chunked", that don't belong in a tunnel).
+	if _, err := client.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n")); err != nil {
+		client.Close()
+		upstream.Close()
+		return
+	}
+	// The client may have sent bytes after its request already; the HTTP
+	// server read them into its buffer, so pass them on first.
 	if n := buffered.Reader.Buffered(); n > 0 {
 		data, _ := buffered.Reader.Peek(n)
 		_, _ = upstream.Write(data)
 	}
+	// Two goroutines copy the two directions at the same time; the
+	// WaitGroup waits for both to finish.
 	var wg sync.WaitGroup
 	wg.Add(2)
 	pipe := func(dst, src net.Conn) {
 		defer wg.Done()
 		_, _ = io.Copy(dst, src)
+		// src ended: tell dst nothing more comes, without closing the
+		// other direction.
 		if tcp, ok := dst.(*net.TCPConn); ok {
 			_ = tcp.CloseWrite()
 		}

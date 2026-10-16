@@ -1,5 +1,12 @@
 package plugin
 
+// This file reads the catalog: for each source (a GitHub repository), its
+// newest release's list of files, through GitHub's API
+// (api.github.com/repos/OWNER/REPO/releases/latest). No GitHub account is
+// needed; GitHub allows 60 such questions an hour from one address, which
+// is why RasBeacon only asks when the owner opens the catalog, and once a
+// day for updates.
+
 import (
 	"encoding/base64"
 	"encoding/json"
@@ -187,6 +194,7 @@ func Download(client *http.Client, url, dst string) error {
 	return err
 }
 
+// githubGet asks GitHub's API, as its documentation asks clients to.
 func githubGet(client *http.Client, url string) (*http.Response, error) {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
@@ -218,6 +226,7 @@ func githubError(resp *http.Response) error {
 	return fmt.Errorf("GitHub answered %s", resp.Status)
 }
 
+// getJSON downloads a release's JSON file (at most 1 MB) into v.
 func getJSON(client *http.Client, url string, v any) error {
 	data, err := getBytes(client, url, 1<<20)
 	if err != nil {
@@ -226,6 +235,7 @@ func getJSON(client *http.Client, url string, v any) error {
 	return json.Unmarshal(data, v)
 }
 
+// getBytes downloads a release's file of at most limit bytes.
 func getBytes(client *http.Client, url string, limit int64) ([]byte, error) {
 	if !strings.HasPrefix(url, "https://github.com/") {
 		return nil, errors.New("not a GitHub release file")
@@ -271,6 +281,7 @@ func NewerVersion(a, b string) bool {
 	return len(pa) > len(pb)
 }
 
+// versionParts cuts "v1.10.2-1" into "1", "10", "2", "1".
 func versionParts(v string) []string {
 	v = strings.TrimPrefix(strings.TrimPrefix(v, "v"), "V")
 	return strings.FieldsFunc(v, func(r rune) bool { return r == '.' || r == '-' || r == '+' || r == '_' })

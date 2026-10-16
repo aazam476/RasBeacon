@@ -1,5 +1,11 @@
 package plugin
 
+// This file asks an image registry (Docker Hub, GitHub's ghcr.io, …) how
+// large an image's download is, for the install sheet. It speaks the
+// registry's HTTP API directly: a manifest describes an image (its layers
+// and their sizes), and an "index" lists one manifest per system
+// (linux/arm64, linux/amd64, …).
+
 import (
 	"encoding/json"
 	"errors"
@@ -87,6 +93,7 @@ func DownloadSize(client *http.Client, image RegistryImage) (int64, error) {
 	return size, nil
 }
 
+// registry is one image repository on a registry, with the token for it.
 type registry struct {
 	client     *http.Client
 	host       string
@@ -94,6 +101,9 @@ type registry struct {
 	token      string
 }
 
+// manifest fetches the manifest (or index) with the given digest. Most
+// registries first answer 401 with how to get a token; then it gets an
+// anonymous one and asks again.
 func (r *registry) manifest(digest string) (*registryManifest, error) {
 	u := "https://" + r.host + "/v2/" + r.repository + "/manifests/" + digest
 	resp, err := r.get(u)
@@ -121,6 +131,8 @@ func (r *registry) manifest(digest string) (*registryManifest, error) {
 	return &m, nil
 }
 
+// get asks the registry for u, saying which kinds of manifest RasBeacon
+// reads, with the token once there is one.
 func (r *registry) get(u string) (*http.Response, error) {
 	req, err := http.NewRequest(http.MethodGet, u, nil)
 	if err != nil {

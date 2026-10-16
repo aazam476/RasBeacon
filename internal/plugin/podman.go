@@ -49,18 +49,26 @@ func ContainerName(id string) string { return ContainerPrefix + id }
 // RunArgs are the arguments of `podman` that start a plugin.
 func RunArgs(s RunSpec) []string {
 	args := []string{
+		// Run in the background, replacing an old container of the same name.
 		"run", "--detach", "--replace",
 		"--name", ContainerName(s.ID),
+		// The label finds RasBeacon's containers (podman ps --filter label=…).
 		"--label", Label + "=" + s.ID,
+		// Its network, its fixed address on it, and RasBeacon's DNS server.
 		"--network", NetworkName,
 		"--ip", s.Address,
 		"--dns", Gateway,
 		"--hostname", s.ID,
+		// What it may use: memory, processor, and at most 512 processes (so
+		// a runaway program can't use up the Pi's).
 		"--memory", strconv.Itoa(s.MemoryMB) + "m",
 		"--cpus", strconv.FormatFloat(s.CPUs, 'f', -1, 64),
 		"--pids-limit", "512",
+		// RasBeacon restarts it itself (with a crash count); Podman doesn't.
 		"--restart", "no",
+		// No program in it can gain more privileges (like set-user-ID ones).
 		"--security-opt", "no-new-privileges",
+		// Its output goes to a file in memory, at most 256 KB.
 		"--log-driver", "k8s-file",
 		"--log-opt", "path=" + s.LogFile,
 		"--log-opt", "max-size=256k",
@@ -78,6 +86,8 @@ func RunArgs(s RunSpec) []string {
 	for _, path := range s.Masked {
 		args = append(args, "--security-opt", "mask="+path)
 	}
+	// Sorted, so the same settings always give the same command (a map's
+	// order changes from one loop to the next).
 	keys := make([]string, 0, len(s.Env))
 	for k := range s.Env {
 		keys = append(keys, k)
@@ -106,7 +116,8 @@ func LocalImage(id, version string) string {
 	return fmt.Sprintf("localhost/rasbeacon-plugin/%s:%s", id, sanitizeTag(version))
 }
 
-// sanitizeTag turns a version into a valid image tag.
+// sanitizeTag turns a version into a valid image tag: letters, digits, '.',
+// '-' and '_', at most 120 long, not starting with '.' or '-'.
 func sanitizeTag(v string) string {
 	out := []byte{}
 	for i := 0; i < len(v) && len(out) < 120; i++ {

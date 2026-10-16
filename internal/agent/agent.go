@@ -112,6 +112,9 @@ type Agent struct {
 	plugins    pluginsState
 	// powerSockets are the plugins' power sockets (see pluginsrun.go).
 	powerSockets map[string]*http.Server
+	// backupTickets are backups asked for but not downloaded yet, by token
+	// (see backup.go).
+	backupTickets map[string]backupTicket
 	// pluginBridge is true once the plugins' network exists.
 	pluginBridge bool
 	// background runs slow work (plugins) without blocking: a goroutine,

@@ -192,9 +192,12 @@ func NewReader(r io.Reader, password string) (io.Reader, error) {
 	if _, err := io.ReadFull(br, data); err != nil {
 		return nil, ErrNotBackup
 	}
+	// The header isn't encrypted, so its costs are checked before use: a
+	// made-up file must not make the Pi spend minutes or all its memory on
+	// the key.
 	var h header
 	if err := json.Unmarshal(data, &h); err != nil || h.KDF != "argon2id" || len(h.Salt) < 16 ||
-		h.Time == 0 || h.Time > 10 || h.Memory < 8*1024 || h.Memory > 256*1024 || h.Threads == 0 {
+		h.Time == 0 || h.Time > 10 || h.Memory < 8*1024 || h.Memory > 256*1024 || h.Threads == 0 || h.Threads > 4 {
 		return nil, ErrNotBackup
 	}
 	aead, err := newAEAD(h.key(password))

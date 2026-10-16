@@ -2,9 +2,13 @@ package plugin
 
 import (
 	"archive/zip"
+	"bytes"
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/json"
+	"image"
+	"image/png"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,7 +18,14 @@ import (
 	"testing"
 )
 
-var png = "\x89PNG\r\n\x1a\nrest"
+// iconPNG is a real PNG of side×side pixels (plugin icons are checked).
+func iconPNG(side int) string {
+	var b bytes.Buffer
+	png.Encode(&b, image.NewGray(image.Rect(0, 0, side, side)))
+	return b.String()
+}
+
+var icon = iconPNG(128)
 
 func validManifest() map[string]any {
 	return map[string]any{
@@ -60,7 +71,7 @@ func manifestJSON(m map[string]any) string {
 
 func TestOpen_ReadsAValidPlugin(t *testing.T) {
 	path := writeRBA(t, map[string]string{
-		ManifestFile: manifestJSON(validManifest()), IconFile: png, ReadmeFile: "# Hi",
+		ManifestFile: manifestJSON(validManifest()), IconFile: icon, ReadmeFile: "# Hi",
 		"templates/AdGuardHome.yaml": "users: []",
 	})
 	a, err := Open(path)
@@ -80,12 +91,14 @@ func TestOpen_ReadsAValidPlugin(t *testing.T) {
 
 func TestOpen_RefusesBadFiles(t *testing.T) {
 	good := func() map[string]string {
-		return map[string]string{ManifestFile: manifestJSON(validManifest()), IconFile: png, "templates/AdGuardHome.yaml": "x"}
+		return map[string]string{ManifestFile: manifestJSON(validManifest()), IconFile: icon, "templates/AdGuardHome.yaml": "x"}
 	}
 	cases := map[string]func(map[string]string){
 		"no manifest":      func(f map[string]string) { delete(f, ManifestFile) },
 		"no icon":          func(f map[string]string) { delete(f, IconFile) },
 		"icon not png":     func(f map[string]string) { f[IconFile] = "GIF89a" },
+		"icon too small":   func(f map[string]string) { f[IconFile] = iconPNG(64) },
+		"text after json":  func(f map[string]string) { f[ManifestFile] = manifestJSON(validManifest()) + "{}" },
 		"unexpected file":  func(f map[string]string) { f["run.sh"] = "rm -rf /" },
 		"path escape":      func(f map[string]string) { f["../evil"] = "x" },
 		"missing template": func(f map[string]string) { delete(f, "templates/AdGuardHome.yaml") },
@@ -112,6 +125,47 @@ func TestOpen_RefusesBadFiles(t *testing.T) {
 			m["metrics"] = []map[string]any{{"label": "x", "url": "http://example.com/", "path": "a"}}
 			f[ManifestFile] = manifestJSON(m)
 		},
+		"metric bent elsewhere": func(f map[string]string) {
+			m := validManifest()
+			m["metrics"] = []map[string]any{{"label": "x", "url": "http://{address}@192.168.1.1/", "path": "a"}}
+			f[ManifestFile] = manifestJSON(m)
+		},
+		"health elsewhere": func(f map[string]string) {
+			m := validManifest()
+			m["health"] = map[string]any{"url": "http://{address}.example.com/"}
+			f[ManifestFile] = manifestJSON(m)
+		},
+		"port default too big": func(f map[string]string) {
+			m := validManifest()
+			m["ports"] = []map[string]any{{"name": "Web", "container": 3000, "default": 70000}}
+			f[ManifestFile] = manifestJSON(m)
+		},
+		"image without registry": func(f map[string]string) {
+			m := validManifest()
+			m["image"] = map[string]any{"ref": "adguard/adguardhome:v1", "digest": "sha256:" + strings.Repeat("ab", 32)}
+			f[ManifestFile] = manifestJSON(m)
+		},
+		"volumes share a path": func(f map[string]string) {
+			m := validManifest()
+			m["volumes"] = []map[string]any{{"name": "conf", "path": "/opt/adguardhome/conf"}, {"name": "work", "path": "/opt/adguardhome/conf"}}
+			f[ManifestFile] = manifestJSON(m)
+		},
+		"env on two lines": func(f map[string]string) {
+			m := validManifest()
+			m["env"] = map[string]string{"TZ": "UTC\nEVIL=1"}
+			f[ManifestFile] = manifestJSON(m)
+		},
+		"name on two lines": func(f map[string]string) {
+			m := validManifest()
+			m["name"] = "Ad\nGuard"
+			f[ManifestFile] = manifestJSON(m)
+		},
+		"options twice": func(f map[string]string) {
+			m := validManifest()
+			m["settings"] = []map[string]any{{"key": "x", "label": "X", "type": "select",
+				"options": []map[string]any{{"value": "a", "label": "A"}, {"value": "a", "label": "Again"}}}}
+			f[ManifestFile] = manifestJSON(m)
+		},
 		"usb no permission": func(f map[string]string) {
 			m := validManifest()
 			m["usbDrive"] = map[string]any{"path": "/share"}
@@ -129,7 +183,7 @@ func TestOpen_RefusesBadFiles(t *testing.T) {
 
 func TestSignature_SignedFilesVerifyAndChangesAreCaught(t *testing.T) {
 	public, private, _ := ed25519.GenerateKey(rand.Reader)
-	src := writeRBA(t, map[string]string{ManifestFile: manifestJSON(validManifest()), IconFile: png, "templates/AdGuardHome.yaml": "x"})
+	src := writeRBA(t, map[string]string{ManifestFile: manifestJSON(validManifest()), IconFile: icon, "templates/AdGuardHome.yaml": "x"})
 	signed := filepath.Join(t.TempDir(), "signed.rba")
 	if err := Sign(src, signed, private); err != nil {
 		t.Fatal(err)
@@ -150,8 +204,7 @@ func TestSignature_SignedFilesVerifyAndChangesAreCaught(t *testing.T) {
 	files := map[string]string{}
 	for _, f := range z.File {
 		r, _ := f.Open()
-		data := make([]byte, f.UncompressedSize64)
-		r.Read(data)
+		data, _ := io.ReadAll(r)
 		r.Close()
 		files[f.Name] = string(data)
 	}
@@ -159,6 +212,14 @@ func TestSignature_SignedFilesVerifyAndChangesAreCaught(t *testing.T) {
 	files["templates/AdGuardHome.yaml"] = "y"
 	if _, err := Open(writeRBA(t, files)); err == nil || !strings.Contains(err.Error(), "signature") {
 		t.Errorf("a changed file must fail the signature check, got %v", err)
+	}
+
+	// Signing a file in place works (the signed copy replaces it).
+	if err := Sign(src, src, private); err != nil {
+		t.Fatal(err)
+	}
+	if a, err := Open(src); err != nil || !a.PublicKey.Equal(public) {
+		t.Errorf("signed in place: %v", err)
 	}
 }
 

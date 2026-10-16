@@ -19,6 +19,16 @@ package agent
 // hotspot reach a plugin's ports at RasBeacon's address and the ports the
 // owner chose; guests and the internet never do.
 //
+// # Where things are kept
+//
+//	a.cfg.Plugins.Installed[id]   its settings (config.json): version, ports,
+//	                              settings, drive, whether it should run
+//	a.secrets.Plugins[id]         its password settings (secrets.json)
+//	paths.PluginDir(id)           its manifest, icon, readme, templates and
+//	                              data file (data.img)
+//	a.plugins.live[id]            what is only in memory: its manifest as
+//	                              read, its state, crash count, metrics
+//
 // # Long work
 //
 // Downloading an image or starting a container takes seconds to minutes,
@@ -40,6 +50,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"rasbeacon/internal/api"
 	"rasbeacon/internal/config"
@@ -84,6 +96,7 @@ type pluginLive struct {
 	// crashes counts crashes in a row; startedAt is when it last started.
 	crashes   int
 	startedAt time.Time
+	// healthy is nil when unknown (no health check, or not running).
 	healthy   *bool
 	metrics   []api.PluginMetric
 	checkedAt time.Time
@@ -95,7 +108,8 @@ var errPluginBusy = errors.New("RasBeacon is still working on this plugin; try a
 // errNoPlugin is returned for an ID that isn't installed.
 var errNoPlugin = &config.ValidationError{Field: "id", Message: "No such plugin is installed."}
 
-// maxPlugins is how many plugins can be installed (addresses .2 to .254).
+// maxPlugins is how many plugins can be installed at once: far more than a
+// Pi can run, and well within the plugins' network (addresses .2 to .254).
 const maxPlugins = 50
 
 // Crash handling: a plugin that stops by itself is started again, up to
@@ -129,6 +143,9 @@ func (a *Agent) loadPlugins() {
 
 // readPluginFiles reads an installed plugin's manifest, icon and readme.
 func (a *Agent) readPluginFiles(id string, live *pluginLive) error {
+	if !plugin.ValidID(id) {
+		return errors.New("its name isn't valid")
+	}
 	dir := a.paths.PluginDir(id)
 	data, err := os.ReadFile(filepath.Join(dir, plugin.ManifestFile))
 	if err != nil {
@@ -165,7 +182,7 @@ func (a *Agent) pluginBoard() string {
 	return ""
 }
 
-// memoryMB returns the Pi's memory and swap in MB.
+// memoryMB returns the Pi's memory and swap in MB (0 if unknown).
 func (a *Agent) memoryMB() (memory, swap int) {
 	text, err := os.ReadFile(a.paths.ProcMeminfo())
 	if err != nil {
@@ -201,7 +218,8 @@ func (a *Agent) PluginsState() api.PluginsState {
 	return state
 }
 
-// pluginIDs lists the installed plugins by name. The caller holds a.mu.
+// pluginIDs lists the installed plugins, sorted by name. The caller holds
+// a.mu.
 func (a *Agent) pluginIDs() []string {
 	ids := slices.Collect(maps.Keys(a.cfg.Plugins.Installed))
 	slices.SortFunc(ids, func(x, y string) int {
@@ -210,6 +228,8 @@ func (a *Agent) pluginIDs() []string {
 	return ids
 }
 
+// pluginName is a plugin's name, or its ID while its manifest can't be read.
+// The caller holds a.mu.
 func (a *Agent) pluginName(id string) string {
 	if live := a.plugins.live[id]; live != nil && live.manifest != nil {
 		return live.manifest.Name
@@ -237,6 +257,7 @@ func (a *Agent) pluginView(id string) api.Plugin {
 	view := api.Plugin{
 		ID: id, Name: id, Version: p.Version, Source: p.Source, Signed: p.PublicKey != "",
 		State: live.state, Message: live.message, Healthy: live.healthy, Address: p.Address.String(),
+		// Empty lists rather than nil, so the JSON has [] instead of null.
 		Permissions: []api.PluginPermission{}, Ports: []api.PluginPort{}, Settings: []api.PluginSetting{},
 		Metrics: slices.Clone(live.metrics), Drive: p.Drive, Icon: live.icon, Readme: live.readme,
 	}
@@ -258,7 +279,7 @@ func (a *Agent) pluginView(id string) api.Plugin {
 	view.Settings = a.settingViews(m, p.Settings, a.secrets.Plugins[id])
 	view.UsesDrive = m.USBDrive != nil
 	view.DriveOptional = m.USBDrive != nil && m.USBDrive.Optional
-	view.AfterInstall = a.pluginValues(id, m, p).Expand(m.AfterInstall)
+	view.AfterInstall = a.pluginValues(id, m, p, false).Expand(m.AfterInstall)
 	view.MemoryMB, view.CPUs, view.StorageMB = m.Memory(), m.CPULimit(), m.Storage()
 	if entry, ok := a.plugins.catalog.find(p.Source, id); ok && plugin.NewerVersion(entry.Version, p.Version) {
 		view.UpdateVersion = entry.Version
@@ -267,6 +288,7 @@ func (a *Agent) pluginView(id string) api.Plugin {
 	return view
 }
 
+// permissionViews describes permissions in words for the screens.
 func permissionViews(ids []string) []api.PluginPermission {
 	views := []api.PluginPermission{}
 	for _, id := range ids {
@@ -290,6 +312,7 @@ func (a *Agent) portViews(m *plugin.Manifest, chosen map[string]int) []api.Plugi
 			host = p.Default
 		}
 		view := api.PluginPort{Key: portKey(p), Name: p.Name, Protocol: p.Protocol, Container: p.Container, Host: host}
+		// The Open button needs a port that is really set up.
 		if p.Open && chosen[portKey(p)] != 0 {
 			scheme := "http"
 			if p.HTTPS {
@@ -303,7 +326,7 @@ func (a *Agent) portViews(m *plugin.Manifest, chosen map[string]int) []api.Plugi
 }
 
 // settingViews lists a plugin's settings with their values; passwords only
-// say whether one is saved.
+// say whether one is saved (they are never sent back to the browser).
 func (a *Agent) settingViews(m *plugin.Manifest, values, secrets map[string]string) []api.PluginSetting {
 	views := []api.PluginSetting{}
 	for _, s := range m.Settings {
@@ -327,8 +350,10 @@ func (a *Agent) settingViews(m *plugin.Manifest, values, secrets map[string]stri
 }
 
 // pluginValues fills in a manifest's placeholders for an installed plugin.
-// withSecrets adds password settings (for rbd's own use, never shown).
-func (a *Agent) pluginValues(id string, m *plugin.Manifest, p config.InstalledPlugin, withSecrets ...bool) plugin.Values {
+// withSecrets adds its password settings: only for RasBeacon's own use
+// (templates, environment, metric logins), never for text shown on a
+// screen. The caller holds a.mu.
+func (a *Agent) pluginValues(id string, m *plugin.Manifest, p config.InstalledPlugin, withSecrets bool) plugin.Values {
 	v := plugin.Values{Address: p.Address.String(), Host: a.lan.Address(), Ports: map[int]int{}, Settings: map[string]string{}}
 	for _, port := range m.Ports {
 		if host := p.Ports[portKey(port)]; host != 0 {
@@ -337,9 +362,10 @@ func (a *Agent) pluginValues(id string, m *plugin.Manifest, p config.InstalledPl
 	}
 	for _, s := range m.Settings {
 		switch {
-		case s.Secret() && len(withSecrets) > 0 && withSecrets[0]:
+		case s.Secret() && withSecrets:
 			v.Settings[s.Key] = a.secrets.Plugins[id][s.Key]
 		case s.Secret():
+			// Left out: {setting:password} stays as it is written.
 		default:
 			value, ok := p.Settings[s.Key]
 			if !ok {
@@ -352,10 +378,11 @@ func (a *Agent) pluginValues(id string, m *plugin.Manifest, p config.InstalledPl
 }
 
 // checkPorts checks the ports chosen for a plugin: each from 1 to 65535,
-// not one of RasBeacon's own, and not taken by another plugin. The caller
-// holds a.mu.
+// not one of RasBeacon's own, and not taken by another plugin. It returns
+// the ports to save ("tcp/3000" → port on RasBeacon). The caller holds
+// a.mu.
 func (a *Agent) checkPorts(id string, m *plugin.Manifest, requested map[string]int) (map[string]int, error) {
-	chosen := map[string]int{}
+	// taken: "tcp/8080" → the name of the plugin using it.
 	taken := map[string]string{}
 	for other, p := range a.cfg.Plugins.Installed {
 		if other == id {
@@ -366,6 +393,7 @@ func (a *Agent) checkPorts(id string, m *plugin.Manifest, requested map[string]i
 			taken[protocol+"/"+strconv.Itoa(host)] = a.pluginName(other)
 		}
 	}
+	chosen := map[string]int{}
 	for _, port := range m.Ports {
 		key := portKey(port)
 		host, ok := requested[key]
@@ -373,13 +401,14 @@ func (a *Agent) checkPorts(id string, m *plugin.Manifest, requested map[string]i
 			host = port.Default
 		}
 		field := "ports." + key
+		hostKey := port.Protocol + "/" + strconv.Itoa(host)
 		switch {
 		case host < 1 || host > 65535:
 			return nil, &config.ValidationError{Field: field, Message: "Choose a port from 1 to 65535."}
 		case plugin.Reserved(host):
 			return nil, &config.ValidationError{Field: field, Message: fmt.Sprintf("Port %d is RasBeacon's own. Choose another.", host)}
-		case taken[port.Protocol+"/"+strconv.Itoa(host)] != "":
-			return nil, &config.ValidationError{Field: field, Message: fmt.Sprintf("%s already uses port %d.", taken[port.Protocol+"/"+strconv.Itoa(host)], host)}
+		case taken[hostKey] != "":
+			return nil, &config.ValidationError{Field: field, Message: fmt.Sprintf("%s already uses port %d.", taken[hostKey], host)}
 		}
 		for otherKey, otherHost := range chosen {
 			protocol, _, _ := strings.Cut(otherKey, "/")
@@ -411,6 +440,8 @@ func (a *Agent) suggestPorts(id string, m *plugin.Manifest, current map[string]i
 		if host == 0 {
 			host = port.Default
 		}
+		// Move up until a free port is found (wrapping around to 1024, the
+		// first port that isn't a "well-known" one).
 		for tries := 0; tries < 2000 && (plugin.Reserved(host) || taken[port.Protocol+"/"+strconv.Itoa(host)]); tries++ {
 			if host++; host > 65535 {
 				host = 1024
@@ -431,23 +462,22 @@ func (a *Agent) checkSettings(id string, m *plugin.Manifest, submitted map[strin
 	for _, s := range m.Settings {
 		value, ok := submitted[s.Key]
 		if !ok {
+			// Not sent: keep what it was (or its default).
 			value = s.Default
 			if old, exists := a.cfg.Plugins.Installed[id].Settings[s.Key]; exists && !s.Secret() {
 				value = old
 			}
 		}
-		value = strings.TrimSpace(value)
-		if s.Secret() && value == "" {
-			value = saved[s.Key]
+		if s.Secret() {
+			// Passwords are kept exactly as typed: spaces may be part of one.
+			if value == "" {
+				value = saved[s.Key]
+			}
+		} else {
+			value = strings.TrimSpace(value)
 		}
 		if err := s.Check(value); err != nil {
-			message := err.Error()
-			if message == "required" {
-				message = "Fill this in."
-			} else {
-				message = strings.ToUpper(message[:1]) + message[1:] + "."
-			}
-			return nil, nil, &config.ValidationError{Field: "settings." + s.Key, Message: message}
+			return nil, nil, &config.ValidationError{Field: "settings." + s.Key, Message: settingMessage(err)}
 		}
 		if s.Secret() {
 			if value != "" {
@@ -458,6 +488,17 @@ func (a *Agent) checkSettings(id string, m *plugin.Manifest, submitted map[strin
 		}
 	}
 	return values, secrets, nil
+}
+
+// settingMessage turns a setting check's error ("must be a number") into
+// the sentence shown under the field ("Must be a number.").
+func settingMessage(err error) string {
+	message := err.Error()
+	if message == "required" {
+		return "Fill this in."
+	}
+	first, size := utf8.DecodeRuneInString(message)
+	return string(unicode.ToUpper(first)) + message[size:] + "."
 }
 
 // checkDrive checks the USB drive chosen for a plugin. The caller holds a.mu.
@@ -474,6 +515,9 @@ func (a *Agent) checkDrive(id string, m *plugin.Manifest, uuid string) error {
 		}
 		return nil
 	}
+	if !plugin.ValidDriveUUID(uuid) {
+		return &config.ValidationError{Field: "drive", Message: "Choose a USB drive from the list."}
+	}
 	for other, p := range a.cfg.Plugins.Installed {
 		if other != id && p.Drive == uuid {
 			return &config.ValidationError{Field: "drive", Message: a.pluginName(other) + " already uses this drive."}
@@ -485,12 +529,15 @@ func (a *Agent) checkDrive(id string, m *plugin.Manifest, uuid string) error {
 // nextPluginAddress picks the lowest free address on the plugins' network.
 // The caller holds a.mu.
 func (a *Agent) nextPluginAddress() (netip.Addr, error) {
-	used := map[netip.Addr]bool{netip.MustParseAddr(render.PluginGateway): true}
+	gateway := netip.MustParseAddr(render.PluginGateway)
+	used := map[netip.Addr]bool{gateway: true}
 	for _, p := range a.cfg.Plugins.Installed {
 		used[p.Address] = true
 	}
-	for addr := netip.MustParseAddr(render.PluginGateway).Next(); render.PluginSubnet.Contains(addr); addr = addr.Next() {
-		if !used[addr] && addr != render.PluginSubnet.Masked().Addr() && addr.As4()[3] != 255 {
+	// From the address after the gateway (.2) up to .254 (.255 is the
+	// network's broadcast address).
+	for addr := gateway.Next(); render.PluginSubnet.Contains(addr); addr = addr.Next() {
+		if !used[addr] && addr.As4()[3] != 255 {
 			return addr, nil
 		}
 	}
@@ -547,8 +594,9 @@ func (a *Agent) endPluginWork(id string) {
 	}
 }
 
-// savePluginConfig saves a change to one installed plugin. The caller
-// holds a.mu.
+// savePluginConfig saves a change to one installed plugin: change edits a
+// copy of its settings, which is written to config.json, and only then
+// becomes the agent's. The caller holds a.mu.
 func (a *Agent) savePluginConfig(id string, change func(p *config.InstalledPlugin)) error {
 	newCfg := a.cfg.Clone()
 	p, ok := newCfg.Plugins.Installed[id]
@@ -579,6 +627,7 @@ func (a *Agent) StartPlugin(id string) error {
 		return err
 	}
 	a.mu.Unlock()
+	// endPluginWork runs when StartPlugin returns, after runPlugin.
 	defer a.endPluginWork(id)
 	return a.runPlugin(id)
 }
@@ -613,6 +662,7 @@ func (a *Agent) UpdatePluginSettings(req api.PluginSettingsRequest) (api.Plugin,
 		a.mu.Unlock()
 		return api.Plugin{}, err
 	}
+	// fail undoes the busy mark and unlocks, for each early return below.
 	fail := func(err error) (api.Plugin, error) {
 		live.busy = false
 		a.mu.Unlock()
@@ -636,6 +686,7 @@ func (a *Agent) UpdatePluginSettings(req api.PluginSettingsRequest) (api.Plugin,
 	if err := a.savePluginSecrets(req.ID, secrets); err != nil {
 		return fail(err)
 	}
+	oldDrive := a.cfg.Plugins.Installed[req.ID].Drive
 	if err := a.savePluginConfig(req.ID, func(p *config.InstalledPlugin) {
 		p.Ports, p.Settings, p.Drive = ports, values, req.Drive
 	}); err != nil {
@@ -648,6 +699,11 @@ func (a *Agent) UpdatePluginSettings(req api.PluginSettingsRequest) (api.Plugin,
 	}
 	a.mu.Unlock()
 
+	// A drive it no longer uses is let go of.
+	if oldDrive != "" && oldDrive != req.Drive && plugin.ValidDriveUUID(oldDrive) {
+		_, _ = a.plugins.runner.Run("podman", "rm", "--force", "--ignore", "--time", "10", plugin.ContainerName(req.ID))
+		_, _ = a.plugins.runner.Run("umount", a.paths.DriveMountDir(oldDrive))
+	}
 	if running {
 		_ = a.runPlugin(req.ID) // its state shows any problem
 	}
@@ -738,25 +794,39 @@ func (a *Agent) PluginLogs(id string) (api.PluginLogs, error) {
 	return api.PluginLogs{Lines: lastLogLines(string(data), 500)}, nil
 }
 
-// lastLogLines reads Podman's k8s-file log ("<time> stdout F <text>")
-// and keeps the last n lines as "<hh:mm:ss> <text>".
+// lastLogLines reads Podman's k8s-file log and keeps the last n lines as
+// "<hh:mm:ss> <text>". Each log line is "<time> <stream> <tag> <text>":
+// the tag is F for a full line, or P for part of a long line that goes on
+// in the next one (those parts are joined back together).
 func lastLogLines(text string, n int) []string {
-	raw := strings.Split(strings.TrimRight(text, "\n"), "\n")
-	if len(raw) > n {
-		raw = raw[len(raw)-n:]
-	}
-	lines := make([]string, 0, len(raw))
-	for _, line := range raw {
+	var lines []string
+	partial := ""
+	for _, line := range strings.Split(strings.TrimRight(text, "\n"), "\n") {
 		if line == "" {
 			continue
 		}
 		fields := strings.SplitN(line, " ", 4)
-		if len(fields) == 4 {
-			if t, err := time.Parse(time.RFC3339Nano, fields[0]); err == nil {
-				line = t.Local().Format("15:04:05") + " " + fields[3]
-			}
+		t, err := time.Parse(time.RFC3339Nano, fields[0])
+		if len(fields) < 3 || err != nil {
+			lines = append(lines, line) // not in Podman's format: as it is
+			continue
 		}
-		lines = append(lines, line)
+		content := ""
+		if len(fields) == 4 {
+			content = fields[3]
+		}
+		if fields[2] == "P" {
+			partial += content
+			continue
+		}
+		lines = append(lines, t.Local().Format("15:04:05")+" "+partial+content)
+		partial = ""
+	}
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	if lines == nil {
+		lines = []string{}
 	}
 	return lines
 }
@@ -803,6 +873,8 @@ func (a *Agent) SetPluginSources(req api.PluginSourcesRequest) (api.PluginsState
 		if err != nil {
 			return api.PluginsState{}, &config.ValidationError{Field: fmt.Sprintf("sources.%d", i), Message: "Enter a GitHub repository like owner/repo."}
 		}
+		// The built-in source is always there, and each source counts once
+		// (GitHub names don't care about capital letters).
 		if strings.EqualFold(checked, plugin.BuiltInSource) || slices.ContainsFunc(sources, func(x string) bool { return strings.EqualFold(x, checked) }) {
 			continue
 		}
@@ -850,7 +922,11 @@ func (a *Agent) pluginDiagnostics() string {
 	for _, id := range a.pluginIDs() {
 		p := a.cfg.Plugins.Installed[id]
 		live := a.plugins.live[id]
-		fmt.Fprintf(&b, "  %s %s (%s, %s): %s", id, p.Version, p.Source, map[bool]string{true: "signed", false: "unsigned"}[p.PublicKey != ""], live.state)
+		signed := "unsigned"
+		if p.PublicKey != "" {
+			signed = "signed"
+		}
+		fmt.Fprintf(&b, "  %s %s (%s, %s): %s", id, p.Version, p.Source, signed, live.state)
 		if live.message != "" {
 			fmt.Fprintf(&b, " - %s", live.message)
 		}

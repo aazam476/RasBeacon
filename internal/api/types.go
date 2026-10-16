@@ -949,13 +949,21 @@ type PluginPowerRequest struct {
 	Action string `json:"action"`
 }
 
-// BackupRequest makes a backup (POST /system/backup): the admin password
+// BackupRequest asks for a backup (POST /system/backup): the admin password
 // again, the password that encrypts the file, and whether the plugins
 // (their images and data) are in it.
 type BackupRequest struct {
 	AdminPassword  string `json:"adminPassword"`
 	Password       string `json:"password"`
 	IncludePlugins bool   `json:"includePlugins"`
+}
+
+// BackupTicket is the answer to a BackupRequest: the browser downloads the
+// backup from GET /system/backup/{token} (once, within two minutes), as a
+// file it saves while it arrives.
+type BackupTicket struct {
+	Token    string `json:"token"`
+	FileName string `json:"fileName"`
 }
 
 // RestoreRequest restores the uploaded backup (POST /system/restore).

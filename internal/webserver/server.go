@@ -20,6 +20,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -134,12 +135,21 @@ func (s *Server) Handler() http.Handler {
 	// So are plugin files; and the catalog and plugin downloads take a
 	// while (GitHub and image registries, through the VPN).
 	mux.Handle("POST /api/v1/plugins/upload", s.requireLogin(http.HandlerFunc(s.handlePluginUpload)))
-	// Backups stream both ways: the download as it is made, the upload to
-	// rbd; restoring one takes a while.
-	mux.Handle("POST /api/v1/system/backup", s.requireLogin(http.HandlerFunc(s.handleBackup)))
+	// Backups stream both ways: the download as it is made (a link the
+	// browser saves; POST /system/backup asks for it first), the upload to
+	// rbd. Restoring one takes a while.
+	mux.Handle("GET /api/v1/system/backup/{token}", s.requireLogin(http.HandlerFunc(s.handleBackupDownload)))
 	mux.Handle("POST /api/v1/system/restore/upload", s.requireLogin(http.HandlerFunc(s.handleRestoreUpload)))
-	for _, route := range []string{"/plugins/catalog", "/plugins/catalog/download", "/plugins/update", "/system/restore"} {
-		mux.Handle("POST /api/v1"+route, s.requireLogin(s.slowForward(route)))
+	// Routes that can take longer than the usual time limits: plugin
+	// downloads (GitHub and image registries, through the VPN), starting
+	// and stopping containers (slow on a Pi Zero), restoring a backup.
+	for _, route := range []string{
+		"POST /plugins/catalog", "POST /plugins/catalog/download", "POST /plugins/update",
+		"POST /plugins/start", "POST /plugins/stop", "POST /plugins/remove", "PUT /plugins/settings",
+		"POST /system/restore",
+	} {
+		method, path, _ := strings.Cut(route, " ")
+		mux.Handle(method+" /api/v1"+path, s.requireLogin(s.slowForward(path)))
 	}
 
 	// Factory reset also logs everyone out.
@@ -368,14 +378,17 @@ func (s *Server) handlePluginUpload(w http.ResponseWriter, r *http.Request) {
 	writeRaw(w, status, "application/json", body)
 }
 
-// handleBackup streams a backup from rbd to the browser.
-func (s *Server) handleBackup(w http.ResponseWriter, r *http.Request) {
-	body, ok := readBody(w, r)
-	if !ok {
+// handleBackupDownload streams a backup from rbd to the browser while rbd
+// makes it. The token in the address is the ticket from POST
+// /system/backup; only letters and digits are passed on.
+func (s *Server) handleBackupDownload(w http.ResponseWriter, r *http.Request) {
+	token := r.PathValue("token")
+	if !tokenPattern.MatchString(token) {
+		writeJSON(w, http.StatusNotFound, api.ErrorResponse{Error: "This backup link has expired. Make the backup again."})
 		return
 	}
 	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(updateUploadTime))
-	resp, err := s.rbd.Open(http.MethodPost, "/system/backup", body)
+	resp, err := s.rbd.Open(http.MethodGet, "/system/backup/"+token, nil)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, api.ErrorResponse{Error: err.Error()})
 		return
@@ -408,11 +421,15 @@ func (s *Server) handleRestoreUpload(w http.ResponseWriter, r *http.Request) {
 // maxBackupSize limits backup uploads (plugins' data included).
 const maxBackupSize = 32 << 30
 
-// pluginDownloadTime is how long a catalog request or plugin download may
-// take (a large .rba on a slow connection).
+// pluginDownloadTime is how long a slow request may take (a large .rba
+// downloaded over a slow connection, the longest of them).
 const pluginDownloadTime = 30 * time.Minute
 
-// slowForward forwards a JSON request that may take minutes.
+// tokenPattern is a backup ticket's token: 32 hex digits.
+var tokenPattern = regexp.MustCompile(`^[0-9a-f]{32}$`)
+
+// slowForward forwards a JSON request that may take minutes, with the
+// request's own method.
 func (s *Server) slowForward(rbdPath string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, ok := readBody(w, r)
@@ -420,7 +437,7 @@ func (s *Server) slowForward(rbdPath string) http.Handler {
 			return
 		}
 		_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(pluginDownloadTime))
-		status, respBody, err := s.rbd.DoSlow(http.MethodPost, rbdPath, body)
+		status, respBody, err := s.rbd.DoSlow(r.Method, rbdPath, body)
 		if err != nil {
 			writeJSON(w, http.StatusBadGateway, api.ErrorResponse{Error: err.Error()})
 			return
@@ -664,11 +681,8 @@ var forwardedRoutes = map[string]string{
 	"GET /api/v1/plugins":                            "/plugins",
 	"POST /api/v1/plugins/install":                   "/plugins/install",
 	"POST /api/v1/plugins/cancel":                    "/plugins/cancel",
-	"PUT /api/v1/plugins/settings":                   "/plugins/settings",
-	"POST /api/v1/plugins/start":                     "/plugins/start",
-	"POST /api/v1/plugins/stop":                      "/plugins/stop",
-	"POST /api/v1/plugins/remove":                    "/plugins/remove",
 	"POST /api/v1/plugins/logs":                      "/plugins/logs",
 	"GET /api/v1/plugins/drives":                     "/plugins/drives",
 	"PUT /api/v1/plugins/sources":                    "/plugins/sources",
+	"POST /api/v1/system/backup":                     "/system/backup",
 }

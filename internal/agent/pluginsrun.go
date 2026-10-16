@@ -2,7 +2,12 @@ package agent
 
 // Starting and stopping plugins' containers, their data and drives, the
 // crash watch, health checks and metrics, and the power socket. See
-// plugins.go.
+// plugins.go for the overview.
+//
+// A note on locking: a.mu (the agent's mutex) guards a.cfg, a.secrets and
+// a.plugins. A function whose comment says "The caller holds a.mu" expects
+// it locked already. The others lock it themselves, and never while a slow
+// command (podman, mount, mkfs) runs, so the web UI keeps answering.
 
 import (
 	"bytes"
@@ -10,9 +15,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -41,10 +48,14 @@ func (a *Agent) pluginLogFile(id string) string {
 	return filepath.Join(a.paths.PluginRunDir(id), "output.log")
 }
 
+// pluginDataMount is where a plugin's data file is mounted; each volume is
+// a folder in it.
 func (a *Agent) pluginDataMount(id string) string {
 	return filepath.Join(a.paths.PluginRunDir(id), "data")
 }
 
+// pluginSocketDir holds a plugin's power socket; the container sees this
+// folder as /run/rasbeacon.
 func (a *Agent) pluginSocketDir(id string) string {
 	return filepath.Join(a.paths.PluginRunDir(id), "socket")
 }
@@ -55,15 +66,22 @@ type pluginRunPlan struct {
 	id        string
 	manifest  *plugin.Manifest
 	storageMB int
-	templates []renderedTemplate
+	// templates are filled in later, without the lock (bcrypt is slow).
+	templates []pendingTemplate
+	values    plugin.Values
 	drive     string
 	spec      plugin.RunSpec
 	power     bool
 }
 
-type renderedTemplate struct {
+// pendingTemplate is one of the plugin's templates, to fill in and write
+// into its volume before it starts.
+type pendingTemplate struct {
+	file string // its name in templates/
+	text []byte
+	// volume is the volume's name, and relative the path inside it, e.g.
+	// "conf" and "AdGuardHome.yaml" for /opt/adguardhome/conf/AdGuardHome.yaml.
 	volume, relative string
-	content          []byte
 	once             bool
 }
 
@@ -78,30 +96,31 @@ func (a *Agent) planPluginRun(id string) (*pluginRunPlan, error) {
 	if m == nil {
 		return nil, errors.New("its files can't be read")
 	}
-	plan := &pluginRunPlan{id: id, manifest: m, storageMB: m.Storage(), drive: p.Drive, power: m.Has("power-button")}
-	values := a.pluginValues(id, m, p, true)
+	plan := &pluginRunPlan{
+		id: id, manifest: m, storageMB: m.Storage(), drive: p.Drive, power: m.Has("power-button"),
+		// With its passwords: they go into its templates and environment.
+		values: a.pluginValues(id, m, p, true),
+	}
 
 	for _, t := range m.Templates {
 		text, err := os.ReadFile(filepath.Join(a.paths.PluginDir(id), "templates", t.File))
 		if err != nil {
 			return nil, fmt.Errorf("its template %s can't be read", t.File)
 		}
-		content, err := fillTemplate(t.File, text, values)
-		if err != nil {
-			return nil, err
-		}
-		volume, _ := m.VolumeFor(t.Path)
+		volume, _ := m.VolumeFor(t.Path) // the manifest check made sure it is in one
 		relative := strings.TrimPrefix(t.Path, strings.TrimSuffix(volume.Path, "/")+"/")
-		plan.templates = append(plan.templates, renderedTemplate{volume: volume.Name, relative: relative, content: content, once: t.Once})
+		plan.templates = append(plan.templates, pendingTemplate{file: t.File, text: text, volume: volume.Name, relative: relative, once: t.Once})
 	}
 
+	// Its environment: the manifest's fixed variables, then the settings
+	// that name one.
 	env := map[string]string{}
 	for k, v := range m.Env {
 		env[k] = v
 	}
 	for _, s := range m.Settings {
 		if s.Env != "" {
-			env[s.Env] = values.Settings[s.Key]
+			env[s.Env] = plan.values.Settings[s.Key]
 		}
 	}
 	spec := plugin.RunSpec{
@@ -139,12 +158,31 @@ func (a *Agent) planPluginRun(id string) (*pluginRunPlan, error) {
 	return plan, nil
 }
 
+// Limits for filling in templates. A template comes from the plugin's
+// author, so it must not be able to make rbd run out of memory or spend
+// minutes hashing passwords.
+const (
+	// maxTemplateOutput is the largest a filled-in template may be: they
+	// are configuration files.
+	maxTemplateOutput = 4 << 20
+	// maxBcryptCalls is how many passwords one template may hash (each
+	// takes a tenth of a second or more on a Pi).
+	maxBcryptCalls = 10
+)
+
 // fillTemplate fills in a template with the plugin's settings:
-// {{.Settings.key}}, {{.Address}}, {{.Host}}, {{port 3000}}, and
-// {{bcrypt .Settings.password}} for programs that keep password hashes.
+// {{.Settings.key}}, {{.Address}}, {{.Host}}, {{port 3000}}, {{json …}},
+// {{html …}} (built in), and {{bcrypt .Settings.password}} for programs
+// that keep password hashes.
 func fillTemplate(name string, text []byte, values plugin.Values) ([]byte, error) {
+	bcryptCalls := 0
+	// Functions the template may call, by name.
 	funcs := template.FuncMap{
 		"bcrypt": func(password string) (string, error) {
+			bcryptCalls++
+			if bcryptCalls > maxBcryptCalls {
+				return "", fmt.Errorf("bcrypt is used more than %d times", maxBcryptCalls)
+			}
 			hash, err := bcrypt.GenerateFromPassword([]byte(password), 10)
 			return string(hash), err
 		},
@@ -154,15 +192,92 @@ func fillTemplate(name string, text []byte, values plugin.Values) ([]byte, error
 			return string(data), err
 		},
 	}
+	// missingkey=zero: {{.Settings.unknown}} is empty instead of an error.
 	t, err := template.New(name).Funcs(funcs).Option("missingkey=zero").Parse(string(text))
 	if err != nil {
 		return nil, fmt.Errorf("its template %s is broken: %w", name, err)
 	}
-	var out bytes.Buffer
-	if err := t.Execute(&out, values); err != nil {
+	out := &limitedBuffer{limit: maxTemplateOutput}
+	if err := t.Execute(out, values); err != nil {
 		return nil, fmt.Errorf("its template %s can't be filled in: %w", name, err)
 	}
-	return out.Bytes(), nil
+	return out.buf.Bytes(), nil
+}
+
+// limitedBuffer collects a template's output, refusing more than limit
+// bytes (which stops the template).
+type limitedBuffer struct {
+	buf   bytes.Buffer
+	limit int
+}
+
+func (b *limitedBuffer) Write(p []byte) (int, error) {
+	if b.buf.Len()+len(p) > b.limit {
+		return 0, errors.New("it is too large")
+	}
+	return b.buf.Write(p)
+}
+
+// writeIntoVolume writes a filled-in template into a plugin's volume.
+//
+// The volume belongs to the plugin, and RasBeacon runs as root. A plugin
+// could put a symbolic link where a folder on the template's path should
+// be, pointing at /etc for example, to make RasBeacon write there. So
+// every folder on the way is checked to be a real folder (not a link), and
+// the file is written under a new random name, then renamed into place:
+// creating a new name never follows a link, and renaming replaces a link
+// instead of writing through it. The plugin's container is stopped while
+// this runs, so nothing can change between the checks and the writing.
+func writeIntoVolume(volumeDir, relative string, content []byte, once bool) error {
+	if relative == "" || strings.HasSuffix(relative, "/") {
+		return errors.New("its path names a folder, not a file")
+	}
+	// Walk the folders between the volume and the file, making missing ones.
+	dir := volumeDir
+	parts := strings.Split(relative, "/")
+	for _, part := range parts[:len(parts)-1] {
+		dir = filepath.Join(dir, part)
+		// Lstat, unlike Stat, describes a link itself instead of what it
+		// points to.
+		info, err := os.Lstat(dir)
+		switch {
+		case errors.Is(err, fs.ErrNotExist):
+			if err := os.Mkdir(dir, 0o755); err != nil {
+				return err
+			}
+		case err != nil:
+			return err
+		case !info.IsDir():
+			return fmt.Errorf("%s in its data is a link or a file, not a folder", strings.TrimPrefix(dir, volumeDir+"/"))
+		}
+	}
+	target := filepath.Join(volumeDir, relative)
+	if once {
+		if _, err := os.Lstat(target); err == nil {
+			return nil // already there: the plugin may have changed it since
+		}
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(target), ".rasbeacon-*")
+	if err != nil {
+		return err
+	}
+	// Removes the temporary file if anything below fails (after the rename
+	// the name is gone and this does nothing).
+	defer os.Remove(tmp.Name())
+	_, err = tmp.Write(content)
+	if err == nil {
+		err = tmp.Chmod(0o644) // CreateTemp makes it readable by root only
+	}
+	if err == nil {
+		err = tmp.Sync()
+	}
+	if cerr := tmp.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), target)
 }
 
 // runPlugin (re)starts a plugin's container with its current settings.
@@ -198,9 +313,13 @@ func (a *Agent) runPlugin(id string) error {
 	return nil
 }
 
-// preparePluginRun mounts the plugin's data and drive, writes its
-// templates and opens its power socket. Called without a.mu.
+// preparePluginRun stops the plugin's old container (if any), mounts its
+// data and drive, writes its templates and opens its power socket. Called
+// without a.mu.
 func (a *Agent) preparePluginRun(plan *pluginRunPlan) error {
+	// Stopped first, so it can't change its volumes while the templates are
+	// written into them (see writeIntoVolume).
+	_, _ = a.plugins.runner.Run("podman", "rm", "--force", "--ignore", "--time", "10", plugin.ContainerName(plan.id))
 	if err := os.MkdirAll(a.paths.PluginRunDir(plan.id), 0o700); err != nil {
 		return err
 	}
@@ -214,15 +333,12 @@ func (a *Agent) preparePluginRun(plan *pluginRunPlan) error {
 		}
 	}
 	for _, t := range plan.templates {
-		target := filepath.Join(dataMount, t.volume, filepath.FromSlash(t.relative))
-		if _, err := os.Stat(target); err == nil && t.once {
-			continue
-		}
-		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		content, err := fillTemplate(t.file, t.text, plan.values)
+		if err != nil {
 			return err
 		}
-		if err := config.WriteFileAtomic(target, t.content, 0o644); err != nil {
-			return err
+		if err := writeIntoVolume(filepath.Join(dataMount, t.volume), t.relative, content, t.once); err != nil {
+			return fmt.Errorf("its template %s can't be written: %w", t.file, err)
 		}
 	}
 	if plan.drive != "" {
@@ -242,6 +358,7 @@ func (a *Agent) preparePluginRun(plan *pluginRunPlan) error {
 	return os.MkdirAll(filepath.Dir(plan.spec.LogFile), 0o700)
 }
 
+// removeMount returns mounts without the one from host.
 func removeMount(mounts []plugin.Mount, host string) []plugin.Mount {
 	var kept []plugin.Mount
 	for _, m := range mounts {
@@ -257,6 +374,7 @@ func removeMount(mounts []plugin.Mount, host string) []plugin.Mount {
 func (a *Agent) mountPluginData(id string, storageMB int) error {
 	r := a.plugins.runner
 	mount := a.pluginDataMount(id)
+	// mountpoint -q succeeds (no error) when something is mounted there.
 	if _, err := r.Run("mountpoint", "-q", mount); err == nil {
 		return nil // already mounted
 	}
@@ -268,6 +386,7 @@ func (a *Agent) mountPluginData(id string, storageMB int) error {
 	info, err := os.Stat(file)
 	switch {
 	case errors.Is(err, os.ErrNotExist):
+		// A new plugin: reserve the space, and make an empty filesystem in it.
 		if _, err := r.Run("fallocate", "--length", size, file); err != nil {
 			return fmt.Errorf("no room for its %d MB of data: %w", storageMB, err)
 		}
@@ -287,6 +406,8 @@ func (a *Agent) mountPluginData(id string, storageMB int) error {
 			return err
 		}
 	}
+	// nosuid and nodev: no program in it can gain privileges, and it can't
+	// hold device files.
 	_, err = r.Run("mount", "-o", "loop,nosuid,nodev", file, mount)
 	return err
 }
@@ -298,6 +419,9 @@ func (a *Agent) unmountPluginData(id string) {
 
 // mountDrive mounts a USB drive for a plugin, so nothing on it can run.
 func (a *Agent) mountDrive(uuid string) error {
+	if !plugin.ValidDriveUUID(uuid) {
+		return errors.New("its USB drive's ID isn't valid; choose the drive again")
+	}
 	r := a.plugins.runner
 	dir := a.paths.DriveMountDir(uuid)
 	if _, err := r.Run("mountpoint", "-q", dir); err == nil {
@@ -327,11 +451,12 @@ func (a *Agent) mountDrive(uuid string) error {
 // stopPluginContainer stops and removes a plugin's container, unmounts its
 // drive and closes its power socket. Called without a.mu.
 func (a *Agent) stopPluginContainer(id string) {
+	// --time 10: ten seconds to stop by itself before it is killed.
 	_, _ = a.plugins.runner.Run("podman", "rm", "--force", "--ignore", "--time", "10", plugin.ContainerName(id))
 	a.mu.Lock()
 	drive := a.cfg.Plugins.Installed[id].Drive
 	a.mu.Unlock()
-	if drive != "" {
+	if drive != "" && plugin.ValidDriveUUID(drive) {
 		_, _ = a.plugins.runner.Run("umount", a.paths.DriveMountDir(drive))
 	}
 	a.closePowerSocket(id)
@@ -371,7 +496,7 @@ func (a *Agent) startPlugins() {
 	a.plugins.watching = true
 	a.mu.Unlock()
 	for _, id := range ids {
-		_ = a.runPlugin(id)
+		_ = a.runPlugin(id) // a problem shows in its state
 		a.endPluginWork(id)
 	}
 	if !watching && a.plugins.watchEvery > 0 {
@@ -417,23 +542,25 @@ func (a *Agent) checkPluginContainers() {
 	}
 
 	a.mu.Lock()
-	var restart []string
+	var restart, giveUp []string
 	for id, p := range a.cfg.Plugins.Installed {
 		live := a.plugins.live[id]
 		if live == nil || live.busy || !p.Running || live.state != api.PluginRunning || running[id] {
 			continue
 		}
+		// It should run but doesn't: it crashed (or exited by itself).
 		if a.now().Sub(live.startedAt) > stableAfter {
-			live.crashes = 0
+			live.crashes = 0 // it ran fine for a while before this crash
 		}
 		live.crashes++
 		slog.Warn("plugin stopped by itself", "plugin", id, "times", live.crashes)
+		live.busy = true
 		if live.crashes >= maxCrashes {
 			_ = a.savePluginConfig(id, func(p *config.InstalledPlugin) { p.Running, p.StoppedAfterCrashes = false, true })
 			a.setPluginState(id, api.PluginCrashed, "It stopped working several times in a row, so RasBeacon stopped it. Check its log, then start it again.")
+			giveUp = append(giveUp, id)
 			continue
 		}
-		live.busy = true
 		restart = append(restart, id)
 	}
 	a.mu.Unlock()
@@ -441,14 +568,43 @@ func (a *Agent) checkPluginContainers() {
 		_ = a.runPlugin(id)
 		a.endPluginWork(id)
 	}
+	// Those given up on: remove the dead container, and let go of the drive
+	// and the power socket until the owner starts them again.
+	for _, id := range giveUp {
+		a.stopPluginContainer(id)
+		a.endPluginWork(id)
+	}
 }
 
-// pluginCheck is one health or metric request.
+// pluginCheck is one plugin's health check and metrics to read.
 type pluginCheck struct {
 	id      string
 	health  string
 	metrics []plugin.Metric
 	values  plugin.Values
+}
+
+// pluginCheckClient asks plugins for their health and metrics. One client
+// is shared, without keep-alive connections: a new connection every 30 s
+// costs nothing, while idle ones would pile up with every check. It never
+// follows redirects, so a plugin can't send RasBeacon somewhere else.
+var pluginCheckClient = &http.Client{
+	Timeout:   3 * time.Second,
+	Transport: &http.Transport{Proxy: nil, DisableKeepAlives: true},
+	CheckRedirect: func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	},
+}
+
+// pluginURL fills in a metric's or health check's URL, and checks that it
+// leads to the plugin itself. (The manifest check makes sure of that too;
+// this also covers what the placeholders filled in.)
+func pluginURL(text string, values plugin.Values) (string, error) {
+	u, err := url.Parse(values.Expand(text))
+	if err != nil || u.Scheme != "http" || u.User != nil || u.Hostname() != values.Address {
+		return "", errors.New("the URL doesn't lead to the plugin")
+	}
+	return u.String(), nil
 }
 
 // readPluginHealth asks running plugins' health URL and metrics.
@@ -468,20 +624,22 @@ func (a *Agent) readPluginHealth() {
 	}
 	a.mu.Unlock()
 
-	client := &http.Client{Timeout: 3 * time.Second, Transport: &http.Transport{Proxy: nil}}
 	for _, c := range checks {
+		// healthy stays nil (unknown) for plugins without a health check.
 		var healthy *bool
 		if c.health != "" {
 			ok := false
-			if resp, err := client.Get(c.values.Expand(c.health)); err == nil {
-				ok = resp.StatusCode < 500
-				resp.Body.Close()
+			if u, err := pluginURL(c.health, c.values); err == nil {
+				if resp, err := pluginCheckClient.Get(u); err == nil {
+					ok = resp.StatusCode < 500
+					resp.Body.Close()
+				}
 			}
 			healthy = &ok
 		}
 		metrics := []api.PluginMetric{}
 		for _, m := range c.metrics {
-			metrics = append(metrics, api.PluginMetric{Label: m.Label, Value: readOneMetric(client, m, c.values)})
+			metrics = append(metrics, api.PluginMetric{Label: m.Label, Value: readOneMetric(m, c.values)})
 		}
 		a.mu.Lock()
 		if live := a.plugins.live[c.id]; live != nil && live.state == api.PluginRunning {
@@ -491,16 +649,21 @@ func (a *Agent) readPluginHealth() {
 	}
 }
 
-// readOneMetric asks the plugin for one metric ("" if it can't be read).
-func readOneMetric(client *http.Client, m plugin.Metric, values plugin.Values) string {
-	req, err := http.NewRequest(http.MethodGet, values.Expand(m.URL), nil)
+// readOneMetric asks the plugin for one metric ("" if it can't be read;
+// the page shows a dash).
+func readOneMetric(m plugin.Metric, values plugin.Values) string {
+	u, err := pluginURL(m.URL, values)
+	if err != nil {
+		return ""
+	}
+	req, err := http.NewRequest(http.MethodGet, u, nil)
 	if err != nil {
 		return ""
 	}
 	if m.Username != "" || m.Password != "" {
 		req.SetBasicAuth(values.Expand(m.Username), values.Expand(m.Password))
 	}
-	resp, err := client.Do(req)
+	resp, err := pluginCheckClient.Do(req)
 	if err != nil {
 		return ""
 	}
@@ -522,8 +685,9 @@ func readOneMetric(client *http.Client, m plugin.Metric, values plugin.Values) s
 // --- The power socket -------------------------------------------------
 
 // openPowerSocket lets a plugin with the power-button permission ask
-// RasBeacon to shut down or restart: a socket in a folder only that
-// plugin's container gets.
+// RasBeacon to shut down or restart: a Unix socket (a file other programs
+// connect to, like a network port) in a folder only that plugin's
+// container gets.
 func (a *Agent) openPowerSocket(id string) error {
 	a.closePowerSocket(id)
 	dir := a.pluginSocketDir(id)
@@ -531,7 +695,7 @@ func (a *Agent) openPowerSocket(id string) error {
 		return err
 	}
 	path := filepath.Join(dir, "rbd.sock")
-	_ = os.Remove(path)
+	_ = os.Remove(path) // left over from before a restart
 	listener, err := net.Listen("unix", path)
 	if err != nil {
 		return err
@@ -555,6 +719,7 @@ func (a *Agent) openPowerSocket(id string) error {
 		}
 		slog.Warn("a plugin asked RasBeacon to "+req.Action, "plugin", id)
 		w.WriteHeader(http.StatusNoContent)
+		// A second's wait, so the answer reaches the plugin first.
 		a.afterFunc(time.Second, func() { _, _ = a.runner.Run("systemctl", command) })
 	})
 	server := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
@@ -564,10 +729,13 @@ func (a *Agent) openPowerSocket(id string) error {
 	}
 	a.powerSockets[id] = server
 	a.mu.Unlock()
+	// Serve runs until the server is closed, so it gets its own goroutine
+	// (a function running alongside this one).
 	go func() { _ = server.Serve(listener) }()
 	return nil
 }
 
+// closePowerSocket stops a plugin's power socket, if it has one open.
 func (a *Agent) closePowerSocket(id string) {
 	a.mu.Lock()
 	server := a.powerSockets[id]
@@ -579,13 +747,13 @@ func (a *Agent) closePowerSocket(id string) {
 }
 
 // stopAllPlugins stops every plugin's container and unmounts their data,
-// before a factory reset. The caller holds a.mu.
+// before a factory reset or a restore. The caller holds a.mu.
 func (a *Agent) stopAllPlugins() {
 	_, _ = a.plugins.runner.Run("podman", "rm", "--all", "--force", "--time", "5")
-	for id := range a.cfg.Plugins.Installed {
+	for id, p := range a.cfg.Plugins.Installed {
 		_, _ = a.plugins.runner.Run("umount", a.pluginDataMount(id))
-		if drive := a.cfg.Plugins.Installed[id].Drive; drive != "" {
-			_, _ = a.plugins.runner.Run("umount", a.paths.DriveMountDir(drive))
+		if p.Drive != "" && plugin.ValidDriveUUID(p.Drive) {
+			_, _ = a.plugins.runner.Run("umount", a.paths.DriveMountDir(p.Drive))
 		}
 	}
 }
