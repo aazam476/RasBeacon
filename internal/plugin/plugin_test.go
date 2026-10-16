@@ -110,6 +110,11 @@ func TestOpen_RefusesBadFiles(t *testing.T) {
 			f[ManifestFile] = manifestJSON(m)
 		},
 		"bad id": func(f map[string]string) { m := validManifest(); m["id"] = "Bad_ID"; f[ManifestFile] = manifestJSON(m) },
+		"bad minRasBeacon": func(f map[string]string) {
+			m := validManifest()
+			m["minRasBeacon"] = "next year"
+			f[ManifestFile] = manifestJSON(m)
+		},
 		"digest missing": func(f map[string]string) {
 			m := validManifest()
 			m["image"] = map[string]any{"ref": "docker.io/a/b:1"}
@@ -383,5 +388,27 @@ func TestRunArgs(t *testing.T) {
 	}
 	if LocalImage("x", "1.0+b/2") != "localhost/rasbeacon-plugin/x:1.0_b_2" {
 		t.Error(LocalImage("x", "1.0+b/2"))
+	}
+}
+
+func TestSupportedBy(t *testing.T) {
+	for _, c := range []struct {
+		min, running string
+		ok           bool
+	}{
+		{"", "v0.1.0", true},
+		{"0.1.0", "v0.1.0", true},
+		{"0.1", "v0.1.0", true},
+		{"0.2.0", "v0.1.9", false},
+		{"0.2.0", "v0.2.0-beta.1", true},
+		{"0.2.1", "v0.2.0-beta.1", false},
+		{"1.0", "v0.9.9", false},
+		{"0.10.0", "v0.9.0", false},
+		{"0.2.0", "dev", true},
+		{"0.2.0", "dev-abc1234", true},
+	} {
+		if got := SupportedBy(c.min, c.running); got != c.ok {
+			t.Errorf("SupportedBy(%q, %q) = %v", c.min, c.running, got)
+		}
 	}
 }

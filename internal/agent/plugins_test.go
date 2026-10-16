@@ -24,6 +24,7 @@ import (
 	"rasbeacon/internal/api"
 	"rasbeacon/internal/config"
 	"rasbeacon/internal/plugin"
+	"rasbeacon/internal/version"
 )
 
 // testPluginManifest is a plugin like AdGuard Home, with its image in the file.
@@ -635,5 +636,22 @@ func TestPlugins_UnreadableFilesMarkItBroken(t *testing.T) {
 	}
 	if err := e.agent.RemovePlugin(api.PluginRemoveRequest{ID: "adguard-home"}); err != nil {
 		t.Errorf("it can still be removed: %v", err)
+	}
+}
+
+func TestPlugins_TooNewForThisRasBeaconIsRefused(t *testing.T) {
+	e := newPluginEnv(t)
+	old := version.Version
+	version.Version = "v0.1.0"
+	defer func() { version.Version = old }()
+	m := testPluginManifest("1.0")
+	m["minRasBeacon"] = "0.2.0"
+	_, err := e.agent.StagePluginFile(bytes.NewReader(writeTestPlugin(t, m, nil)))
+	if err == nil || !strings.Contains(err.Error(), "needs RasBeacon 0.2.0 or newer") {
+		t.Errorf("got %v", err)
+	}
+	m["minRasBeacon"] = "0.1.0"
+	if _, err := e.agent.StagePluginFile(bytes.NewReader(writeTestPlugin(t, m, nil))); err != nil {
+		t.Errorf("a plugin for this version: %v", err)
 	}
 }

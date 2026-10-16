@@ -54,6 +54,9 @@ type Manifest struct {
 	Homepage    string `json:"homepage,omitempty"`
 	// Boards it runs on (pi5, pi4, pi3, zero2w); empty: all.
 	Boards []string `json:"boards,omitempty"`
+	// MinRasBeacon is the oldest RasBeacon it works with, e.g. "0.2.0"
+	// (empty: any). An older RasBeacon refuses to install it.
+	MinRasBeacon string `json:"minRasBeacon,omitempty"`
 	// Image is a container image in a registry, pinned by digest. Without
 	// it the .rba must hold image.tar. (A pointer, so "not there" is nil.)
 	Image *RegistryImage `json:"image,omitempty"`
@@ -264,6 +267,9 @@ var (
 	// come between "{address}" and the port or path, so a URL can't be
 	// bent to lead elsewhere (like http://{address}@other-host/).
 	pluginURLPattern = regexp.MustCompile(`^http://\{address\}(:[0-9]{1,5})?(/[^\s]*)?$`)
+	// minVersionPattern is a RasBeacon version a plugin needs: 1 to 3
+	// numbers ("0.2", "0.2.1").
+	minVersionPattern = regexp.MustCompile(`^[0-9]{1,4}(\.[0-9]{1,4}){0,2}$`)
 	// driveUUIDPattern is a filesystem's UUID as lsblk shows it: ext4's
 	// 8-4-4-4-12 hex digits, FAT's 1234-ABCD, NTFS's 16 hex digits.
 	driveUUIDPattern = regexp.MustCompile(`^[A-Za-z0-9-]{1,64}$`)
@@ -362,6 +368,9 @@ func (m *Manifest) checkAbout() error {
 		if !slices.Contains(Boards, b) {
 			return fmt.Errorf("unknown board %q (use %s)", b, strings.Join(Boards, ", "))
 		}
+	}
+	if m.MinRasBeacon != "" && !minVersionPattern.MatchString(m.MinRasBeacon) {
+		return fmt.Errorf("minRasBeacon %q must be a version like 0.2.0", m.MinRasBeacon)
 	}
 	return checkParagraph("afterInstall", m.AfterInstall, maxAfterInstallLength)
 }
@@ -735,6 +744,53 @@ func rangeText(low, high *float64) string {
 	default:
 		return "must be at most " + format(*high)
 	}
+}
+
+// SupportedBy reports whether a plugin needing RasBeacon min works on the
+// RasBeacon version running ("v0.1.0", "v0.2.0-beta.1"). Only the numbers
+// count: a beta of 0.2.0 is enough for a plugin needing 0.2.0. Development
+// builds ("dev", "dev-abc1234") take every plugin.
+func SupportedBy(min, running string) bool {
+	have := versionNumbers(running)
+	if min == "" || len(have) == 0 {
+		return true
+	}
+	need := versionNumbers(min)
+	// Compare number by number; a missing number counts as 0.
+	for i := 0; i < max(len(need), len(have)); i++ {
+		var n, h int
+		if i < len(need) {
+			n = need[i]
+		}
+		if i < len(have) {
+			h = have[i]
+		}
+		if h != n {
+			return h > n
+		}
+	}
+	return true
+}
+
+// versionNumbers reads the leading numbers of a version: "v0.2.0-beta.1"
+// gives 0, 2, 0. A version that doesn't start with a number gives none.
+func versionNumbers(v string) []int {
+	var out []int
+	for _, part := range strings.Split(strings.TrimPrefix(v, "v"), ".") {
+		digits := part
+		if i := strings.IndexFunc(part, func(r rune) bool { return r < '0' || r > '9' }); i >= 0 {
+			digits = part[:i] // "0-beta" gives "0"
+		}
+		n, err := strconv.Atoi(digits)
+		if err != nil {
+			break
+		}
+		out = append(out, n)
+		if len(digits) < len(part) {
+			break // the rest is a label like "-beta"
+		}
+	}
+	return out
 }
 
 // Reserved reports whether a port on RasBeacon belongs to RasBeacon itself.

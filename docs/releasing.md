@@ -1,8 +1,27 @@
 # Making a release
 
 Releases are built by GitHub Actions (`.github/workflows/release.yml`).
-Pushing a tag like `v1.2.0` builds the images and creates a **draft**
+Pushing a tag like `v0.1.0` builds the images and creates a **draft**
 release; check it, then publish it.
+
+## Version numbers
+
+RasBeacon's versions are `vMAJOR.MINOR.PATCH`:
+
+- **PATCH** (`v0.1.1`): bug fixes only.
+- **MINOR** (`v0.2.0`): new features. Before 1.0, a minor version may also
+  change things plugins rely on.
+- **MAJOR** (`v1.0.0`): incompatible changes (after 1.0).
+
+A test version gets a label: `v0.2.0-beta.1`. Publish it as a GitHub
+**pre-release** (tick *Set as a pre-release*): devices' update check reads
+the latest release, which never includes pre-releases, so nobody is offered
+a beta by surprise.
+
+Plugins follow along: the plugins repository's release tags start with the
+RasBeacon version they're made for (`v0.1.0`, `v0.1.1`, … for RasBeacon
+0.1), and a plugin that needs a newer RasBeacon says so in its manifest
+(`minRasBeacon`, see [plugins.md](plugins.md)).
 
 There is one image for the Pi 4 and Pi 5 (board name `rpi64`), and one for
 the Pi Zero 2 W, 3B and 3B+ (`rpi3`: same programs, MBR layout with one
@@ -50,10 +69,12 @@ files.
 
 1. CI is green on the commit you'll tag.
 2. Update `docs/compatibility.md` with any new hardware results.
-3. Tag and push: `git tag v1.2.0 && git push origin v1.2.0`.
+3. Tag and push: `git tag -a v0.2.0 -m "RasBeacon v0.2.0" && git push origin v0.2.0`
+   (a beta: `v0.2.0-beta.1`).
 4. When the workflow finishes, open the draft release, check the files are
    all there (the two images, the update file, the two package lists,
-   `SHA256SUMS`), write the notes, and publish.
+   `SHA256SUMS`), write the notes, and publish (a beta: tick *Set as a
+   pre-release* first).
 5. Test the update file on a device running the previous release (System
    page → Install update), and check it comes back on the new version.
 

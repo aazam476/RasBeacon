@@ -131,7 +131,13 @@ function CatalogRow({ entry }: { entry: PluginCatalogEntry }) {
         subtitle={
           <>
             {entry.description && <span className="block text-label">{entry.description}</span>}
-            <span className="block">{entry.runsHere ? details : "Doesn't run on this Raspberry Pi"}</span>
+            <span className="block">
+              {!entry.runsHere
+                ? "Doesn't run on this Raspberry Pi"
+                : entry.needsRasBeacon
+                  ? `Needs RasBeacon ${entry.needsRasBeacon} or newer`
+                  : details}
+            </span>
           </>
         }
         trailing={
@@ -144,7 +150,7 @@ function CatalogRow({ entry }: { entry: PluginCatalogEntry }) {
               size="sm"
               variant="secondary"
               loading={busy}
-              disabled={!entry.runsHere}
+              disabled={!entry.runsHere || Boolean(entry.needsRasBeacon)}
               onClick={() => void get()}
               aria-label={`${newer ? 'Update' : 'Get'} ${entry.name}`}
             >

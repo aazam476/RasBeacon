@@ -28,6 +28,7 @@ import (
 	"rasbeacon/internal/config"
 	"rasbeacon/internal/plugin"
 	"rasbeacon/internal/tunnel"
+	"rasbeacon/internal/version"
 )
 
 // stagedPlugin is a plugin file waiting in the install sheet.
@@ -205,6 +206,9 @@ func (a *Agent) preview(s *stagedPlugin) (api.PluginPreview, error) {
 	board := a.pluginBoard()
 	if !m.RunsOn(board) {
 		return refuse(fmt.Sprintf("%s doesn't run on this Raspberry Pi.", m.Name))
+	}
+	if !plugin.SupportedBy(m.MinRasBeacon, version.Version) {
+		return refuse(fmt.Sprintf("%s needs RasBeacon %s or newer. Update RasBeacon first (System → Software).", m.Name, m.MinRasBeacon))
 	}
 	memory, swap := a.memoryMB()
 	if m.MinMemoryMB > 0 && memory > 0 && memory < m.MinMemoryMB {
