@@ -69,8 +69,11 @@ files.
 
 1. CI is green on the commit you'll tag.
 2. Update `docs/compatibility.md` with any new hardware results.
-3. Tag and push: `git tag -a v0.2.0 -m "RasBeacon v0.2.0" && git push origin v0.2.0`
-   (a beta: `v0.2.0-beta.1`).
+3. Either tag and push: `git tag -a v0.2.0 -m "RasBeacon v0.2.0" && git push origin v0.2.0`
+   (a beta: `v0.2.0-beta.1`), which makes a draft release; or open
+   **Actions → Release images → Run workflow** and type the release name,
+   which makes the tag and publishes the release at once (a beta as a
+   pre-release), so skip the publishing in step 4.
 4. When the workflow finishes, open the draft release, check the files are
    all there (the two images, the update file, the two package lists,
    `SHA256SUMS`), write the notes, and publish (a beta: tick *Set as a

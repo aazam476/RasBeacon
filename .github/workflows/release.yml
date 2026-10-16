@@ -5,7 +5,9 @@
 # - Pushing a tag like v0.1.0 builds both and publishes a GitHub release
 #   with the images, the update file (Pi 4/5) and SHA256SUMS.
 # - "Run workflow" on the Actions tab builds them for testing without a
-#   release (download them from the run's artifacts).
+#   release (download them from the run's artifacts), or, with a release
+#   name like v0.1.0 or v0.2.0-beta.1, also creates that tag on the commit
+#   and publishes the release (a beta as a pre-release).
 #
 # The image tool (rpi-image-gen) is pinned to an exact commit so builds are
 # repeatable. Update IMAGE_GEN_COMMIT deliberately and test the result.
@@ -24,6 +26,12 @@ on:
         type: choice
         options: [ubuntu-24.04-arm, ubuntu-24.04]
         default: ubuntu-24.04
+      release:
+        description: >-
+          Release to publish, like v0.1.0 or v0.2.0-beta.1 (the tag is made on
+          this commit). Leave empty for a test build.
+        type: string
+        default: ""
 
 permissions:
   contents: write
@@ -53,8 +61,17 @@ jobs:
 
       - name: Version
         id: version
+        env:
+          RELEASE: ${{ inputs.release }}
         run: |
-          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then v="${GITHUB_REF_NAME}"; else v="dev-${GITHUB_SHA::7}"; fi
+          if [ -n "${RELEASE}" ]; then
+            # vMAJOR.MINOR.PATCH, optionally with a label: v0.2.0-beta.1
+            if ! printf '%s' "${RELEASE}" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; then
+              echo "::error::The release name must look like v0.1.0 or v0.2.0-beta.1"
+              exit 1
+            fi
+            v="${RELEASE}"
+          elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then v="${GITHUB_REF_NAME}"; else v="dev-${GITHUB_SHA::7}"; fi
           echo "version=$v" >> "$GITHUB_OUTPUT"
 
       - name: Get rpi-image-gen
@@ -87,7 +104,9 @@ jobs:
 
   publish:
     name: Publish release
-    if: github.ref_type == 'tag'
+    # A pushed tag makes a draft to check first; a release asked for from
+    # the Actions tab is published at once (a beta as a pre-release).
+    if: github.ref_type == 'tag' || inputs.release != ''
     needs: image
     runs-on: ubuntu-24.04
     steps:
@@ -105,4 +124,7 @@ jobs:
             dist/*.rbupdate
             dist/*.packages.txt
             dist/SHA256SUMS
-          draft: true
+          tag_name: ${{ inputs.release || github.ref_name }}
+          target_commitish: ${{ github.sha }}
+          draft: ${{ github.ref_type == 'tag' }}
+          prerelease: ${{ contains(inputs.release || github.ref_name, '-') }}
