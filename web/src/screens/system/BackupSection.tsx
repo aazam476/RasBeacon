@@ -51,7 +51,8 @@ export function BackupSection() {
   );
 }
 
-function BackupSheet({ hasPlugins, onClose }: { hasPlugins: boolean; onClose: () => void }) {
+/** The sheet that makes a backup file. The software section opens it too, before a fresh install. */
+export function BackupSheet({ hasPlugins, onClose }: { hasPlugins: boolean; onClose: () => void }) {
   const { backUp } = useDevice();
   const [adminPassword, setAdminPassword] = useState('');
   const [password, setPassword] = useState('');

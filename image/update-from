@@ -1,0 +1,8 @@
+# The oldest RasBeacon version that can install this version's update file
+# (.rbupdate), e.g. v1.0.0. Leave it empty when any version can.
+#
+# Set it when a new version can't be installed over older ones: say its
+# settings or its partitions changed in a way the update can't handle.
+# Older RasBeacons then refuse the update and tell their owner to back up
+# the settings, flash the new image and restore the backup. See
+# docs/releasing.md.

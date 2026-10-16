@@ -348,6 +348,20 @@ type UpdateStatus struct {
 	CheckOnline    bool   `json:"checkOnline"`
 	LatestVersion  string `json:"latestVersion,omitempty"`
 	LatestURL      string `json:"latestUrl,omitempty"`
+	// Reflash is set when a newer version can't be installed over this one
+	// (the online check found one, or its update file was refused): the
+	// owner backs up the settings, flashes the new image and restores the
+	// backup.
+	Reflash *UpdateReflash `json:"reflash,omitempty"`
+}
+
+// UpdateReflash describes a new version that needs a fresh install.
+type UpdateReflash struct {
+	Version string `json:"version"`
+	// MinFromVersion is the oldest version that can install its update file.
+	MinFromVersion string `json:"minFromVersion"`
+	// URL is its release page, when known.
+	URL string `json:"url,omitempty"`
 }
 
 // UpdateSettings is written by the System page.

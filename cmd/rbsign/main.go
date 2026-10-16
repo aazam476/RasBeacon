@@ -6,10 +6,13 @@
 //	    RASBEACON_UPDATE_SIGNING_KEY secret of the GitHub repository) and its
 //	    public key (commit it to image/.../usr/lib/rasbeacon/update-keys/).
 //
-//	rbsign pack -board rpi64 -version v1.2.0 -bundle x.update.tar.zst -out x.rbupdate
+//	rbsign pack -board rpi64 -version v1.2.0 [-min-from v1.0.0] -bundle x.update.tar.zst -out x.rbupdate [-info x.update.json]
 //	    Makes a signed update file. The private key is read from the
 //	    RASBEACON_UPDATE_SIGNING_KEY environment variable, never from the
 //	    command line (which other users of the computer could see).
+//	    -min-from names the oldest version that can install it (none: any).
+//	    -info also writes a small JSON file with the version and -min-from,
+//	    which the online update check reads from the release.
 //
 //	rbsign plugin-keygen
 //	    Prints a new key for signing plugins: the private key (keep it
@@ -30,6 +33,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -93,6 +97,8 @@ func pack(args []string) error {
 	version := flags.String("version", "", "version, e.g. v1.2.0")
 	bundlePath := flags.String("bundle", "", "rpi-image-gen's <image>.update.tar.zst")
 	outPath := flags.String("out", "", "update file to write (.rbupdate)")
+	minFrom := flags.String("min-from", "", "oldest version that can install the update (empty: any)")
+	infoPath := flags.String("info", "", "also write the version and -min-from to this JSON file")
 	_ = flags.Parse(args)
 	if *board == "" || *version == "" || *bundlePath == "" || *outPath == "" {
 		usage()
@@ -111,11 +117,21 @@ func pack(args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := update.Pack(out, bundle, *board, *version, key); err != nil {
+	if err := update.Pack(out, bundle, *board, *version, *minFrom, key); err != nil {
 		out.Close()
 		return err
 	}
-	return out.Close()
+	if err := out.Close(); err != nil {
+		return err
+	}
+	if *infoPath == "" {
+		return nil
+	}
+	info, err := json.MarshalIndent(update.Info{Version: *version, MinFromVersion: *minFrom}, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(*infoPath, append(info, '\n'), 0o644)
 }
 
 // pluginKeygen prints a new key pair for signing plugins, and the public

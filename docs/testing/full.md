@@ -409,6 +409,13 @@ install updates (on the Pi 3/Zero 2 W image, check instead that System says
    works), and as soon as the hotspot disappears for the restart, pull the
    power, wait 5 s, plug it back in. **Expect:** RasBeacon comes back on the
    **old** version and System says *The update to … didn't start correctly, so RasBeacon went back to …*.
+5. **Versions (released images only):** test builds are called `dev-…` and
+   skip the version checks, so do this on a device flashed with a release
+   (like `v0.1.0`). Install an **older** release's `.rbupdate`. **Expect:**
+   refused (*older than the … running*), no restart. To see the fresh-install
+   steps, open the demo (`npm run demo`) state *New version needs a fresh
+   install*: **Back up settings** opens the backup sheet, **Release page**
+   opens the release.
 
 ## 15. Robustness
 

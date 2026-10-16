@@ -579,6 +579,24 @@ export const SCENARIOS: DemoScenario[] = [
     },
   },
   {
+    id: 'update-reflash',
+    group: 'System',
+    title: 'New version needs a fresh install',
+    route: '/system',
+    apply: (d) => {
+      Object.assign(d.router.status.update, {
+        checkOnline: true,
+        latestVersion: 'v2.0.0',
+        latestUrl: 'https://github.com/rasbeacon/rasbeacon/releases/tag/v2.0.0',
+        reflash: {
+          version: 'v2.0.0',
+          minFromVersion: 'v1.5.0',
+          url: 'https://github.com/rasbeacon/rasbeacon/releases/tag/v2.0.0',
+        },
+      });
+    },
+  },
+  {
     id: 'update-installing',
     group: 'System',
     title: 'Installing an update',

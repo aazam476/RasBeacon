@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useDevice } from '@/data/device';
-import type { Status } from '@/data/types';
+import type { Status, UpdateReflash } from '@/data/types';
 import { useAction } from '@/lib/useAction';
 import {
   ActivityIndicator,
@@ -16,6 +16,7 @@ import {
   Section,
   SwitchRow,
 } from '@/ui';
+import { BackupSheet } from './BackupSection';
 
 const BOARDS: Record<string, string> = {
   rpi64: 'Raspberry Pi 4 and 5',
@@ -37,22 +38,19 @@ export function SoftwareSection({ status }: { status: Status }) {
           <p>RasBeacon restarts when it&apos;s done. Connected devices are offline for about two minutes.</p>
         </Notice>
       )}
-      {update.latestVersion && (
-        <Notice
-          tone="info"
-          icon="system_update_alt"
-          title={`Version ${update.latestVersion} is available`}
-          actions={
-            update.latestUrl && (
-              <a href={update.latestUrl} target="_blank" rel="noreferrer" className={buttonClasses('secondary', 'sm')}>
-                Release page
-                <Icon name="open_in_new" size={16} />
-              </a>
-            )
-          }
-        >
-          <p>Download its .rbupdate file for your board, then install it below.</p>
-        </Notice>
+      {update.reflash ? (
+        <ReflashNotice reflash={update.reflash} running={version} hasPlugins={status.plugins.length > 0} />
+      ) : (
+        update.latestVersion && (
+          <Notice
+            tone="info"
+            icon="system_update_alt"
+            title={`Version ${update.latestVersion} is available`}
+            actions={update.latestUrl && <ReleaseLink url={update.latestUrl} />}
+          >
+            <p>Download its .rbupdate file for your board, then install it below.</p>
+          </Notice>
+        )
       )}
 
       <Section title="Software">
@@ -77,7 +75,8 @@ export function SoftwareSection({ status }: { status: Status }) {
         <Notice title="New versions are flashed">
           <p>
             On the Pi Zero 2 W, 3B and 3B+, RasBeacon has one copy of the system, so it can&apos;t install update files.
-            To move to a new version, flash its new image and set RasBeacon up again.
+            To move to a new version, back up your settings below, flash the new image, set it up, and restore the
+            backup.
           </p>
         </Notice>
       ) : (
@@ -88,6 +87,62 @@ export function SoftwareSection({ status }: { status: Status }) {
         )
       )}
     </>
+  );
+}
+
+/** A link to a release's page on GitHub, where its files are. */
+function ReleaseLink({ url }: { url: string }) {
+  return (
+    <a href={url} target="_blank" rel="noreferrer" className={buttonClasses('secondary', 'sm')}>
+      Release page
+      <Icon name="open_in_new" size={16} />
+    </a>
+  );
+}
+
+/**
+ * A new version that can't be installed over this one (it changed too much): the steps to it,
+ * with the backup one a press away.
+ */
+function ReflashNotice({
+  reflash,
+  running,
+  hasPlugins,
+}: {
+  reflash: UpdateReflash;
+  running: string;
+  hasPlugins: boolean;
+}) {
+  const [backingUp, setBackingUp] = useState(false);
+
+  return (
+    <Notice
+      tone="info"
+      icon="system_update_alt"
+      title={`Version ${reflash.version} needs a fresh install`}
+      actions={
+        <>
+          <Button variant="secondary" size="sm" icon="download" onClick={() => setBackingUp(true)}>
+            Back up settings
+          </Button>
+          {reflash.url && <ReleaseLink url={reflash.url} />}
+        </>
+      }
+    >
+      <p>
+        It changed too much to be installed over {running}: only {reflash.minFromVersion} or newer can install it. Your
+        settings come along in three steps:
+      </p>
+      <ol className="flex list-decimal flex-col gap-0.5 pl-5">
+        <li>
+          Back up your settings{hasPlugins && <> (turn on Include plugins to keep them too)</>}, and keep the file and
+          its password.
+        </li>
+        <li>Flash the {reflash.version} image for your board onto the SD card, with Raspberry Pi Imager.</li>
+        <li>Set RasBeacon up, then restore the backup under System, Backup.</li>
+      </ol>
+      {backingUp && <BackupSheet hasPlugins={hasPlugins} onClose={() => setBackingUp(false)} />}
+    </Notice>
   );
 }
 

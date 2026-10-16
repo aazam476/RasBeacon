@@ -93,7 +93,9 @@ As built in milestone 1, this uses rpi-image-gen's `image-rota` layout
   config, never a partial one.
 - **Update flow, following the Pi firmware's documented A/B procedure:**
   1. Verify the bundle's Ed25519 signature and check that its version is not
-     older than the running one. A downgrade needs an explicit confirmation.
+     older than the running one (downgrades are refused; the way back is a
+     flash) and that the running one is at least the update's
+     `minFromVersion` (otherwise: back up, flash, restore).
   2. Write the inactive boot and root slots, verify their hashes, then run
      `reboot "0 tryboot"`.
   3. The new slot runs a health check: `rbd` running, `ap0` beaconing, the UI

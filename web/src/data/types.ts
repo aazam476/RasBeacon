@@ -187,6 +187,20 @@ export interface UpdateStatus {
   checkOnline: boolean;
   latestVersion?: string;
   latestUrl?: string;
+  /**
+   * A newer version that can't be installed over this one: the online check found it, or its
+   * update file was refused. The way to it is a backup, the new image, and the backup restored.
+   */
+  reflash?: UpdateReflash;
+}
+
+/** A new version that needs a fresh install (`UpdateStatus.reflash`). */
+export interface UpdateReflash {
+  version: string;
+  /** The oldest version that can install its update file. */
+  minFromVersion: string;
+  /** Its release page, when known. */
+  url?: string;
 }
 
 /** A "captive portal" is the login page of a hotel or café network. GET /api/v1/portal (no login). */

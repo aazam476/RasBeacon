@@ -6,7 +6,8 @@
 // board "rpi64" (the one image for the Pi 4 and Pi 5). It is a tar archive with three entries,
 // in this order:
 //
-//	manifest.json   what this is: board, version, size and SHA-256 of the bundle
+//	manifest.json   what this is: board, version, the oldest version that
+//	                can install it, size and SHA-256 of the bundle
 //	manifest.sig    an Ed25519 signature of manifest.json (base64)
 //	bundle.tar.zst  rpi-image-gen's update bundle: zstd-compressed tar with
 //	                the boot and system partitions as sparse images
@@ -17,6 +18,15 @@
 // the way. Only if everything matches does it boot the new slot, once, on
 // trial ("tryboot"; see internal/agent/update.go). Nobody without the
 // release signing key can make an update a RasBeacon will install.
+//
+// # Which versions can install it
+//
+// RasBeacon never installs an older version than the one running (see
+// CheckVersion). And when a version changes too much to be installed over
+// an old one (its settings or partitions changed, say), its manifest names
+// the oldest version that can install it (minFromVersion). An older
+// RasBeacon refuses it, and its owner moves to the new version by backing
+// up the settings, flashing the new image and restoring the backup.
 package update
 
 import (
@@ -31,6 +41,8 @@ import (
 	"hash"
 	"io"
 	"strings"
+
+	"rasbeacon/internal/version"
 )
 
 // Format names this layout; a different layout would get a new name.
@@ -42,9 +54,21 @@ type Manifest struct {
 	// Board is the image the update is for: "rpi64" (see build.sh).
 	Board   string `json:"board"`
 	Version string `json:"version"`
+	// MinFromVersion is the oldest RasBeacon that can install this update
+	// ("v1.0.0"). Empty: any version can.
+	MinFromVersion string `json:"minFromVersion,omitempty"`
 	// BundleSHA256 and BundleSize describe bundle.tar.zst.
 	BundleSHA256 string `json:"bundleSha256"`
 	BundleSize   int64  `json:"bundleSize"`
+}
+
+// Info is published next to a release's update file (<name>.update.json),
+// so the online update check can tell whether this RasBeacon can install
+// the new version before anyone downloads it. It is a hint only: the
+// signed manifest inside the update file is what counts.
+type Info struct {
+	Version        string `json:"version"`
+	MinFromVersion string `json:"minFromVersion,omitempty"`
 }
 
 // Package is an update file being read.
@@ -136,6 +160,38 @@ func (p *Package) Verify() error {
 	return nil
 }
 
+// NeedsReflashError means the update can't be installed over the version
+// running: it needs MinFromVersion or newer. The way to it is a backup, the
+// new image and the backup restored.
+type NeedsReflashError struct {
+	Version, MinFromVersion, Running string
+}
+
+// Error describes the refusal in a sentence for the owner.
+func (e *NeedsReflashError) Error() string {
+	return fmt.Sprintf("%s can't be installed over %s (it needs %s or newer). Back up your settings, flash the %s image, then restore the backup",
+		e.Version, e.Running, e.MinFromVersion, e.Version)
+}
+
+// CheckVersion reports whether the version running may install an update
+// with manifest m. It refuses an older version (a downgrade could meet
+// settings it doesn't understand), and a version that needs a newer
+// RasBeacon to install it (a *NeedsReflashError). The same version again
+// is allowed, to repair a damaged system copy. Development builds ("dev")
+// have no number to compare, so they install anything.
+func CheckVersion(m Manifest, running string) error {
+	if result, ok := version.Compare(m.Version, running); ok && result < 0 {
+		return fmt.Errorf("this update is %s, which is older than the %s running, and RasBeacon doesn't go back to older versions", m.Version, running)
+	}
+	if m.MinFromVersion == "" {
+		return nil
+	}
+	if result, ok := version.Compare(running, m.MinFromVersion); ok && result < 0 {
+		return &NeedsReflashError{Version: m.Version, MinFromVersion: m.MinFromVersion, Running: running}
+	}
+	return nil
+}
+
 // readSmallEntry reads the next tar entry, which must be called name and
 // small.
 func readSmallEntry(t *tar.Reader, name string) ([]byte, error) {
@@ -152,8 +208,19 @@ func readSmallEntry(t *tar.Reader, name string) ([]byte, error) {
 // --- Making update files (used by cmd/rbsign at release time) ---
 
 // Pack writes an update file: manifest, signature and bundle. bundle must
-// be readable twice (it is hashed first), e.g. an *os.File.
-func Pack(out io.Writer, bundle io.ReadSeeker, board, version string, key ed25519.PrivateKey) error {
+// be readable twice (it is hashed first), e.g. an *os.File. minFrom is the
+// oldest version that can install it ("" for any).
+func Pack(out io.Writer, bundle io.ReadSeeker, board, newVersion, minFrom string, key ed25519.PrivateKey) error {
+	if minFrom != "" {
+		if len(version.Numbers(minFrom)) == 0 {
+			return fmt.Errorf("the oldest version to update from (%s) must be a version like v1.0.0", minFrom)
+		}
+		// A version that can't install itself would be a mistake. (A
+		// development build has no number to compare.)
+		if result, ok := version.Compare(minFrom, newVersion); ok && result > 0 {
+			return fmt.Errorf("the oldest version to update from (%s) must be no newer than %s", minFrom, newVersion)
+		}
+	}
 	h := sha256.New()
 	size, err := io.Copy(h, bundle)
 	if err != nil {
@@ -163,7 +230,7 @@ func Pack(out io.Writer, bundle io.ReadSeeker, board, version string, key ed2551
 		return err
 	}
 	manifestJSON, err := json.MarshalIndent(Manifest{
-		Format: Format, Board: board, Version: version,
+		Format: Format, Board: board, Version: newVersion, MinFromVersion: minFrom,
 		BundleSHA256: hex.EncodeToString(h.Sum(nil)), BundleSize: size,
 	}, "", "  ")
 	if err != nil {

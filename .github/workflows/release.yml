@@ -122,6 +122,7 @@ jobs:
           files: |
             dist/*.img.xz
             dist/*.rbupdate
+            dist/*.update.json
             dist/*.packages.txt
             dist/SHA256SUMS
           tag_name: ${{ inputs.release || github.ref_name }}
