@@ -9,6 +9,8 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-0c8a9c?style=flat-square" alt="Apache-2.0 license"></a>
 </p>
 
+<h1 align="center">RasBeacon</h1>
+
 An open-source Wi-Fi travel router for the Raspberry Pi.
 Your devices join RasBeacon's hotspot, and RasBeacon joins the network where
 you are (hotel, campus eduroam, café). The goal is that all your traffic can
