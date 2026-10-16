@@ -119,10 +119,10 @@ function ReflashNotice({
     <Notice
       tone="info"
       icon="system_update_alt"
-      title={`Version ${reflash.version} needs a fresh install`}
+      title={`RasBeacon ${reflash.version} needs a fresh install`}
       actions={
         <>
-          <Button variant="secondary" size="sm" icon="download" onClick={() => setBackingUp(true)}>
+          <Button variant="secondary" size="sm" onClick={() => setBackingUp(true)}>
             Back up settings
           </Button>
           {reflash.url && <ReleaseLink url={reflash.url} />}
@@ -130,8 +130,8 @@ function ReflashNotice({
       }
     >
       <p>
-        It changed too much to be installed over {running}: only {reflash.minFromVersion} or newer can install it. Your
-        settings come along in three steps:
+        It can&apos;t be installed over {running} (it needs {reflash.minFromVersion} or newer). To move to it and keep
+        your settings:
       </p>
       <ol className="flex list-decimal flex-col gap-0.5 pl-5">
         <li>
@@ -139,7 +139,7 @@ function ReflashNotice({
           its password.
         </li>
         <li>Flash the {reflash.version} image for your board onto the SD card, with Raspberry Pi Imager.</li>
-        <li>Set RasBeacon up, then restore the backup under System, Backup.</li>
+        <li>Set RasBeacon up, then restore the backup on this page, under Backup.</li>
       </ol>
       {backingUp && <BackupSheet hasPlugins={hasPlugins} onClose={() => setBackingUp(false)} />}
     </Notice>
