@@ -94,8 +94,8 @@ export function SoftwareSection({ status }: { status: Status }) {
 function ReleaseLink({ url }: { url: string }) {
   return (
     <a href={url} target="_blank" rel="noreferrer" className={buttonClasses('secondary', 'sm')}>
-      Release page
       <Icon name="open_in_new" size={16} />
+      <span>Release page</span>
     </a>
   );
 }
@@ -122,7 +122,7 @@ function ReflashNotice({
       title={`RasBeacon ${reflash.version} needs a fresh install`}
       actions={
         <>
-          <Button variant="secondary" size="sm" onClick={() => setBackingUp(true)}>
+          <Button variant="secondary" size="sm" icon="download" onClick={() => setBackingUp(true)}>
             Back up settings
           </Button>
           {reflash.url && <ReleaseLink url={reflash.url} />}
