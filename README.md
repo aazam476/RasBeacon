@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/images/banner.png" alt="RasBeacon, an open-source travel router for the Raspberry Pi: its status page on an iPhone and a MacBook"></p>
+
 # RasBeacon
 
 An open-source Wi-Fi travel router for the Raspberry Pi.
