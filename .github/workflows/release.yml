@@ -126,6 +126,7 @@ jobs:
             dist/*.packages.txt
             dist/SHA256SUMS
           tag_name: ${{ inputs.release || github.ref_name }}
+          name: ${{ inputs.release || github.ref_name }}
           target_commitish: ${{ github.sha }}
           draft: ${{ github.ref_type == 'tag' }}
           prerelease: ${{ contains(inputs.release || github.ref_name, '-') }}
