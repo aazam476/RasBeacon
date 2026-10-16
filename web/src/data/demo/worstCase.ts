@@ -210,6 +210,8 @@ export function applyWorstCase(demo: DemoState) {
       'Updated to v1.9.3 on 2026-09-30. The previous version (v1.9.2) is kept and starts again by itself if this one fails.',
     latestVersion: 'v1.10.0-rc.2+build.20261011',
     latestUrl: 'https://github.example.com/rasbeacon/rasbeacon/releases/tag/v1.10.0-rc.2',
+    // A new version that needs a fresh install, from a refused file: no release page known.
+    reflash: { version: 'v1.10.0-rc.2+build.20261011', minFromVersion: 'v1.9.12-beta.4' },
   };
   status.radios = [
     ...status.radios,

@@ -156,8 +156,8 @@ function Hero({ plugin }: { plugin: Plugin }) {
                 aria-disabled={plugin.state !== 'running'}
                 className="pressable inline-flex h-8 items-center gap-1 rounded-full bg-tint-fill px-4 text-subhead font-semibold text-white no-underline aria-disabled:pointer-events-none aria-disabled:opacity-40"
               >
-                {openable.length > 1 ? `Open ${port.name}` : 'Open'}
                 <Icon name="open_in_new" size={16} />
+                {openable.length > 1 ? `Open ${port.name}` : 'Open'}
               </a>
             ))}
           </span>
