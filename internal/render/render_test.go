@@ -493,18 +493,27 @@ func TestWPASupplicant_EnterpriseMethods(t *testing.T) {
 		Networks: []WPANetwork{
 			{SSID: "eduroam", Security: config.UplinkEnterprise, Password: `p"w`, Enterprise: &WPAEnterprise{
 				Method: config.EAPTTLSPAP, Identity: "NetID@rutgers.edu", AnonymousIdentity: "anonymous@rutgers.edu",
-				ServerDomain: "ruw.rutgers.edu", CACertFile: "/persistent/rasbeacon/certs/a1-ca.pem",
+				ServerDomain: "ruw.rutgers.edu", CACert: "/persistent/rasbeacon/certs/a1-ca.pem",
 			}},
 			{SSID: "CorpNet", Security: config.UplinkEnterprise, Password: "secret", Enterprise: &WPAEnterprise{
 				Method: config.EAPPEAP, Identity: "alice", ServerDomain: "radius.corp.example",
-				CACertFile: "/persistent/rasbeacon/certs/b2-ca.pem",
+				CACert: "/persistent/rasbeacon/certs/b2-ca.pem",
 			}},
 			{SSID: "LabNet", Security: config.UplinkEnterprise, Password: "key-passphrase", Enterprise: &WPAEnterprise{
 				Method: config.EAPTLS, Identity: "bob", ServerDomain: "lab.example",
-				CACertFile: "/c/ca.pem", ClientCertFile: "/c/client.pem", ClientKeyFile: "/c/key.pem",
+				CACert: "/c/ca.pem", ClientCertFile: "/c/client.pem", ClientKeyFile: "/c/key.pem",
 			}},
 			{SSID: "NoCheck", Security: config.UplinkEnterprise, Password: "pw", Enterprise: &WPAEnterprise{
 				Method: config.EAPPEAP, Identity: "carol",
+			}},
+			{SSID: "NameOnly", Security: config.UplinkEnterprise, Password: "pw", Enterprise: &WPAEnterprise{
+				Method: config.EAPPEAP, Identity: "dave", ServerDomain: "radius.example.com", CACert: SystemCAFile,
+			}},
+			{SSID: "FirstTime", Security: config.UplinkEnterprise, Password: "pw", Enterprise: &WPAEnterprise{
+				Method: config.EAPPEAP, Identity: "erin", CACert: ProbeServerCert, Probe: true,
+			}},
+			{SSID: "Trusted", Security: config.UplinkEnterprise, Password: "pw", Enterprise: &WPAEnterprise{
+				Method: config.EAPPEAP, Identity: "frank", CACert: TrustedServerCert(strings.Repeat("ab", 32)),
 			}},
 		},
 	})
@@ -527,7 +536,7 @@ func TestWPASupplicant_EnterpriseMethods(t *testing.T) {
 func TestWPASupplicant_EnterpriseRejectsUnsafeValues(t *testing.T) {
 	_, err := WPASupplicant(WPAInput{Country: "US", Networks: []WPANetwork{
 		{SSID: "x", Security: config.UplinkEnterprise, Password: "pw", Enterprise: &WPAEnterprise{
-			Method: config.EAPPEAP, Identity: "a", ServerDomain: "evil\"\nca_cert=\"/x", CACertFile: "/c/ca.pem",
+			Method: config.EAPPEAP, Identity: "a", ServerDomain: "evil\"\nca_cert=\"/x", CACert: "/c/ca.pem",
 		}},
 	}})
 	if err == nil {

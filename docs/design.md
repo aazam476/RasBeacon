@@ -149,7 +149,7 @@ Secrets:
 - Never logged:
   - `wpa_supplicant` and `hostapd` run without `-d`.
   - `rbd`'s logger redacts known secret keys.
-  - The eduroam identity is shown masked (`N***@rutgers.edu`) in logs and exports.
+  - The eduroam identity is shown masked (`u***@example.com`) in logs and exports.
 
 Release images contain no keys, passwords or per-device material. Everything
 per-device is generated on first boot.
@@ -210,20 +210,27 @@ per-device is generated on first boot.
 - **Enterprise uplinks:** `eap=TTLS` + `phase2="auth=PAP"`, `PEAP` +
   `MSCHAPV2`, or `TLS` with a client cert/key. Fields:
   - `identity` and `anonymous_identity`
-  - `ca_cert` (uploaded PEM/DER; multiple CAs concatenated)
-  - `domain_suffix_match` or `domain_match` (from the "server name" field;
-    `*.ruw.rutgers.edu` maps to `domain_suffix_match=ruw.rutgers.edu`)
+  - `ca_cert`: the uploaded CA (PEM/DER; multiple CAs concatenated); the
+    system's CA list when only a server name is given; or, with neither,
+    `probe://` at the first connection and then
+    `hash://server/sha256/<the server certificate's SHA-256>` ("trust on
+    first connect", `internal/agent/servercert.go`)
+  - `domain_suffix_match` (from the "server name" field;
+    `*.radius.example.com` maps to `domain_suffix_match=radius.example.com`)
   - `ieee80211w=1` (PMF optional). `key_mgmt=WPA-EAP WPA-EAP-SHA256` covers
     WPA2- and WPA3-Enterprise.
 
-  **The UI refuses to save an Enterprise network without a CA certificate.**
-  An "I understand the risk" override exists only under an expanded Advanced
-  section and shows a persistent warning banner. The default is never "no
+  **The login server is always checked.** The CA certificate and server
+  name are optional (under Advanced); without them the first connection's
+  certificate is trusted, before any password is sent, and only that one
+  afterwards. A "Don't check the login server" override exists only under
+  Advanced and shows a persistent warning banner. The default is never "no
   validation".
 - **No eduroam preset:** RasBeacon is a general travel router, so eduroam
   is added like any WPA-Enterprise network (from the scan, or Add manually),
-  with TTLS/PAP as the default login method. `docs/eduroam.md` explains it,
-  with Rutgers as an example; nothing about it is built into the code.
+  with TTLS/PAP as the default login method. `docs/wpa-enterprise.md`
+  explains it, with eduroam as one example; nothing about it is built into
+  the code.
 - **Regulatory:** one country setting is applied to cfg80211 (`iw reg set`),
   hostapd and wpa_supplicant.
 
@@ -689,7 +696,7 @@ web/                static UI (HTML/CSS/ES modules)
 image/              rpi-image-gen config, overlays, systemd units, sysctl, partition layout
 test/netns/         namespace harness + leak tests
 test/hwsim/         hwsim/EAP tests, test CA generator
-docs/               architecture, eduroam (Rutgers example), wireguard-server, compatibility table, updating, redistribution
+docs/               architecture, wpa-enterprise, wireguard-server, compatibility table, updating, redistribution
 .github/workflows/  ci.yml, release.yml
 LICENSE, LICENSES/THIRD_PARTY.md, CONTRIBUTING.md, SECURITY.md
 ```

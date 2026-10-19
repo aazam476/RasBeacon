@@ -52,7 +52,7 @@ What plugins can't do, whatever they ask for:
 
 **After installing:** a plugin may tell you what to do next, for example
 AdGuard Home asks you to set the DNS servers (Internet → DNS servers) to its
-address and turn on **Also use while the VPN is on**. RasBeacon never makes
+address and turn on **Use these servers while the VPN is on**. RasBeacon never makes
 such changes for a plugin.
 
 **Crashes:** a plugin that stops by itself is started again. After 5 crashes

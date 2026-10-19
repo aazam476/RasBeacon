@@ -19,6 +19,9 @@ mmdebstrap:
     - dnsmasq-utils
     # Joins upstream Wi-Fi networks (the uplink)
     - wpasupplicant
+    # The certificate authorities the system trusts: they check an
+    # Enterprise network's login server when only its name was given
+    - ca-certificates
     # The "wg" tool for the WireGuard VPN (the kernel has WireGuard built in;
     # RasBeacon doesn't use wg-quick)
     - wireguard-tools

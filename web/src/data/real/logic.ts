@@ -140,14 +140,9 @@ export function checkNewNetwork(form: NewNetworkForm, list: SavedNetwork[]): Err
     } else if (!form.password) {
       errors.password = 'Enter your password.';
     }
-    if (!form.allowNoCertificateCheck) {
-      if (form.caCertFiles.length === 0) {
-        errors.caCert = "Choose the network's CA certificate file (your institution publishes it).";
-      }
-      if (!form.serverName) errors.serverName = "Enter the login server's name.";
-      else if (!SERVER_NAME.test(form.serverName.trim())) {
-        errors.serverName = 'Must look like radius.example.edu or *.example.edu.';
-      }
+    // Both optional: without them, RasBeacon trusts the login server it meets first.
+    if (!form.allowNoCertificateCheck && form.serverName.trim() && !SERVER_NAME.test(form.serverName.trim())) {
+      errors.serverName = 'Must look like radius.example.com or *.example.com.';
     }
   }
   return errors;

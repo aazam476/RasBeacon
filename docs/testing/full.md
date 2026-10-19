@@ -19,7 +19,7 @@ skip them freely. The report template at the end has one line per section.
 | Most sections | A phone (A), a second phone or tablet (B), a laptop. Your home router, an Ethernet cable, your home Wi-Fi password. |
 | Section 8 | A WireGuard `.conf` for RasBeacon ([server guide](../wireguard-server.md)); a second one for profiles if you can. |
 | Section 10 | A network with a login page (hotel, café, library, campus guest). |
-| Section 4.6 | Being on campus, with eduroam's certificates ([guide](../eduroam.md)). |
+| Section 4.6 | Being near a WPA-Enterprise network you can log in to, such as eduroam ([guide](../wpa-enterprise.md)). |
 | Section 13 | A USB stick (exFAT) for Samba; an Argon ONE V2 case for a Pi 4, if you have one. |
 | Section 14 (Pi 4/5 only) | The `.rbupdate` file from a build **newer** than the image you flashed (same Artifacts download). |
 | Optional | A USB power meter, `iperf3` on two computers, a push button and two jumper wires. |
@@ -101,19 +101,20 @@ first if you want them; everything else works from the web pages alone.
    *Connected to Wi-Fi "…"* with signal and band; websites load.
 5. Plug Ethernet back in. **Expect:** it switches back to Ethernet. Unplug
    it again for the next sections.
-6. **eduroam (if you can, on campus):** connect RasBeacon to any network
-   once first, so its clock is set. Then tap **eduroam** in the nearby
-   networks list (or **Add manually**: name `eduroam`, security *Username
-   and password*): login method
-   *EAP-TTLS with PAP* (try PEAP if it doesn't connect), username
-   `NetID@rutgers.edu`, anonymous username `anonymous@rutgers.edu`, your
-   password, **both** CA certificate files and the login server name
-   `*.ruw.rutgers.edu` (see the [eduroam guide](../eduroam.md#example-rutgers-university)),
-   **Add to list**, **Save**, and move eduroam to the top if other networks
-   are saved. **Expect:** connected within 30 s, websites load. *SSH* or
-   diagnostics: the `key_mgmt=` line tells WPA2- from WPA3-Enterprise.
-   A wrong server name or wrong password: **expect** *The network rejected
-   the login* and no connection.
+6. **WPA-Enterprise (if you can, e.g. eduroam):** connect RasBeacon to any
+   network once first, so its clock is set. Then tap the network in the
+   nearby networks list (or **Add manually**, security *Username and
+   password*): login method *EAP-TTLS with PAP* (try PEAP if it doesn't
+   connect), your username, anonymous identity and password, and leave
+   **Advanced** closed. **Add to list**, **Save**, and move the network to
+   the top if others are saved. **Expect:** connected within 30 s, websites
+   load, and the saved network shows *Login server: Trusted since the first
+   connection (…)*. *SSH:* `grep ca_cert /run/rbd/wpa_supplicant.conf` shows
+   `hash://server/sha256/…`. Then remove it and add it again with the CA
+   certificate(s) and server name under **Advanced** (see the
+   [guide](../wpa-enterprise.md#finding-the-ca-certificate-and-server-name)):
+   **expect** it connects too. A wrong server name or wrong password:
+   **expect** *The network rejected the login* and no connection.
 7. **Hotspot moves on large networks (fixed this round, campus/eduroam):**
    if the network you join uses RasBeacon's own address range (10.87.x.x),
    **expect** the hotspot to restart within a minute on another range
@@ -136,10 +137,10 @@ first if you want them; everything else works from the web pages alone.
 
 The VPN stays **off** for this section.
 
-1. Internet → **DNS servers** row. **Expect:** it says *The network's own*.
-2. Tap it, type `dns.google`, **Save**. **Expect:** *Saved.*; the box now
-   shows `https://dns.google/dns-query`; the row says *dns.google
-   (encrypted)*.
+1. Internet → **DNS servers** row. **Expect:** the row lists no servers;
+   opening it shows an empty box.
+2. Type `dns.google`, **Save**. **Expect:** *Saved.*; the box now shows
+   `https://dns.google/dns-query`.
 3. On phone A, open <https://dnsleaktest.com> (standard test) or
    <https://one.one.one.one/help>. **Expect:** Google's DNS, not your
    provider's or the network's.
@@ -148,12 +149,17 @@ The VPN stays **off** for this section.
    `cat /run/rbd/doh.env` lists the server and `127.0.0.53`;
    `journalctl -u rasbeacon-doh -b` shows no errors.
 6. Type `https://cloudflare-dns.com/dns-query` and `1.1.1.1` on two lines,
-   **Save**. **Expect:** the leak test now shows Cloudflare.
+   in that order, **Save**. **Expect:** after reloading the page the box
+   keeps that order; the leak test shows Cloudflare; *SSH:*
+   `grep -A3 strict-order /run/rbd/dnsmasq.conf` lists `127.0.0.1#5053`
+   before `1.1.1.1`, and `/run/rbd/doh.env` has
+   `RBDOH_BOOTSTRAP=1.1.1.1 127.0.0.53`.
 7. Type `not a server`, **Save**. **Expect:** an error under the box, and
    nothing changes.
 8. Plain DNS only: `9.9.9.9`, **Save**. **Expect:** the leak test shows
    Quad9; *SSH:* `systemctl status rasbeacon-doh` is *inactive*.
-9. Empty the box, **Save**. **Expect:** *The network's own* again.
+9. Empty the box, **Save**. **Expect:** *Saved.*, and the network's DNS is
+   used again.
 10. On the laptop: `nslookup example.com 8.8.8.8`. **Expect:** an answer
     (RasBeacon answers every DNS question itself).
 
@@ -215,7 +221,7 @@ The VPN stays **off** for this section.
    (section 5) to `dns.google` while the VPN is on: **expect** the leak
    test still shows the VPN's DNS (the VPN's DNS wins), and *SSH:*
    `rasbeacon-doh` is inactive.
-   **Also use while the VPN is on (new):** turn the switch on under the
+   **Use these servers while the VPN is on:** turn the switch on under the
    DNS box, **Save**. **Expect:** the leak test shows Google's DNS, reached
    from the VPN server's address (not your home address); *SSH:*
    `rasbeacon-doh` is active and `ip rule` lists a `uidrange` rule for the
@@ -352,8 +358,8 @@ Pi 4 in an Argon ONE V2 case, test that plugin too.
 4. **VPN + kill switch:** break the tunnel (see section 8) and install Samba:
    **expect** *Waiting for the VPN*, and the install continuing once the VPN
    is back. Fix the tunnel.
-5. **DNS:** do what *Next steps* says (DNS servers = its address, **Also use
-   while the VPN is on**). **Expect** ads blocked on phone A
+5. **DNS:** do what *Next steps* says (DNS servers = its address, **Use
+   these servers while the VPN is on**). **Expect** ads blocked on phone A
    (<https://d3ward.github.io/toolz/adblock>), and AdGuard's *Queries today*
    growing. Guests' lookups are filtered too, but on a guest phone
    `http://10.87.0.1:3000` doesn't load.

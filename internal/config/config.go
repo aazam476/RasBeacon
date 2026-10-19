@@ -147,11 +147,28 @@ type DNSConfig struct {
 	// DoH are DNS-over-HTTPS servers (https://host/path, see ParseDoH),
 	// asked through RasBeacon's DoH forwarder (cmd/rbdoh) alongside Servers.
 	DoH []string `json:"doh,omitempty"`
+	// Order is every server above, plain and DoH, in the order the owner
+	// listed them: devices' lookups go to the first, then the next if it
+	// doesn't answer. Settings saved before v0.2.0 have none: their plain
+	// servers came first, then the DoH ones (see Ordered).
+	Order []string `json:"order,omitempty"`
 	// WithVPN uses these servers while devices' traffic goes through the
 	// VPN too (normally the VPN's own DNS servers are used then). They are
 	// then reached through the tunnel, and the DoH forwarder's traffic goes
 	// through it as well.
 	WithVPN bool `json:"withVpn,omitempty"`
+}
+
+// Ordered returns the servers in the order the owner listed them.
+func (d DNSConfig) Ordered() []string {
+	if len(d.Order) > 0 {
+		return d.Order
+	}
+	var out []string
+	for _, s := range d.Servers {
+		out = append(out, s.String())
+	}
+	return append(out, d.DoH...)
 }
 
 // MaxDNSServers keeps the list short; dnsmasq asks them in turn.
@@ -447,26 +464,32 @@ const (
 // directory (see paths.Paths).
 type EnterpriseConfig struct {
 	Method EAPMethod `json:"method"`
-	// Identity is your username, e.g. "NetID@rutgers.edu".
+	// Identity is your username, e.g. "user@example.com".
 	Identity string `json:"identity"`
 	// AnonymousIdentity is sent before the encrypted tunnel is set up, so
 	// your real username is not visible to the hotspot, e.g.
-	// "anonymous@rutgers.edu". Optional.
+	// "anonymous@example.com". Optional.
 	AnonymousIdentity string `json:"anonymousIdentity"`
 	// ServerName is the name in the login server's certificate, as your
-	// institution publishes it, e.g. "*.ruw.rutgers.edu". RasBeacon only
-	// talks to a server whose certificate matches it (see ServerDomain).
+	// company or university publishes it, e.g. "*.radius.example.com".
+	// RasBeacon only talks to a server whose certificate matches it (see
+	// ServerDomain). Optional.
 	ServerName string `json:"serverName"`
+	// ServerCertHash is the SHA-256 of the login server's certificate,
+	// remembered at the first connection when neither a CA certificate nor
+	// a server name was given ("trust on first connect", as phones do).
+	// From then on only that certificate is accepted.
+	ServerCertHash string `json:"serverCertHash,omitempty"`
 	// AllowNoCertificateCheck turns off checking the login server's
 	// certificate. Anyone could then pretend to be the network and collect
 	// your password, so this is off by default and the UI warns about it.
 	AllowNoCertificateCheck bool `json:"allowNoCertificateCheck"`
 }
 
-// ServerDomain turns the server name as institutions publish it into the
-// domain RasBeacon requires in the server's certificate: "*.ruw.rutgers.edu"
-// becomes "ruw.rutgers.edu", which matches that name and every name ending
-// in ".ruw.rutgers.edu".
+// ServerDomain turns the server name as networks publish it into the
+// domain RasBeacon requires in the server's certificate:
+// "*.radius.example.com" becomes "radius.example.com", which matches that
+// name and every name ending in ".radius.example.com".
 func (e EnterpriseConfig) ServerDomain() string {
 	return strings.ToLower(strings.TrimPrefix(strings.TrimSpace(e.ServerName), "*."))
 }
@@ -835,22 +858,17 @@ func (n SavedNetwork) validateEnterprise(c NetworkCredentials) *ValidationError 
 		return &ValidationError{Field: "password", Message: err.Error()}
 	}
 
-	// The server's certificate must be checked unless the owner explicitly
-	// turned that off: without the check, anyone nearby could set up a fake
-	// "eduroam" and collect the password.
-	if e.AllowNoCertificateCheck {
+	// The login server's certificate is always checked unless the owner
+	// explicitly turned that off: without the check, anyone nearby could
+	// set up a fake network with the same name and collect the password.
+	// With a CA certificate and/or a server name, the certificate must
+	// match them; with neither, RasBeacon trusts the certificate it sees
+	// at the first connection and only that one afterwards.
+	if e.AllowNoCertificateCheck || e.ServerName == "" {
 		return nil
 	}
-	if !c.HasCACert {
-		return &ValidationError{Field: "enterprise.caCert", Message: "Upload the network's CA certificate (your institution publishes it), so RasBeacon can check it is talking to the real network."}
-	}
-	// A CA certificate alone is not enough: public CAs sign certificates
-	// for millions of servers. The server name narrows it down to yours.
-	if e.ServerName == "" {
-		return &ValidationError{Field: "enterprise.serverName", Message: "Enter the login server's name (your institution publishes it, e.g. *.ruw.rutgers.edu)."}
-	}
 	if !isDomainName(e.ServerDomain()) {
-		return &ValidationError{Field: "enterprise.serverName", Message: "Must be a server name like radius.example.edu or *.example.edu."}
+		return &ValidationError{Field: "enterprise.serverName", Message: "Must be a server name like radius.example.com or *.example.com."}
 	}
 	return nil
 }
@@ -877,7 +895,7 @@ func checkEAPText(text string, required bool) error {
 }
 
 // isDomainName reports whether name looks like a DNS name such as
-// "ruw.rutgers.edu": dot-separated labels of letters, digits and hyphens.
+// "radius.example.com": dot-separated labels of letters, digits and hyphens.
 func isDomainName(name string) bool {
 	if name == "" || len(name) > 253 {
 		return false

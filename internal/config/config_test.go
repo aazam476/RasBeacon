@@ -217,8 +217,12 @@ func TestUplinkConfig_ValidateEnterprise(t *testing.T) {
 		wantField string
 	}{
 		{"complete TTLS", eduroam(nil), withCA, ""},
-		{"no CA certificate", eduroam(nil), NetworkCredentials{Password: "pw"}, "networks.0.enterprise.caCert"},
-		{"no server name", eduroam(func(e *EnterpriseConfig) { e.ServerName = "" }), withCA, "networks.0.enterprise.serverName"},
+		// Without a CA certificate, the server name is checked against the
+		// system's CAs; with neither, the first connection's certificate is
+		// trusted from then on.
+		{"no CA certificate", eduroam(nil), NetworkCredentials{Password: "pw"}, ""},
+		{"no server name", eduroam(func(e *EnterpriseConfig) { e.ServerName = "" }), withCA, ""},
+		{"neither", eduroam(func(e *EnterpriseConfig) { e.ServerName = "" }), NetworkCredentials{Password: "pw"}, ""},
 		{"bad server name", eduroam(func(e *EnterpriseConfig) { e.ServerName = "ruw rutgers" }), withCA, "networks.0.enterprise.serverName"},
 		{"check turned off on purpose", eduroam(func(e *EnterpriseConfig) { e.AllowNoCertificateCheck = true; e.ServerName = "" }),
 			NetworkCredentials{Password: "pw"}, ""},

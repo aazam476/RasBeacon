@@ -182,3 +182,23 @@ func TestDNS_AlsoWhileTheVPNIsOn(t *testing.T) {
 		t.Errorf("without the switch, the VPN's DNS is used:\n%s", got)
 	}
 }
+
+func TestDNS_ServersAreAskedInTheOrderListed(t *testing.T) {
+	e := newClaimedEnv(t, false)
+	// A DoH server first, then a plain one: the DoH server is asked first,
+	// and its name is looked up with the plain one.
+	err := e.agent.UpdateDNSSettings(api.DNSSettings{Servers: []string{"https://cloudflare-dns.com/dns-query", "1.1.1.1"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(e.agent.DNSSettings().Servers, " "); got != "https://cloudflare-dns.com/dns-query 1.1.1.1" {
+		t.Errorf("the list must keep its order, got %q", got)
+	}
+	conf := e.readFile(e.paths.DnsmasqConfig())
+	if !strings.Contains(conf, "strict-order\nserver=127.0.0.1#5053\nserver=1.1.1.1") {
+		t.Errorf("dnsmasq must ask the forwarder first, strictly in order:\n%s", conf)
+	}
+	if got := e.readFile(e.paths.DoHEnv()); !strings.Contains(got, "RBDOH_BOOTSTRAP=1.1.1.1 127.0.0.53\n") {
+		t.Errorf("doh.env = %q", got)
+	}
+}

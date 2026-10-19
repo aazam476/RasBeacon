@@ -39,15 +39,35 @@ type WPAEnterprise struct {
 	Identity          string
 	AnonymousIdentity string
 	// ServerDomain is required in the server certificate's name, e.g.
-	// "ruw.rutgers.edu" (see config.EnterpriseConfig.ServerDomain). Empty
-	// only when the certificate check was turned off.
+	// "radius.example.com" (see config.EnterpriseConfig.ServerDomain).
+	// Optional.
 	ServerDomain string
-	// Files written by rbd. CACertFile is empty only when the certificate
-	// check was turned off; the client files are for EAP-TLS.
-	CACertFile     string
+	// CACert is what the server's certificate is checked against
+	// (wpa_supplicant's ca_cert): a CA certificate file, the system's CA
+	// list (when only a server name was given), "hash://server/sha256/…"
+	// for a certificate trusted at the first connection, or "probe://" to
+	// learn the certificate without logging in. Empty only when the check
+	// was turned off.
+	CACert string
+	// Probe is true for "probe://": the connection only fetches the server's
+	// certificate, so rbd can remember it, and never sends the password.
+	Probe bool
+	// Files written by rbd, for EAP-TLS.
 	ClientCertFile string
 	ClientKeyFile  string
 }
+
+// SystemCAFile lists the certificate authorities the system trusts. It
+// checks a login server when only its name was given.
+const SystemCAFile = "/etc/ssl/certs/ca-certificates.crt"
+
+// TrustedServerCert is the ca_cert value that accepts only the server
+// certificate with this SHA-256 (hexadecimal).
+func TrustedServerCert(hash string) string { return "hash://server/sha256/" + hash }
+
+// ProbeServerCert is the ca_cert value that only reports the server's
+// certificate (see WPAEnterprise.Probe).
+const ProbeServerCert = "probe://"
 
 // WPAInput is everything needed to write wpa_supplicant.conf.
 type WPAInput struct {
@@ -145,13 +165,13 @@ func checkEnterprise(n WPANetwork) error {
 	if e.Method == config.EAPTLS && (e.ClientCertFile == "" || e.ClientKeyFile == "") {
 		return fmt.Errorf("EAP-TLS needs a client certificate and key")
 	}
-	for _, value := range []string{e.ServerDomain, e.CACertFile, e.ClientCertFile, e.ClientKeyFile} {
+	for _, value := range []string{e.ServerDomain, e.CACert, e.ClientCertFile, e.ClientKeyFile} {
 		if strings.ContainsAny(value, "\"\n\r\\") {
 			return fmt.Errorf("unsafe value %q", value)
 		}
 	}
-	if e.CACertFile != "" && e.ServerDomain == "" {
-		return fmt.Errorf("a CA certificate needs a server name")
+	if e.CACert == SystemCAFile && e.ServerDomain == "" {
+		return fmt.Errorf("the system's CA list needs a server name")
 	}
 	return nil
 }

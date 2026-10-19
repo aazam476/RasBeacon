@@ -625,6 +625,13 @@ func (a *Agent) UpdateUplinkSettings(req api.UplinkSettings) error {
 				return err
 			}
 			uploads[id] = parsed
+			// A login server trusted at the first connection stays trusted
+			// while the network is the same one with no CA or name given.
+			for _, old := range a.cfg.Uplink.Networks {
+				if old.ID == id && old.SSID == n.SSID && old.Enterprise != nil && e.ServerName == "" && parsed.caCert == "" {
+					saved.Enterprise.ServerCertHash = old.Enterprise.ServerCertHash
+				}
+			}
 		}
 
 		if n.Security == config.UplinkPersonal || n.Security == config.UplinkEnterprise {

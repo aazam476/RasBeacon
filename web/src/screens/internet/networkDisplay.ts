@@ -3,7 +3,7 @@ import type { EAPMethod, NearbyNetwork, UplinkSecurity } from '@/data/types';
 /** The three kinds of network RasBeacon can join, as the "Security" choice names them. */
 export const SECURITY_OPTIONS: { value: UplinkSecurity; label: string }[] = [
   { value: 'personal', label: 'Password (WPA2/WPA3-Personal)' },
-  { value: 'enterprise', label: 'Username and password (WPA2/WPA3-Enterprise, e.g. eduroam)' },
+  { value: 'enterprise', label: 'Username and password (WPA2/WPA3-Enterprise)' },
   { value: 'open', label: 'Open (no password)' },
 ];
 

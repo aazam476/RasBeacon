@@ -311,9 +311,16 @@ func (a *Agent) egressInterfaces() []string {
 // upstreamDNS returns the DNS servers dnsmasq passes devices' questions to.
 func (a *Agent) upstreamDNS() []string {
 	if a.ownDNSInUse() {
-		servers := addrStrings(a.cfg.DNS.Servers)
-		if len(a.cfg.DNS.DoH) > 0 {
-			servers = append(servers, dohForwarder)
+		// In the owner's order. The DoH servers are all asked through the
+		// one forwarder, which takes the place of the first of them (it
+		// asks them in the same order).
+		var servers []string
+		for _, s := range a.cfg.DNS.Ordered() {
+			if _, err := netip.ParseAddr(s); err == nil {
+				servers = append(servers, s)
+			} else if !slices.Contains(servers, dohForwarder) {
+				servers = append(servers, dohForwarder)
+			}
 		}
 		return servers
 	}

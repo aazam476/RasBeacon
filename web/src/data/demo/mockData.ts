@@ -326,9 +326,9 @@ export function createMockRouter(): MockRouter {
           hasPassword: true,
           enterprise: {
             method: 'ttls-pap',
-            identity: 'netid@rutgers.edu',
-            anonymousIdentity: 'anonymous@rutgers.edu',
-            serverName: '*.ruw.rutgers.edu',
+            identity: 'user@example.edu',
+            anonymousIdentity: 'anonymous@example.edu',
+            serverName: 'radius.example.edu',
             allowNoCertificateCheck: false,
             caCertSummary: 'USERTrust RSA Certification Authority (valid until 2038-01-18)',
             clientCertSummary: '',

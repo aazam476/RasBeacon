@@ -112,9 +112,9 @@ describe('adding a network', () => {
     expect(checkNewNetwork({ ...emptyForm, ssid: 'Cafe', security: 'open' }, [])).toEqual({});
     expect(checkNewNetwork({ ...emptyForm, ssid: 'Home', security: 'open' }, [home]).ssid).toMatch(/already/);
   });
-  it('needs the CA certificate and server name for Enterprise, unless the check is off', () => {
+  it('takes Enterprise networks without a CA certificate or server name, but checks a name given', () => {
     const eduroam = { ...emptyForm, ssid: 'eduroam', security: 'enterprise' as const, identity: 'me', password: 'pw' };
-    expect(Object.keys(checkNewNetwork(eduroam, [])).sort()).toEqual(['caCert', 'serverName']);
+    expect(checkNewNetwork(eduroam, [])).toEqual({});
     expect(checkNewNetwork({ ...eduroam, serverName: 'not a name!' }, []).serverName).toMatch(/radius\.example/);
     expect(checkNewNetwork({ ...eduroam, allowNoCertificateCheck: true }, [])).toEqual({});
     expect(

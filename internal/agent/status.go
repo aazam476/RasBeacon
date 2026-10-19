@@ -61,7 +61,7 @@ func (a *Agent) StatusFor(viewer string) api.Status {
 		Update:   a.updateStatus(),
 		Radios:   a.radios,
 		Clients:  a.connectedClients(),
-		Warnings: slices.Concat(a.warnings, a.vpnWarnings(), a.uplinkWarnings(), a.enterpriseWarnings(), a.guestWarnings()),
+		Warnings: slices.Concat(a.warnings, a.vpnWarnings(), a.uplinkWarnings(), a.enterpriseWarnings(), a.serverCertWarnings(), a.guestWarnings()),
 
 		Throughput:          a.readings.traffic,
 		System:              a.systemStats(),

@@ -121,7 +121,7 @@ seconds later, so the phone receives the "success" page first.
   certificates go into `wpa_supplicant.conf` (`internal/agent/enterprise.go`).
   RasBeacon only accepts a login server whose certificate is signed by the
   uploaded CA *and* carries the configured server name. See
-  [eduroam.md](eduroam.md).
+  [wpa-enterprise.md](wpa-enterprise.md).
 - **IPv6:** devices always get a private IPv6 address on the hotspot. They
   only get an IPv6 route to the internet when the uplink has IPv6; then
   their traffic is translated like IPv4 (*NAT66*).

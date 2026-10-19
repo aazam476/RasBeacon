@@ -11,6 +11,7 @@ import (
 	"net/netip"
 	"os"
 	"os/user"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -41,12 +42,12 @@ const (
 	dohForwarder = "127.0.0.1#5053"
 )
 
-// DNSSettings returns the owner's DNS servers ([] for the network's): the
-// plain ones, then the DoH ones.
+// DNSSettings returns the owner's DNS servers ([] for the network's), in
+// the order they were listed.
 func (a *Agent) DNSSettings() api.DNSSettings {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return api.DNSSettings{Servers: append(addrStrings(a.cfg.DNS.Servers), a.cfg.DNS.DoH...), WithVPN: a.cfg.DNS.WithVPN}
+	return api.DNSSettings{Servers: slices.Clone(a.cfg.DNS.Ordered()), WithVPN: a.cfg.DNS.WithVPN}
 }
 
 // UpdateDNSSettings saves the DNS servers and tells dnsmasq at once. Each
@@ -67,6 +68,7 @@ func (a *Agent) UpdateDNSSettings(req api.DNSSettings) error {
 		}
 		if addr, err := netip.ParseAddr(item); err == nil {
 			newCfg.DNS.Servers = append(newCfg.DNS.Servers, addr)
+			newCfg.DNS.Order = append(newCfg.DNS.Order, addr.String())
 			continue
 		}
 		doh, err := config.ParseDoH(item)
@@ -75,6 +77,7 @@ func (a *Agent) UpdateDNSSettings(req api.DNSSettings) error {
 				"%q is not an IP address or a DNS-over-HTTPS address like https://dns.example/dns-query.", item)}
 		}
 		newCfg.DNS.DoH = append(newCfg.DNS.DoH, doh)
+		newCfg.DNS.Order = append(newCfg.DNS.Order, doh)
 	}
 	if err := newCfg.DNS.Validate(); err != nil {
 		return err
@@ -83,7 +86,7 @@ func (a *Agent) UpdateDNSSettings(req api.DNSSettings) error {
 		return err
 	}
 	a.cfg = newCfg
-	slog.Info("DNS servers saved", "servers", addrStrings(newCfg.DNS.Servers), "doh", newCfg.DNS.DoH, "withVPN", newCfg.DNS.WithVPN)
+	slog.Info("DNS servers saved", "servers", newCfg.DNS.Order, "withVPN", newCfg.DNS.WithVPN)
 	if a.vpnActive() {
 		// The tunnel's DNS routes and the firewall's guard change too.
 		if err := a.applyVPNConfig(); err != nil {

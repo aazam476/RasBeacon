@@ -444,10 +444,15 @@ export interface EnterpriseSettings {
   method: EAPMethod;
   identity: string;
   anonymousIdentity: string;
-  /** As the institution publishes it, e.g. "*.example.edu". */
+  /** As the network publishes it, e.g. "*.example.com". Optional. */
   serverName: string;
   /** Turns off checking the login server. Unsafe; the UI warns. */
   allowNoCertificateCheck: boolean;
+  /**
+   * Without a CA certificate or server name: the SHA-256 of the login server's certificate,
+   * trusted at the first connection (empty until then). Read only.
+   */
+  serverCertHash?: string;
   caCert?: string;
   caCertSummary: string;
   clientCert?: string;

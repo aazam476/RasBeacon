@@ -29,7 +29,7 @@ hotel login pages.
 > testing is in progress** (see the [full test plan](docs/testing/full.md)). RasBeacon
 > runs your hotspot (plus an optional guest network), connects it to the
 > internet through Ethernet or Wi-Fi (open, password, or WPA-Enterprise
-> such as eduroam, [guide](docs/eduroam.md)), can send everything through
+> such as eduroam, [guide](docs/wpa-enterprise.md)), can send everything through
 > your own WireGuard VPN with a kill switch, keeping several VPN profiles
 > ([server guide](docs/wireguard-server.md)), lets you log in to hotel login
 > pages without anything leaving the VPN, and installs signed updates with

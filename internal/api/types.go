@@ -571,6 +571,10 @@ type EnterpriseSettings struct {
 	AnonymousIdentity       string           `json:"anonymousIdentity"`
 	ServerName              string           `json:"serverName"`
 	AllowNoCertificateCheck bool             `json:"allowNoCertificateCheck"`
+	// ServerCertHash is the SHA-256 of the login server's certificate,
+	// trusted at the first connection (read only; empty until then, and
+	// when a CA certificate or server name is given).
+	ServerCertHash string `json:"serverCertHash,omitempty"`
 
 	CACert            string `json:"caCert,omitempty"`
 	CACertSummary     string `json:"caCertSummary"`
