@@ -13,7 +13,7 @@ export function SwapSection() {
     <Loaded data={swapSettings} what="the swap settings" onRetry={() => reload('swapSettings')}>
       {(settings) => (
         <Section
-          footer={`Lets programs keep running when memory runs out. Used only when memory is really short, because it wears the card. ${settings.maxGb > 0 ? `Up to ${formatGb(settings.maxGb)} fits` : 'The card is too full for one'} (1 GB always stays free).`}
+          footer={`Lets programs keep running when memory runs out. 2 GB is recommended on the Pi Zero 2 W and other boards with 1 GB of memory.${settings.maxGb > 0 ? '' : ' The card is too full for one.'}`}
         >
           <Disclosure
             title="Swap file"

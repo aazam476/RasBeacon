@@ -12,7 +12,7 @@ export function StorageSection({ storage }: { storage: StorageInfo }) {
   ];
 
   return (
-    <Section title="Storage" footer={`${storage.filesystem}, ${storage.health} health.`}>
+    <Section title="Storage">
       <div className="row flex-col items-stretch gap-3 py-3.5">
         <RowText
           title={storage.medium}

@@ -38,10 +38,7 @@ function HardwareSection({ status }: { status: Status }) {
   const { system } = status;
 
   return (
-    <Section
-      title="Hardware"
-      footer={`Cooling: ${system.cooling}. Sensor: ${system.sensorStatus}. Slowed down for heat: ${system.throttling}.`}
-    >
+    <Section title="Hardware">
       {Object.values(getResourceMetrics(system)).map((metric) => (
         <Row
           key={metric.label}
@@ -63,7 +60,6 @@ function AboutSection({ status }: { status: Status }) {
   return (
     <Section title="About">
       <Row title="Name" value={device.hostname} />
-      <Row title="RasBeacon version" value={status.version} />
       <Row title="Board" value={status.boardModel} />
       <Row title="Model" value={device.modelSpec} />
       <Row title="Device ID" value={status.deviceId} />
@@ -89,9 +85,13 @@ function RadiosSection({ status }: { status: Status }) {
           key={radio.interface}
           leading={{ icon: 'wifi' }}
           title={<span className="font-mono">{radio.interface}</span>}
-          subtitle={`${radio.driver} · ${radio.isUsb ? `USB ${radio.usbId}` : 'built-in'} · ${
-            radio.maxAps > 1 ? `can broadcast ${radio.maxAps} networks` : 'one network at a time'
-          }`}
+          subtitle={[
+            radio.driver,
+            radio.isUsb ? `USB ${radio.usbId}` : 'built-in',
+            radio.maxAps > 1 && `can broadcast ${radio.maxAps} networks`,
+          ]
+            .filter(Boolean)
+            .join(' · ')}
           trailing={<Badge tone={ROLES[radio.role].tone}>{ROLES[radio.role].label}</Badge>}
         />
       ))}
@@ -99,12 +99,12 @@ function RadiosSection({ status }: { status: Status }) {
   );
 }
 
-/** A text report to attach when asking for help: a plain file download. */
+/** A text report to attach to a GitHub issue: a plain file download. */
 function DiagnosticsSection() {
   const { diagnosticsUrl } = useDevice();
 
   return (
-    <Section footer="A text report to attach when asking for help. Passwords are removed and device addresses are partly hidden.">
+    <Section footer="Attach this report when you open an issue on GitHub. Passwords are removed and device addresses are partly hidden.">
       <a
         href={diagnosticsUrl}
         download="rasbeacon-diagnostics.txt"
