@@ -220,12 +220,10 @@ func (a *Agent) UpdateHotspotSettings(req api.HotspotSettings) error {
 	return a.startNormalMode()
 }
 
-// RevealHotspotPassword returns the hotspot password if adminPassword is
-// correct. The password is only shown on request, never in normal responses.
-func (a *Agent) RevealHotspotPassword(adminPassword string) (string, error) {
-	if !a.VerifyAdminPassword(adminPassword) {
-		return "", ErrWrongPassword
-	}
+// RevealHotspotPassword returns the hotspot password. It is only shown on
+// request, never in normal responses; being logged in is enough to ask
+// (whoever is logged in typed the admin password already).
+func (a *Agent) RevealHotspotPassword() (string, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.secrets.HotspotPassword, nil

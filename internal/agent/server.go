@@ -184,11 +184,7 @@ func (a *Agent) Handler() http.Handler {
 	})
 
 	mux.HandleFunc("POST /settings/hotspot/reveal-password", func(w http.ResponseWriter, r *http.Request) {
-		var req api.PasswordRequest
-		if !readJSON(w, r, &req) {
-			return
-		}
-		password, err := a.RevealHotspotPassword(req.Password)
+		password, err := a.RevealHotspotPassword()
 		if err != nil {
 			writeError(w, err)
 			return

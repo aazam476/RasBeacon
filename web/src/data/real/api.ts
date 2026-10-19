@@ -206,13 +206,10 @@ export const getStatus = () => request<Status>('GET', '/status');
 export const getHotspotSettings = () => request<HotspotSettings>('GET', '/settings/hotspot');
 export const putHotspotSettings = (settings: HotspotSettings) =>
   request<HotspotSettings>('PUT', '/settings/hotspot', { body: settings, timeoutMs: 45_000 });
-export const revealHotspotPassword = (adminPassword: string) =>
-  request<{ hotspotPassword: string }>('POST', '/settings/hotspot/reveal-password', {
-    body: { password: adminPassword },
-  });
-/** A QR code to join the hotspot (needs the admin password) or the guest network. */
-export const wifiQr = (network: 'hotspot' | 'guest', adminPassword?: string) =>
-  request<WiFiQR>('POST', '/wifi-qr', { body: { network, adminPassword } });
+export const revealHotspotPassword = () =>
+  request<{ hotspotPassword: string }>('POST', '/settings/hotspot/reveal-password', { body: {} });
+/** A QR code to join the hotspot or the guest network. */
+export const wifiQr = (network: 'hotspot' | 'guest') => request<WiFiQR>('POST', '/wifi-qr', { body: { network } });
 
 export const getGuestSettings = () => request<GuestSettings>('GET', '/settings/guest');
 export const putGuestSettings = (settings: GuestSettings) =>

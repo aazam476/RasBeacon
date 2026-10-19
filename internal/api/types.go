@@ -653,8 +653,7 @@ type ClientNameRequest struct {
 // WiFiQRRequest asks for a QR code to join a network (POST /wifi-qr):
 // "hotspot" (needs the admin password) or "guest".
 type WiFiQRRequest struct {
-	Network       string `json:"network"`
-	AdminPassword string `json:"adminPassword,omitempty"`
+	Network string `json:"network"`
 }
 
 // WiFiQR is a QR code phones scan to join a network: an SVG image.

@@ -59,6 +59,9 @@ const (
 	// SecurityWPA2 is a compatibility setting for old devices that fail to
 	// join a WPA2/WPA3 network.
 	SecurityWPA2 Security = "wpa2"
+	// SecurityWPA3 allows WPA3 (SAE, with protected management frames)
+	// only: the safest, but devices older than about 2019 can't join.
+	SecurityWPA3 Security = "wpa3"
 )
 
 // Config holds all non-secret settings.
@@ -708,8 +711,8 @@ func (h HotspotConfig) Validate() error {
 	if h.Band != Band2GHz && h.Band != Band5GHz {
 		return &ValidationError{Field: "hotspot.band", Message: `Must be "2.4GHz" or "5GHz".`}
 	}
-	if h.Security != SecurityWPA2WPA3 && h.Security != SecurityWPA2 {
-		return &ValidationError{Field: "hotspot.security", Message: `Must be "wpa2-wpa3" or "wpa2".`}
+	if h.Security != SecurityWPA2WPA3 && h.Security != SecurityWPA2 && h.Security != SecurityWPA3 {
+		return &ValidationError{Field: "hotspot.security", Message: `Must be "wpa2-wpa3", "wpa2" or "wpa3".`}
 	}
 	if h.Channel != 0 && !IsAllowedChannel(h.Band, h.Channel) {
 		return &ValidationError{Field: "hotspot.channel", Message: "This channel is not offered for this band."}

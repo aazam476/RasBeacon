@@ -70,6 +70,20 @@ func TestHostapd_WPA2WPA3On2GHz(t *testing.T) {
 	checkGolden(t, "hostapd_wpa2wpa3_2ghz", got)
 }
 
+func TestHostapd_WPA3Only(t *testing.T) {
+	got, err := Hostapd(HotspotInput{
+		Interface: "ap0", SSID: "RasBeacon-4F2A", Band: config.Band2GHz,
+		Country: "US", Security: config.SecurityWPA3, Password: "kq7m-2xvd-h8pt-rn4w",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkGolden(t, "hostapd_wpa3_2ghz", got)
+	if !strings.Contains(got, "wpa_key_mgmt=SAE\nieee80211w=2") || strings.Contains(got, "WPA-PSK") {
+		t.Error("WPA3 only: SAE alone, protected management frames required")
+	}
+}
+
 func TestHostapd_WPA2OnlyOn5GHzChannel149(t *testing.T) {
 	got, err := Hostapd(HotspotInput{
 		Interface: "ap0", SSID: `Ali's "Travel" Wi-Fi ☕`, Band: config.Band5GHz, Channel: 149,

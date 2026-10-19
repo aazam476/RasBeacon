@@ -18,7 +18,7 @@ export type Mode =
 export type Band = '2.4GHz' | '5GHz';
 
 /** "wpa2-wpa3" lets new devices use WPA3; "wpa2" is for old devices. */
-export type Security = 'wpa2-wpa3' | 'wpa2';
+export type Security = 'wpa2-wpa3' | 'wpa2' | 'wpa3';
 
 /** GET /api/v1/setup (no login needed). */
 export interface SetupState {

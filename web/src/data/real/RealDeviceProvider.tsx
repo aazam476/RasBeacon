@@ -526,11 +526,11 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
         store('hotspotSettings', saved);
         await refreshStatus();
       },
-      revealHotspotPassword: async (adminPassword) => {
-        const { hotspotPassword } = await attempt(() => api.revealHotspotPassword(adminPassword));
+      revealHotspotPassword: async () => {
+        const { hotspotPassword } = await attempt(() => api.revealHotspotPassword());
         return hotspotPassword;
       },
-      wifiQr: (network, adminPassword) => attempt(() => api.wifiQr(network, adminPassword)),
+      wifiQr: (network) => attempt(() => api.wifiQr(network)),
       saveGuestSettings: async (settings) => {
         const problems = checkGuestForm(settings);
         if (Object.keys(problems).length > 0) throw new FieldErrors(problems);

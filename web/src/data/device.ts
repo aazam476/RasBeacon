@@ -232,13 +232,10 @@ export interface DeviceActions {
 
   /** Field keys: ssid, password, channel, country. */
   saveHotspotSettings: (settings: HotspotSettings) => Promise<void>;
-  /** Answer with the current Wi-Fi password. Reject when the admin password is wrong. */
-  revealHotspotPassword: (adminPassword: string) => Promise<string>;
-  /**
-   * A QR code to join a network: the hotspot (needs the admin password; reject when it is wrong)
-   * or the guest network.
-   */
-  wifiQr: (network: 'hotspot' | 'guest', adminPassword?: string) => Promise<WiFiQR>;
+  /** Answer with the current Wi-Fi password (being logged in is enough). */
+  revealHotspotPassword: () => Promise<string>;
+  /** A QR code to join a network: the hotspot or the guest network. */
+  wifiQr: (network: 'hotspot' | 'guest') => Promise<WiFiQR>;
   /** Field keys: enabled, ssid, password. */
   saveGuestSettings: (settings: GuestSettings) => Promise<void>;
 

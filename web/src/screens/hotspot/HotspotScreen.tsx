@@ -2,15 +2,12 @@ import { useState, type FormEvent } from 'react';
 import { HOTSPOT_CHANNELS } from '@/data/constants';
 import { useDevice } from '@/data/device';
 import type { HotspotSettings, WiFiQR } from '@/data/types';
-import { useAction } from '@/lib/useAction';
 import { useForm } from '@/lib/useForm';
 import { Loaded } from '@/shell/Loaded';
 import {
   Badge,
-  Button,
   ButtonRow,
   FormActions,
-  FormError,
   FormSwitchRow,
   PasswordField,
   Row,
@@ -71,7 +68,6 @@ function HotspotForm({ settings }: { settings: HotspotSettings }) {
             <Badge tone="red">Not running</Badge>
           )
         }
-        footer="The Wi-Fi network your devices join."
       >
         <TextField
           label="Network name"
@@ -92,7 +88,14 @@ function HotspotForm({ settings }: { settings: HotspotSettings }) {
         />
       </Section>
 
-      <Section title="Radio" footer="The country decides which channels are legal.">
+      <Section
+        title="Radio"
+        footer={
+          values.security === 'wpa3'
+            ? "The country decides which channels are legal. With WPA3 only, devices older than about 2019 can't join."
+            : 'The country decides which channels are legal.'
+        }
+      >
         <SelectField
           label="Band"
           options={BAND_OPTIONS}
@@ -128,9 +131,9 @@ function HotspotForm({ settings }: { settings: HotspotSettings }) {
       <Section
         footer={
           <>
-            Tells devices to hold back big downloads and backups. Android phones read this automatically when they
-            reconnect. On iPhones and Macs, turn on &quot;Low Data Mode&quot; for this network in Wi-Fi settings; on
-            Windows, set it as a metered connection. Changing only this doesn&apos;t restart the hotspot.
+            Asks devices to hold back large downloads and backups. Android reads this automatically when it connects. On
+            iPhone and Mac, turn on Low Data Mode for this network in Wi-Fi settings; on Windows, set it as a metered
+            connection. Changing only this doesn&apos;t restart the hotspot.
           </>
         }
       >
@@ -159,18 +162,12 @@ function HotspotForm({ settings }: { settings: HotspotSettings }) {
 }
 
 /**
- * Shows the hotspot's current password and a QR code to join it, after the admin password is
- * typed again.
+ * Shows the hotspot's current password and a QR code to join it, hidden until asked for (it is
+ * the password to your network). Being logged in is enough.
  */
 function CurrentPassword() {
   const { revealHotspotPassword, wifiQr } = useDevice();
-  const [adminPassword, setAdminPassword] = useState('');
   const [revealed, setRevealed] = useState<{ password: string; qr: WiFiQR } | null>(null);
-  const revealing = useAction(async () => {
-    const [password, qr] = await Promise.all([revealHotspotPassword(adminPassword), wifiQr('hotspot', adminPassword)]);
-    setRevealed({ password, qr });
-    setAdminPassword('');
-  });
 
   if (revealed !== null) {
     return (
@@ -192,37 +189,17 @@ function CurrentPassword() {
   }
 
   return (
-    <form
-      onSubmit={(event) => {
-        event.preventDefault();
-        revealing.run();
-      }}
-      noValidate
-    >
-      <Section title="Join the hotspot" footer="Type the admin password to see the Wi-Fi password and a QR code.">
-        <PasswordField
-          label="Admin password"
-          autoComplete="current-password"
-          value={adminPassword}
-          onChange={setAdminPassword}
-        />
-        {revealing.error && (
-          <div className="row">
-            <FormError>{revealing.error}</FormError>
-          </div>
-        )}
-        <div className="row">
-          <Button
-            type="submit"
-            variant="secondary"
-            icon="qr_code"
-            loading={revealing.pending}
-            disabled={adminPassword === ''}
-          >
-            Show password and QR code
-          </Button>
-        </div>
-      </Section>
-    </form>
+    <Section title="Join the hotspot">
+      <ButtonRow
+        leading={{ icon: 'qr_code' }}
+        action={async () => {
+          const [password, qr] = await Promise.all([revealHotspotPassword(), wifiQr('hotspot')]);
+          setRevealed({ password, qr });
+        }}
+        busyLabel="Loading…"
+      >
+        Show password and QR code
+      </ButtonRow>
+    </Section>
   );
 }

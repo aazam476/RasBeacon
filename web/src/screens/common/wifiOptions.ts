@@ -8,5 +8,6 @@ export const BAND_OPTIONS: { value: Band; label: string }[] = [
 
 export const HOTSPOT_SECURITY_OPTIONS: { value: Security; label: string }[] = [
   { value: 'wpa2-wpa3', label: 'WPA2/WPA3 (recommended)' },
+  { value: 'wpa3', label: 'WPA3 only (safest; newer devices only)' },
   { value: 'wpa2', label: "WPA2 only (for old devices that can't join)" },
 ];

@@ -942,23 +942,18 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
 
   // The one action that answers with a value from the state, so it is made with the state.
   const { hotspotPassword } = demo.router;
-  const revealHotspotPassword = useCallback(
-    async (adminPassword: string) => {
-      await wait(800);
-      if (failActions) throw new Error(UNREACHABLE);
-      if (adminPassword === '' || adminPassword === 'wrong') throw new Error('Wrong password.');
-      return hotspotPassword;
-    },
-    [hotspotPassword, failActions],
-  );
+  const revealHotspotPassword = useCallback(async () => {
+    await wait(500);
+    if (failActions) throw new Error(UNREACHABLE);
+    return hotspotPassword;
+  }, [hotspotPassword, failActions]);
   const { ssid: hotspotSsid } = demo.router.hotspotSettings;
   const { enabled: guestEnabled, ssid: guestSsid } = demo.router.guestSettings;
   const wifiQr = useCallback(
-    async (network: 'hotspot' | 'guest', adminPassword?: string) => {
+    async (network: 'hotspot' | 'guest') => {
       await wait(600);
       if (failActions) throw new Error(UNREACHABLE);
       if (network === 'hotspot') {
-        if (!adminPassword || adminPassword === 'wrong') throw new Error('Wrong password.');
         return { ssid: hotspotSsid, svg: demoQrSvg(`${hotspotSsid}:${hotspotPassword}`) };
       }
       if (!guestEnabled) throw new Error('The guest network is off.');
