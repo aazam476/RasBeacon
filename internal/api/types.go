@@ -434,8 +434,10 @@ type VPNStatus struct {
 	Enabled    bool `json:"enabled"`
 	KillSwitch bool `json:"killSwitch"`
 	// State is "off", "connecting", "up", "down" or "direct" (see
-	// internal/tunnel). In "connecting" and "down" with the kill switch on,
-	// devices have no internet; in "direct" they use the uplink directly.
+	// internal/tunnel), or "blocked". In "connecting" and "down" with the
+	// kill switch on, devices have no internet; in "direct" they use the
+	// uplink directly; "blocked" means the VPN is off but the kill switch is
+	// on, so devices have no internet.
 	State string `json:"state"`
 	// HandshakeAgeSeconds is the time since the last handshake with the
 	// server, or -1 if there has been none.
@@ -447,6 +449,10 @@ type VPNStatus struct {
 	// from, while it is in use (see VPNSettings).
 	RoutedIPv6Prefix string `json:"routedIpv6Prefix,omitempty"`
 }
+
+// VPNBlocked is VPNStatus.State while the kill switch blocks devices
+// because the VPN is off.
+const VPNBlocked = "blocked"
 
 // VPNSettings is read by the VPN page: the switches and the WireGuard
 // profiles (GET /settings/vpn). Each change has its own route, and each
@@ -508,6 +514,12 @@ type VPNProfileDetails struct {
 // /remove and /generate-key).
 type VPNProfileRequest struct {
 	Name string `json:"name"`
+}
+
+// VPNRenameRequest renames a profile (POST /settings/vpn/profile/rename).
+type VPNRenameRequest struct {
+	Name    string `json:"name"`
+	NewName string `json:"newName"`
 }
 
 // HTTPSSettings is read and written by the HTTPS page.

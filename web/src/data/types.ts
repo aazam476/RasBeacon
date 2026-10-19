@@ -219,7 +219,8 @@ export interface PortalStatus {
 }
 
 /** Where the WireGuard tunnel is. */
-export type VPNState = 'off' | 'connecting' | 'up' | 'down' | 'direct';
+/** `blocked`: the VPN is off but the kill switch is on, so devices have no internet. */
+export type VPNState = 'off' | 'connecting' | 'up' | 'down' | 'direct' | 'blocked';
 
 export interface VPNStatus {
   enabled: boolean;

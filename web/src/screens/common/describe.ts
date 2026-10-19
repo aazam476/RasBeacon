@@ -86,7 +86,7 @@ export interface VpnStateView {
  * "no internet because of the kill switch" in orange, "using the internet WITHOUT the VPN" in red.
  */
 export function vpnStateView(vpn: VPNStatus): VpnStateView {
-  const state = vpn.enabled ? vpn.state : 'off';
+  const state = vpn.state === 'blocked' ? 'blocked' : vpn.enabled ? vpn.state : 'off';
   switch (state) {
     case 'up':
       return {
@@ -127,6 +127,16 @@ export function vpnStateView(vpn: VPNStatus): VpnStateView {
         title: 'Not protected',
         badge: 'Without VPN',
         summary: 'Not connected: your devices are using the internet WITHOUT the VPN (kill switch off).',
+        alert: true,
+        pulse: false,
+      };
+    case 'blocked':
+      return {
+        tone: 'red',
+        icon: 'gpp_bad',
+        title: 'No internet',
+        badge: 'Blocked',
+        summary: 'Devices have no internet: the kill switch is on and the VPN is off.',
         alert: true,
         pulse: false,
       };

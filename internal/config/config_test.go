@@ -274,8 +274,24 @@ func TestClone_CopiesEnterpriseSettings(t *testing.T) {
 	}
 }
 
+func TestFillDefaults_KillSwitchOffWhereTheVPNWasOff(t *testing.T) {
+	// Before v0.2.0 the kill switch did nothing with the VPN off; now it
+	// would block devices, so it is turned off there.
+	cfg := Config{Version: 3, VPN: VPNConfig{KillSwitch: true}}
+	cfg.FillDefaults()
+	if cfg.VPN.KillSwitch {
+		t.Error("devices with the VPN off must keep their internet after the upgrade")
+	}
+	on := Config{Version: 3, VPN: VPNConfig{Enabled: true, KillSwitch: true}}
+	on.FillDefaults()
+	if !on.VPN.KillSwitch {
+		t.Error("with the VPN on, the kill switch stays on")
+	}
+}
+
 func TestFillDefaults_OldConfigGetsKillSwitchOn(t *testing.T) {
-	cfg := Config{Version: 1}
+	// A version 1 config with the VPN on gets the kill switch on.
+	cfg := Config{Version: 1, VPN: VPNConfig{Enabled: true}}
 	cfg.FillDefaults()
 	if !cfg.VPN.KillSwitch || cfg.Version != CurrentVersion {
 		t.Errorf("got %+v", cfg)

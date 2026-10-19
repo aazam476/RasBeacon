@@ -213,6 +213,8 @@ export interface DeviceActions {
   setActiveVpnProfile: (name: string) => Promise<void>;
   /** Remove a profile and its keys. */
   removeVpnProfile: (name: string) => Promise<void>;
+  /** Give a profile another name (its keys and whether it is in use stay). */
+  renameVpnProfile: (name: string, newName: string) => Promise<void>;
   /**
    * Import a WireGuard file as a new profile, from a chosen file or pasted text. `fileName` is
    * the chosen file's name, if any. Reject with the router's refusal for unsafe files.

@@ -493,6 +493,7 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
       setKillSwitch: (killSwitch) => vpnChange(() => api.putVPNSwitches({ ...vpnSwitches(), killSwitch })),
       setActiveVpnProfile: (name) => vpnChange(() => api.vpnProfileAction('activate', name)),
       removeVpnProfile: (name) => vpnChange(() => api.vpnProfileAction('remove', name)),
+      renameVpnProfile: (name, newName) => vpnChange(() => api.renameVPNProfile(name, newName), { newName: 'name' }),
       importVpnProfile: ({ text, fileName }) => vpnChange(() => api.importVPNProfile(text, fileName)),
       saveVpnDetails: async (profile, form) => {
         const details = vpnDetailsRequest(profile, form);

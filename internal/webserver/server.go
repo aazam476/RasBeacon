@@ -671,6 +671,7 @@ var forwardedRoutes = map[string]string{
 	"POST /api/v1/settings/vpn/profile/save":         "/settings/vpn/profile/save",
 	"POST /api/v1/settings/vpn/profile/activate":     "/settings/vpn/profile/activate",
 	"POST /api/v1/settings/vpn/profile/remove":       "/settings/vpn/profile/remove",
+	"POST /api/v1/settings/vpn/profile/rename":       "/settings/vpn/profile/rename",
 	"POST /api/v1/settings/vpn/profile/generate-key": "/settings/vpn/profile/generate-key",
 	"GET /api/v1/settings/https":                     "/settings/https",
 	"PUT /api/v1/settings/https":                     "/settings/https",

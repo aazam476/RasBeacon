@@ -252,6 +252,9 @@ export const saveVPNProfile = (details: VPNProfileDetails) =>
 export const vpnProfileAction = (action: 'activate' | 'remove' | 'generate-key', name: string) =>
   request<VPNSettings>('POST', `/settings/vpn/profile/${action}`, { body: { name }, timeoutMs: 30_000 });
 
+export const renameVPNProfile = (name: string, newName: string) =>
+  request<VPNSettings>('POST', '/settings/vpn/profile/rename', { body: { name, newName } });
+
 export const clientAction = (action: 'disconnect' | 'flush-lease', mac: string) =>
   request<void>('POST', `/clients/${action}`, { body: { mac } });
 export const setClientInternetAccess = (mac: string, allowed: boolean) =>

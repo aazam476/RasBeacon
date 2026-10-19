@@ -352,6 +352,18 @@ func (a *Agent) Handler() http.Handler {
 		writeJSON(w, http.StatusOK, a.VPNSettings())
 	})
 
+	mux.HandleFunc("POST /settings/vpn/profile/rename", func(w http.ResponseWriter, r *http.Request) {
+		var req api.VPNRenameRequest
+		if !readJSON(w, r, &req) {
+			return
+		}
+		if err := a.RenameVPNProfile(req.Name, req.NewName); err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, a.VPNSettings())
+	})
+
 	profileActions := map[string]func(string) error{
 		"POST /settings/vpn/profile/activate":     a.SetActiveVPNProfile,
 		"POST /settings/vpn/profile/remove":       a.RemoveVPNProfile,

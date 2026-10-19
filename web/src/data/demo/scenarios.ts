@@ -202,6 +202,19 @@ export const SCENARIOS: DemoScenario[] = [
     },
   },
   {
+    id: 'vpn-blocked',
+    group: 'Status',
+    title: 'VPN off, kill switch on (no internet)',
+    route: '/',
+    apply: (d) => {
+      d.router.status.vpn = { ...d.router.status.vpn, enabled: false, state: 'blocked' };
+      d.router.vpnSettings.enabled = false;
+      d.router.status.warnings = [
+        'Your devices have no internet: the kill switch is on and the VPN is off. Turn on the VPN, or turn off the kill switch.',
+      ];
+    },
+  },
+  {
     id: 'vpn-connecting',
     group: 'Status',
     title: 'VPN connecting',
@@ -216,8 +229,9 @@ export const SCENARIOS: DemoScenario[] = [
     title: 'VPN off, metered, public IPv6',
     route: '/',
     apply: (d) => {
-      d.router.status.vpn = { ...d.router.status.vpn, enabled: false, state: 'off' };
+      d.router.status.vpn = { ...d.router.status.vpn, enabled: false, killSwitch: false, state: 'off' };
       d.router.vpnSettings.enabled = false;
+      d.router.vpnSettings.killSwitch = false;
       d.router.status.hotspot.metered = true;
       d.router.hotspotSettings.metered = true;
       d.router.status.uplink.ipv6 = true;

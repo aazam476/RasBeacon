@@ -5,7 +5,6 @@ import { Loaded } from '@/shell/Loaded';
 import { BreakableText, Notice, Row, Section, SwitchRow, type NoticeTone, type Tone } from '@/ui';
 import { vpnStateView } from '../common/describe';
 import { ImportProfileSection } from './ImportProfileSection';
-import { KILL_SWITCH_EXPLANATION } from './killSwitch';
 import { ProfilesSection } from './ProfilesSection';
 import { PublicKeySection, ServerDetailsSection } from './ServerDetails';
 
@@ -88,20 +87,19 @@ function TunnelSections({ vpn, settings }: { vpn: VPNStatus; settings: VPNSettin
         <Row title="Sent" value={formatBytes(vpn.sentBytes)} />
       </Section>
 
-      <Section footer={KILL_SWITCH_EXPLANATION}>
+      <Section>
+        {/* Without a profile there is no VPN to keep traffic in, so the switch would do nothing. */}
         <SwitchRow
           leading={{ tile: 'block', color: 'red' }}
           title="Kill switch"
           subtitle={
-            !vpn.killSwitch
-              ? 'Off'
-              : vpn.enabled
-                ? 'On: devices never use the internet without the VPN'
-                : // With the VPN off, devices use the internet directly whatever the kill switch says.
-                  'On, but the VPN is off, so devices use the internet directly'
+            vpn.killSwitch
+              ? "Devices only use the internet through the VPN, and have none while it's down or off."
+              : 'If the VPN goes down, devices use the internet directly.'
           }
-          checked={vpn.killSwitch}
+          checked={configured && vpn.killSwitch}
           onChange={setKillSwitch}
+          disabled={!configured}
         />
       </Section>
     </>

@@ -34,7 +34,9 @@ import (
 //	1: milestones 1 to 3
 //	2: adds the VPN section, with the kill switch on by default
 //	3: the VPN keeps several WireGuard profiles (see MoveVPNIntoProfile)
-const CurrentVersion = 3
+//	4: v0.2.0. The kill switch with the VPN off now blocks devices, so it
+//	   is turned off where the VPN was off (devices keep their internet).
+const CurrentVersion = 4
 
 // Band is the Wi-Fi frequency band the hotspot uses.
 type Band string
@@ -238,9 +240,10 @@ type VPNConfig struct {
 	// Enabled sends devices' traffic through the WireGuard tunnel.
 	Enabled bool `json:"enabled"`
 	// KillSwitch on (the default) means devices' traffic never leaves
-	// outside the tunnel: if the tunnel is down, nothing gets through.
-	// Off means traffic goes directly through the uplink while the tunnel
-	// is down (see internal/tunnel).
+	// outside the tunnel: if the tunnel is down, or the VPN is turned off,
+	// nothing gets through. Off means traffic goes directly through the
+	// uplink while the tunnel is down or off (see internal/tunnel). It only
+	// acts once a WireGuard profile exists.
 	KillSwitch bool `json:"killSwitch"`
 	// Active is the name of the profile in use; "" when there is none.
 	Active   string       `json:"active"`
@@ -546,6 +549,11 @@ func (c *Config) FillDefaults() {
 	if c.Version < 2 {
 		// Version 2 added the VPN. Its kill switch starts on.
 		c.VPN.KillSwitch = true
+	}
+	if c.Version < 4 && !c.VPN.Enabled {
+		// Until v0.2.0 the kill switch did nothing while the VPN was off;
+		// now it blocks devices then. Keep their internet as it was.
+		c.VPN.KillSwitch = false
 	}
 	c.Version = CurrentVersion
 }

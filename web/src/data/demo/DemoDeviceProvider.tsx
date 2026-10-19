@@ -419,7 +419,8 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
           d.router.status.vpn = {
             ...d.router.status.vpn,
             enabled,
-            state: enabled ? 'up' : 'off',
+            // Off with the kill switch on: nothing gets through.
+            state: enabled ? 'up' : d.router.vpnSettings.killSwitch ? 'blocked' : 'off',
             handshakeAgeSeconds: enabled ? 1 : d.router.status.vpn.handshakeAgeSeconds,
           };
         });
@@ -429,8 +430,17 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
         change((d) => {
           d.router.vpnSettings.killSwitch = killSwitch;
           const vpn = d.router.status.vpn;
-          // A broken tunnel lets traffic out directly once the kill switch is off, and blocks it once on.
-          const state = vpn.state === 'down' && !killSwitch ? 'direct' : vpn.state === 'direct' ? 'down' : vpn.state;
+          // A broken tunnel lets traffic out directly once the kill switch is off, and blocks it once on;
+          // with the VPN off, the kill switch blocks everything.
+          const state = !vpn.enabled
+            ? killSwitch
+              ? 'blocked'
+              : 'off'
+            : vpn.state === 'down' && !killSwitch
+              ? 'direct'
+              : vpn.state === 'direct'
+                ? 'down'
+                : vpn.state;
           d.router.status.vpn = { ...vpn, killSwitch, state };
         });
       },
@@ -440,6 +450,18 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
           const profile = d.router.vpnSettings.profiles.find((candidate) => candidate.name === name);
           d.router.vpnSettings.activeProfile = name;
           d.router.status.vpn = { ...d.router.status.vpn, endpoint: profile?.endpoint ?? '', handshakeAgeSeconds: 1 };
+        });
+      },
+      renameVpnProfile: async (name, newName) => {
+        await wait(600);
+        if (newName !== name && currentDemo.router.vpnSettings.profiles.some((profile) => profile.name === newName)) {
+          throw new FieldErrors({ name: 'Another profile already has this name.' });
+        }
+        change((d) => {
+          const settings = d.router.vpnSettings;
+          const profile = settings.profiles.find((p) => p.name === name);
+          if (profile) profile.name = newName;
+          if (settings.activeProfile === name) settings.activeProfile = newName;
         });
       },
       removeVpnProfile: async (name) => {

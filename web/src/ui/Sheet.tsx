@@ -31,6 +31,8 @@ interface SheetProps {
    * when it succeeds the sheet closes, and when it fails it stays and shows why.
    */
   onConfirm: () => Promise<void>;
+  /** Grays out the confirm button (and Enter does nothing), e.g. while a required field is empty. */
+  confirmDisabled?: boolean;
   onClose: () => void;
   /**
    * The content, usually `Section`s of fields. Pass a function to put the messages of a
@@ -71,6 +73,7 @@ export function Sheet({
   tone = 'default',
   size = 'md',
   onConfirm,
+  confirmDisabled = false,
   onClose,
   children,
 }: SheetProps) {
@@ -191,6 +194,7 @@ export function Sheet({
   // --- Content --------------------------------------------------------------------------------
 
   async function confirm() {
+    if (confirmDisabled) return;
     if (await confirming.run()) dismiss();
   }
 
@@ -209,7 +213,13 @@ export function Sheet({
     </Button>
   );
   const confirmButton = (
-    <Button type="submit" size={buttonSize} variant={tone === 'danger' ? 'danger-filled' : 'primary'} loading={busy}>
+    <Button
+      type="submit"
+      size={buttonSize}
+      variant={tone === 'danger' ? 'danger-filled' : 'primary'}
+      loading={busy}
+      disabled={confirmDisabled && !busy}
+    >
       {busy ? busyLabel : confirmLabel}
     </Button>
   );
