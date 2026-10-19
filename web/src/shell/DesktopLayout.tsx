@@ -24,7 +24,11 @@ export function DesktopLayout() {
   return (
     <div className="min-h-dvh">
       <Sidebar />
-      <div ref={barRef} className="fixed top-0 right-0 left-64 z-20 h-12">
+      {/*
+        The bar only shows the title once it has scrolled away; it holds nothing to press, so
+        presses go through it (to a sub-page's back link right under it, for one).
+      */}
+      <div ref={barRef} className="pointer-events-none fixed top-0 right-0 left-64 z-20 h-12">
         <div
           aria-hidden="true"
           className={cn(

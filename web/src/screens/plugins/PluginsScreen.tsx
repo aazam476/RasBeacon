@@ -72,7 +72,7 @@ function NoPlugins() {
       <Icon name="extension" size={44} className="text-label-3" />
       <p className="text-title3 text-label">No plugins yet</p>
       <p className="max-w-80 text-subhead text-pretty text-label-2">
-        Plugins add features like ad blocking or sharing files, and can only do what you allow.
+        Plugins add features such as ad blocking or file sharing, and can only do what you allow.
       </p>
     </div>
   );

@@ -184,7 +184,8 @@ function SourcesSection() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const sources = plugins.data?.sources ?? [];
-  const extra = sources.filter((s) => !s.builtIn).map((s) => s.source);
+  // Every source, the built-in one too: removing it is allowed, and typing its name adds it back.
+  const listed = sources.map((s) => s.source);
 
   async function save(next: string[]) {
     setSaving(true);
@@ -211,14 +212,12 @@ function SourcesSection() {
           title={<span className="wrap-anywhere">{source.source}</span>}
           value={source.builtIn ? 'Built in' : undefined}
           trailing={
-            source.builtIn ? undefined : (
-              <IconButton
-                icon="delete"
-                ariaLabel={`Remove ${source.source}`}
-                disabled={saving}
-                onClick={() => void save(extra.filter((s) => s !== source.source))}
-              />
-            )
+            <IconButton
+              icon="delete"
+              ariaLabel={`Remove ${source.source}`}
+              disabled={saving}
+              onClick={() => void save(listed.filter((s) => s !== source.source))}
+            />
           }
         />
       ))}
@@ -227,7 +226,7 @@ function SourcesSection() {
         noValidate
         onSubmit={(event) => {
           event.preventDefault();
-          if (adding.trim()) void save([...extra, adding.trim()]);
+          if (adding.trim()) void save([...listed, adding.trim()]);
         }}
       >
         <TextField

@@ -866,10 +866,13 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
         });
         failIfAny(errors);
         change((d) => {
-          d.router.plugins.sources = [
-            d.router.plugins.sources[0],
-            ...sources.map((source) => ({ source: source.trim(), builtIn: false })),
-          ];
+          // The built-in source only if it is still listed (it can be removed, and added back).
+          const builtIn = 'aazam476/RasBeacon-plugins';
+          const unique = [...new Set(sources.map((source) => source.trim()))];
+          d.router.plugins.sources = unique.map((source) => ({
+            source,
+            builtIn: source.toLowerCase() === builtIn.toLowerCase(),
+          }));
         });
       },
 

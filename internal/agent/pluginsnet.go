@@ -283,7 +283,10 @@ func (a *Agent) refreshCatalog() {
 		a.mu.Unlock()
 		return
 	}
-	sources := []string{plugin.BuiltInSource}
+	var sources []string
+	if !a.cfg.Plugins.NoBuiltInSource {
+		sources = append(sources, plugin.BuiltInSource)
+	}
 	sources = append(sources, a.cfg.Plugins.Sources...)
 	a.mu.Unlock()
 

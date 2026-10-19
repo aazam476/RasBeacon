@@ -655,3 +655,21 @@ func TestPlugins_TooNewForThisRasBeaconIsRefused(t *testing.T) {
 		t.Errorf("a plugin for this version: %v", err)
 	}
 }
+
+func TestPlugins_TheBuiltInSourceCanBeRemovedAndAddedBack(t *testing.T) {
+	e := newClaimedEnv(t, false)
+	state, err := e.agent.SetPluginSources(api.PluginSourcesRequest{Sources: []string{"someone/more-plugins"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(state.Sources) != 1 || state.Sources[0].Source != "someone/more-plugins" || state.Sources[0].BuiltIn {
+		t.Errorf("without the built-in source listed, it is removed: %+v", state.Sources)
+	}
+	state, err = e.agent.SetPluginSources(api.PluginSourcesRequest{Sources: []string{"someone/more-plugins", "AAZAM476/rasbeacon-plugins"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(state.Sources) != 2 || !state.Sources[0].BuiltIn {
+		t.Errorf("typing its name brings it back: %+v", state.Sources)
+	}
+}

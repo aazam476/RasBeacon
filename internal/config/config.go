@@ -96,6 +96,9 @@ type PluginsConfig struct {
 	// Sources are extra GitHub repositories ("owner/repo") for the catalog,
 	// besides the built-in one.
 	Sources []string `json:"sources,omitempty"`
+	// NoBuiltInSource is true when the owner removed the built-in source
+	// (RasBeacon's own plugins) from the catalog.
+	NoBuiltInSource bool `json:"noBuiltInSource,omitempty"`
 }
 
 // InstalledPlugin is one installed plugin's settings. Its manifest, icon and

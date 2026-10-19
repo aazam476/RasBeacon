@@ -859,24 +859,34 @@ func (a *Agent) PluginDrives() (api.PluginDrives, error) {
 
 // pluginSources lists the catalog's sources. The caller holds a.mu.
 func (a *Agent) pluginSources() []api.PluginSource {
-	sources := []api.PluginSource{{Source: plugin.BuiltInSource, BuiltIn: true}}
+	sources := []api.PluginSource{}
+	if !a.cfg.Plugins.NoBuiltInSource {
+		sources = append(sources, api.PluginSource{Source: plugin.BuiltInSource, BuiltIn: true})
+	}
 	for _, s := range a.cfg.Plugins.Sources {
 		sources = append(sources, api.PluginSource{Source: s})
 	}
 	return sources
 }
 
-// SetPluginSources saves the extra catalog sources.
+// SetPluginSources saves the catalog's sources: the built-in one is kept
+// only if it is in the list (removing it is allowed; adding its name again
+// brings it back).
 func (a *Agent) SetPluginSources(req api.PluginSourcesRequest) (api.PluginsState, error) {
 	var sources []string
+	builtIn := false
 	for i, s := range req.Sources {
 		checked, err := plugin.CheckSource(s)
 		if err != nil {
 			return api.PluginsState{}, &config.ValidationError{Field: fmt.Sprintf("sources.%d", i), Message: "Enter a GitHub repository like owner/repo."}
 		}
-		// The built-in source is always there, and each source counts once
-		// (GitHub names don't care about capital letters).
-		if strings.EqualFold(checked, plugin.BuiltInSource) || slices.ContainsFunc(sources, func(x string) bool { return strings.EqualFold(x, checked) }) {
+		// Each source counts once (GitHub names don't care about capital
+		// letters).
+		if strings.EqualFold(checked, plugin.BuiltInSource) {
+			builtIn = true
+			continue
+		}
+		if slices.ContainsFunc(sources, func(x string) bool { return strings.EqualFold(x, checked) }) {
 			continue
 		}
 		sources = append(sources, checked)
@@ -891,6 +901,7 @@ func (a *Agent) SetPluginSources(req api.PluginSourcesRequest) (api.PluginsState
 	}
 	newCfg := a.cfg.Clone()
 	newCfg.Plugins.Sources = sources
+	newCfg.Plugins.NoBuiltInSource = !builtIn
 	err := config.WriteJSON(a.paths.ConfigFile(), newCfg, 0o644)
 	if err == nil {
 		a.cfg = newCfg
