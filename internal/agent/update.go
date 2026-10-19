@@ -16,6 +16,7 @@ package agent
 //     to the old slot.
 
 import (
+	"context"
 	"crypto/ed25519"
 	"encoding/json"
 	"errors"
@@ -26,11 +27,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
 	"rasbeacon/internal/api"
 	"rasbeacon/internal/config"
+	"rasbeacon/internal/notify"
 	"rasbeacon/internal/update"
 	"rasbeacon/internal/version"
 )
@@ -54,8 +57,11 @@ type updateState struct {
 	trying    bool
 	confirmed bool
 	message   string
-	// latest is the newest release found by the online check.
-	latest latestRelease
+	// latest is the newest release found by the online check, lastCheck
+	// when it last asked, and checkError why that failed.
+	latest     latestRelease
+	lastCheck  time.Time
+	checkError string
 	// refused is set when an update file was refused because it needs a
 	// newer RasBeacon to install it (update.NeedsReflashError).
 	refused *api.UpdateReflash
@@ -110,7 +116,11 @@ func (a *Agent) updateStatus() api.UpdateStatus {
 		Installing:     a.update.installing,
 		Message:        a.update.message,
 		CanCheckOnline: version.Repository != "",
-		CheckOnline:    a.cfg.Updates.CheckOnline,
+		CheckHours:     a.cfg.Updates.CheckHours,
+		CheckError:     a.update.checkError,
+	}
+	if !a.update.lastCheck.IsZero() {
+		s.LastChecked = a.update.lastCheck.UTC().Format(time.RFC3339)
 	}
 	latest := a.update.latest
 	if result, ok := version.Compare(latest.TagName, version.Version); ok && result > 0 {
@@ -322,8 +332,145 @@ func (a *Agent) rollbackIfUnconfirmed() {
 
 // --- The optional online check ---
 
-// updateCheckInterval is how often the online check runs (when on).
-const updateCheckInterval = 6 * time.Hour
+// updateHTTP asks GitHub and sends notifications.
+var updateHTTP = &http.Client{Timeout: 20 * time.Second}
+
+// RunUpdateCheck asks GitHub for the newest release as often as the owner
+// chose (never, unless they chose a schedule). cmd/rbd starts it.
+func (a *Agent) RunUpdateCheck() {
+	if version.Repository == "" {
+		return // this build doesn't know where its releases are
+	}
+	for {
+		time.Sleep(time.Minute)
+		a.mu.Lock()
+		every := time.Duration(a.cfg.Updates.CheckHours) * time.Hour
+		due := every > 0 && a.uplink.status.Connected && a.now().Sub(a.update.lastCheck) >= every
+		a.mu.Unlock()
+		if due {
+			_ = a.checkForUpdate()
+		}
+	}
+}
+
+// CheckForUpdateNow asks GitHub right away ("Check now").
+func (a *Agent) CheckForUpdateNow() (api.UpdateStatus, error) {
+	if version.Repository == "" {
+		return api.UpdateStatus{}, &config.ValidationError{Field: "update", Message: "This build doesn't know where its releases are."}
+	}
+	err := a.checkForUpdate()
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if err != nil {
+		return api.UpdateStatus{}, &config.ValidationError{Field: "update", Message: a.update.checkError}
+	}
+	return a.updateStatus(), nil
+}
+
+// checkForUpdate asks GitHub for the newest release and, if it is new and
+// a notification address is saved, announces it once.
+func (a *Agent) checkForUpdate() error {
+	release, err := fetchLatestRelease(updateHTTP, githubAPI, version.Repository)
+	a.mu.Lock()
+	a.update.lastCheck = a.now()
+	if err != nil {
+		slog.Warn("update check failed", "error", err)
+		a.update.checkError = "Couldn't ask GitHub: " + err.Error()
+		a.mu.Unlock()
+		return err
+	}
+	a.update.latest, a.update.checkError = release, ""
+	notifyURL := a.secrets.UpdateNotifyURL
+	newer, ok := version.Compare(release.TagName, version.Version)
+	announce := notifyURL != "" && ok && newer > 0 && release.TagName != a.cfg.Updates.NotifiedVersion
+	a.mu.Unlock()
+	if !announce {
+		return nil
+	}
+
+	message := fmt.Sprintf("RasBeacon %s is available (this one runs %s).", release.TagName, version.Version)
+	if s := a.updateStatusLocked(); s.Reflash != nil {
+		message += " It needs a fresh install: open the System page for the steps."
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	if err := notify.Send(ctx, updateHTTP, notifyURL, "RasBeacon "+release.TagName, message, release.HTMLURL); err != nil {
+		slog.Warn("could not send the update notification", "error", err)
+		return nil
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	newCfg := a.cfg.Clone()
+	newCfg.Updates.NotifiedVersion = release.TagName
+	if err := config.WriteJSON(a.paths.ConfigFile(), newCfg, 0o644); err == nil {
+		a.cfg = newCfg
+	}
+	slog.Info("new version announced", "version", release.TagName)
+	return nil
+}
+
+// updateStatusLocked is updateStatus, taking a.mu itself.
+func (a *Agent) updateStatusLocked() api.UpdateStatus {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.updateStatus()
+}
+
+// UpdateSettings returns the update check's schedule and notification
+// address.
+func (a *Agent) UpdateSettings() api.UpdateSettings {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return api.UpdateSettings{CheckHours: a.cfg.Updates.CheckHours, NotifyURL: a.secrets.UpdateNotifyURL}
+}
+
+// UpdateUpdateSettings saves the schedule and the notification address.
+func (a *Agent) UpdateUpdateSettings(req api.UpdateSettings) error {
+	if !slices.Contains(config.UpdateCheckHours, req.CheckHours) {
+		return &config.ValidationError{Field: "checkHours", Message: "Choose how often from the list."}
+	}
+	req.NotifyURL = strings.TrimSpace(req.NotifyURL)
+	if req.NotifyURL != "" {
+		if err := notify.CheckURL(req.NotifyURL); err != nil {
+			return &config.ValidationError{Field: "notifyUrl", Message: err.Error()}
+		}
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	newCfg := a.cfg.Clone()
+	newCfg.Updates.CheckHours = req.CheckHours
+	newSecrets := a.secrets.Clone()
+	newSecrets.UpdateNotifyURL = req.NotifyURL
+	if err := config.WriteJSON(a.paths.SecretsFile(), newSecrets, 0o600); err != nil {
+		return err
+	}
+	if err := config.WriteJSON(a.paths.ConfigFile(), newCfg, 0o644); err != nil {
+		return err
+	}
+	a.cfg, a.secrets = newCfg, newSecrets
+	return nil
+}
+
+// SendTestNotification sends a test message to address, or to the saved
+// one when address is empty.
+func (a *Agent) SendTestNotification(address string) error {
+	address = strings.TrimSpace(address)
+	if address == "" {
+		a.mu.Lock()
+		address = a.secrets.UpdateNotifyURL
+		a.mu.Unlock()
+	}
+	if address == "" {
+		return &config.ValidationError{Field: "notifyUrl", Message: "Enter the address first."}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	err := notify.Send(ctx, updateHTTP, address, "RasBeacon", "This is a test: RasBeacon will tell you here when a new version is out.", "")
+	if err != nil {
+		return &config.ValidationError{Field: "notifyUrl", Message: "The test didn't arrive: " + err.Error()}
+	}
+	return nil
+}
 
 // latestRelease is the part of GitHub's answer RasBeacon reads.
 type latestRelease struct {
@@ -341,36 +488,8 @@ type releaseAsset struct {
 	URL  string `json:"browser_download_url"`
 }
 
-// RunUpdateCheck asks GitHub for the newest release every few hours, while
-// the owner has the check turned on. cmd/rbd starts it on the device.
-func (a *Agent) RunUpdateCheck() {
-	if version.Repository == "" {
-		return // this build doesn't know where its releases are
-	}
-	client := &http.Client{Timeout: 20 * time.Second}
-	lastCheck := time.Time{}
-	for {
-		time.Sleep(time.Minute)
-		a.mu.Lock()
-		due := a.cfg.Updates.CheckOnline && a.uplink.status.Connected && time.Since(lastCheck) >= updateCheckInterval
-		a.mu.Unlock()
-		if !due {
-			continue
-		}
-		lastCheck = time.Now()
-		release, err := fetchLatestRelease(client, githubAPI, version.Repository)
-		if err != nil {
-			slog.Warn("update check failed", "error", err)
-			continue
-		}
-		a.mu.Lock()
-		a.update.latest = release
-		a.mu.Unlock()
-	}
-}
-
 // githubAPI is GitHub's public API.
-const githubAPI = "https://api.github.com"
+var githubAPI = "https://api.github.com"
 
 // fetchLatestRelease asks GitHub's API (at apiURL) for a repository's
 // newest release.
@@ -428,20 +547,4 @@ func fetchUpdateInfo(client *http.Client, url string) (update.Info, error) {
 	var info update.Info
 	err = json.NewDecoder(io.LimitReader(resp.Body, 64*1024)).Decode(&info)
 	return info, err
-}
-
-// UpdateUpdateSettings saves the online check setting.
-func (a *Agent) UpdateUpdateSettings(req api.UpdateSettings) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	newCfg := a.cfg.Clone()
-	newCfg.Updates.CheckOnline = req.CheckOnline
-	if err := config.WriteJSON(a.paths.ConfigFile(), newCfg, 0o644); err != nil {
-		return err
-	}
-	a.cfg = newCfg
-	if !req.CheckOnline {
-		a.update.latest = latestRelease{}
-	}
-	return nil
 }

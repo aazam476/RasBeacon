@@ -617,6 +617,28 @@ func (a *Agent) Handler() http.Handler {
 		writeJSON(w, http.StatusOK, result)
 	})
 
+	mux.HandleFunc("GET /settings/updates", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, a.UpdateSettings())
+	})
+	mux.HandleFunc("POST /settings/updates/test", func(w http.ResponseWriter, r *http.Request) {
+		var req api.NotifyTestRequest
+		if !readJSON(w, r, &req) {
+			return
+		}
+		if err := a.SendTestNotification(req.URL); err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, struct{}{})
+	})
+	mux.HandleFunc("POST /system/update/check", func(w http.ResponseWriter, r *http.Request) {
+		status, err := a.CheckForUpdateNow()
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, status)
+	})
 	mux.HandleFunc("PUT /settings/updates", func(w http.ResponseWriter, r *http.Request) {
 		var req api.UpdateSettings
 		if !readJSON(w, r, &req) {

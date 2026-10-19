@@ -184,7 +184,11 @@ export interface UpdateStatus {
   message?: string;
   /** The optional online check for new releases. */
   canCheckOnline: boolean;
-  checkOnline: boolean;
+  /** How often it asks GitHub: 0 (only with Check now), 1, 6, 24 or 168 hours. */
+  checkHours: number;
+  /** When it last asked (ISO 8601), and why that failed. */
+  lastChecked?: string;
+  checkError?: string;
   latestVersion?: string;
   latestUrl?: string;
   /**
@@ -383,6 +387,14 @@ export interface GuestSettings {
   hasPassword: boolean;
   /** False when the Wi-Fi adapter can only broadcast one network (read-only). */
   supported: boolean;
+}
+
+/** GET/PUT /api/v1/settings/updates: how often to look for a new version, and where to announce it. */
+export interface UpdateSettings {
+  /** 0 (only with Check now), 1, 6, 24 or 168 hours. */
+  checkHours: number;
+  /** An ntfy topic or a webhook; "" for none. */
+  notifyUrl: string;
 }
 
 /** GET/PUT /api/v1/settings/swap: the swap file on the SD card, in whole gigabytes. */

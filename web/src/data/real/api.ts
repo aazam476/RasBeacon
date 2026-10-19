@@ -17,6 +17,7 @@ import type {
   SSHSettings,
   SwapSettings,
   Status,
+  UpdateSettings,
   UpdateStatus,
   UplinkSettings,
   UsageSettings,
@@ -273,8 +274,12 @@ export const putHTTPSSettings = (
 /** Uploads and installs an update file; takes minutes on slow Wi-Fi. */
 export const installUpdate = (file: File) =>
   request<UpdateStatus>('POST', '/system/update', { file, timeoutMs: 30 * 60_000 });
-export const setCheckOnline = (checkOnline: boolean) =>
-  request<UpdateStatus>('PUT', '/settings/updates', { body: { checkOnline } });
+export const getUpdateSettings = () => request<UpdateSettings>('GET', '/settings/updates');
+export const putUpdateSettings = (settings: UpdateSettings) =>
+  request<UpdateStatus>('PUT', '/settings/updates', { body: settings });
+export const checkForUpdates = () => request<UpdateStatus>('POST', '/system/update/check', { timeoutMs: 60_000 });
+export const testUpdateNotification = (url: string) =>
+  request<void>('POST', '/settings/updates/test', { body: { url }, timeoutMs: 30_000 });
 export const reboot = () => request<void>('POST', '/system/reboot');
 export const factoryReset = (adminPassword: string) =>
   request<void>('POST', '/system/factory-reset', { body: { password: adminPassword } });

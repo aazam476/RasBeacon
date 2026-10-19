@@ -36,6 +36,7 @@ import (
 //	3: the VPN keeps several WireGuard profiles (see MoveVPNIntoProfile)
 //	4: v0.2.0. The kill switch with the VPN off now blocks devices, so it
 //	   is turned off where the VPN was off (devices keep their internet).
+//	   The online update check's on/off becomes a schedule (CheckHours).
 const CurrentVersion = 4
 
 // Band is the Wi-Fi frequency band the hotspot uses.
@@ -224,11 +225,21 @@ const MaxUsageLimitMB = 1_000_000
 
 // UpdatesConfig holds the update settings.
 type UpdatesConfig struct {
-	// CheckOnline asks GitHub now and then whether a newer release exists
-	// (off by default; RasBeacon contacts nobody unless you turn it on).
-	// It only shows a link: installing stays manual.
-	CheckOnline bool `json:"checkOnline"`
+	// CheckHours is how often RasBeacon asks GitHub whether a newer
+	// release exists: 0 (only when asked, the default; RasBeacon contacts
+	// nobody unless told to), 1, 6, 24 or 168 hours. It only tells the
+	// owner: installing stays manual.
+	CheckHours int `json:"checkHours,omitempty"`
+	// CheckOnline is the on/off setting before v0.2.0 (on meant every 6
+	// hours). FillDefaults turns it into CheckHours.
+	CheckOnline bool `json:"checkOnline,omitempty"`
+	// NotifiedVersion is the newest version a notification was sent for,
+	// so each version is announced once (see Secrets.UpdateNotifyURL).
+	NotifiedVersion string `json:"notifiedVersion,omitempty"`
 }
+
+// UpdateCheckHours are the choices for UpdatesConfig.CheckHours.
+var UpdateCheckHours = []int{0, 1, 6, 24, 168}
 
 // HTTPSConfig is the HTTPS setting for the web UI. The certificate and key
 // are files in the data directory (see paths.Paths.TLSDir).
@@ -556,6 +567,10 @@ func (c *Config) FillDefaults() {
 		// Version 2 added the VPN. Its kill switch starts on.
 		c.VPN.KillSwitch = true
 	}
+	if c.Version < 4 && c.Updates.CheckOnline {
+		// "Check online" checked every 6 hours.
+		c.Updates.CheckHours, c.Updates.CheckOnline = 6, false
+	}
 	if c.Version < 4 && !c.VPN.Enabled {
 		// Until v0.2.0 the kill switch did nothing while the VPN was off;
 		// now it blocks devices then. Keep their internet as it was.
@@ -626,6 +641,11 @@ type Secrets struct {
 	UplinkPasswords map[string]string `json:"uplinkPasswords,omitempty"`
 	// GuestPassword is the WPA2/WPA3 password for the guest network.
 	GuestPassword string `json:"guestPassword,omitempty"`
+	// UpdateNotifyURL is where a new version is announced: an ntfy topic
+	// (https://ntfy.sh/your-topic) or another web address that takes a
+	// message (a Discord or Home Assistant webhook). It can hold a token,
+	// so it is kept with the secrets.
+	UpdateNotifyURL string `json:"updateNotifyUrl,omitempty"`
 	// WireGuardKeys holds each VPN profile's keys, keyed by profile name.
 	WireGuardKeys map[string]WireGuardKeys `json:"wireguardKeys,omitempty"`
 	// WireGuardPrivateKey and WireGuardPresharedKey are where version 2

@@ -349,3 +349,44 @@ func TestStorage_ThePi3ImageHasOneSystemPartition(t *testing.T) {
 		t.Errorf("storage = %+v: RasBeacon is the boot partition and the system files, settings what /persistent holds", s)
 	}
 }
+
+func TestUpdateCheck_AnnouncesANewVersionOnce(t *testing.T) {
+	e := newClaimedEnv(t, false)
+	runningVersion(t, "v1.0.0")
+	oldRepo, oldAPI := version.Repository, githubAPI
+	t.Cleanup(func() { version.Repository, githubAPI = oldRepo, oldAPI })
+	version.Repository = "owner/rasbeacon"
+
+	var announced []string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/owner/rasbeacon/releases/latest", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"tag_name":"v1.1.0","html_url":"https://github.com/owner/rasbeacon/releases/tag/v1.1.0"}`))
+	})
+	mux.HandleFunc("/topic", func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		announced = append(announced, r.Header.Get("Title")+": "+string(body))
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+	githubAPI = server.URL
+
+	if err := e.agent.UpdateUpdateSettings(api.UpdateSettings{CheckHours: 24, NotifyURL: server.URL + "/topic"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.agent.UpdateUpdateSettings(api.UpdateSettings{CheckHours: 5}); err == nil {
+		t.Error("only the listed schedules may be chosen")
+	}
+	status, err := e.agent.CheckForUpdateNow()
+	if err != nil || status.LatestVersion != "v1.1.0" || status.LastChecked == "" || status.CheckHours != 24 {
+		t.Fatalf("status %+v, %v", status, err)
+	}
+	if _, err := e.agent.CheckForUpdateNow(); err != nil {
+		t.Fatal(err)
+	}
+	if len(announced) != 1 || !strings.Contains(announced[0], "RasBeacon v1.1.0") {
+		t.Errorf("announced %q, want the new version once", announced)
+	}
+	if err := e.agent.SendTestNotification(""); err != nil || len(announced) != 2 {
+		t.Errorf("test message: %v, %q", err, announced)
+	}
+}

@@ -343,9 +343,13 @@ type UpdateStatus struct {
 	// Message describes the last update, e.g. "Updated to v1.2.0." or why
 	// it failed.
 	Message string `json:"message,omitempty"`
-	// The optional online check (see UpdateSettings).
+	// The optional online check (see UpdateSettings). CheckHours is how
+	// often it runs (0: only with "Check now"); LastChecked is when it last
+	// asked (RFC 3339, "" if never), and CheckError why that failed.
 	CanCheckOnline bool   `json:"canCheckOnline"`
-	CheckOnline    bool   `json:"checkOnline"`
+	CheckHours     int    `json:"checkHours"`
+	LastChecked    string `json:"lastChecked,omitempty"`
+	CheckError     string `json:"checkError,omitempty"`
 	LatestVersion  string `json:"latestVersion,omitempty"`
 	LatestURL      string `json:"latestUrl,omitempty"`
 	// Reflash is set when a newer version can't be installed over this one
@@ -364,9 +368,21 @@ type UpdateReflash struct {
 	URL string `json:"url,omitempty"`
 }
 
-// UpdateSettings is written by the System page.
+// UpdateSettings is read and written by the System page
+// (GET and PUT /settings/updates).
 type UpdateSettings struct {
-	CheckOnline bool `json:"checkOnline"`
+	// CheckHours is how often to ask GitHub for a new version: 0 (only
+	// with "Check now"), 1, 6, 24 or 168.
+	CheckHours int `json:"checkHours"`
+	// NotifyURL is where to announce a new version: an ntfy topic or a
+	// webhook ("" for none).
+	NotifyURL string `json:"notifyUrl"`
+}
+
+// NotifyTestRequest sends a test message (POST /settings/updates/test) to
+// URL, or to the saved address when URL is empty.
+type NotifyTestRequest struct {
+	URL string `json:"url"`
 }
 
 // PortalStatus describes captive portals (login pages of hotel networks).

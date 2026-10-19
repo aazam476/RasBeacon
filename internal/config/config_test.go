@@ -362,3 +362,11 @@ func TestDNSConfig_CountsDoHServersTowardTheLimit(t *testing.T) {
 		t.Error("DoH servers are saved in full")
 	}
 }
+
+func TestFillDefaults_CheckOnlineBecomesASchedule(t *testing.T) {
+	cfg := Config{Version: 3, Updates: UpdatesConfig{CheckOnline: true}}
+	cfg.FillDefaults()
+	if cfg.Updates.CheckHours != 6 || cfg.Updates.CheckOnline {
+		t.Errorf("updates = %+v, want every 6 hours as before", cfg.Updates)
+	}
+}

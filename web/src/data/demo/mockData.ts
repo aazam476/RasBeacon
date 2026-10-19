@@ -1,6 +1,7 @@
 import type {
   DNSSettings,
   SwapSettings,
+  UpdateSettings,
   Client,
   GuestSettings,
   HotspotSettings,
@@ -30,6 +31,7 @@ export interface MockRouter {
   sshSettings: SSHSettings;
   dnsSettings: DNSSettings;
   swapSettings: SwapSettings;
+  updateSettings: UpdateSettings;
   usageSettings: UsageSettings;
   plugins: PluginsState;
   httpsSettings: HTTPSSettings;
@@ -221,7 +223,7 @@ export function createMockRouter(): MockRouter {
         canInstall: true,
         installing: false,
         canCheckOnline: true,
-        checkOnline: false,
+        checkHours: 0,
       },
       radios: [
         {
@@ -415,6 +417,7 @@ export function createMockRouter(): MockRouter {
 
     dnsSettings: { servers: [], withVpn: false },
     swapSettings: { sizeGb: 2, maxGb: 26 },
+    updateSettings: { checkHours: 0, notifyUrl: '' },
     plugins: createMockPlugins(),
     usageSettings: { limitMb: 0, since: '2026-10-01T08:00:00Z', metered: false, devicesPaused: 0 },
 

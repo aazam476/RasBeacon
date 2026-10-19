@@ -21,6 +21,7 @@ import type {
   SetupState,
   SSHSettings,
   SwapSettings,
+  UpdateSettings,
   Status,
   UplinkSettings,
   UsageSettings,
@@ -54,6 +55,7 @@ interface DataTypes {
   sshSettings: SSHSettings;
   dnsSettings: DNSSettings;
   swapSettings: SwapSettings;
+  updateSettings: UpdateSettings;
   usageSettings: UsageSettings;
   plugins: PluginsState;
   httpsSettings: HTTPSSettings;
@@ -71,6 +73,7 @@ const LOADERS: { [K in DataKey]: () => Promise<DataTypes[K]> } = {
   sshSettings: api.getSSHSettings,
   dnsSettings: api.getDNSSettings,
   swapSettings: api.getSwapSettings,
+  updateSettings: api.getUpdateSettings,
   usageSettings: api.getUsageSettings,
   plugins: api.getPlugins,
   httpsSettings: api.getHTTPSSettings,
@@ -87,6 +90,7 @@ const NO_DATA: AllData = {
   sshSettings: NOTHING,
   dnsSettings: NOTHING,
   swapSettings: NOTHING,
+  updateSettings: NOTHING,
   usageSettings: NOTHING,
   plugins: NOTHING,
   httpsSettings: NOTHING,
@@ -102,6 +106,7 @@ const SETTINGS: DataKey[] = [
   'sshSettings',
   'dnsSettings',
   'swapSettings',
+  'updateSettings',
   'usageSettings',
   'httpsSettings',
 ];
@@ -116,7 +121,7 @@ const PAGE_DATA: Record<string, DataKey[]> = {
   '/clients': ['status', 'usageSettings'],
   '/ssh': ['sshSettings'],
   '/https': ['httpsSettings'],
-  '/system': ['status', 'swapSettings'],
+  '/system': ['status', 'swapSettings', 'updateSettings'],
   '/more': ['sshSettings', 'httpsSettings'],
 };
 
@@ -590,10 +595,16 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
         store('swapSettings', await attempt(() => api.putSwapSettings(sizeGb), sameNames('sizeGb')));
         await refreshStatus();
       },
-      setCheckOnline: async (enabled) => {
-        const update = await attempt(() => api.setCheckOnline(enabled));
+      saveUpdateSettings: async (settings) => {
+        const update = await attempt(() => api.putUpdateSettings(settings), sameNames('checkHours', 'notifyUrl'));
+        store('updateSettings', settings);
         patchStatus((status) => ({ ...status, update }));
       },
+      checkForUpdates: async () => {
+        const update = await attempt(api.checkForUpdates);
+        patchStatus((status) => ({ ...status, update }));
+      },
+      testUpdateNotification: (url) => attempt(() => api.testUpdateNotification(url), sameNames('notifyUrl')),
       reboot: async () => {
         await attempt(api.reboot);
         await waitForRestart();

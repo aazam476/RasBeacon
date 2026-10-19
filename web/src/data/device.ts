@@ -25,6 +25,7 @@ import type {
   SetupState,
   SSHSettings,
   SwapSettings,
+  UpdateSettings,
   Status,
   UplinkSettings,
   VPNDetailsForm,
@@ -64,6 +65,7 @@ export type DataKey =
   | 'sshSettings'
   | 'dnsSettings'
   | 'swapSettings'
+  | 'updateSettings'
   | 'usageSettings'
   | 'plugins'
   | 'httpsSettings'
@@ -93,6 +95,7 @@ export interface DeviceState {
   sshSettings: Loadable<SSHSettings>;
   dnsSettings: Loadable<DNSSettings>;
   swapSettings: Loadable<SwapSettings>;
+  updateSettings: Loadable<UpdateSettings>;
   usageSettings: Loadable<UsageSettings>;
   plugins: Loadable<PluginsState>;
   httpsSettings: Loadable<HTTPSSettings>;
@@ -265,7 +268,12 @@ export interface DeviceActions {
 
   /** Upload and install a .rbupdate file; resolves when the router has accepted it. */
   installUpdate: (file: File) => Promise<void>;
-  setCheckOnline: (enabled: boolean) => Promise<void>;
+  /** Save how often to look for a new version and where to announce it. Field keys: checkHours, notifyUrl. */
+  saveUpdateSettings: (settings: UpdateSettings) => Promise<void>;
+  /** Ask GitHub now; the result lands in status.update. */
+  checkForUpdates: () => Promise<void>;
+  /** Send a test message to `url` (or the saved address). Field key: notifyUrl. */
+  testUpdateNotification: (url: string) => Promise<void>;
   /** The swap file's size in whole gigabytes (0 = off). Field key: sizeGb. */
   saveSwapSettings: (sizeGb: number) => Promise<void>;
   /** Resolves once the router answers again after restarting. */

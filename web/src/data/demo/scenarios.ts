@@ -586,7 +586,7 @@ export const SCENARIOS: DemoScenario[] = [
     route: '/system',
     apply: (d) => {
       Object.assign(d.router.status.update, {
-        checkOnline: true,
+        checkHours: 24,
         latestVersion: 'v1.1.0',
         latestUrl: 'https://github.com/rasbeacon/rasbeacon/releases/tag/v1.1.0',
       });
@@ -599,7 +599,7 @@ export const SCENARIOS: DemoScenario[] = [
     route: '/system',
     apply: (d) => {
       Object.assign(d.router.status.update, {
-        checkOnline: true,
+        checkHours: 24,
         latestVersion: 'v2.0.0',
         latestUrl: 'https://github.com/rasbeacon/rasbeacon/releases/tag/v2.0.0',
         reflash: {

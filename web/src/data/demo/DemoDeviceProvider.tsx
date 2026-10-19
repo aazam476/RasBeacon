@@ -637,9 +637,9 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
           });
         }
         if (servers.length > 4) throw new FieldErrors({ servers: 'At most 4 DNS servers.' });
-        const plain = servers.filter(isIp);
-        const doh = servers.filter((server) => !isIp(server)).map((server) => full(server)!.toLowerCase());
-        change((d) => void (d.router.dnsSettings = { servers: [...plain, ...doh], withVpn }));
+        // In the order typed, as the router keeps them.
+        const ordered = servers.map((server) => (isIp(server) ? server : full(server)!.toLowerCase()));
+        change((d) => void (d.router.dnsSettings = { servers: ordered, withVpn }));
       },
       saveSshSettings: async (settings) => {
         await wait(900);
@@ -710,20 +710,32 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
           8000,
         );
       },
-      setCheckOnline: async (enabled) => {
-        await wait(700);
+      saveUpdateSettings: async (settings) => {
+        await wait(600);
+        if (settings.notifyUrl && !/^https?:\/\/[^/\s]+/.test(settings.notifyUrl)) {
+          throw new FieldErrors({ notifyUrl: 'Enter a web address like https://ntfy.sh/your-topic.' });
+        }
         change((d) => {
-          Object.assign(
-            d.router.status.update,
-            enabled
-              ? {
-                  checkOnline: true,
-                  latestVersion: 'v1.1.0',
-                  latestUrl: 'https://github.com/rasbeacon/rasbeacon/releases/tag/v1.1.0',
-                }
-              : { checkOnline: false, latestVersion: undefined, latestUrl: undefined },
-          );
+          d.router.updateSettings = settings;
+          d.router.status.update.checkHours = settings.checkHours;
         });
+      },
+      checkForUpdates: async () => {
+        await wait(1500);
+        change((d) => {
+          Object.assign(d.router.status.update, {
+            lastChecked: new Date().toISOString(),
+            checkError: undefined,
+            latestVersion: 'v1.1.0',
+            latestUrl: 'https://github.com/rasbeacon/rasbeacon/releases/tag/v1.1.0',
+          });
+        });
+      },
+      testUpdateNotification: async (url) => {
+        await wait(1000);
+        if (!url && !currentDemo.router.updateSettings.notifyUrl) {
+          throw new FieldErrors({ notifyUrl: 'Enter the address first.' });
+        }
       },
       reboot: () => wait(3000),
       previewPluginFile: async (file) => {
@@ -933,6 +945,7 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
       sshSettings: loadable('sshSettings', router.sshSettings),
       dnsSettings: loadable('dnsSettings', router.dnsSettings),
       swapSettings: loadable('swapSettings', router.swapSettings),
+      updateSettings: loadable('updateSettings', router.updateSettings),
       plugins: loadable('plugins', router.plugins),
       usageSettings: loadable('usageSettings', { ...router.usageSettings, metered: router.hotspotSettings.metered }),
       httpsSettings: loadable('httpsSettings', router.httpsSettings),
