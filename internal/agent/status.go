@@ -211,6 +211,13 @@ var diagnosticCommands = [][]string{
 	{"iw", "reg", "get"},
 	{"iw", "dev", "ap0", "station", "dump"},
 	{"iw", "dev", "guest0", "station", "dump"},
+	// Is the hotspot's Wi-Fi still in its bridge, and what does hostapd
+	// say about itself and each device (inactive time, keys)?
+	{"bridge", "link"},
+	{"hostapd_cli", "-p", "/run/hostapd", "-i", "ap0", "status"},
+	{"hostapd_cli", "-p", "/run/hostapd", "-i", "ap0", "all_sta"},
+	// The devices RasBeacon can still reach on the hotspot network.
+	{"ip", "neigh", "show", "dev", "br-lan"},
 	{"nft", "list", "ruleset"},
 	{"cat", "/proc/sys/net/ipv4/ip_forward", "/proc/sys/net/ipv6/conf/all/forwarding"},
 	{"systemctl", "--no-pager", "status", hostapdService, dnsmasqService, "rbd.service", "rbweb.service"},
@@ -246,6 +253,10 @@ func (a *Agent) Diagnostics() string {
 	}
 	wifiUplink := a.wifiUplinkInterface()
 	plugins := a.pluginDiagnostics()
+	// Devices the firewall blocks, and what the hotspot check repaired.
+	paused := fmt.Sprintf("blocked devices: %d by the owner, %d over the data limit: %s\n",
+		len(a.cfg.Clients.Paused), len(a.usage.overLimit), strings.Join(a.pausedMACs(), ", "))
+	hotspotEvents := slices.Clone(a.hotspotCheck.events)
 	a.mu.Unlock()
 
 	var report strings.Builder
@@ -257,6 +268,13 @@ func (a *Agent) Diagnostics() string {
 	fmt.Fprintf(&report, "guest: enabled=%v running=%v ssid=%q clients=%d\n",
 		status.Guest.Enabled, status.Guest.Running, status.Guest.SSID, len(status.Guest.Clients))
 	report.WriteString(plugins)
+	report.WriteString(paused)
+	if len(hotspotEvents) == 0 {
+		report.WriteString("hotspot check: nothing repaired\n")
+	}
+	for _, event := range hotspotEvents {
+		fmt.Fprintf(&report, "hotspot check: %s\n", event)
+	}
 	u := status.Uplink
 	fmt.Fprintf(&report, "uplink: connected=%v kind=%s interface=%s address=%s gateway=%s ipv6=%v\n",
 		u.Connected, u.Kind, u.Interface, u.Address, u.Gateway, u.IPv6)

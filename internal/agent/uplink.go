@@ -278,6 +278,7 @@ func (a *Agent) RunUplinkMonitor() {
 		time.Sleep(UplinkCheckInterval)
 		a.mu.Lock()
 		a.checkUplink()
+		a.checkHotspot()
 		a.sampleReadings()
 		a.mu.Unlock()
 	}

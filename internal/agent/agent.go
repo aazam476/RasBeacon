@@ -110,6 +110,8 @@ type Agent struct {
 	update     updateState
 	usage      usageState
 	plugins    pluginsState
+	// hotspotCheck is the hotspot's regular self-check (hotspotcheck.go).
+	hotspotCheck hotspotCheckState
 	// powerSockets are the plugins' power sockets (see pluginsrun.go).
 	powerSockets map[string]*http.Server
 	// backupTickets are backups asked for but not downloaded yet, by token

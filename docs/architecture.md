@@ -28,7 +28,13 @@ The reasons behind the big decisions are in [design.md](design.md) and
 - **rbweb** (`cmd/rbweb`, logic in `internal/webserver`) serves the web UI
   and the `/api/v1/` API. It runs as the unprivileged `rbweb` user and cannot
   read the settings files. It checks logins, then forwards requests to rbd.
-- **hostapd** turns the USB Wi-Fi adapter into an *access point*.
+- **hostapd** turns the USB Wi-Fi adapter into an *access point*. It puts
+  the hotspot's interface (`ap0`) into the `br-lan` bridge. Every minute rbd
+  checks that it is still there and that hostapd still runs, and repairs
+  either (`internal/agent/hotspotcheck.go`); the diagnostics report lists
+  each repair. The group key isn't changed daily, because some adapters
+  and phones miss the change and stop receiving broadcasts (ARP), which
+  cuts Wi-Fi devices off while Ethernet ones keep working.
 - **dnsmasq** hands out addresses (*DHCP*) and answers name lookups (*DNS*)
   for devices on the hotspot.
 - **rbdoh** (`cmd/rbdoh`, logic in `internal/doh`) is the

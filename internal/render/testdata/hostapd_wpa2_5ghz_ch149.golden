@@ -53,3 +53,10 @@ rsn_pairwise=CCMP
 wpa_key_mgmt=WPA-PSK
 ieee80211w=0
 wpa_passphrase=correct horse battery
+# Keep the network-wide ("group") key instead of changing it every day.
+# Some Wi-Fi adapters and phones miss the change: they stay connected but
+# no longer receive broadcast messages, such as RasBeacon asking where a
+# device is (ARP), so Wi-Fi devices lose the internet while Ethernet
+# devices keep it. A new group key is still made whenever the hotspot
+# starts, and each device keeps its own key for everything else.
+wpa_group_rekey=0
