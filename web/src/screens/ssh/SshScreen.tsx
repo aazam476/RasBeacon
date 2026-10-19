@@ -71,16 +71,8 @@ function SshForm({ settings }: { settings: SSHSettings }) {
           onChange={(enabled) => setField('enabled', enabled)}
         />
       </Section>
-      <Section footer={`${keys} ${keys === 1 ? 'key' : 'keys'}.`}>
-        <TextAreaField
-          label="Public keys"
-          labelNote="(one per line, e.g. the contents of ~/.ssh/id_ed25519.pub)"
-          mono
-          rows={5}
-          placeholder="ssh-ed25519 AAAA… you@laptop"
-          value={values.authorizedKeys}
-          onChange={(authorizedKeys) => setField('authorizedKeys', authorizedKeys)}
-        />
+      {/* As on the VPN page: the file first, then the text it fills in. */}
+      <Section title="Public keys" footer={`${keys} ${keys === 1 ? 'key' : 'keys'}.`}>
         <FileField
           key={fileInputKey}
           label="Add from a file"
@@ -88,6 +80,15 @@ function SshForm({ settings }: { settings: SSHSettings }) {
           accept=".pub,text/plain"
           multiple
           onChange={addKeyFiles}
+        />
+        <TextAreaField
+          label="Or paste its contents"
+          labelNote="(one key per line, such as ~/.ssh/id_ed25519.pub)"
+          mono
+          rows={5}
+          placeholder="ssh-ed25519 AAAA… you@laptop"
+          value={values.authorizedKeys}
+          onChange={(authorizedKeys) => setField('authorizedKeys', authorizedKeys)}
         />
       </Section>
       <FormActions
