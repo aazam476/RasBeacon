@@ -1,29 +1,30 @@
 import { useState } from 'react';
 import { useDevice } from '@/data/device';
 import { cn } from '@/lib/cn';
-import { Badge, BreakableText, ButtonRow, Section, Sheet, Switch, TextField } from '@/ui';
+import { Badge, BreakableText, ButtonRow, EditButton, RenameSheet, Switch } from '@/ui';
 import { clientDetails, clientName, networkName, type NetworkClient } from '../common/clientDisplay';
 
 /**
- * One device as a group: its name and network with the switch for its internet access, its
- * readings, renaming it, and disconnecting it (or, while paused, flushing its lease). A device
+ * One device as a group: its name (renamed with the pencil beside it) and network with the
+ * switch for its internet access, its readings, and disconnecting it (or, while paused, flushing its lease). A device
  * paused by the data limit stays paused until the counts are reset or the limit is raised.
  */
 export function ClientSection({ client }: { client: NetworkClient }) {
-  const { setClientInternetAccess, disconnectClient, flushClientLease } = useDevice();
+  const { setClientInternetAccess, disconnectClient, flushClientLease, renameClient } = useDevice();
   const [renaming, setRenaming] = useState(false);
   const paused = !client.internetAccess;
   const name = clientName(client);
 
   return (
     <section className="overflow-hidden rounded-group bg-cell">
-      <div className="row">
+      <div className="group row">
         <span className="min-w-0 flex-1">
           {/* Phones have no hover tooltips, so long names wrap instead of being cut off. */}
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <h2 className={cn('min-w-0 text-headline wrap-break-word', paused ? 'text-label-2' : 'text-label')}>
               <BreakableText>{name}</BreakableText>
             </h2>
+            <EditButton label={`Rename ${name}`} onClick={() => setRenaming(true)} className="-my-1.5" />
             {client.isThisDevice && <Badge tone="tint">This device</Badge>}
           </span>
           <span className="mt-0.5 block text-subhead text-label-2">
@@ -54,7 +55,6 @@ export function ClientSection({ client }: { client: NetworkClient }) {
           </div>
         ))}
       </dl>
-      <ButtonRow onClick={() => setRenaming(true)}>Rename</ButtonRow>
       {paused ? (
         // The keys give each button its own request state.
         <ButtonRow key="flush" tone="danger" action={() => flushClientLease(client.mac)} busyLabel="Flushing…">
@@ -68,48 +68,23 @@ export function ClientSection({ client }: { client: NetworkClient }) {
           </ButtonRow>
         )
       )}
-      {renaming && <RenameSheet client={client} onClose={() => setRenaming(false)} />}
-    </section>
-  );
-}
-
-/** A name of the owner's for the device; empty goes back to the one it sends. */
-function RenameSheet({ client, onClose }: { client: NetworkClient; onClose: () => void }) {
-  const { renameClient } = useDevice();
-  const [name, setName] = useState(client.name ?? '');
-
-  return (
-    <Sheet
-      title="Rename device"
-      confirmLabel="Save"
-      busyLabel="Saving…"
-      onConfirm={() => renameClient(client.mac, name)}
-      onClose={onClose}
-    >
-      {(errors) => (
-        <Section
-          level={3}
+      {renaming && (
+        <RenameSheet
+          title="Rename device"
+          label="Name"
+          initial={client.name ?? client.hostname ?? ''}
+          placeholder={client.hostname || 'Kitchen tablet'}
+          maxLength={40}
           footer={
             <>
-              Kept for <span className="font-mono wrap-anywhere">{client.mac}</span>, also after it leaves and comes
+              Kept for <span className="font-mono wrap-anywhere">{client.mac}</span>, even after it leaves and comes
               back.
-              {client.hostname
-                ? ` Leave empty to use the name it sends: ${client.hostname}.`
-                : ' Leave empty for none.'}
             </>
           }
-        >
-          <TextField
-            label="Name"
-            placeholder={client.hostname || 'Kitchen tablet'}
-            maxLength={40}
-            value={name}
-            onChange={setName}
-            error={errors.name}
-            autoComplete="off"
-          />
-        </Section>
+          onSave={(newName) => renameClient(client.mac, newName)}
+          onClose={() => setRenaming(false)}
+        />
       )}
-    </Sheet>
+    </section>
   );
 }

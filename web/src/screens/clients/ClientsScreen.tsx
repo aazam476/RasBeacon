@@ -55,7 +55,8 @@ function ClientList({ status }: { status: Status }) {
       ) : (
         <ul
           aria-label="Devices"
-          className="flex flex-col gap-5 xl:block xl:columns-2 xl:gap-7 xl:*:mb-5 xl:*:break-inside-avoid"
+          // Two columns on wide screens, in rows: the cards side by side start at the same height.
+          className="flex flex-col gap-5 xl:grid xl:grid-cols-2 xl:items-start xl:gap-x-7"
         >
           {shown.map((client) => (
             <li key={client.mac}>

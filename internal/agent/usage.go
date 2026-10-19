@@ -11,9 +11,8 @@ package agent
 // device are read (see sampleReadings); what they grew by since the last
 // sample is added to that device's total. The totals are saved now and then
 // (usage.json), so they survive restarts, until the owner resets them. With
-// a data limit set and the connection marked metered, a device over the
-// limit is paused by the firewall until the counters are reset or the
-// limit is raised.
+// a data limit set, a device over the limit is blocked by the firewall
+// until the counters are reset or the limit is raised.
 
 import (
 	"errors"
@@ -111,10 +110,10 @@ func (a *Agent) saveUsage() {
 	a.usage.savedAt = a.now()
 }
 
-// usageLimitBytes is the data limit in force now (0: none). It only applies
-// while the connection is marked metered.
+// usageLimitBytes is the data limit in force now (0: none), metered
+// connection or not.
 func (a *Agent) usageLimitBytes() uint64 {
-	if !a.cfg.Hotspot.Metered || a.cfg.Clients.UsageLimitMB <= 0 {
+	if a.cfg.Clients.UsageLimitMB <= 0 {
 		return 0
 	}
 	return uint64(a.cfg.Clients.UsageLimitMB) * 1_000_000

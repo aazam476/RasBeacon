@@ -436,9 +436,13 @@ type FirewallInput struct {
 	// yours, but reach nothing else (not your devices, not RasBeacon's
 	// settings, only its DHCP and DNS).
 	Guest bool
-	// PausedMACs are devices whose internet access the owner paused: the
-	// firewall refuses to forward anything from them.
+	// PausedMACs are devices whose internet access the owner paused (or
+	// that used up their data): the firewall refuses to forward anything
+	// from them.
 	PausedMACs []string
+	// PausedIPv4 are those devices' addresses on the hotspot (from the DHCP
+	// leases): nothing is forwarded to them either.
+	PausedIPv4 []netip.Addr
 	// Browser confines the login browser (see internal/browser) to the
 	// uplinks. nil when there is no browser user.
 	Browser *BrowserRule
@@ -497,6 +501,7 @@ type BrowserRule struct {
 
 type firewallData struct {
 	PausedMACs      []string
+	PausedIPv4      []string
 	Browser         *BrowserRule
 	RoutedIPv6      string
 	PortalOnly      bool
@@ -570,6 +575,12 @@ func Firewall(in FirewallInput) (string, error) {
 			return "", fmt.Errorf("invalid MAC address %q", mac)
 		}
 		data.PausedMACs = append(data.PausedMACs, hw.String())
+	}
+	for _, addr := range in.PausedIPv4 {
+		if !addr.Is4() {
+			return "", fmt.Errorf("invalid IPv4 address %v", addr)
+		}
+		data.PausedIPv4 = append(data.PausedIPv4, addr.String())
 	}
 	if b := in.Browser; b != nil {
 		if b.UID <= 0 {

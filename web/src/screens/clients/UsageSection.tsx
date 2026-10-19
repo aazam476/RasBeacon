@@ -14,17 +14,16 @@ function limitLabel(limitMb: number): string {
   return limitMb === 0 ? 'No limit' : formatBytes(limitMb * 1_000_000);
 }
 
-/** "1 October", or with the year when it isn't this year. */
+/** "October 19, 2026" (in the browser's language and order). */
 function sinceLabel(since: string | undefined): string {
   const date = since ? new Date(since) : null;
   if (!date || Number.isNaN(date.getTime())) return 'the start';
-  const sameYear = date.getFullYear() === new Date().getFullYear();
-  return date.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: sameYear ? undefined : 'numeric' });
+  return date.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
 /**
  * Data use: counted for each Wi-Fi device until the counts are reset, with a limit per device
- * that pauses it while the connection is marked metered.
+ * that blocks it once used up.
  */
 export function UsageSection() {
   const { usageSettings, reload } = useDevice();
@@ -52,16 +51,10 @@ function UsageForm({ settings }: { settings: UsageSettings }) {
   }
 
   let footer = `Counted for each Wi-Fi device since ${sinceLabel(settings.since)}. `;
-  if (settings.limitMb === 0) {
-    footer += 'A limit pauses a device that uses it up, while the hotspot is set as a metered connection.';
-  } else if (!settings.metered) {
-    footer += 'The limit is not in use: it only applies while the hotspot is set as a metered connection.';
-  } else {
-    footer +=
-      settings.devicesPaused > 0
-        ? `${settings.devicesPaused === 1 ? 'One device has' : `${settings.devicesPaused} devices have`} used the limit and ${settings.devicesPaused === 1 ? 'is' : 'are'} paused until you reset the counts or raise the limit.`
-        : 'A device that uses it up is paused until you reset the counts or raise the limit.';
-  }
+  footer +=
+    settings.limitMb > 0 && settings.devicesPaused > 0
+      ? `${settings.devicesPaused === 1 ? 'One device has' : `${settings.devicesPaused} devices have`} used up ${settings.devicesPaused === 1 ? 'its' : 'their'} data, so ${settings.devicesPaused === 1 ? 'its' : 'their'} traffic is blocked until you reset the counts or raise the limit.`
+      : 'When a device uses up its data, its traffic is blocked until you reset the counts or raise the limit.';
 
   return (
     <Section title="Data use" footer={footer}>

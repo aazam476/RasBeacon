@@ -597,6 +597,7 @@ func (a *Agent) applyFirewall() error {
 		Guest:           a.guestActive(),
 		RoutedIPv6:      a.wantedRoutedIPv6(),
 		PausedMACs:      a.pausedMACs(),
+		PausedIPv4:      a.pausedIPv4(),
 	}
 	if a.mode == api.ModeNormal {
 		input.Plugins = a.pluginRules()

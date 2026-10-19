@@ -120,6 +120,11 @@ table inet rasbeacon {
 		# is forwarded (they can still reach RasBeacon itself).
 		iifname @lans ether saddr { {{range $i, $m := .PausedMACs}}{{if $i}}, {{end}}{{$m}}{{end}} } reject
 {{- end}}
+{{- if .PausedIPv4}}
+		# ... and nothing reaches them from outside, not even answers to
+		# connections they started before.
+		oifname @lans ip daddr { {{range $i, $a := .PausedIPv4}}{{if $i}}, {{end}}{{$a}}{{end}} } drop
+{{- end}}
 
 		# Connections devices already started may continue, but only on the
 		# current path. When the path changes (for example from login mode

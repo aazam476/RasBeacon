@@ -432,7 +432,8 @@ func TestFirewall_LoginBrowserOnlyReachesUplinks(t *testing.T) {
 }
 
 func TestFirewall_PausedDevicesAreNotForwarded(t *testing.T) {
-	got, err := Firewall(FirewallInput{Egress: []string{"wlan0"}, PausedMACs: []string{"3A:1F:22:AA:BB:CC", "8e:00:11:22:33:44"}})
+	got, err := Firewall(FirewallInput{Egress: []string{"wlan0"}, PausedMACs: []string{"3A:1F:22:AA:BB:CC", "8e:00:11:22:33:44"},
+		PausedIPv4: []netip.Addr{netip.MustParseAddr("10.87.0.23")}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -442,6 +443,10 @@ func TestFirewall_PausedDevicesAreNotForwarded(t *testing.T) {
 	at := strings.Index(forward, rule)
 	if at < 0 || at > strings.Index(forward, "ct state established,related accept") {
 		t.Errorf("paused devices must be refused before established connections are let through:\n%s", forward)
+	}
+	drop := strings.Index(forward, `oifname @lans ip daddr { 10.87.0.23 } drop`)
+	if drop < 0 || drop > strings.Index(forward, "ct state established,related accept") {
+		t.Errorf("nothing may reach a paused device, not even answers:\n%s", forward)
 	}
 	if _, err := Firewall(FirewallInput{PausedMACs: []string{"3a:1f:22:aa:bb:cc } accept #"}}); err == nil {
 		t.Error("a bad MAC address must be refused")

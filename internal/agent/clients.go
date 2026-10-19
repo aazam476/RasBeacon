@@ -59,6 +59,27 @@ func (a *Agent) pausedMACs() []string {
 	return macs
 }
 
+// pausedIPv4 lists the paused devices' addresses on the hotspot, from the
+// DHCP leases, so the firewall drops traffic to them too.
+func (a *Agent) pausedIPv4() []netip.Addr {
+	paused := a.pausedMACs()
+	if len(paused) == 0 {
+		return nil
+	}
+	leases, _ := os.ReadFile(a.paths.DnsmasqLeases())
+	var addrs []netip.Addr
+	for _, lease := range stations.ParseLeases(string(leases)) {
+		mac, err := normalizeMAC(lease.MAC)
+		if err != nil || !slices.Contains(paused, mac) {
+			continue
+		}
+		if addr, err := netip.ParseAddr(lease.IP); err == nil && addr.Is4() && !slices.Contains(addrs, addr) {
+			addrs = append(addrs, addr)
+		}
+	}
+	return addrs
+}
+
 // SetClientInternetAccess pauses (allowed false) or allows a device's
 // internet access.
 func (a *Agent) SetClientInternetAccess(mac string, allowed bool) error {

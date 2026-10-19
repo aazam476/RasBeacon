@@ -85,6 +85,9 @@ table inet rasbeacon {
 		# Devices whose internet access the owner paused: nothing from them
 		# is forwarded (they can still reach RasBeacon itself).
 		iifname @lans ether saddr { 3a:1f:22:aa:bb:cc, 8e:00:11:22:33:44 } reject
+		# ... and nothing reaches them from outside, not even answers to
+		# connections they started before.
+		oifname @lans ip daddr { 10.87.0.23 } drop
 
 		# Connections devices already started may continue, but only on the
 		# current path. When the path changes (for example from login mode
