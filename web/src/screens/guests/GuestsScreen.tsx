@@ -144,10 +144,7 @@ const REACH: { icon: BaseIconName; text: string; allowed: boolean }[] = [
 /** What guests can and can't reach. */
 function Reach() {
   return (
-    <Section
-      title="What guests can reach"
-      footer="Guests can use the internet (through the VPN, if it is on), but can't reach your devices, each other, or these settings."
-    >
+    <Section title="What guests can reach">
       {REACH.map((item) => (
         <Row
           key={item.text}
