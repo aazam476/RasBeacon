@@ -9,6 +9,9 @@
 // Steps find elements by their role and visible name (like a person or a
 // screen reader would), so a restyled UI keeps passing as long as it keeps
 // the wording listed in docs/ui-contract.md.
+//
+// E2E_VIEWPORT=desktop runs it on a computer-sized screen (the sidebar
+// layout) instead of a phone's (the tab bar); CI runs both.
 
 const { chromium } = require("playwright");
 const fs = require("fs");
@@ -21,6 +24,9 @@ const SCREENSHOT_DIR = process.env.SCREENSHOT_DIR ?? "";
 // Chromium is available for the simulated device's own browser, which the
 // zero-leak login and the speed test need).
 const HOTEL_URL = process.env.RASBEACON_E2E_HOTEL ?? "";
+const DESKTOP = process.env.E2E_VIEWPORT === "desktop";
+// Screenshots of each screen size are kept apart.
+const PREFIX = DESKTOP ? "desktop-" : "phone-";
 
 // A WireGuard file with the WireGuard documentation's example keys.
 const WIREGUARD_CONF = `[Interface]
@@ -41,8 +47,9 @@ async function main() {
   const browser = await chromium.launch(
     process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {},
   );
-  // Phone-sized screen (iPhone 14/15).
-  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  // A phone (iPhone 14/15) or a laptop.
+  const page = await browser.newPage({ viewport: DESKTOP ? { width: 1280, height: 800 } : { width: 390, height: 844 } });
+  console.log(`Screen: ${DESKTOP ? "desktop, 1280 x 800" : "phone, 390 x 844"}`);
   const pageErrors = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
 
@@ -52,21 +59,22 @@ async function main() {
       await action();
     } catch (error) {
       if (SCREENSHOT_DIR) {
-        await page.screenshot({ path: `${SCREENSHOT_DIR}/FAILED-${name.replace(/\W+/g, "-")}.png`, fullPage: true });
+        await page.screenshot({ path: `${SCREENSHOT_DIR}/${PREFIX}FAILED-${name.replace(/\W+/g, "-")}.png`, fullPage: true });
       }
       throw error;
     }
     if (SCREENSHOT_DIR) {
-      await page.screenshot({ path: `${SCREENSHOT_DIR}/${name.replace(/\W+/g, "-")}.png`, fullPage: true });
+      await page.screenshot({ path: `${SCREENSHOT_DIR}/${PREFIX}${name.replace(/\W+/g, "-")}.png`, fullPage: true });
     }
     console.log("ok");
   };
 
   const nav = page.getByRole("navigation", { name: "Main navigation" });
   const main = page.getByRole("main");
-  // Opens a page the way a person would: from the tab bar, or through "More".
+  // Opens a page the way a person would: from the sidebar, the tab bar, or
+  // through "More".
   const open = async (name) => {
-    if (ON_MORE_PAGE.has(name)) {
+    if (!DESKTOP && ON_MORE_PAGE.has(name)) {
       await nav.getByRole("link", { name: "More", exact: true }).click();
       await main.getByRole("link", { name, exact: true }).click();
     } else {
