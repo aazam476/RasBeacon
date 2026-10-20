@@ -686,16 +686,6 @@ func (m *Manifest) RunsOn(board string) bool {
 	return len(m.Boards) == 0 || board == "" || slices.Contains(m.Boards, board)
 }
 
-// SettingByKey finds a setting.
-func (m *Manifest) SettingByKey(key string) (Setting, bool) {
-	for _, s := range m.Settings {
-		if s.Key == key {
-			return s, true
-		}
-	}
-	return Setting{}, false
-}
-
 // Secret reports whether the setting's value is kept with the secrets.
 func (s Setting) Secret() bool { return s.Type == "password" }
 

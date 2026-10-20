@@ -52,10 +52,15 @@ name the test after the behaviour:
 `TestFactoryReset_NeedsTheAdminPassword`, not `TestReset2`. Prefer a table
 when several inputs check the same rule.
 
-What the unit tests don't run, on purpose: loops that run for as long as
-RasBeacon does (the uplink, portal and clock monitors, the reset button),
-and code that needs a real kernel, radio or browser. The groups below cover
-those.
+Background work (the uplink, portal and clock monitors, the update and
+catalog checks, the plugin watcher) is a loop that only sleeps and calls
+one round: `checkClock`, `updateCheckDue`, `catalogCheckDue`,
+`pluginWatchRound`, `CheckPortal` and so on. Test the round, not the loop;
+a new background job should follow the same shape.
+
+What the unit tests don't run: those loops themselves, and code that needs
+a real kernel, radio, network or browser (raw DHCP packets, sockets marked
+for the VPN, Chromium, Podman). The groups below cover those.
 
 ### Network namespace tests (`test/netns/`)
 
@@ -141,10 +146,15 @@ Helpers (`web/test/components/render.tsx` and `setup.ts`):
 - `section(title)`: the group of rows under a heading.
 - `setViewport('desktop')`: before rendering, for the sidebar layout
   (phone is the default).
+- `rerender(ui)` (from `renderScreen`): draws the screen again after the
+  test changed the device.
+- `finger(target, kind, clientY, time)`: a timed pointer event, for swipes
+  and pulls whose speed matters.
 
 `data/` tests the real data layer (`RealDeviceProvider`) against a fake
 rbweb: `actions.test.tsx` is a table of every action, the requests it sends
-and the state it leaves.
+and the state it leaves; `waiting.test.tsx` uses a fake clock for what takes
+minutes (a restart, a factory reset, the regular reloads).
 
 Find elements by their role and visible name, as a person would
 (`getByRole('button', { name: 'Save' })`), not by class names.

@@ -2,11 +2,16 @@ package agent
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"rasbeacon/internal/api"
 	"rasbeacon/internal/plugin"
@@ -191,5 +196,61 @@ func TestRoutes_UnknownBackupDownload(t *testing.T) {
 	var got api.ErrorResponse
 	if status != http.StatusBadRequest || json.Unmarshal(body, &got) != nil || got.Error == "" {
 		t.Errorf("an unknown backup token = %d %s, want 400 with a message", status, body)
+	}
+}
+
+func TestRoutes_BackupDownloadStreamsTheFile(t *testing.T) {
+	e := newClaimedEnv(t, false)
+	status, body := e.call(http.MethodPost, "/system/backup", api.BackupRequest{Password: "backup-pass-42"})
+	var ticket api.BackupTicket
+	if status != http.StatusOK || json.Unmarshal(body, &ticket) != nil || ticket.Token == "" {
+		t.Fatalf("POST /system/backup = %d %s", status, body)
+	}
+
+	rec := httptest.NewRecorder()
+	e.agent.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/system/backup/"+ticket.Token, nil))
+	if rec.Code != http.StatusOK || rec.Body.Len() == 0 {
+		t.Fatalf("download = %d, %d bytes", rec.Code, rec.Body.Len())
+	}
+	if got := rec.Header().Get("Content-Disposition"); !strings.Contains(got, ticket.FileName) {
+		t.Errorf("Content-Disposition = %q, want the file name %q", got, ticket.FileName)
+	}
+	if bytes.Contains(rec.Body.Bytes(), []byte(validClaim.HotspotPassword)) {
+		t.Error("the backup must be encrypted")
+	}
+	// A ticket is used once.
+	if status, _ := e.call(http.MethodGet, "/system/backup/"+ticket.Token, nil); status != http.StatusBadRequest {
+		t.Errorf("second download = %d, want refused", status)
+	}
+}
+
+func TestListenUnix_ServesTheRoutesOnlyToItsOwnerAndGroup(t *testing.T) {
+	e := newClaimedEnv(t, false)
+	socket := filepath.Join(t.TempDir(), "api.sock")
+	go func() { _ = e.agent.ListenUnix(socket, -1) }()
+
+	client := &http.Client{Transport: &http.Transport{
+		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			var d net.Dialer
+			return d.DialContext(ctx, "unix", socket)
+		},
+	}}
+	var resp *http.Response
+	var err error
+	for range 50 {
+		if resp, err = client.Get("http://rbd/state"); err == nil {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("GET /state over the socket = %d", resp.StatusCode)
+	}
+	if info, err := os.Stat(socket); err != nil || info.Mode().Perm() != 0o660 {
+		t.Errorf("socket mode = %v, %v; want 0660 (rbd and rbweb's group only)", info.Mode().Perm(), err)
 	}
 }
