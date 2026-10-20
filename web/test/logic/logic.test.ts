@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { FieldErrors } from '../errors';
-import type { NewNetworkForm, SavedNetwork, SetupState, VPNDetailsForm } from '../types';
-import { ApiError } from './api';
+import { FieldErrors } from '@/data/errors';
+import type { NewNetworkForm, SavedNetwork, SetupState, VPNDetailsForm } from '@/data/types';
+import { ApiError } from '@/data/real/api';
 import {
   certificatesToUpload,
   checkAdminPassword,
@@ -19,7 +19,7 @@ import {
   splitList,
   toSavedNetwork,
   vpnDetailsRequest,
-} from './logic';
+} from '@/data/real/logic';
 
 const normal: SetupState = {
   mode: 'normal',

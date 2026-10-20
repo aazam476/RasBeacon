@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseInline, parseMarkdown } from './markdown';
+import { parseInline, parseMarkdown } from '@/lib/markdown';
 
 describe('parseMarkdown', () => {
   it('joins wrapped lines and splits paragraphs at blank lines', () => {
