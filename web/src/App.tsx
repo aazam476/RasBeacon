@@ -87,7 +87,8 @@ function PhaseGate() {
   }
 }
 
-function Pages() {
+/** The logged-in pages in the layout for this screen size (exported for the tests). */
+export function Pages() {
   const Layout = useMediaQuery(DESKTOP_QUERY) ? DesktopLayout : PhoneLayout;
 
   return (

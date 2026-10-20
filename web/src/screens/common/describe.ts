@@ -47,7 +47,14 @@ export function describeEthernet(ethernet: EthernetUplinkStatus): string {
 }
 
 export function describeSecurity(security: Security): string {
-  return security === 'wpa2-wpa3' ? 'WPA2/WPA3' : 'WPA2 only';
+  switch (security) {
+    case 'wpa2-wpa3':
+      return 'WPA2/WPA3';
+    case 'wpa3':
+      return 'WPA3 only';
+    case 'wpa2':
+      return 'WPA2 only';
+  }
 }
 
 /** The metered setting, with what devices do about it. */
