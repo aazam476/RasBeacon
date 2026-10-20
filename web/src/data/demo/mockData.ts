@@ -273,7 +273,7 @@ export function createMockRouter(): MockRouter {
         throttling: 'None',
       },
       device: {
-        hostname: 'rasbeacon.local',
+        hostname: 'rasbeacon.lan',
         modelSpec: 'CM4-1GB-Lite',
         kernel: 'Linux 6.1.21-v8+ aarch64',
         kernelRelease: '6.1.21-v8+',
@@ -429,7 +429,7 @@ export function createMockRouter(): MockRouter {
     httpsSettings: {
       enabled: true,
       uploaded: false,
-      subject: 'CN=rasbeacon.local',
+      subject: 'CN=RasBeacon 7162',
       fingerprint: '3F:9A:12:C4:7E:01:55:B2:9D:4C:10:E8:77:AB:02:6C:91:3E:D5:48:0F:22:A7:6B:C3:19:E0:84:5D:2A:F1:66',
       validUntil: '2036-10-01',
     },

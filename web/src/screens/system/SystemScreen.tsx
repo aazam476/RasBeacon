@@ -2,10 +2,11 @@ import { useDevice } from '@/data/device';
 import type { Status } from '@/data/types';
 import { formatDuration } from '@/lib/format';
 import { Loaded } from '@/shell/Loaded';
-import { Badge, Icon, Meter, Row, Section, type Tone } from '@/ui';
+import { useState } from 'react';
+import { Badge, EditButton, Icon, Meter, RenameSheet, Row, Section, type Tone } from '@/ui';
 import { getResourceMetrics } from '../common/resourceMetrics';
 import { BackupSection } from './BackupSection';
-import { FactoryResetSection, RebootSection } from './RestartSections';
+import { FactoryResetSection, RebootSection, ShutdownSection } from './RestartSections';
 import { SoftwareSection } from './SoftwareSection';
 import { StorageSection } from './StorageSection';
 import { SwapSection } from './SwapSection';
@@ -27,6 +28,7 @@ export function SystemScreen() {
           <DiagnosticsSection />
           <BackupSection />
           <RebootSection />
+          <ShutdownSection />
           <FactoryResetSection />
         </>
       )}
@@ -55,17 +57,38 @@ function HardwareSection({ status }: { status: Status }) {
 }
 
 function AboutSection({ status }: { status: Status }) {
+  const { saveHostname } = useDevice();
   const { device } = status;
+  const [renaming, setRenaming] = useState(false);
 
   return (
     <Section title="About">
-      <Row title="Name" value={device.hostname} />
+      <Row
+        className="group"
+        title="Name"
+        value={device.hostname}
+        trailing={<EditButton label="Rename RasBeacon" onClick={() => setRenaming(true)} className="-my-1.5" />}
+      />
       <Row title="Board" value={status.boardModel} />
       <Row title="Model" value={device.modelSpec} />
       <Row title="Device ID" value={status.deviceId} />
       <Row title="Kernel" value={device.kernel} />
       <Row title="Starts from" value={device.bootDevice} />
       <Row title="Up for" value={formatDuration(status.uptimeSeconds)} />
+      {renaming && (
+        <RenameSheet
+          title="Rename RasBeacon"
+          label="Name"
+          initial={device.hostname.replace(/\.lan$/, '')}
+          placeholder="rasbeacon"
+          maxLength={63}
+          errorKey="hostname"
+          busyLabel="Restarting…"
+          footer="Use lowercase letters, digits and hyphens. Devices then reach RasBeacon at this name followed by .lan. It restarts to use the new name, so devices disconnect for about a minute."
+          onSave={saveHostname}
+          onClose={() => setRenaming(false)}
+        />
+      )}
     </Section>
   );
 }

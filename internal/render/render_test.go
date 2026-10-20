@@ -741,3 +741,18 @@ func TestDnsmasq_AnswersPlugins(t *testing.T) {
 		t.Errorf("dnsmasq must answer plugins' DNS, without DHCP:\n%s", got)
 	}
 }
+
+func TestDnsmasq_Hostname(t *testing.T) {
+	got, err := Dnsmasq(DnsmasqInput{LAN: DefaultLAN, LeaseFile: "x", Hostname: "travel-pi"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"address=/rasbeacon.lan/10.87.0.1", "address=/travel-pi.lan/10.87.0.1"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	if _, err := Dnsmasq(DnsmasqInput{LAN: DefaultLAN, LeaseFile: "x", Hostname: "a/b"}); err == nil {
+		t.Error("a name with a slash was accepted")
+	}
+}

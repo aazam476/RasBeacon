@@ -318,6 +318,9 @@ var PluginSubnet = netip.MustParsePrefix("10.89.0.0/24")
 type DnsmasqInput struct {
 	LAN       LAN
 	LeaseFile string
+	// Hostname is RasBeacon's own name; <Hostname>.lan points to it, as
+	// does rasbeacon.lan.
+	Hostname string
 	// Captive is true during first-boot setup: every name points to
 	// RasBeacon so phones open the setup page automatically.
 	Captive bool
@@ -358,6 +361,7 @@ type dnsmasqData struct {
 	DHCPStart        string
 	DHCPEnd          string
 	LeaseFile        string
+	Hostname         string
 	Captive          bool
 	CaptivePortalAPI string
 	Upstream         []string
@@ -395,6 +399,12 @@ func Dnsmasq(in DnsmasqInput) (string, error) {
 			data.GuestDHCPStart = g.hostAddress(dhcpFirst)
 			data.GuestDHCPEnd = g.hostAddress(dhcpLast)
 		}
+	}
+	if in.Hostname != "" && in.Hostname != "rasbeacon" {
+		if strings.ContainsAny(in.Hostname, "/.\n\r ") {
+			return "", fmt.Errorf("invalid host name %q", in.Hostname)
+		}
+		data.Hostname = in.Hostname
 	}
 	for _, name := range data.NoticeHostnames {
 		if strings.ContainsAny(name, "/\n\r ") || name == "" {

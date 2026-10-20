@@ -659,6 +659,23 @@ func (a *Agent) Handler() http.Handler {
 		w.WriteHeader(http.StatusNoContent)
 	})
 
+	mux.HandleFunc("POST /system/shutdown", func(w http.ResponseWriter, r *http.Request) {
+		a.Shutdown()
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	mux.HandleFunc("POST /system/hostname", func(w http.ResponseWriter, r *http.Request) {
+		var req api.HostnameRequest
+		if !readJSON(w, r, &req) {
+			return
+		}
+		if err := a.SetHostname(req.Hostname); err != nil {
+			writeError(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+
 	mux.HandleFunc("POST /system/factory-reset", func(w http.ResponseWriter, r *http.Request) {
 		var req api.PasswordRequest
 		if !readJSON(w, r, &req) {

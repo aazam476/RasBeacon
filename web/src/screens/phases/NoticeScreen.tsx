@@ -2,9 +2,12 @@ import { useDevice } from '@/data/device';
 import { FullPage, FullPageHeader } from '@/shell/FullPage';
 import { ActionButton, ActivityIndicator, AppIcon, Icon, type BaseIconName } from '@/ui';
 
-export type NoticeKind = 'unreachable' | 'setup-closed' | 'setup-error' | 'no-radio';
+export type NoticeKind = 'unreachable' | 'setup-closed' | 'setup-error' | 'no-radio' | 'off';
 
-const NOTICES: Record<NoticeKind, { title: string; body: string; icon: BaseIconName; tone: 'orange' | 'red' }> = {
+const NOTICES: Record<
+  NoticeKind,
+  { title: string; body: string; icon: BaseIconName; tone: 'gray' | 'orange' | 'red' }
+> = {
   unreachable: {
     title: "Can't reach RasBeacon",
     body: 'Check that this device is connected to the RasBeacon hotspot, then try again.',
@@ -23,12 +26,24 @@ const NOTICES: Record<NoticeKind, { title: string; body: string; icon: BaseIconN
     icon: 'sd_card',
     tone: 'red',
   },
+  off: {
+    title: 'RasBeacon is off',
+    body: 'Unplug the power and plug it back in to turn it on again. Then join its Wi-Fi and try again.',
+    icon: 'power_settings_new',
+    tone: 'gray',
+  },
   'no-radio': {
     title: 'No Wi-Fi adapter found',
     body: 'RasBeacon found no Wi-Fi radio that can run a hotspot. Plug in a supported USB Wi-Fi adapter and restart.',
     icon: 'wifi_off',
     tone: 'red',
   },
+};
+
+const TONES = {
+  gray: 'bg-fill text-label-2',
+  orange: 'bg-orange-fill/15 text-orange',
+  red: 'bg-red-fill/15 text-red',
 };
 
 /** A full-page message when there is nothing to set up from here, with "Try again". */
@@ -43,9 +58,7 @@ export function NoticeScreen({ kind, detail }: { kind: NoticeKind; detail?: stri
         icon={
           <span
             aria-hidden="true"
-            className={`grid size-[4.5rem] place-items-center rounded-full ${
-              notice.tone === 'red' ? 'bg-red-fill/15 text-red' : 'bg-orange-fill/15 text-orange'
-            }`}
+            className={`grid size-[4.5rem] place-items-center rounded-full ${TONES[notice.tone]}`}
           >
             <Icon name={notice.icon} filled size={40} />
           </span>

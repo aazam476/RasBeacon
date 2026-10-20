@@ -3,6 +3,7 @@ import { useLocation } from 'react-router';
 import { FALLBACK_LOGIN_URL } from '../constants';
 import {
   DeviceContext,
+  type AppPhase,
   type DataKey,
   type Device,
   type DeviceActions,
@@ -161,8 +162,12 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<AllData>(NO_DATA);
   const [nearbyNetworks, setNearbyNetworks] = useState<NearbyNetwork[] | null>(null);
   const [portalBrowser, setPortalBrowser] = useState<PortalBrowserState>(CLOSED_BROWSER);
+  const [poweredOff, setPoweredOff] = useState(false);
 
-  const phase = useMemo(() => decidePhase(setup, loggedIn, startupError), [setup, loggedIn, startupError]);
+  const phase = useMemo<AppPhase>(
+    () => (poweredOff ? { kind: 'notice', notice: 'off' } : decidePhase(setup, loggedIn, startupError)),
+    [poweredOff, setup, loggedIn, startupError],
+  );
   const ready = phase.kind === 'ready';
   const setupDone = phase.kind === 'ready' || phase.kind === 'login';
 
@@ -374,7 +379,10 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
     }
 
     return {
-      retry: loadStartup,
+      retry: async () => {
+        setPoweredOff(false);
+        await loadStartup();
+      },
       reload: load,
 
       finishSetup: async (form) => {
@@ -609,6 +617,23 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
         await attempt(api.reboot);
         await waitForRestart();
         // The session may have ended with the restart ("Stay logged in" keeps it).
+        await loadStartup();
+      },
+      shutDown: async () => {
+        await attempt(api.shutDown);
+        setPoweredOff(true);
+      },
+      saveHostname: async (hostname) => {
+        const name = hostname.trim().toLowerCase();
+        const oldName = latest.current.status.data?.device.hostname;
+        await attempt(() => api.saveHostname(name), sameNames('hostname'));
+        if (oldName && oldName !== 'rasbeacon.lan' && window.location.hostname === oldName) {
+          // The old name stops working with the restart: wait it out, then open the new one.
+          await sleep(90_000);
+          window.location.host = window.location.host.replace(oldName, `${name}.lan`);
+          return;
+        }
+        await waitForRestart();
         await loadStartup();
       },
       previewPluginFile: (file) => attempt(() => api.uploadPlugin(file), sameNames('file')),

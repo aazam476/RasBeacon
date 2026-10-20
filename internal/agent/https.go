@@ -146,7 +146,7 @@ func (a *Agent) generateCertificate() error {
 	if a.lan.IPv6Prefix.IsValid() {
 		addresses = append(addresses, net.IP(a.lan.IPv6Prefix.Addr().AsSlice()))
 	}
-	cert, key, err := tlscert.Generate("RasBeacon "+a.identity.ShortID, addresses, a.now())
+	cert, key, err := tlscert.Generate("RasBeacon "+a.identity.ShortID, []string{a.cfg.Name() + ".lan"}, addresses, a.now())
 	if err != nil {
 		return err
 	}

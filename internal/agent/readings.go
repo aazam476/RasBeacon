@@ -163,9 +163,8 @@ func (a *Agent) deviceInfo() api.DeviceInfo {
 	if arch == "arm64" {
 		arch = "aarch64" // what `uname -m` says
 	}
-	host, _ := os.Hostname()
 	d := api.DeviceInfo{
-		Hostname:      host + ".lan",
+		Hostname:      a.cfg.Name() + ".lan",
 		KernelRelease: release,
 		Kernel:        strings.Join(strings.Fields("Linux "+release+" "+arch), " "),
 		Appliance:     "RasBeacon " + version.Version,

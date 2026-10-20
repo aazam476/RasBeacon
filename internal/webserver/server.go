@@ -567,7 +567,7 @@ func (s *Server) handleUI(w http.ResponseWriter, r *http.Request) {
 	if h, _, err := net.SplitHostPort(host); err == nil {
 		host = h
 	}
-	isDevice := host == lan || host == hostName || host == "localhost" || host == "127.0.0.1"
+	isDevice := host == lan || host == hostName || (st.Hostname != "" && strings.EqualFold(host, st.Hostname)) || host == "localhost" || host == "127.0.0.1"
 	if !isDevice && (st.Mode == api.ModeSetup || st.PortalNotice) {
 		// A phone's connectivity check (captive.apple.com, ...) reached us
 		// because our DNS answered it: send it to the setup page or to the
@@ -680,6 +680,8 @@ var forwardedRoutes = map[string]string{
 	"POST /api/v1/settings/updates/test":             "/settings/updates/test",
 	"POST /api/v1/system/update/check":               "/system/update/check",
 	"POST /api/v1/system/reboot":                     "/system/reboot",
+	"POST /api/v1/system/shutdown":                   "/system/shutdown",
+	"POST /api/v1/system/hostname":                   "/system/hostname",
 	"GET /api/v1/diagnostics":                        "/diagnostics",
 	"POST /api/v1/clients/internet-access":           "/clients/internet-access",
 	"POST /api/v1/clients/disconnect":                "/clients/disconnect",

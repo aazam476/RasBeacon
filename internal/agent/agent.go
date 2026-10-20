@@ -222,7 +222,8 @@ func (a *Agent) Start() error {
 		return err
 	}
 
-	// 2a. The installed plugins (started once the network is up).
+	// 2a. RasBeacon's name, and the installed plugins (started once the network is up).
+	a.applyHostname()
 	a.loadPlugins()
 
 	// 2b. The swap file (its size is a setting; a problem isn't fatal).
@@ -555,6 +556,7 @@ func (a *Agent) applyDHCP(captive bool) error {
 	input := render.DnsmasqInput{
 		LAN:              a.lan,
 		LeaseFile:        a.paths.DnsmasqLeases(),
+		Hostname:         a.cfg.Name(),
 		Captive:          captive,
 		Upstream:         a.upstreamDNS(),
 		Plugins:          a.pluginBridge,

@@ -49,7 +49,7 @@ export type AppPhase =
   /** They couldn't be loaded. */
   | { kind: 'unreachable'; error: string }
   /** An unclaimed router that can't be set up (SetupState.mode). */
-  | { kind: 'notice'; notice: 'setup-closed' | 'setup-error' | 'no-radio' }
+  | { kind: 'notice'; notice: 'setup-closed' | 'setup-error' | 'no-radio' | 'off' }
   /** First boot: the setup wizard. */
   | { kind: 'setup' }
   | { kind: 'login' }
@@ -278,6 +278,13 @@ export interface DeviceActions {
   saveSwapSettings: (sizeGb: number) => Promise<void>;
   /** Resolves once the router answers again after restarting. */
   reboot: () => Promise<void>;
+  /** Turn RasBeacon off; afterwards the phase is the `off` notice. */
+  shutDown: () => Promise<void>;
+  /**
+   * Rename RasBeacon (lowercase letters, digits, hyphens). It restarts; resolves once it answers
+   * again, at the new address when the page was opened by the old name. Field key: hostname.
+   */
+  saveHostname: (hostname: string) => Promise<void>;
   /** Erase everything; afterwards the phase is `setup`. Reject when the admin password is wrong. */
   factoryReset: (adminPassword: string) => Promise<void>;
   /**

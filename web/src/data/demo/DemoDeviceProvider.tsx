@@ -233,7 +233,12 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
       retry: async () => {
         await wait(900);
         change((d) => {
-          if (d.phase.kind === 'unreachable' || d.phase.kind === 'loading') d.phase = { kind: 'ready' };
+          if (
+            d.phase.kind === 'unreachable' ||
+            d.phase.kind === 'loading' ||
+            (d.phase.kind === 'notice' && d.phase.notice === 'off')
+          )
+            d.phase = { kind: 'ready' };
         });
       },
       reload: async (what: DataKey) => {
@@ -655,7 +660,7 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
           https.enabled = enabled;
           if (enabled && !https.fingerprint) {
             Object.assign(https, {
-              subject: 'CN=rasbeacon.local',
+              subject: 'CN=RasBeacon 7162',
               fingerprint: randomFingerprint(),
               validUntil: '2036-10-06',
             });
@@ -667,7 +672,7 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
         change((d) => {
           Object.assign(d.router.httpsSettings, {
             uploaded: false,
-            subject: 'CN=rasbeacon.local',
+            subject: 'CN=RasBeacon 7162',
             fingerprint: randomFingerprint(),
             validUntil: '2036-10-06',
           });
@@ -738,6 +743,26 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
         }
       },
       reboot: () => wait(3000),
+      shutDown: async () => {
+        await wait(1500);
+        change((d) => void (d.phase = { kind: 'notice', notice: 'off' }));
+      },
+      saveHostname: async (hostname) => {
+        await wait(1200);
+        const name = hostname.trim().toLowerCase();
+        if (!/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(name)) {
+          throw new FieldErrors({
+            hostname: 'Use 1 to 63 lowercase letters, digits and hyphens, not starting or ending with a hyphen.',
+          });
+        }
+        if (currentDemo.router.status.clients.some((c) => c.hostname.toLowerCase() === name)) {
+          throw new FieldErrors({ hostname: 'A device on the hotspot already uses this name.' });
+        }
+        await wait(3000);
+        change((d) => {
+          d.router.status.device.hostname = `${name}.lan`;
+        });
+      },
       previewPluginFile: async (file) => {
         await wait(1200);
         if (!file.name.endsWith('.rba')) throw new FieldErrors({ file: 'This is not a RasBeacon plugin (.rba) file.' });

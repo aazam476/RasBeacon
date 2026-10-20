@@ -15,6 +15,8 @@ interface RenameSheetProps {
   footer?: ReactNode;
   /** The field's name in the router's errors (default `name`). */
   errorKey?: string;
+  /** While saving (default "Saving…"), e.g. "Restarting…" when saving restarts something. */
+  busyLabel?: string;
   onSave: (name: string) => Promise<void>;
   onClose: () => void;
 }
@@ -31,6 +33,7 @@ export function RenameSheet({
   maxLength,
   footer,
   errorKey = 'name',
+  busyLabel = 'Saving…',
   onSave,
   onClose,
 }: RenameSheetProps) {
@@ -40,7 +43,7 @@ export function RenameSheet({
     <Sheet
       title={title}
       confirmLabel="Save"
-      busyLabel="Saving…"
+      busyLabel={busyLabel}
       confirmDisabled={name.trim() === ''}
       onConfirm={() => onSave(name.trim())}
       onClose={onClose}

@@ -49,15 +49,15 @@ func TestHTTPS_TurningOnMakesACertificateForRbweb(t *testing.T) {
 
 func TestHTTPS_UploadIsChecked(t *testing.T) {
 	e := newClaimedEnv(t, false)
-	certA, _, _ := tlscert.Generate("mine", nil, time.Now())
-	_, keyB, _ := tlscert.Generate("other", nil, time.Now())
+	certA, _, _ := tlscert.Generate("mine", nil, nil, time.Now())
+	_, keyB, _ := tlscert.Generate("other", nil, nil, time.Now())
 	err := e.agent.UpdateHTTPSSettings(api.HTTPSSettings{Enabled: true, Certificate: certA, PrivateKey: keyB})
 	var verr *config.ValidationError
 	if !errors.As(err, &verr) || verr.Field != "certificate" {
 		t.Fatalf("got %v", err)
 	}
 
-	certA2, keyA2, _ := tlscert.Generate("mine", nil, time.Now())
+	certA2, keyA2, _ := tlscert.Generate("mine", nil, nil, time.Now())
 	if err := e.agent.UpdateHTTPSSettings(api.HTTPSSettings{Enabled: true, Certificate: certA2, PrivateKey: keyA2}); err != nil {
 		t.Fatal(err)
 	}

@@ -45,6 +45,7 @@ func (a *Agent) SetupState() api.SetupState {
 		SetupNetworkSecured: a.setupSecured,
 		DeviceShortID:       a.identity.ShortID,
 		LANAddress:          a.lan.Address(),
+		Hostname:            a.cfg.Name() + ".lan",
 		PortalNotice:        a.noticeActive(),
 	}
 	if a.mode == api.ModeSetup {
@@ -317,6 +318,13 @@ func (a *Agent) FactoryReset(adminPassword string) error {
 func (a *Agent) Reboot() {
 	slog.Info("reboot requested from the web UI")
 	a.afterFunc(switchDelay, func() { _, _ = a.runner.Run("systemctl", "reboot") })
+}
+
+// Shutdown turns the device off shortly after answering the request. It
+// starts again when its power is unplugged and plugged back in.
+func (a *Agent) Shutdown() {
+	slog.Info("shutdown requested from the web UI")
+	a.afterFunc(switchDelay, func() { _, _ = a.runner.Run("systemctl", "poweroff") })
 }
 
 // ResetHold is how long the reset button must be held for a factory reset.

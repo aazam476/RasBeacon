@@ -53,6 +53,9 @@ dhcp-option=43,ANDROID_METERED
 domain=lan
 local=/lan/
 address=/rasbeacon.lan/{{.LANAddress}}
+{{- if .Hostname}}
+address=/{{.Hostname}}.lan/{{.LANAddress}}
+{{- end}}
 {{- if and (not .Captive) .Upstream}}
 
 # --- DNS: internet names ---

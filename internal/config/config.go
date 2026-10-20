@@ -75,6 +75,10 @@ type Config struct {
 	// setup.txt-protected) setup network.
 	Claimed bool `json:"claimed"`
 
+	// Hostname is RasBeacon's name on the network (devices on the hotspot
+	// reach it at <hostname>.lan). Empty means DefaultHostname.
+	Hostname string `json:"hostname,omitempty"`
+
 	Hotspot  HotspotConfig  `json:"hotspot"`
 	Guest    GuestConfig    `json:"guest"`
 	SSH      SSHConfig      `json:"ssh"`
@@ -981,6 +985,34 @@ func ParseDoH(text string) (string, error) {
 	}
 	u.Host = strings.ToLower(u.Host)
 	return u.String(), nil
+}
+
+// DefaultHostname is RasBeacon's name until the owner changes it.
+const DefaultHostname = "rasbeacon"
+
+// Name returns RasBeacon's host name.
+func (c *Config) Name() string {
+	if c.Hostname == "" {
+		return DefaultHostname
+	}
+	return c.Hostname
+}
+
+// ValidateHostname checks a host name for RasBeacon: 1 to 63 lowercase
+// letters, digits and hyphens, not starting or ending with a hyphen.
+func ValidateHostname(name string) error {
+	if name == "" || len(name) > 63 {
+		return &ValidationError{Field: "hostname", Message: "The name must be 1 to 63 characters long."}
+	}
+	for _, c := range name {
+		if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '-') {
+			return &ValidationError{Field: "hostname", Message: "Use only lowercase letters, digits and hyphens."}
+		}
+	}
+	if name[0] == '-' || name[len(name)-1] == '-' {
+		return &ValidationError{Field: "hostname", Message: "The name can't start or end with a hyphen."}
+	}
+	return nil
 }
 
 // validHostname accepts DNS names with at least one dot: letters, digits

@@ -31,9 +31,15 @@ import (
 const Validity = 10 * 365 * 24 * time.Hour
 
 // Generate makes a self-signed certificate valid for RasBeacon's possible
-// hotspot addresses and the name rasbeacon.lan. It returns the certificate
-// and private key in PEM format.
-func Generate(name string, addresses []net.IP, now time.Time) (certPEM, keyPEM string, err error) {
+// hotspot addresses, the name rasbeacon.lan and any other hostnames. It
+// returns the certificate and private key in PEM format.
+func Generate(name string, hostnames []string, addresses []net.IP, now time.Time) (certPEM, keyPEM string, err error) {
+	dnsNames := []string{"rasbeacon.lan"}
+	for _, h := range hostnames {
+		if h != dnsNames[0] {
+			dnsNames = append(dnsNames, h)
+		}
+	}
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return "", "", err
@@ -50,7 +56,7 @@ func Generate(name string, addresses []net.IP, now time.Time) (certPEM, keyPEM s
 		NotAfter:    now.Add(Validity),
 		KeyUsage:    x509.KeyUsageDigitalSignature,
 		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		DNSNames:    []string{"rasbeacon.lan"},
+		DNSNames:    dnsNames,
 		IPAddresses: addresses,
 	}
 	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)

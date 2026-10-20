@@ -54,6 +54,8 @@ type SetupState struct {
 	DeviceShortID       string `json:"deviceShortId"`
 	// LANAddress is RasBeacon's address on the hotspot, e.g. 10.87.0.1.
 	LANAddress string `json:"lanAddress"`
+	// Hostname is RasBeacon's name on the hotspot, e.g. rasbeacon.lan.
+	Hostname string `json:"hostname,omitempty"`
 	// Suggestions pre-fill the setup wizard. Only sent while unclaimed.
 	SuggestedHotspotSSID     string `json:"suggestedHotspotSsid,omitempty"`
 	SuggestedHotspotPassword string `json:"suggestedHotspotPassword,omitempty"`
@@ -530,6 +532,12 @@ type VPNProfileDetails struct {
 // /remove and /generate-key).
 type VPNProfileRequest struct {
 	Name string `json:"name"`
+}
+
+// HostnameRequest renames RasBeacon (POST /system/hostname). RasBeacon
+// restarts afterwards.
+type HostnameRequest struct {
+	Hostname string `json:"hostname"`
 }
 
 // VPNRenameRequest renames a profile (POST /settings/vpn/profile/rename).
