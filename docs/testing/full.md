@@ -178,20 +178,21 @@ The VPN stays **off** for this section.
    rejoins within a minute.
 5. **Flush lease** on phone B. **Expect:** no error; it gets an address
    again when it next joins.
-6. **Rename (new):** **Rename** on phone B, type `Test phone`, **Save**.
+6. **Rename:** the pencil next to phone B's name (always shown on a phone,
+   on hover with a mouse), type `Test phone`, **Save** (gray while the name
+   is blank).
    **Expect:** the card and Status show *Test phone*, and *Calls itself*
    shows its own name. Disconnect it and let it rejoin: the name stays.
    Rename it to nothing: its own name is back.
 7. **Data used (new):** after the download in step 2, phone B's card shows
    *Data used* close to what phone B says it downloaded. Reboot: the
    counts are kept (within the last 10 minutes of use).
-8. **Data limit (new):** Hotspot → tick **Metered connection**, **Save**.
-   Clients → *Data use* → **Limit per device** *500 MB* → **Save**, then
-   download more than 500 MB on phone B. **Expect:** phone B is paused
-   with *Data limit reached* and its switch can't be turned on; the
-   footer says one device is paused. **Reset counts** → **Reset**: phone B
-   has internet again, and every count is 0. Set *No limit* and untick
-   **Metered connection** again.
+8. **Data limit:** Clients → *Data use* → **Limit per device** *500 MB* →
+   **Save** (no metered connection needed), then download more than 500 MB
+   on phone B. **Expect:** phone B's traffic is blocked both ways, with
+   *Data limit reached*, and its switch can't be turned on; the footer
+   says one device has used up its data. **Reset counts** → **Reset**:
+   phone B has internet again, and every count is 0. Set *No limit* again.
 
 ## 7. The Ethernet port as a client port
 
@@ -212,10 +213,11 @@ The VPN stays **off** for this section.
 
 ## 8. VPN and kill switch
 
-1. VPN → choose your `.conf` → **Import**. **Expect:** "WireGuard file
-   imported", the profile `….conf` is picked.
-2. Turn on **Use the VPN** (kill switch on). **Expect:** within about 10 s
-   Status says *Connected: your devices' traffic goes through the VPN*.
+1. VPN → the **Kill switch** is gray until a profile is imported. Choose
+   your `.conf` → **Import**. **Expect:** "WireGuard file imported.", the
+   profile `….conf` is picked, and **Use the VPN** turns on by itself.
+2. **Expect:** within about 10 s (kill switch on) Status says *Connected:
+   your devices' traffic goes through the VPN*.
    <https://ifconfig.me> on phone A shows the VPN server's address.
 3. **DNS:** the leak test shows your VPN's DNS. Set your own DNS servers
    (section 5) to `dns.google` while the VPN is on: **expect** the leak
@@ -234,21 +236,26 @@ The VPN stays **off** for this section.
    minutes, **expect** *Not connected. The kill switch is on…*, and no
    website loads on phone A. Fix it: **expect** websites back within a
    minute or two.
-5. **Kill switch off:** untick it, break the tunnel again. **Expect** after
+5. **Kill switch on, VPN off:** turn off **Use the VPN**. **Expect:** VPN and
+   Status warn that devices have no internet because the kill switch is
+   on and the VPN is off, and no website loads on phone A (Ethernet devices
+   either). Turn the VPN on again.
+6. **Kill switch off:** untick it, break the tunnel again. **Expect** after
    about 4 minutes *using the internet WITHOUT the VPN* and websites load
    from your home address. Fix it: back to *Connected*. Tick the kill switch
    again.
-6. **Boot with the VPN broken:** break the tunnel, pull the power, plug it
+7. **Boot with the VPN broken:** break the tunnel, pull the power, plug it
    back in, and try websites on phone A for 2 minutes. **Expect:** nothing
    loads. Fix the tunnel: phone A gets online.
-7. **Server details:** type `big` as the MTU, **Save**: **expect** "Must be
+8. **Server details:** type `big` as the MTU, **Save**: **expect** "Must be
    a number, or empty for the default." Type `1420`, **Save**: *Saved.*
-8. **Profiles (if you have a second file):** import it, pick it. **Expect**
+9. **Profiles (if you have a second file):** import it, rename it with the
+   pencil next to its name (a name another profile has is refused), pick it. **Expect**
    Status connected again within about 30 s and ifconfig.me showing the
    second server. While switching, a `ping 1.1.1.1` on the laptop may pause
    but must never show your home address. Remove the second profile:
    **expect** it falls back to the first.
-9. **Clock:** unplug the Pi for 10+ minutes, plug it in. **Expect** the VPN
+10. **Clock:** unplug the Pi for 10+ minutes, plug it in. **Expect** the VPN
    reconnects by itself within a couple of minutes.
 
 ## 9. Speed test
@@ -310,13 +317,27 @@ Keep the VPN on with the kill switch.
    characters long." Leave it empty and set band **5 GHz** → **Save**:
    *Saved.*, the hotspot comes back on 5 GHz, devices rejoin. Switch back to
    2.4 GHz if you like.
-2. **Show password and QR code** with the admin password: shows the current
-   one and a QR code. Scan it with a phone's camera: the phone offers to
-   join the hotspot and joins it.
-3. **Metered:** tick it, **Save**: devices do **not** disconnect; Status
+2. **Show password and QR code** (no admin password asked): shows the
+   current one and a QR code. Scan it with a phone's camera: the phone
+   offers to join the hotspot and joins it.
+3. **WPA3 only (new):** Security → *WPA3 only*, **Save**. **Expect:** the
+   footer warns about older devices; a phone from 2019 or later rejoins,
+   an older laptop or adapter can't. Switch back to *WPA2/WPA3*.
+4. **Allowed devices (new):** *Who can join* → *Allowed devices* → turn on
+   **Only allow these devices**. **Expect:** a warning that the device
+   you're using isn't on the list, with **Add this device**; **Save**
+   without it asks *Lock out this device?*. Add this device with the
+   button, **Save**: the hotspot restarts and this device rejoins; phone B
+   (not listed) can't join with the right password, while a laptop on the
+   Ethernet client port still can. Turn it off again. (Phones use a private
+   MAC address per network: the one in their Wi-Fi settings for this
+   network is the one to list.)
+5. **Device limit (new):** *Device limit* → *2 devices* → **Save**. **Expect:**
+   a third Wi-Fi device can't join until one leaves. Set *No limit*.
+6. **Metered:** tick it, **Save**: devices do **not** disconnect; Status
    shows *Metered connection On*; Android (after Wi-Fi off/on) treats the
    network as metered. Untick it.
-4. **Guest network:** if the Guests page says the adapter can only
+7. **Guest network:** if the Guests page says the adapter can only
    broadcast one network, note it and skip. Otherwise turn it on with a
    name and password (without a password: "Choose a password for the guest
    network."). **Expect:** *Saved. The hotspot has restarted.*; phone B on
@@ -325,7 +346,7 @@ Keep the VPN on with the kill switch.
    Status shows the guest network running with 1 guest.
    **Show QR code** (new) under *Now*: scanning it with a phone's camera
    offers to join the guest network, and joins it.
-5. **Public IPv6 (if your WireGuard server routes a /64 to RasBeacon, and
+8. **Public IPv6 (if your WireGuard server routes a /64 to RasBeacon, and
    its `.conf` gives RasBeacon an IPv6 address and `::/0`):** VPN →
    *Server details* → *Public IPv6 network* → the /64 (like
    `2001:db8:1234:5678::/64`) → **Save**. **Expect:** on a phone,
@@ -333,7 +354,7 @@ Keep the VPN on with the kill switch.
    *Public addresses through the VPN*. Without such a server, just check
    <https://test-ipv6.com> loads quickly and Status shows whether devices get
    IPv6.
-6. **HTTPS:** turn on **Use HTTPS for these settings pages**. Open
+9. **HTTPS:** turn on **Use HTTPS for these settings pages**. Open
    `https://10.87.0.1`: the fingerprint in the browser's warning matches
    the page's *SHA-256 fingerprint*; `http://` redirects to `https://`.
    Turn it off again if you prefer.
@@ -415,7 +436,14 @@ install updates (on the Pi 3/Zero 2 W image, check instead that System says
    works), and as soon as the hotspot disappears for the restart, pull the
    power, wait 5 s, plug it back in. **Expect:** RasBeacon comes back on the
    **old** version and System says *The update to … didn't start correctly, so RasBeacon went back to …*.
-5. **Versions (released images only):** test builds are called `dev-…` and
+5. **Looking for updates (new):** System → *Check for new versions* → *Every
+   day*; **Check now**. **Expect:** the footer says when it last checked
+   (or why it couldn't). *Update notifications* → *Address*: an ntfy topic (install the ntfy
+   app, subscribe to a topic, enter `https://ntfy.sh/<topic>`) →
+   **Send a test**: the phone shows RasBeacon's test message. **Save**.
+   On a device running an older release, **Check now** sends one
+   notification about the new version, and only once.
+6. **Versions (released images only):** test builds are called `dev-…` and
    skip the version checks, so do this on a device flashed with a release
    (like `v0.1.0`). Install an **older** release's `.rbupdate`. **Expect:**
    refused (*older than the … running*), no restart. To see the fresh-install
@@ -428,35 +456,47 @@ install updates (on the Pi 3/Zero 2 W image, check instead that System says
 1. **Power cuts:** three times, pull the power while running, wait 5 s,
    plug back in. **Expect** each time: same hotspot, same settings, the
    uplink (and VPN) back within about a minute, still logged in.
-2. **Reboot:** System → **Reboot** asks first (**Cancel** does nothing);
-   confirming restarts.
-3. **Long run:** connect as many devices as you can (the goal for marking
+2. **Reboot and shut down:** System → **Reboot** asks first (**Cancel** does
+   nothing); confirming restarts. **Shut down** asks first; confirming turns
+   it off (the page says how to turn it on); unplug and replug the power:
+   it starts as usual.
+3. **Rename (new):** System → *About* → pencil next to *Name* → `travel-pi`
+   → **Save**. **Expect:** RasBeacon restarts; afterwards
+   `http://travel-pi.lan` and `http://rasbeacon.lan` both open it, and
+   About shows `travel-pi.lan`. A name a device on the hotspot uses (its
+   own name, shown under *Calls itself* on Clients) is refused. Rename it
+   back to `rasbeacon`.
+4. **Long run:** connect as many devices as you can (the goal for marking
    an adapter *Tested* is **10 devices for 30 minutes**) and keep them in use
    for at least 30 minutes. Phones drop idle Wi-Fi to save power; that's
    not a failure. **Expect:** the hotspot stays up, no "incorrect password",
    and devices rejoin. Afterwards download the diagnostics and look for
    `beacon`, `flush`, `rtw88`, `timed out` or hostapd errors.
-4. **Memory (on a 1 GB board, and a Zero 2 W with 512 MB, if you have
+5. **Memory (on a 1 GB board, and a Zero 2 W with 512 MB, if you have
    them):** open the zero-leak login (section 10) or run the speed test,
    then *SSH:* `free -m`. **Expect:** it works (slower on the Zero 2 W);
    RasBeacon's pages keep responding.
-5. **Diagnostics:** System → **Download diagnostics**. Search it for your
+6. **Diagnostics:** System → **Download diagnostics**. Search it for your
    hotspot password, Wi-Fi passwords, the VPN's `PrivateKey`, your eduroam
    username. **Expect:** none appear (usernames only masked, like
    `N***@…`).
 
 ## 16. Erasing (do these last)
 
-0. **Backup (new):** System → **Back up settings** with a password (with
-   **Include plugins** if any are installed). **Expect** the sheet to close
-   after a second and the browser to download a `.rbbackup` file with its own
-   progress (opening it in a text editor shows nothing readable). With
-   AdGuard Home as the DNS server, phone A keeps loading pages during the
-   download (AdGuard pauses only for the few seconds its data is copied). Change the hotspot's
-   name and remove a plugin, then **Restore from a backup** with that file:
-   a wrong password says so; the right one restarts RasBeacon with the old
-   name and the plugin back (its data too). After the factory reset below,
-   set RasBeacon up and restore the backup again: everything comes back.
+0. **Backup:** System → **Back up settings** with a password (no admin
+   password asked). With plugins installed, choose **Plugin data**.
+   **Expect** the sheet to close after a second and the browser to download
+   a `.rbbackup` file with its own progress (opening it in a text editor
+   shows nothing readable). With AdGuard Home as the DNS server, phone A
+   keeps loading pages during the download (AdGuard pauses only for the few
+   seconds its data is copied). Change the hotspot's name, remove a plugin
+   and install another, then **Restore from a backup** with that file: a
+   wrong password says so; the right one restarts RasBeacon with the old
+   name, the installed plugin gone, and the backup's plugin downloading its
+   app again (*Downloading its app again…*), then running with its data.
+   Repeat with **Everything** and the uplink unplugged: the plugin starts
+   without the internet. After the factory reset below, set RasBeacon up
+   and restore the backup again: everything comes back.
 
 1. **Factory reset:** System → *Factory reset* → **Erase everything** with
    the admin password. **Expect:** it restarts into `RasBeacon-Setup-XXXX`.
@@ -517,16 +557,16 @@ Board (Pi 4/5/3B/3B+/Zero 2 W) / RAM:     Adapter:          Card size:          
 3  Storage shows full card (__ GB): / swap row 2 GB: / 4 GB, Off, 2 GB save: / SSH swapon+swappiness:
 4  Ethernet: / scan lists networks: / Wi-Fi uplink + switch: / eduroam: / hotspot move kept working 15 min: / renew, disconnect:
 5  dns.google saved as full address: / leak test shows Google: / rbdoh running: / Cloudflare+1.1.1.1: / bad entry refused: / plain only, rbdoh stopped: / back to network's:
-6  Count + this device: / traffic rates: / pause + reboot-proof: / disconnect: / flush lease:
+6  Count + this device: / traffic rates: / pause + reboot-proof: / disconnect: / flush lease: / rename pencil: / data limit without metered:
 7  Laptop on client port gets address+internet: / listed with cable icon, no Disconnect: / leaves list: / safety warning:
-8  Import + connect (IP = VPN): / DNS = VPN's even with own DNS set: / kill switch on no leak: / off falls back: / boot no leak: / MTU check: / profiles: / clock:
+8  Import turns VPN on + connect (IP = VPN): / kill switch + VPN off blocks, warns: / rename profile: / DNS = VPN's even with own DNS set: / kill switch on no leak: / off falls back: / boot no leak: / MTU check: / profiles: / clock:
 9  Speed test: down __ up __ ping __ location __, took __ s / speed.cloudflare.com: down __ up __
 10 Login page notice: / zero-leak login worked, tap delay __ s: / no leak: / login mode:
 11 SSH: / pages OK phone+laptop+dark: / rounded focus outline: / readings: / stay logged in: / unsaved bar:
-12 Hotspot password check + 5 GHz: / show password: / metered: / guests isolated: / IPv6: / HTTPS fingerprint + redirect:
-13 Version before __ / renamed image refused: / changed byte refused: / update installed, settings kept, took __ min: / rollback:
-14 Power cuts x3: / reboot dialog: / long run __ devices __ min, drops: / memory: / diagnostics clean:
-15 Factory reset: / setup.txt password + broken-file LED + deleted: / factory-reset file: / button:
+12 Hotspot password check + 5 GHz: / show password (no admin password): / WPA3 only: / allowed devices + lockout warning: / device limit: / metered: / guests isolated: / IPv6: / HTTPS fingerprint + redirect:
+13 Version before __ / renamed image refused: / changed byte refused: / update installed, settings kept, took __ min: / rollback: / check schedule + Check now: / ntfy test + new-version notice:
+14 Power cuts x3: / reboot dialog: / shut down + power on: / rename to travel-pi.lan: / long run __ devices __ min, drops: / memory: / diagnostics clean:
+15 Backup Plugin data restored, app downloaded again: / Everything restored offline: / Factory reset: / setup.txt password + broken-file LED + deleted: / factory-reset file: / button:
 16 Power idle __ W, load __ W / iperf3:
 Anything else odd:
 ```

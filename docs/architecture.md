@@ -34,7 +34,9 @@ The reasons behind the big decisions are in [design.md](design.md) and
   either (`internal/agent/hotspotcheck.go`); the diagnostics report lists
   each repair. The group key isn't changed daily, because some adapters
   and phones miss the change and stop receiving broadcasts (ARP), which
-  cuts Wi-Fi devices off while Ethernet ones keep working.
+  cuts Wi-Fi devices off while Ethernet ones keep working. The owner's
+  allow list and device limit (`internal/agent/access.go`) become
+  hostapd's `accept_mac_file` and `max_num_sta`; they only apply to Wi-Fi.
 - **dnsmasq** hands out addresses (*DHCP*) and answers name lookups (*DNS*)
   for devices on the hotspot.
 - **rbdoh** (`cmd/rbdoh`, logic in `internal/doh`) is the
@@ -117,11 +119,16 @@ seconds later, so the phone receives the "success" page first.
      next restart;
   4. tells devices whether IPv6 internet is available, through dnsmasq's
      *router advertisements*.
-- **WPA-Enterprise (eduroam):** the username, password and uploaded
-  certificates go into `wpa_supplicant.conf` (`internal/agent/enterprise.go`).
-  RasBeacon only accepts a login server whose certificate is signed by the
-  uploaded CA *and* carries the configured server name. See
-  [wpa-enterprise.md](wpa-enterprise.md).
+- **WPA-Enterprise (such as eduroam):** the username, password and
+  uploaded certificates go into `wpa_supplicant.conf`
+  (`internal/agent/enterprise.go`). With an uploaded CA, RasBeacon only
+  accepts a login server whose certificate it signed, carrying the server
+  name if one is given; with a server name alone, one signed by a CA in the
+  system's list. With neither, it trusts the server's certificate at the
+  first connection: wpa_supplicant reports its SHA-256 on the control
+  socket (`internal/wpaevents`), rbd saves it (`servercert.go`), and from
+  then on only that certificate is accepted (`hash://server/sha256/...`).
+  See [wpa-enterprise.md](wpa-enterprise.md).
 - **IPv6:** devices always get a private IPv6 address on the hotspot. They
   only get an IPv6 route to the internet when the uplink has IPv6; then
   their traffic is translated like IPv4 (*NAT66*).
@@ -145,7 +152,10 @@ tunnel. `test/netns/vpn_test.go` checks this against a real WireGuard
 server, including deleting `wg0` while devices are using it.
 
 The VPN keeps several WireGuard profiles (imported files) and uses one;
-switching rebuilds `wg0` while the firewall keeps traffic in it.
+switching rebuilds `wg0` while the firewall keeps traffic in it. With the
+kill switch on and the VPN turned off, the firewall forwards nothing at
+all (the state is *blocked*, with a warning on the VPN and Status pages):
+the kill switch means devices never use the internet outside the VPN.
 
 The clock matters for WireGuard and certificates, and the Pi has no clock
 battery: `internal/agent/clock.go` saves the time regularly, never lets it
@@ -215,10 +225,33 @@ Updates use the two copies ("slots", A and B) of the system on the SD card
 
 Settings live on the shared `/persistent` partition, so they carry over.
 
-The optional online check reads the latest release from GitHub, and its
-small `<name>-<version>.update.json` file (version and `minFromVersion`),
-so the System page can say a new version needs a fresh install before
-anyone downloads it. Installing still needs the signed `.rbupdate` file.
+The optional online check (every 1, 6, 24 or 168 hours, or on *Check
+now*) reads the latest release from GitHub, and its small
+`<name>-<version>.update.json` file (version and `minFromVersion`), so the
+System page can say a new version needs a fresh install before anyone
+downloads it. Installing still needs the signed `.rbupdate` file. A new
+version is announced once to the owner's ntfy topic or webhook
+(`internal/notify`).
+
+## Backups
+
+A backup (`internal/agent/backup.go`, `internal/backup`) is a tar archive,
+compressed with zstd (the image's `zstd` program, every core) and
+encrypted with AES-256-GCM under an Argon2id key from the owner's
+password. It always holds the settings, secrets, certificates and the
+plugins' settings and files; the owner chooses whether it holds the
+plugins' data and their images. A restore replaces the settings and the
+plugins, then restarts. A plugin whose image wasn't in the backup gets it
+when it starts (`internal/agent/pluginsfetch.go`): its `.rba` from the
+catalog, signed with the plugin's pinned key, or its published image by
+digest. A backup from a newer RasBeacon is refused.
+
+## RasBeacon's name
+
+The host name is a setting (`internal/agent/hostname.go`), because the
+system partition is read-only: rbd sets it at every start. dnsmasq answers
+`<name>.lan` and `rasbeacon.lan`, rbweb treats both as RasBeacon's own
+address, and the certificate RasBeacon makes for HTTPS names both.
 
 ## HTTPS and the reset button
 
