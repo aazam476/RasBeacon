@@ -69,4 +69,14 @@ describe('app', () => {
     await waitFor(() => expect(sent.filter((r) => r.path === '/status').length).toBeGreaterThan(before));
     vi.useRealTimers();
   });
+
+  it('the demo build runs on the demo router, without any network', async () => {
+    vi.stubEnv('MODE', 'demo');
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    openApp();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Status' })).toBeTruthy();
+    expect(fetch).not.toHaveBeenCalled();
+    vi.unstubAllEnvs();
+  });
 });

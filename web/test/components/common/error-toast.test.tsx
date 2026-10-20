@@ -4,6 +4,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ActionButton, ErrorToastProvider } from '@/ui';
+import { finger } from '../render';
 
 /** A button whose action fails with `message`, inside the provider. */
 function renderFailingButton(message = 'The VPN could not start.') {
@@ -56,20 +57,22 @@ describe('error message', () => {
     await waitFor(() => expect(toast().textContent).toBe(''));
   });
 
-  it('a swipe back toward its edge sends it away; a small one doesn’t', async () => {
+  it('a swipe back toward its edge sends it away; a slow, short one doesn’t', async () => {
     const user = userEvent.setup();
     renderFailingButton();
     await user.click(screen.getByRole('button', { name: 'Turn on' }));
     const message = screen.getByText('The VPN could not start.').parentElement!;
     // On phones it comes from the top, so a swipe up sends it away.
-    const swipe = (to: number) => {
-      fireEvent.pointerDown(message, { pointerId: 1, pointerType: 'touch', isPrimary: true, clientY: 100 });
-      fireEvent.pointerMove(message, { pointerId: 1, clientY: to });
-      fireEvent.pointerUp(message, { pointerId: 1, clientY: to });
+    const swipe = (to: number, ms: number) => {
+      finger(message, 'pointerDown', 100, 0);
+      finger(message, 'pointerMove', to, ms);
+      finger(message, 'pointerUp', to, ms);
     };
-    swipe(98);
+    // A slow, short one: it goes back into place and stays.
+    swipe(90, 1000);
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
     expect(toast().textContent).toBe('The VPN could not start.');
-    swipe(20);
+    swipe(20, 100);
     await waitFor(() => expect(toast().textContent).toBe(''));
   });
 });

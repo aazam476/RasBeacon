@@ -24,9 +24,11 @@ export interface Sent {
 /**
  * A fake rbweb: GETs answer with the demo's sample data, other requests with `answers[route]`
  * (route like "POST /system/hostname"; status 200 and `{}` if missing). Records every request,
- * with an upload's body as `'<file>'`. `loaded` are the paths it answers with sample data.
+ * with an upload's body as `'<file>'`. `loaded` are the paths it answers with sample data;
+ * `answers` can be changed during a test (RasBeacon going away and coming back).
  */
 export function fakeRbweb(options: { loggedIn?: boolean; answers?: Record<string, FakeAnswer> } = {}) {
+  const answers = (options.answers ??= {});
   const router = createMockRouter();
   const gets: Record<string, unknown> = {
     '/setup': router.setup,
@@ -57,14 +59,14 @@ export function fakeRbweb(options: { loggedIn?: boolean; answers?: Record<string
         path,
         body: typeof init.body === 'string' ? JSON.parse(init.body) : init.body === undefined ? undefined : '<file>',
       });
-      const answer = options.answers?.[`${method} ${path}`];
+      const answer = answers[`${method} ${path}`];
       if (answer?.hang) return new Promise<Response>(() => undefined);
       const status = answer?.status ?? 200;
       const body = answer?.body ?? (method === 'GET' ? gets[path] : {}) ?? {};
       return new Response(status === 204 ? null : JSON.stringify(body), { status });
     }),
   );
-  return { router, sent, loaded: new Set(Object.keys(gets)) };
+  return { router, sent, answers, loaded: new Set(Object.keys(gets)) };
 }
 
 /** Renders the provider and returns a handle on the device it gives the screens. */

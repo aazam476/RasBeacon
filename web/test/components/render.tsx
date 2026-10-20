@@ -8,7 +8,7 @@
 //   await user.click(screen.getByRole('button', { name: 'Save' }));
 //   expect(device.saveVpnDetails).toHaveBeenCalledWith(...);
 
-import { render, screen } from '@testing-library/react';
+import { createEvent, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
@@ -71,18 +71,20 @@ export function fakeDevice(change?: (router: MockRouter) => void, actions: Parti
 /**
  * Renders a screen inside what the app wraps every screen in, at `path` (the screen's own
  * address, for its links). Returns Testing Library's helpers and `user`, which types and clicks
- * like a person.
+ * like a person; `rerender` draws the screen again after a test changed the device.
  */
 export function renderScreen(screen: ReactNode, device: FakeDevice, path = '/') {
   const user = userEvent.setup();
-  const result = render(
+  const wrap = (ui: ReactNode) => (
     <MemoryRouter initialEntries={[path]}>
       <ErrorToastProvider>
-        <DeviceContext value={device}>{screen}</DeviceContext>
+        <DeviceContext value={device}>{ui}</DeviceContext>
       </ErrorToastProvider>
-    </MemoryRouter>,
+    </MemoryRouter>
   );
-  return { ...result, user };
+  const result = render(wrap(screen));
+  // Drawn again inside the same wrappers, after a test changed the device.
+  return { ...result, user, rerender: (ui: ReactNode) => result.rerender(wrap(ui)) };
 }
 
 /**
@@ -107,4 +109,17 @@ export function section(title: string): HTMLElement {
   const group = screen.getByRole('heading', { name: title }).closest('section');
   if (!group) throw new Error(`"${title}" is not a section's heading`);
   return group;
+}
+
+type PointerKind = 'pointerDown' | 'pointerMove' | 'pointerUp' | 'pointerCancel';
+
+/**
+ * A finger's pointer event at `clientY`, `time` ms into the gesture, for swipes and pulls whose
+ * speed matters (Testing Library can't give an event a time of its own).
+ */
+export function finger(target: Element, kind: PointerKind, clientY: number, time: number, init: object = {}) {
+  const event = createEvent[kind](target, { pointerId: 1, pointerType: 'touch', isPrimary: true, clientY, ...init });
+  // From 1 s on: React reads a time of 0 as "none" and uses the clock instead.
+  Object.defineProperty(event, 'timeStamp', { value: 1000 + time });
+  fireEvent(target, event);
 }

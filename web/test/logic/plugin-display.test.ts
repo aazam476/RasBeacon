@@ -9,6 +9,7 @@ import {
   isNewerVersion,
   numberNote,
   splitMetric,
+  toneText,
 } from '@/screens/plugins/pluginDisplay';
 
 describe('versions', () => {
@@ -54,5 +55,17 @@ describe('errors', () => {
   it('shows a field’s message, or the error’s', () => {
     expect(errorText(new FieldErrors({ port: 'Port 443 is RasBeacon’s.' }))).toBe('Port 443 is RasBeacon’s.');
     expect(errorText(new Error('No room on the card.'))).toBe('No room on the card.');
+  });
+});
+
+describe('state colors', () => {
+  it.each([
+    ['green', 'text-green'],
+    ['red', 'text-red'],
+    ['orange', 'text-orange'],
+    ['tint', 'text-tint'],
+    ['gray', ''],
+  ] as const)('%s text is "%s"', (tone, classes) => {
+    expect(toneText(tone)).toBe(classes);
   });
 });

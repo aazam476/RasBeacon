@@ -56,9 +56,13 @@ Element.prototype.animate = function animate() {
 };
 Element.prototype.getAnimations = () => [];
 
-// Nothing has moved: the sheets' springs start from their resting place.
+// Where an element is drawn: the vertical offset of the translate3d(…) the springs set (jsdom
+// keeps the style but has no layout).
 window.DOMMatrixReadOnly = class {
-  m42 = 0;
+  m42: number;
+  constructor(transform = '') {
+    this.m42 = Number(/translate3d\([^,]+,\s*(-?[\d.]+)px/.exec(transform)?.[1] ?? 0);
+  }
 } as unknown as typeof DOMMatrixReadOnly;
 
 window.scrollTo = () => undefined;
