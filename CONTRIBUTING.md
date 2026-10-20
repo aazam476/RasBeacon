@@ -109,7 +109,10 @@ These rules are also in [docs/design.md](docs/design.md) (section 9a).
 
 ## Commit messages
 
-Start the subject with a type prefix:
+Start the subject with a type prefix and a colon, then a short,
+plain-language description in the imperative, such as
+`fix: keep the hotspot in its bridge`. Don't add a scope in parentheses
+(`docs: …`, not `docs(readme): …`).
 
 | Prefix | Use for |
 |---|---|

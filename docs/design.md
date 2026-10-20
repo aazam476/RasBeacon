@@ -701,7 +701,8 @@ docs/               architecture, wpa-enterprise, wireguard-server, compatibilit
 LICENSE, LICENSES/THIRD_PARTY.md, CONTRIBUTING.md, SECURITY.md
 ```
 
-**Commit messages** use a type prefix, documented in `CONTRIBUTING.md` once it exists:
+**Commit messages** start with a type prefix and a colon, with no scope in
+parentheses (`docs: …`, not `docs(readme): …`), as `CONTRIBUTING.md` says:
 
 | Prefix | Use for |
 |---|---|
