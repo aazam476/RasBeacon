@@ -235,8 +235,7 @@ type ClientsConfig struct {
 	// address (lower case). They replace the name a device sends.
 	Names map[string]string `json:"names,omitempty"`
 	// UsageLimitMB pauses a device that has used this much data (down and
-	// up) since the counters were last reset, while the connection is
-	// marked metered. 0 is no limit.
+	// up) since the counters were last reset. 0 is no limit.
 	UsageLimitMB int `json:"usageLimitMb,omitempty"`
 }
 
