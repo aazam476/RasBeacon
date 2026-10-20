@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net"
 	"net/netip"
 	"net/url"
 	"slices"
@@ -80,6 +81,7 @@ type Config struct {
 	Hostname string `json:"hostname,omitempty"`
 
 	Hotspot  HotspotConfig  `json:"hotspot"`
+	Access   AccessConfig   `json:"access"`
 	Guest    GuestConfig    `json:"guest"`
 	SSH      SSHConfig      `json:"ssh"`
 	Ethernet EthernetConfig `json:"ethernet"`
@@ -401,6 +403,66 @@ type HotspotConfig struct {
 	// phone's hotspot, a paid plan), so they hold back large downloads.
 	// Only Android reads this hint automatically (see render.Dnsmasq).
 	Metered bool `json:"metered"`
+}
+
+// AccessConfig limits which and how many devices may join the hotspot.
+// It only applies to Wi-Fi: devices plugged into an Ethernet port always get
+// in.
+type AccessConfig struct {
+	// AllowListOn lets only the devices in Allowed join your network (the
+	// guest network stays open to anyone with its password).
+	AllowListOn bool `json:"allowListOn,omitempty"`
+	// Allowed are MAC addresses, lowercase, like "3a:1f:22:aa:bb:cc".
+	Allowed []string `json:"allowed,omitempty"`
+	// MaxDevices is the most devices on each Wi-Fi network at once; 0
+	// means no limit other than the addresses DHCP hands out.
+	MaxDevices int `json:"maxDevices,omitempty"`
+}
+
+// MaxDevicesLimit is the most MaxDevices can be: the number of addresses
+// DHCP hands out on a network (see render.dhcpFirst and dhcpLast).
+const MaxDevicesLimit = 231
+
+// MaxAllowedDevices is the most addresses the allow list may hold.
+const MaxAllowedDevices = 256
+
+// NormalizeMAC returns a MAC address in lowercase with colons, or an error
+// for anything that isn't a device's own (unicast) address.
+func NormalizeMAC(text string) (string, error) {
+	hw, err := net.ParseMAC(strings.TrimSpace(text))
+	if err != nil || len(hw) != 6 {
+		return "", fmt.Errorf("%q is not a MAC address such as 3a:1f:22:aa:bb:cc.", strings.TrimSpace(text))
+	}
+	if hw[0]&0x01 != 0 {
+		return "", fmt.Errorf("%s is a group address, not a device's.", hw)
+	}
+	return hw.String(), nil
+}
+
+// Validate checks the access settings. The addresses must already be
+// normalized (see NormalizeMAC).
+func (c AccessConfig) Validate() error {
+	if c.MaxDevices < 0 || c.MaxDevices > MaxDevicesLimit {
+		return &ValidationError{Field: "maxDevices", Message: fmt.Sprintf("Choose a number from 1 to %d, or no limit.", MaxDevicesLimit)}
+	}
+	if len(c.Allowed) > MaxAllowedDevices {
+		return &ValidationError{Field: "allowed", Message: fmt.Sprintf("The list can hold up to %d devices.", MaxAllowedDevices)}
+	}
+	seen := map[string]bool{}
+	for _, mac := range c.Allowed {
+		normal, err := NormalizeMAC(mac)
+		if err != nil || normal != mac {
+			return &ValidationError{Field: "allowed", Message: fmt.Sprintf("%q is not a MAC address such as 3a:1f:22:aa:bb:cc.", mac)}
+		}
+		if seen[mac] {
+			return &ValidationError{Field: "allowed", Message: mac + " is listed twice."}
+		}
+		seen[mac] = true
+	}
+	if c.AllowListOn && len(c.Allowed) == 0 {
+		return &ValidationError{Field: "allowed", Message: "Add at least one device, or nobody could join over Wi-Fi."}
+	}
+	return nil
 }
 
 // GuestConfig describes the optional guest Wi-Fi network: a second network

@@ -640,6 +640,19 @@ type HotspotSettings struct {
 	Password string `json:"password,omitempty"`
 }
 
+// AccessSettings says which and how many devices may join the hotspot over
+// Wi-Fi (GET and PUT /settings/access). Devices on Ethernet always can.
+type AccessSettings struct {
+	// AllowListOn lets only the devices in Allowed join your network. The
+	// guest network isn't affected.
+	AllowListOn bool `json:"allowListOn"`
+	// Allowed are MAC addresses such as "3a:1f:22:aa:bb:cc".
+	Allowed []string `json:"allowed"`
+	// MaxDevices is the most devices on each network at once; 0 is no
+	// limit (up to 231, the addresses DHCP hands out).
+	MaxDevices int `json:"maxDevices"`
+}
+
 // RevealPasswordResponse returns the hotspot password after the admin
 // password was entered again.
 type RevealPasswordResponse struct {

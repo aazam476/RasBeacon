@@ -652,6 +652,8 @@ func clientIP(r *http.Request) string {
 var forwardedRoutes = map[string]string{
 	"GET /api/v1/settings/hotspot":                   "/settings/hotspot",
 	"PUT /api/v1/settings/hotspot":                   "/settings/hotspot",
+	"GET /api/v1/settings/access":                    "/settings/access",
+	"PUT /api/v1/settings/access":                    "/settings/access",
 	"POST /api/v1/settings/hotspot/reveal-password":  "/settings/hotspot/reveal-password",
 	"GET /api/v1/settings/guest":                     "/settings/guest",
 	"PUT /api/v1/settings/guest":                     "/settings/guest",

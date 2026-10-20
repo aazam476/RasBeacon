@@ -59,6 +59,16 @@ wmm_enabled=1
 # Devices on the hotspot may talk to each other (AirPlay, printers, ...).
 ap_isolate=0
 auth_algs=1
+{{- if .AcceptMACFile}}
+# Only the devices on the owner's list may join (Settings: Hotspot, Allowed
+# devices). Devices on Ethernet don't go through hostapd, so they always can.
+macaddr_acl=1
+accept_mac_file={{.AcceptMACFile}}
+{{- end}}
+{{- if .MaxDevices}}
+# The most devices connected at once.
+max_num_sta={{.MaxDevices}}
+{{- end}}
 {{- if .Open}}
 # OPEN network: no password. This is only used for the first-boot setup
 # network when no setup.txt was provided, and it closes after setup.
@@ -115,6 +125,9 @@ utf8_ssid=1
 # Guests can't talk to each other.
 ap_isolate=1
 auth_algs=1
+{{- if .MaxDevices}}
+max_num_sta={{.MaxDevices}}
+{{- end}}
 wpa=2
 rsn_pairwise=CCMP
 {{- if eq .Security "wpa2-wpa3"}}

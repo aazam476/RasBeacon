@@ -389,6 +389,16 @@ export interface GuestSettings {
   supported: boolean;
 }
 
+/** GET/PUT /api/v1/settings/access: which and how many devices may join the hotspot over Wi-Fi. */
+export interface AccessSettings {
+  /** Only the devices in `allowed` may join your network (the guest network isn't affected). */
+  allowListOn: boolean;
+  /** MAC addresses such as 3a:1f:22:aa:bb:cc. */
+  allowed: string[];
+  /** The most devices on each network at once; 0 for no limit (up to 231). */
+  maxDevices: number;
+}
+
 /** GET/PUT /api/v1/settings/updates: how often to look for a new version, and where to announce it. */
 export interface UpdateSettings {
   /** 0 (only with Check now), 1, 6, 24 or 168 hours. */

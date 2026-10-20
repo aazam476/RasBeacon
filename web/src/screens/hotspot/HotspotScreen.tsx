@@ -17,6 +17,7 @@ import {
 } from '@/ui';
 import { QrCode } from '../common/QrCode';
 import { BAND_OPTIONS, HOTSPOT_SECURITY_OPTIONS } from '../common/wifiOptions';
+import { AccessSection } from './AccessSection';
 
 /** The settings that restart the hotspot when they change; only `metered` doesn't. */
 const RESTARTING_FIELDS = ['ssid', 'band', 'channel', 'security', 'country'] as const;
@@ -24,7 +25,7 @@ const RESTARTING_FIELDS = ['ssid', 'band', 'channel', 'security', 'country'] as 
 /** Typing settings for names and codes: no capitals, corrections or suggestions. */
 const PLAIN_INPUT = { autoComplete: 'off', autoCapitalize: 'none', autoCorrect: 'off', spellCheck: false } as const;
 
-/** RasBeacon's own Wi-Fi network: name, password, radio settings, and the metered hint. */
+/** RasBeacon's own Wi-Fi network: name, password, radio settings, the metered hint, and who can join. */
 export function HotspotScreen() {
   const { hotspotSettings, reload } = useDevice();
 
@@ -34,6 +35,7 @@ export function HotspotScreen() {
         <>
           <HotspotForm settings={settings} />
           <CurrentPassword />
+          <AccessSection />
         </>
       )}
     </Loaded>

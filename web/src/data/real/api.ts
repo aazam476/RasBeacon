@@ -18,6 +18,7 @@ import type {
   SwapSettings,
   Status,
   UpdateSettings,
+  AccessSettings,
   UpdateStatus,
   UplinkSettings,
   UsageSettings,
@@ -274,6 +275,9 @@ export const putHTTPSSettings = (
 /** Uploads and installs an update file; takes minutes on slow Wi-Fi. */
 export const installUpdate = (file: File) =>
   request<UpdateStatus>('POST', '/system/update', { file, timeoutMs: 30 * 60_000 });
+export const getAccessSettings = () => request<AccessSettings>('GET', '/settings/access');
+export const putAccessSettings = (settings: AccessSettings) =>
+  request<AccessSettings>('PUT', '/settings/access', { body: settings });
 export const getUpdateSettings = () => request<UpdateSettings>('GET', '/settings/updates');
 export const putUpdateSettings = (settings: UpdateSettings) =>
   request<UpdateStatus>('PUT', '/settings/updates', { body: settings });

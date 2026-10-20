@@ -43,6 +43,7 @@ import (
 	"net/http"
 	"net/netip"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -496,15 +497,9 @@ func (a *Agent) closeSetupWindow() {
 // startNormalMode runs the owner's hotspot.
 func (a *Agent) startNormalMode() error {
 	h := a.cfg.Hotspot
-	hotspot := render.HotspotInput{
-		Interface: radio.HotspotInterfaceName,
-		SSID:      h.SSID,
-		Band:      h.Band,
-		Channel:   h.Channel,
-		Country:   h.Country,
-		Security:  h.Security,
-		Password:  a.secrets.HotspotPassword,
-		Guest:     a.guestHostapd(),
+	hotspot, err := a.ownerHotspot()
+	if err != nil {
+		return err
 	}
 	// The guest network's bridge must exist before hostapd starts, and
 	// the plugins' before dnsmasq does (it answers plugins' DNS).
@@ -531,6 +526,31 @@ func (a *Agent) startNormalMode() error {
 	slog.Info("hotspot started", "ssid", h.SSID, "band", h.Band)
 	a.background(a.startPlugins)
 	return nil
+}
+
+// ownerHotspot describes the owner's hotspot for hostapd, and writes the
+// allow list it reads when that is on.
+func (a *Agent) ownerHotspot() (render.HotspotInput, error) {
+	h := a.cfg.Hotspot
+	hotspot := render.HotspotInput{
+		Interface:  radio.HotspotInterfaceName,
+		SSID:       h.SSID,
+		Band:       h.Band,
+		Channel:    h.Channel,
+		Country:    h.Country,
+		Security:   h.Security,
+		Password:   a.secrets.HotspotPassword,
+		MaxDevices: a.cfg.Access.MaxDevices,
+		Guest:      a.guestHostapd(),
+	}
+	if a.cfg.Access.AllowListOn {
+		list := strings.Join(a.cfg.Access.Allowed, "\n") + "\n"
+		if err := config.WriteFileAtomic(a.paths.HostapdAcceptFile(), []byte(list), 0o600); err != nil {
+			return hotspot, err
+		}
+		hotspot.AcceptMACFile = a.paths.HostapdAcceptFile()
+	}
+	return hotspot, nil
 }
 
 // applyHotspotAndDHCP writes hostapd.conf and dnsmasq.conf and restarts both

@@ -725,6 +725,24 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
           d.router.status.update.checkHours = settings.checkHours;
         });
       },
+      saveAccessSettings: async (settings) => {
+        await wait(1200);
+        const allowed: string[] = [];
+        for (const text of settings.allowed) {
+          const mac = text.trim().toLowerCase().replaceAll('-', ':');
+          if (!/^[0-9a-f]{2}(:[0-9a-f]{2}){5}$/.test(mac)) {
+            throw new FieldErrors({ allowed: `"${text.trim()}" is not a MAC address such as 3a:1f:22:aa:bb:cc.` });
+          }
+          if (!allowed.includes(mac)) allowed.push(mac);
+        }
+        if (settings.allowListOn && allowed.length === 0) {
+          throw new FieldErrors({ allowed: 'Add at least one device, or nobody could join over Wi-Fi.' });
+        }
+        if (settings.maxDevices < 0 || settings.maxDevices > 231) {
+          throw new FieldErrors({ maxDevices: 'Choose a number from 1 to 231, or no limit.' });
+        }
+        change((d) => void (d.router.accessSettings = { ...settings, allowed }));
+      },
       checkForUpdates: async () => {
         await wait(1500);
         change((d) => {
@@ -971,6 +989,7 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
       dnsSettings: loadable('dnsSettings', router.dnsSettings),
       swapSettings: loadable('swapSettings', router.swapSettings),
       updateSettings: loadable('updateSettings', router.updateSettings),
+      accessSettings: loadable('accessSettings', router.accessSettings),
       plugins: loadable('plugins', router.plugins),
       usageSettings: loadable('usageSettings', { ...router.usageSettings, metered: router.hotspotSettings.metered }),
       httpsSettings: loadable('httpsSettings', router.httpsSettings),

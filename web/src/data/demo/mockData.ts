@@ -1,4 +1,5 @@
 import type {
+  AccessSettings,
   DNSSettings,
   SwapSettings,
   UpdateSettings,
@@ -32,6 +33,7 @@ export interface MockRouter {
   dnsSettings: DNSSettings;
   swapSettings: SwapSettings;
   updateSettings: UpdateSettings;
+  accessSettings: AccessSettings;
   usageSettings: UsageSettings;
   plugins: PluginsState;
   httpsSettings: HTTPSSettings;
@@ -418,6 +420,7 @@ export function createMockRouter(): MockRouter {
     dnsSettings: { servers: [], withVpn: false },
     swapSettings: { sizeGb: 2, maxGb: 26 },
     updateSettings: { checkHours: 0, notifyUrl: '' },
+    accessSettings: { allowListOn: false, allowed: [], maxDevices: 0 },
     plugins: createMockPlugins(),
     usageSettings: { limitMb: 0, since: '2026-10-01T08:00:00Z', metered: false, devicesPaused: 0 },
 

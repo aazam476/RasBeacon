@@ -183,6 +183,22 @@ func (a *Agent) Handler() http.Handler {
 		writeJSON(w, http.StatusOK, a.HotspotSettings())
 	})
 
+	mux.HandleFunc("GET /settings/access", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, a.AccessSettings())
+	})
+
+	mux.HandleFunc("PUT /settings/access", func(w http.ResponseWriter, r *http.Request) {
+		var req api.AccessSettings
+		if !readJSON(w, r, &req) {
+			return
+		}
+		if err := a.UpdateAccessSettings(req); err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, a.AccessSettings())
+	})
+
 	mux.HandleFunc("POST /settings/hotspot/reveal-password", func(w http.ResponseWriter, r *http.Request) {
 		password, err := a.RevealHotspotPassword()
 		if err != nil {

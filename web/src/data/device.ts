@@ -1,5 +1,6 @@
 import { createContext, useContext } from 'react';
 import type {
+  AccessSettings,
   ClaimResponse,
   DNSSettings,
   UsageSettings,
@@ -66,6 +67,7 @@ export type DataKey =
   | 'dnsSettings'
   | 'swapSettings'
   | 'updateSettings'
+  | 'accessSettings'
   | 'usageSettings'
   | 'plugins'
   | 'httpsSettings'
@@ -96,6 +98,7 @@ export interface DeviceState {
   dnsSettings: Loadable<DNSSettings>;
   swapSettings: Loadable<SwapSettings>;
   updateSettings: Loadable<UpdateSettings>;
+  accessSettings: Loadable<AccessSettings>;
   usageSettings: Loadable<UsageSettings>;
   plugins: Loadable<PluginsState>;
   httpsSettings: Loadable<HTTPSSettings>;
@@ -270,6 +273,8 @@ export interface DeviceActions {
   installUpdate: (file: File) => Promise<void>;
   /** Save how often to look for a new version and where to announce it. Field keys: checkHours, notifyUrl. */
   saveUpdateSettings: (settings: UpdateSettings) => Promise<void>;
+  /** Save the allow list and device limit; the hotspot restarts. Field keys: allowed, maxDevices. */
+  saveAccessSettings: (settings: AccessSettings) => Promise<void>;
   /** Ask GitHub now; the result lands in status.update. */
   checkForUpdates: () => Promise<void>;
   /** Send a test message to `url` (or the saved address). Field key: notifyUrl. */

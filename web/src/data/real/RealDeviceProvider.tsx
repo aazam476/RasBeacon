@@ -23,6 +23,7 @@ import type {
   SSHSettings,
   SwapSettings,
   UpdateSettings,
+  AccessSettings,
   Status,
   UplinkSettings,
   UsageSettings,
@@ -57,6 +58,7 @@ interface DataTypes {
   dnsSettings: DNSSettings;
   swapSettings: SwapSettings;
   updateSettings: UpdateSettings;
+  accessSettings: AccessSettings;
   usageSettings: UsageSettings;
   plugins: PluginsState;
   httpsSettings: HTTPSSettings;
@@ -75,6 +77,7 @@ const LOADERS: { [K in DataKey]: () => Promise<DataTypes[K]> } = {
   dnsSettings: api.getDNSSettings,
   swapSettings: api.getSwapSettings,
   updateSettings: api.getUpdateSettings,
+  accessSettings: api.getAccessSettings,
   usageSettings: api.getUsageSettings,
   plugins: api.getPlugins,
   httpsSettings: api.getHTTPSSettings,
@@ -92,6 +95,7 @@ const NO_DATA: AllData = {
   dnsSettings: NOTHING,
   swapSettings: NOTHING,
   updateSettings: NOTHING,
+  accessSettings: NOTHING,
   usageSettings: NOTHING,
   plugins: NOTHING,
   httpsSettings: NOTHING,
@@ -108,6 +112,7 @@ const SETTINGS: DataKey[] = [
   'dnsSettings',
   'swapSettings',
   'updateSettings',
+  'accessSettings',
   'usageSettings',
   'httpsSettings',
 ];
@@ -117,7 +122,7 @@ const PAGE_DATA: Record<string, DataKey[]> = {
   '/': ['status'],
   '/internet': ['uplinkSettings', 'dnsSettings', 'status'],
   '/vpn': ['vpnSettings', 'status'],
-  '/hotspot': ['hotspotSettings'],
+  '/hotspot': ['hotspotSettings', 'accessSettings', 'status'],
   '/guests': ['guestSettings'],
   '/clients': ['status', 'usageSettings'],
   '/ssh': ['sshSettings'],
@@ -607,6 +612,12 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
         const update = await attempt(() => api.putUpdateSettings(settings), sameNames('checkHours', 'notifyUrl'));
         store('updateSettings', settings);
         patchStatus((status) => ({ ...status, update }));
+      },
+      saveAccessSettings: async (settings) => {
+        store(
+          'accessSettings',
+          await attempt(() => api.putAccessSettings(settings), sameNames('allowed', 'maxDevices')),
+        );
       },
       checkForUpdates: async () => {
         const update = await attempt(api.checkForUpdates);

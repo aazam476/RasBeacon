@@ -170,6 +170,13 @@ type HotspotInput struct {
 	// no setup.txt was provided.
 	Open     bool
 	Password string // ignored when Open is true
+	// AcceptMACFile, when set, lets only the devices listed in that file
+	// join (one MAC address per line). It applies to this network, not the
+	// guest network.
+	AcceptMACFile string
+	// MaxDevices is the most devices on each network at once (0: hostapd's
+	// own limit).
+	MaxDevices int
 	// Guest adds the guest network on the same radio (nil: no guest
 	// network). The radio must support two access points (see
 	// radio.MaxAPInterfaces).
@@ -236,6 +243,12 @@ func Hostapd(in HotspotInput) (string, error) {
 	}
 	if err := config.ValidateSSID(in.SSID); err != nil {
 		return "", fmt.Errorf("hotspot name: %w", err)
+	}
+	if strings.ContainsAny(in.AcceptMACFile, "\n\r") {
+		return "", fmt.Errorf("invalid allow list file name %q", in.AcceptMACFile)
+	}
+	if in.MaxDevices < 0 || in.MaxDevices > config.MaxDevicesLimit {
+		return "", fmt.Errorf("device limit %d is out of range", in.MaxDevices)
 	}
 	if g := in.Guest; g != nil {
 		if in.Open {

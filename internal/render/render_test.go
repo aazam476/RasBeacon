@@ -756,3 +756,31 @@ func TestDnsmasq_Hostname(t *testing.T) {
 		t.Error("a name with a slash was accepted")
 	}
 }
+
+func TestHostapd_AllowListAndDeviceLimit(t *testing.T) {
+	in := HotspotInput{
+		Interface: "ap0", SSID: "RasBeacon-4F2A", Band: config.Band2GHz,
+		Country: "US", Security: config.SecurityWPA2WPA3, Password: "kq7m-2xvd-h8pt-rn4w",
+		AcceptMACFile: "/run/rbd/hostapd.accept", MaxDevices: 12,
+		Guest: &GuestNetwork{SSID: "RasBeacon-4F2A-Guest", Password: "visitors-welcome", BSSID: "52:3e:aa:12:34:56"},
+	}
+	got, err := Hostapd(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkGolden(t, "hostapd_access", got)
+	main, guest, _ := strings.Cut(got, "bss=guest0")
+	for _, want := range []string{"macaddr_acl=1", "accept_mac_file=/run/rbd/hostapd.accept", "max_num_sta=12"} {
+		if !strings.Contains(main, want) {
+			t.Errorf("main section lacks %q", want)
+		}
+	}
+	if strings.Contains(guest, "macaddr_acl") || !strings.Contains(guest, "max_num_sta=12") {
+		t.Errorf("guest section: the allow list must not apply, the limit must:\n%s", guest)
+	}
+
+	in.MaxDevices = config.MaxDevicesLimit + 1
+	if _, err := Hostapd(in); err == nil {
+		t.Error("a limit above the DHCP range was accepted")
+	}
+}

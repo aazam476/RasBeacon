@@ -163,6 +163,10 @@ func (p Paths) APISocket() string { return filepath.Join(p.RunDir(), "api.sock")
 // HostapdConfig is the generated hostapd (hotspot) configuration.
 func (p Paths) HostapdConfig() string { return filepath.Join(p.RunDir(), "hostapd.conf") }
 
+// HostapdAcceptFile lists the devices allowed on the hotspot, when the
+// owner turned the allow list on.
+func (p Paths) HostapdAcceptFile() string { return filepath.Join(p.RunDir(), "hostapd.accept") }
+
 // DnsmasqConfig is the generated DHCP/DNS server configuration.
 func (p Paths) DnsmasqConfig() string { return filepath.Join(p.RunDir(), "dnsmasq.conf") }
 
