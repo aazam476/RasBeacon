@@ -98,3 +98,13 @@ export async function openRow(user: ReturnType<typeof userEvent.setup>, title: s
   await user.click(summary);
   return details;
 }
+
+/**
+ * The group of rows under a heading (a Section), to look inside with `within(…)`. Sections
+ * aren't labelled regions (see web/src/ui/Section.tsx), so this finds them by their heading.
+ */
+export function section(title: string): HTMLElement {
+  const group = screen.getByRole('heading', { name: title }).closest('section');
+  if (!group) throw new Error(`"${title}" is not a section's heading`);
+  return group;
+}

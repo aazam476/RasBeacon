@@ -62,6 +62,9 @@ window.DOMMatrixReadOnly = class {
 } as unknown as typeof DOMMatrixReadOnly;
 
 window.scrollTo = () => undefined;
+// Pointer capture (the login page picture keeps following a finger that leaves it).
+Element.prototype.setPointerCapture = () => undefined;
+Element.prototype.releasePointerCapture = () => undefined;
 window.IntersectionObserver = class {
   observe() {}
   unobserve() {}

@@ -1,80 +1,9 @@
 // The real data layer (RealDeviceProvider): loading, deciding the phase, sending actions and
 // turning the router's answers into state, against a fake router that answers like rbweb.
-import { act, render, waitFor } from '@testing-library/react';
-import { useEffect } from 'react';
-import { MemoryRouter } from 'react-router';
+import { act, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { createMockRouter } from '@/data/demo/mockData';
-import { useDevice, type Device } from '@/data/device';
 import { FieldErrors } from '@/data/errors';
-import { RealDeviceProvider } from '@/data/real/RealDeviceProvider';
-
-interface Sent {
-  method: string;
-  path: string;
-  body: unknown;
-}
-
-/**
- * A fake rbweb: GETs answer with the demo's sample data, other requests with `answers[route]`
- * (route like "POST /system/hostname"; status 200 and `{}` if missing). Records every request.
- */
-function fakeRbweb(
-  options: { loggedIn?: boolean; answers?: Record<string, { status?: number; body?: unknown }> } = {},
-) {
-  const router = createMockRouter();
-  const gets: Record<string, unknown> = {
-    '/setup': router.setup,
-    '/session': { loggedIn: options.loggedIn ?? true, csrfToken: 'token' },
-    '/status': router.status,
-    '/settings/hotspot': router.hotspotSettings,
-    '/settings/guest': router.guestSettings,
-    '/settings/uplink': router.uplinkSettings,
-    '/settings/vpn': router.vpnSettings,
-    '/settings/ssh': router.sshSettings,
-    '/settings/dns': router.dnsSettings,
-    '/settings/swap': router.swapSettings,
-    '/settings/updates': router.updateSettings,
-    '/settings/access': router.accessSettings,
-    '/settings/usage': router.usageSettings,
-    '/settings/https': router.httpsSettings,
-    '/plugins': router.plugins,
-  };
-  const sent: Sent[] = [];
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(async (url: string, init: RequestInit = {}) => {
-      const method = init.method ?? 'GET';
-      const path = url.replace('/api/v1', '');
-      sent.push({ method, path, body: typeof init.body === 'string' ? JSON.parse(init.body) : undefined });
-      const answer = options.answers?.[`${method} ${path}`];
-      const status = answer?.status ?? 200;
-      const body = answer?.body ?? (method === 'GET' ? gets[path] : {}) ?? {};
-      return new Response(status === 204 ? null : JSON.stringify(body), { status });
-    }),
-  );
-  return { router, sent };
-}
-
-/** Renders the provider and returns a handle on the device it gives the screens. */
-function renderProvider() {
-  const current: { device?: Device } = {};
-  function Probe() {
-    const device = useDevice();
-    useEffect(() => {
-      current.device = device;
-    });
-    return null;
-  }
-  render(
-    <MemoryRouter>
-      <RealDeviceProvider>
-        <Probe />
-      </RealDeviceProvider>
-    </MemoryRouter>,
-  );
-  return () => current.device!;
-}
+import { fakeRbweb, renderProvider } from './provider';
 
 describe('starting up', () => {
   it('loads the setup state and the session, then every setting', async () => {
