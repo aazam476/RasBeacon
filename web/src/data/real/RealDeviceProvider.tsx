@@ -33,6 +33,7 @@ import type {
 import * as api from './api';
 import { ApiError } from './api';
 import {
+  checkAdminPasswordForm,
   checkGuestForm,
   checkNewNetwork,
   checkSetupForm,
@@ -692,6 +693,15 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
         await attempt(() => api.restoreBackup(backupPassword), fields);
       },
 
+      changeAdminPassword: async (form) => {
+        const problems = checkAdminPasswordForm(form);
+        if (Object.keys(problems).length > 0) throw new FieldErrors(problems);
+        // rbd names the wrong current password "password".
+        await attempt(() => api.changeAdminPassword(form.currentPassword, form.newPassword), {
+          ...sameNames('currentPassword', 'newPassword'),
+          password: 'currentPassword',
+        });
+      },
       factoryReset: async (adminPassword) => {
         await attempt(() => api.factoryReset(adminPassword));
         setData(NO_DATA);

@@ -5,6 +5,7 @@ import { Loaded } from '@/shell/Loaded';
 import { useState } from 'react';
 import { Badge, EditButton, Icon, Meter, RenameSheet, Row, Section, type Tone } from '@/ui';
 import { getResourceMetrics } from '../common/resourceMetrics';
+import { AdminPasswordSection } from './AdminPasswordSection';
 import { BackupSection } from './BackupSection';
 import { FactoryResetSection, RebootSection, ShutdownSection } from './RestartSections';
 import { SoftwareSection } from './SoftwareSection';
@@ -26,6 +27,7 @@ export function SystemScreen() {
           <AboutSection status={status} />
           <RadiosSection status={status} />
           <DiagnosticsSection />
+          <AdminPasswordSection />
           <BackupSection />
           <RebootSection />
           <ShutdownSection />

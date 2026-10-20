@@ -32,7 +32,7 @@ import (
 var ErrWrongMode = errors.New("this action is not available in the device's current mode")
 
 // ErrWrongPassword means the admin password given with a request was wrong.
-var ErrWrongPassword = errors.New("wrong admin password")
+var ErrWrongPassword = errors.New("Wrong password.")
 
 // SetupState returns the public information the UI needs before login.
 func (a *Agent) SetupState() api.SetupState {
@@ -155,6 +155,38 @@ func (a *Agent) VerifyAdminPassword(password string) bool {
 		return false
 	}
 	return ok
+}
+
+// ChangeAdminPassword replaces the admin password, if currentPassword is
+// the one in use. Every "Stay logged in" ends, so other devices need the
+// new password (rbweb also ends their sessions).
+func (a *Agent) ChangeAdminPassword(req api.AdminPasswordRequest) error {
+	if err := auth.CheckAdminPasswordStrength(req.NewPassword); err != nil {
+		return &config.ValidationError{Field: "newPassword", Message: err.Error()}
+	}
+	if !a.VerifyAdminPassword(req.CurrentPassword) {
+		return ErrWrongPassword
+	}
+	if req.NewPassword == req.CurrentPassword {
+		return &config.ValidationError{Field: "newPassword", Message: "Choose a password different from the current one."}
+	}
+	hash, err := auth.HashPassword(req.NewPassword)
+	if err != nil {
+		return err
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	newSecrets := a.secrets.Clone()
+	newSecrets.AdminPasswordHash = hash
+	if err := config.WriteJSON(a.paths.SecretsFile(), newSecrets, 0o600); err != nil {
+		return err
+	}
+	a.secrets = newSecrets
+	if err := a.forgetAllLogins(); err != nil {
+		slog.Warn("could not forget the remembered logins", "error", err)
+	}
+	slog.Info("admin password changed")
+	return nil
 }
 
 // HotspotSettings returns the current hotspot settings (without password).

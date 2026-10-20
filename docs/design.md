@@ -128,7 +128,12 @@ rbd     root, systemd-hardened; owns /persistent/rasbeacon; renders configs to /
 - **`rbweb`** serves the static UI and a REST/JSON API. It never reads
   secrets: secret fields are write-only and the API only reports
   "set / not set". It handles:
-  - Sessions, login rate limiting and CSRF protection.
+  - Sessions, login rate limiting and CSRF protection. Every request that
+    checks the admin password (login, a new password, factory reset) goes
+    through one gate: one check at a time, counted by the rate limit.
+  - Answering only under RasBeacon's own names (its address,
+    `rasbeacon.lan`, the owner's name for it), so a web page can't reach
+    the API through DNS rebinding.
   - Admin password hashing (argon2id from `golang.org/x/crypto`, our only
     third-party Go dependency).
 - **`rbd`** changes state under a single lock (one change at a time) and is the **only** writer of network state.

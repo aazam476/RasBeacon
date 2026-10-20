@@ -273,6 +273,44 @@ describe('clients', () => {
   ]);
 });
 
+describe('admin password', () => {
+  const form = {
+    currentPassword: 'tangerine-orbit-42',
+    newPassword: 'plum-harbor-sunrise-7',
+    newPasswordConfirm: 'plum-harbor-sunrise-7',
+  };
+
+  testActions([
+    {
+      name: 'changes it with the current one',
+      run: (d) => d.changeAdminPassword(form),
+      sends: ['POST /system/admin-password'],
+      body: { currentPassword: 'tangerine-orbit-42', newPassword: 'plum-harbor-sunrise-7' },
+      answer: { status: 204 },
+    },
+  ]);
+
+  it('a form with problems is refused before anything is sent', async () => {
+    const { device, sent } = await withReadyDevice({});
+    const before = sent.length;
+    const error = await device()
+      .changeAdminPassword({ ...form, newPasswordConfirm: 'other' })
+      .catch((e: unknown) => e);
+    expect((error as FieldErrors).fields).toEqual({ newPasswordConfirm: "The two passwords don't match." });
+    expect(sent.length).toBe(before);
+  });
+
+  it('a wrong current password shows next to its field', async () => {
+    const { device } = await withReadyDevice({
+      'POST /system/admin-password': { status: 403, body: { error: 'Wrong password.', field: 'password' } },
+    });
+    const error = await device()
+      .changeAdminPassword(form)
+      .catch((e: unknown) => e);
+    expect((error as FieldErrors).fields).toEqual({ currentPassword: 'Wrong password.' });
+  });
+});
+
 describe('SSH and HTTPS', () => {
   testActions([
     { name: 'saves SSH', run: (d) => d.saveSshSettings(d.sshSettings.data!), sends: ['PUT /settings/ssh'] },

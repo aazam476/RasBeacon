@@ -51,6 +51,13 @@ describe('device', () => {
     { name: 'reboots', call: api.reboot, method: 'POST', path: '/system/reboot' },
     { name: 'shuts down', call: api.shutDown, method: 'POST', path: '/system/shutdown' },
     {
+      name: 'changes the admin password',
+      call: () => api.changeAdminPassword('tangerine-orbit-42', 'plum-harbor-sunrise-7'),
+      method: 'POST',
+      path: '/system/admin-password',
+      body: { currentPassword: 'tangerine-orbit-42', newPassword: 'plum-harbor-sunrise-7' },
+    },
+    {
       name: 'erases everything with the admin password',
       call: () => api.factoryReset('tangerine-orbit-42'),
       method: 'POST',

@@ -8,7 +8,7 @@ package agent
 // the tokens) in remembered-logins.json on the data partition, so the
 // browser is logged in again without a password after a restart, for
 // rememberTime from the login. Logging out forgets the token; a factory
-// reset forgets them all.
+// reset or a new admin password forgets them all.
 
 import (
 	"crypto/rand"
@@ -104,4 +104,10 @@ func (a *Agent) ForgetLogin(token string) error {
 		return nil
 	}
 	return config.WriteJSON(a.paths.RememberedLoginsFile(), kept, 0o600)
+}
+
+// forgetAllLogins forgets every remembered login (the admin password
+// changed). The caller holds a.mu.
+func (a *Agent) forgetAllLogins() error {
+	return config.WriteJSON(a.paths.RememberedLoginsFile(), []rememberedLogin{}, 0o600)
 }

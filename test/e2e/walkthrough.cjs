@@ -4,7 +4,7 @@
 // http://127.0.0.1:8080 (run.sh starts them). It then acts like a person
 // with a phone: finishes setup, checks the status page, changes settings on
 // every page, uses the VPN profiles, the per-device controls and the speed
-// test, logs out and tries a wrong password.
+// test, changes the admin password, logs out and tries the old one.
 //
 // Steps find elements by their role and visible name (like a person or a
 // screen reader would), so a restyled UI keeps passing as long as it keeps
@@ -410,18 +410,30 @@ async function main() {
     await page.getByRole("button", { name: "Erase everything" }).waitFor();
   });
 
-  await step("log out, then a wrong password is refused", async () => {
+  await step("system: the admin password changes, given the current one", async () => {
+    await page.getByRole("button", { name: "Change admin password" }).click();
+    await dialog().getByLabel("Current password").fill("not-the-password");
+    await dialog().getByLabel("New password").fill("plum-harbor-sunrise-7");
+    await dialog().getByLabel("Type it again").fill("plum-harbor-sunrise-7");
+    await dialog().getByRole("button", { name: "Change" }).click();
+    await dialog().getByText("Wrong password.").waitFor();
+    await dialog().getByLabel("Current password").fill("tangerine-orbit-42");
+    await dialog().getByRole("button", { name: "Change" }).click();
+    await page.getByText("Admin password changed.").waitFor();
+  });
+
+  await step("log out, then the old password is refused", async () => {
     await page.getByRole("button", { name: "Log out" }).click();
     // Wait for the login screen: the System page also has an "Admin
     // password" box (for factory reset), which must not be the one we fill.
     await page.getByText("Forgot the password?").waitFor();
-    await page.getByLabel("Admin password").fill("wrong-password");
+    await page.getByLabel("Admin password").fill("tangerine-orbit-42");
     await page.getByRole("button", { name: "Log in" }).click();
     await page.getByText("Wrong password.").waitFor();
   });
 
-  await step("the right password logs in, staying logged in", async () => {
-    await page.getByLabel("Admin password").fill("tangerine-orbit-42");
+  await step("the new password logs in, staying logged in", async () => {
+    await page.getByLabel("Admin password").fill("plum-harbor-sunrise-7");
     await page.getByLabel("Stay logged in").check();
     await page.getByRole("button", { name: "Log in" }).click();
     await page.getByRole("heading", { level: 1, name: "Status" }).waitFor();

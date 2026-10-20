@@ -101,6 +101,18 @@ func (s *sessionStore) removeAll() {
 	s.sessions = map[string]*session{}
 }
 
+// removeAllExcept ends every session but keep (the admin password changed
+// in that one).
+func (s *sessionStore) removeAllExcept(keep string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for id := range s.sessions {
+		if id != keep {
+			delete(s.sessions, id)
+		}
+	}
+}
+
 // fromRequest finds the session for the cookie in r, if any.
 func (s *sessionStore) fromRequest(r *http.Request) (id string, sess *session, ok bool) {
 	cookie, err := r.Cookie(sessionCookieName)

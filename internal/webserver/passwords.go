@@ -1,7 +1,7 @@
 package webserver
 
-// Every request that checks the admin password (logging in, factory
-// reset) goes through one gate: one check at a time, and
+// Every request that checks the admin password (logging in, changing the
+// password, factory reset) goes through one gate: one check at a time, and
 // only from a device the login limiter (ratelimit.go) allows.
 //
 // One at a time matters: asking the limiter and recording a wrong password
@@ -11,6 +11,7 @@ package webserver
 // anyway, so a person loses nothing.
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"time"
@@ -90,6 +91,40 @@ func (s *Server) handleFactoryReset(w http.ResponseWriter, r *http.Request) {
 	if status == http.StatusNoContent {
 		s.sessions.removeAll()
 		clearSessionCookie(w)
+	}
+	writeRaw(w, status, "application/json", respBody)
+}
+
+// handleAdminPassword changes the admin password. When it is changed, every
+// other browser is logged out and "Stay logged in" ends everywhere (rbd
+// forgets the remembered logins); this browser stays logged in.
+func (s *Server) handleAdminPassword(w http.ResponseWriter, r *http.Request) {
+	body, ok := readBody(w, r)
+	if !ok {
+		return
+	}
+	var req api.AdminPasswordRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, api.ErrorResponse{Error: "invalid request: " + err.Error()})
+		return
+	}
+	done, ok := s.passwordGate(w, r)
+	if !ok {
+		return
+	}
+	body, _ = json.Marshal(req)
+	status, respBody, err := s.rbd.Do(http.MethodPost, "/system/admin-password", body)
+	if err != nil {
+		done(passwordUnknown)
+		writeJSON(w, http.StatusBadGateway, api.ErrorResponse{Error: err.Error()})
+		return
+	}
+	done(resultOf(status))
+	if status == http.StatusNoContent {
+		if id, _, ok := s.sessions.fromRequest(r); ok {
+			s.sessions.removeAllExcept(id)
+		}
+		clearRememberCookie(w)
 	}
 	writeRaw(w, status, "application/json", respBody)
 }

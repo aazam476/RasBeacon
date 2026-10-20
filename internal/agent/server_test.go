@@ -56,7 +56,7 @@ func TestRoutes_RefuseBodiesTheyCantRead(t *testing.T) {
 		"POST /plugins/catalog", "POST /plugins/catalog/download", "POST /plugins/update", "POST /plugins/install",
 		"POST /plugins/cancel", "PUT /plugins/settings", "POST /plugins/remove", "POST /plugins/logs",
 		"PUT /plugins/sources", "POST /system/backup", "POST /system/restore", "POST /settings/updates/test",
-		"PUT /settings/updates", "POST /system/hostname", "POST /system/factory-reset",
+		"PUT /settings/updates", "POST /system/hostname", "POST /system/factory-reset", "POST /system/admin-password",
 	}
 	for _, route := range routes {
 		method, path, _ := strings.Cut(route, " ")

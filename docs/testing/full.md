@@ -498,18 +498,26 @@ install updates (on the Pi 3/Zero 2 W image, check instead that System says
    without the internet. After the factory reset below, set RasBeacon up
    and restore the backup again: everything comes back.
 
-1. **Factory reset:** System → *Factory reset* → **Erase everything** with
+1. **Admin password:** log in on a second device too, then on the first
+   System → **Change admin password**. A wrong current password says
+   *Wrong password.*; a new one under 10 characters, or typed differently
+   the second time, is refused next to its field. The right one says
+   *Admin password changed.* **Expect:** the first device stays logged in;
+   the second is sent to the login page, where the old password is
+   refused and the new one works. "Stay logged in" ends on both.
+   Change it back if you like.
+2. **Factory reset:** System → *Factory reset* → **Erase everything** with
    the admin password. **Expect:** it restarts into `RasBeacon-Setup-XXXX`.
-2. **setup.txt:** power off, create `setup.txt` on the card's `BOOTCONFIG`
+3. **setup.txt:** power off, create `setup.txt` on the card's `BOOTCONFIG`
    drive (`BOOT` on the Pi 3/Zero 2 W image) with `setup_password=testing-1234`, boot. **Expect:** the setup
    network asks for that password. Then change it to
    `setup_password=short`, boot: **expect** no setup network and the green
    LED blinking 3 short, 1 long. Delete the file, boot, finish setup:
    `setup.txt` is gone from the card afterwards.
-3. **factory-reset file:** power off, create an empty file
+4. **factory-reset file:** power off, create an empty file
    `factory-reset` (no extension) on `BOOTCONFIG` (or `BOOT`), boot. **Expect:** the
    setup network, and the file gone afterwards.
-4. **Reset button (if you can):** button between pin 11 (GPIO 17) and pin 9
+5. **Reset button (if you can):** button between pin 11 (GPIO 17) and pin 9
    (ground). A short press does nothing; holding 10 s erases everything
    like step 1.
 
@@ -566,7 +574,7 @@ Board (Pi 4/5/3B/3B+/Zero 2 W) / RAM:     Adapter:          Card size:          
 12 Hotspot password check + 5 GHz: / show password (no admin password): / WPA3 only: / allowed devices + lockout warning: / device limit: / metered: / guests isolated: / IPv6: / HTTPS fingerprint + redirect:
 13 Version before __ / renamed image refused: / changed byte refused: / update installed, settings kept, took __ min: / rollback: / check schedule + Check now: / ntfy test + new-version notice:
 14 Power cuts x3: / reboot dialog: / shut down + power on: / rename to travel-pi.lan: / long run __ devices __ min, drops: / memory: / diagnostics clean:
-15 Backup Plugin data restored, app downloaded again: / Everything restored offline: / Factory reset: / setup.txt password + broken-file LED + deleted: / factory-reset file: / button:
+15 Backup Plugin data restored, app downloaded again: / Everything restored offline: / Admin password changed, other device logged out: / Factory reset: / setup.txt password + broken-file LED + deleted: / factory-reset file: / button:
 16 Power idle __ W, load __ W / iperf3:
 Anything else odd:
 ```

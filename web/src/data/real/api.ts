@@ -287,6 +287,8 @@ export const testUpdateNotification = (url: string) =>
 export const reboot = () => request<void>('POST', '/system/reboot');
 export const shutDown = () => request<void>('POST', '/system/shutdown');
 export const saveHostname = (hostname: string) => request<void>('POST', '/system/hostname', { body: { hostname } });
+export const changeAdminPassword = (currentPassword: string, newPassword: string) =>
+  request<void>('POST', '/system/admin-password', { body: { currentPassword, newPassword } });
 export const factoryReset = (adminPassword: string) =>
   request<void>('POST', '/system/factory-reset', { body: { password: adminPassword } });
 

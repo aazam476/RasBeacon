@@ -23,6 +23,7 @@ import type {
   PortalStatus,
   SavedNetwork,
   SetupForm,
+  AdminPasswordForm,
   SetupState,
   SSHSettings,
   SwapSettings,
@@ -298,6 +299,11 @@ export interface DeviceActions {
   saveHostname: (hostname: string) => Promise<void>;
   /** Erase everything; afterwards the phase is `setup`. Reject when the admin password is wrong. */
   factoryReset: (adminPassword: string) => Promise<void>;
+  /**
+   * Change the admin password. Other devices are logged out and "Stay logged in" ends everywhere;
+   * this device stays logged in. Field keys: currentPassword, newPassword, newPasswordConfirm.
+   */
+  changeAdminPassword: (form: AdminPasswordForm) => Promise<void>;
   /**
    * Make an encrypted backup and save it as a file. `plugins` is how much of the plugins goes
    * in. Field keys: backupPassword.

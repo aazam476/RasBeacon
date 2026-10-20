@@ -155,8 +155,10 @@ func (s *Server) Handler() http.Handler {
 	}
 
 	// Requests with the admin password go through the password gate
-	// (passwords.go), like logins. Factory reset also logs everyone out.
+	// (passwords.go), like logins. Factory reset also logs everyone out;
+	// a new password logs out every other browser.
 	mux.Handle("POST /api/v1/system/factory-reset", s.requireLogin(http.HandlerFunc(s.handleFactoryReset)))
+	mux.Handle("POST /api/v1/system/admin-password", s.requireLogin(http.HandlerFunc(s.handleAdminPassword)))
 
 	// Unknown API routes get a JSON 404 instead of the web UI.
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {

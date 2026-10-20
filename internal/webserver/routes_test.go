@@ -16,7 +16,7 @@ import (
 var rbdOnlyRoutes = []string{
 	"GET /state", "POST /claim", "POST /verify-password",
 	"POST /remembered-logins", "POST /remembered-logins/check", "POST /remembered-logins/forget",
-	"GET /status", "POST /speedtest", "POST /system/update", "POST /system/factory-reset",
+	"GET /status", "POST /speedtest", "POST /system/update", "POST /system/factory-reset", "POST /system/admin-password",
 	"GET /portal", "GET /portal/browser/frame", "POST /portal/browser/input",
 	"POST /portal/browser/start", "POST /portal/browser/stop",
 	"POST /portal/start", "POST /portal/stop", "POST /portal/extend", "POST /portal/check",

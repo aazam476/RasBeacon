@@ -91,6 +91,13 @@ type PasswordRequest struct {
 	Password string `json:"password"`
 }
 
+// AdminPasswordRequest changes the admin password (POST
+// /system/admin-password): the current one, then the new one.
+type AdminPasswordRequest struct {
+	CurrentPassword string `json:"currentPassword"`
+	NewPassword     string `json:"newPassword"`
+}
+
 // VerifyPasswordResponse is rbd's answer to a password check.
 type VerifyPasswordResponse struct {
 	OK bool `json:"ok"`

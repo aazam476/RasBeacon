@@ -13,6 +13,7 @@
 import type { AppPhase } from '../device';
 import { FieldErrors } from '../errors';
 import type {
+  AdminPasswordForm,
   GuestSettings,
   NewNetworkForm,
   PictureBox,
@@ -103,6 +104,15 @@ export function checkSetupForm(form: SetupForm): Errors {
     adminPasswordConfirm: form.adminPassword === form.adminPasswordConfirm ? null : "The two passwords don't match.",
     hotspotSsid: checkSsid(form.hotspotSsid),
     hotspotPassword: checkWifiPassword(form.hotspotPassword),
+  });
+}
+
+/** The new admin password form. Keys: currentPassword, newPassword, newPasswordConfirm. */
+export function checkAdminPasswordForm(form: AdminPasswordForm): Errors {
+  return found({
+    currentPassword: form.currentPassword === '' ? 'Enter the current password.' : null,
+    newPassword: checkAdminPassword(form.newPassword),
+    newPasswordConfirm: form.newPassword === form.newPasswordConfirm ? null : "The two passwords don't match.",
   });
 }
 

@@ -704,6 +704,18 @@ func (a *Agent) Handler() http.Handler {
 		w.WriteHeader(http.StatusNoContent)
 	})
 
+	mux.HandleFunc("POST /system/admin-password", func(w http.ResponseWriter, r *http.Request) {
+		var req api.AdminPasswordRequest
+		if !readJSON(w, r, &req) {
+			return
+		}
+		if err := a.ChangeAdminPassword(req); err != nil {
+			writeError(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+
 	mux.HandleFunc("GET /diagnostics", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = w.Write([]byte(a.Diagnostics()))

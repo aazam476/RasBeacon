@@ -41,6 +41,13 @@ export interface SetupForm {
   hotspotBand: Band;
 }
 
+/** The form that changes the admin password (System page). */
+export interface AdminPasswordForm {
+  currentPassword: string;
+  newPassword: string;
+  newPasswordConfirm: string;
+}
+
 /** POST /api/v1/setup/claim answers with this. */
 export interface ClaimResponse {
   hotspotSsid: string;

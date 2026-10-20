@@ -5,6 +5,7 @@ import { ApiError } from '@/data/real/api';
 import {
   certificatesToUpload,
   checkAdminPassword,
+  checkAdminPasswordForm,
   checkGuestForm,
   checkNewNetwork,
   checkSetupForm,
@@ -219,5 +220,30 @@ describe('refusals', () => {
     const error = screenError(new ApiError(403, 'Wrong password.', 'password'));
     expect(error).not.toBeInstanceOf(FieldErrors);
     expect(error.message).toBe('Wrong password.');
+  });
+});
+
+describe('checkAdminPasswordForm', () => {
+  const form = {
+    currentPassword: 'tangerine-orbit-42',
+    newPassword: 'plum-harbor-sunrise-7',
+    newPasswordConfirm: 'plum-harbor-sunrise-7',
+  };
+
+  it('accepts a good new password typed twice', () => {
+    expect(checkAdminPasswordForm(form)).toEqual({});
+  });
+
+  it('names every problem by its field', () => {
+    expect(checkAdminPasswordForm({ currentPassword: '', newPassword: 'short', newPasswordConfirm: 'other' })).toEqual({
+      currentPassword: 'Enter the current password.',
+      newPassword: 'Must be at least 10 characters long.',
+      newPasswordConfirm: "The two passwords don't match.",
+    });
+  });
+
+  it('refuses a new password with the device name in it', () => {
+    const named = { ...form, newPassword: 'my-rasbeacon-pass', newPasswordConfirm: 'my-rasbeacon-pass' };
+    expect(checkAdminPasswordForm(named).newPassword).toBe('Must not contain the device name.');
   });
 });

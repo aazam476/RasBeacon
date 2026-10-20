@@ -28,6 +28,7 @@ import { demoQrSvg } from './qrPicture';
 import {
   checkGuestSettings,
   checkHotspotSettings,
+  checkNewAdminPassword,
   checkNewNetwork,
   checkSetupForm,
   checkWifiPassword,
@@ -956,6 +957,12 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
         failIfAny(errors);
       },
 
+      changeAdminPassword: async (form) => {
+        await wait(1200);
+        const errors = checkNewAdminPassword(form);
+        if (form.currentPassword === 'wrong') errors.currentPassword = 'Wrong password.';
+        failIfAny(errors);
+      },
       factoryReset: async (adminPassword) => {
         await wait(1500);
         if (adminPassword === '' || adminPassword === 'wrong') throw new Error('Wrong password.');

@@ -3,7 +3,14 @@
  * follow the original UI's shared/validation.ts and the checks in its hooks; the real provider
  * should use those (and the router re-checks everything anyway).
  */
-import type { GuestSettings, HotspotSettings, NewNetworkForm, SavedNetwork, SetupForm } from '../types';
+import type {
+  AdminPasswordForm,
+  GuestSettings,
+  HotspotSettings,
+  NewNetworkForm,
+  SavedNetwork,
+  SetupForm,
+} from '../types';
 
 type Errors = Record<string, string>;
 
@@ -21,6 +28,17 @@ export function checkWifiPassword(password: string): string | null {
     return 'May only contain printable ASCII characters (no emoji or accented letters).';
   }
   return null;
+}
+
+/** A new admin password, as the router checks it (and the two must match). */
+export function checkNewAdminPassword(form: AdminPasswordForm): Errors {
+  const errors: Errors = {};
+  if (form.currentPassword === '') errors.currentPassword = 'Enter the current password.';
+  if ([...form.newPassword].length < 10) errors.newPassword = 'Must be at least 10 characters long.';
+  else if (form.newPassword.toLowerCase().includes('rasbeacon'))
+    errors.newPassword = 'Must not contain the device name.';
+  if (form.newPassword !== form.newPasswordConfirm) errors.newPasswordConfirm = "The two passwords don't match.";
+  return errors;
 }
 
 export function checkSetupForm(form: SetupForm): Errors {
