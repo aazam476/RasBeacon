@@ -508,6 +508,18 @@ export const SCENARIOS: DemoScenario[] = [
   // Hotspot and guests
   { id: 'hotspot', group: 'Hotspot and guests', title: 'Hotspot settings', route: '/hotspot' },
   {
+    id: 'hotspot-allow-list',
+    group: 'Hotspot and guests',
+    title: 'Only allowed devices, at most 10',
+    route: '/hotspot',
+    apply: (d) =>
+      void (d.router.accessSettings = {
+        allowListOn: true,
+        allowed: ['f4:d4:88:62:3b:01', '3c:06:30:19:9e:11', '98:b6:e9:14:42:07'],
+        maxDevices: 10,
+      }),
+  },
+  {
     id: 'guests-off',
     group: 'Hotspot and guests',
     title: 'Guest network off',
