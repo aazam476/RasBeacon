@@ -433,3 +433,38 @@ func TestVPN_RenameKeepsKeysAndTheProfileInUse(t *testing.T) {
 		t.Error("renaming a profile that doesn't exist must fail")
 	}
 }
+
+// Looking up the VPN server's name can hang on a network that drops DNS,
+// so it runs in the background, never while rbd's lock is held (the
+// settings pages would wait for it).
+func TestVPN_ServerLookupRunsOutsideTheLock(t *testing.T) {
+	e, c := newVPNEnv(t, true)
+	e.runBackground()
+	lookups := func() int {
+		n := 0
+		for _, cmd := range e.runner.commands {
+			if strings.HasPrefix(cmd, "wg set wg0 peer") && strings.Contains(cmd, " endpoint ") {
+				n++
+			}
+		}
+		return n
+	}
+	before := lookups()
+
+	// The tunnel is still down a minute later: time to look again.
+	c.advance(2 * time.Minute)
+	e.agent.mu.Lock()
+	if err := e.agent.updateTunnel(); err != nil {
+		e.agent.mu.Unlock()
+		t.Fatal(err)
+	}
+	ranUnderLock := lookups() - before
+	e.agent.mu.Unlock()
+	if ranUnderLock != 0 {
+		t.Fatalf("the lookup ran while rbd's lock was held")
+	}
+	e.runBackground()
+	if lookups() != before+1 {
+		t.Errorf("lookups = %d, want one more in the background", lookups()-before)
+	}
+}

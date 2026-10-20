@@ -251,13 +251,18 @@ func (a *Agent) updateTunnel() error {
 
 	// While the tunnel isn't working, look up the server's address again
 	// now and then (it may have changed, or the uplink's DNS works now).
+	// The lookup can take as long as the command's time limit on a network
+	// that drops DNS, so it runs in the background, not under a.mu: the
+	// settings pages keep answering meanwhile.
 	if active && state != tunnel.Up && a.now().Sub(a.vpn.lastRefresh) >= endpointRefreshInterval {
 		a.vpn.lastRefresh = a.now()
 		p, _ := a.activeProfile()
-		cmd := routing.SetEndpoint(p.Peer.PublicKey, p.Peer.Endpoint)
-		if _, err := a.runner.Run(cmd[0], cmd[1:]...); err != nil {
-			slog.Warn("could not look up the VPN server", "endpoint", p.Peer.Endpoint, "error", err)
-		}
+		cmd, endpoint, runner := routing.SetEndpoint(p.Peer.PublicKey, p.Peer.Endpoint), p.Peer.Endpoint, a.runner
+		a.background(func() {
+			if _, err := runner.Run(cmd[0], cmd[1:]...); err != nil {
+				slog.Warn("could not look up the VPN server", "endpoint", endpoint, "error", err)
+			}
+		})
 	}
 
 	if state == a.vpn.applied {
