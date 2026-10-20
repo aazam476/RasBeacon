@@ -57,6 +57,13 @@ func newSessionStore() *sessionStore {
 func (s *sessionStore) create() (id, csrfToken string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// Sessions are otherwise only dropped when they are looked up, so the
+	// ones nobody comes back to go here.
+	for oldID, old := range s.sessions {
+		if s.now().Sub(old.lastSeen) > sessionIdleTimeout {
+			delete(s.sessions, oldID)
+		}
+	}
 	id = randomToken()
 	csrfToken = randomToken()
 	s.sessions[id] = &session{csrfToken: csrfToken, lastSeen: s.now()}

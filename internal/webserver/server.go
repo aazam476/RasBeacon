@@ -35,6 +35,8 @@ type Server struct {
 	ui       fs.FS // the built web UI files
 	sessions *sessionStore
 	limiter  *loginLimiter
+	// passwordMu lets one admin password check run at a time (passwords.go).
+	passwordMu sync.Mutex
 
 	// Cached copy of rbd's /state, refreshed at most every stateCacheTime,
 	// because captive-portal checks happen on almost every request in
@@ -152,8 +154,9 @@ func (s *Server) Handler() http.Handler {
 		mux.Handle(method+" /api/v1"+path, s.requireLogin(s.slowForward(path)))
 	}
 
-	// Factory reset also logs everyone out.
-	mux.Handle("POST /api/v1/system/factory-reset", s.requireLogin(s.handleFactoryReset()))
+	// Requests with the admin password go through the password gate
+	// (passwords.go), like logins. Factory reset also logs everyone out.
+	mux.Handle("POST /api/v1/system/factory-reset", s.requireLogin(http.HandlerFunc(s.handleFactoryReset)))
 
 	// Unknown API routes get a JSON 404 instead of the web UI.
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
@@ -170,6 +173,14 @@ func (s *Server) Handler() http.Handler {
 // hotspot address. The firewall already blocks the web UI from the upstream
 // network; this is a second, independent check ("defence in depth").
 // Requests from the device itself (loopback) are allowed for local testing.
+//
+// It also rejects requests sent under another website's name (the Host
+// header). A web page can point its own name at RasBeacon's address ("DNS
+// rebinding"); the browser then treats RasBeacon as part of that site and
+// lets the page send it requests. The one exception is the captive-portal
+// redirect (see handleUI): during setup, or while the login-page notice is
+// up, phones' connectivity checks (captive.apple.com, …) reach RasBeacon
+// and are sent to its own address. They never reach the API.
 func (s *Server) onlyFromHotspot(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		local, _ := r.Context().Value(http.LocalAddrContextKey).(net.Addr)
@@ -182,8 +193,35 @@ func (s *Server) onlyFromHotspot(next http.Handler) http.Handler {
 				return
 			}
 		}
+		if !s.isDeviceHost(r.Host) {
+			st, _ := s.state()
+			captive := st.Mode == api.ModeSetup || st.PortalNotice
+			if !captive || strings.HasPrefix(r.URL.Path, "/api/") {
+				http.Error(w, "open RasBeacon's settings at http://"+hostName+"/", http.StatusMisdirectedRequest)
+				return
+			}
+		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// isDeviceHost reports whether host (a Host header, with or without a
+// port) is one of RasBeacon's own names: its hotspot address,
+// rasbeacon.lan, the name the owner gave it, or this computer (loopback,
+// for the simulated device and tests).
+func (s *Server) isDeviceHost(host string) bool {
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	st, lan := s.state()
+	switch {
+	case host == "" || host == lan || strings.EqualFold(host, hostName) || strings.EqualFold(host, "localhost"):
+		return true
+	case st.Hostname != "" && strings.EqualFold(host, st.Hostname):
+		return true
+	}
+	ip := net.ParseIP(strings.Trim(host, "[]"))
+	return ip != nil && ip.IsLoopback()
 }
 
 // state returns rbd's setup state and the hotspot address, cached briefly.
@@ -282,15 +320,6 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		s.refuseOverHTTP(w, r) // never send the admin password unencrypted
 		return
 	}
-	ip := clientIP(r)
-	if allowed, wait := s.limiter.allow(ip); !allowed {
-		w.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
-		writeJSON(w, http.StatusTooManyRequests, api.ErrorResponse{
-			Error: "Too many wrong passwords. Please wait " + wait.Round(time.Second).String() + " and try again.",
-		})
-		return
-	}
-
 	body, ok := readBody(w, r)
 	if !ok {
 		return
@@ -300,20 +329,24 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, api.ErrorResponse{Error: "invalid request: " + err.Error()})
 		return
 	}
+	done, ok := s.passwordGate(w, r)
+	if !ok {
+		return
+	}
 	body, _ = json.Marshal(api.PasswordRequest{Password: login.Password})
 	var verify api.VerifyPasswordResponse
 	status, respBody, err := s.rbd.Do(http.MethodPost, "/verify-password", body)
 	if err != nil || status != http.StatusOK || json.Unmarshal(respBody, &verify) != nil {
+		done(passwordUnknown)
 		writeJSON(w, http.StatusBadGateway, api.ErrorResponse{Error: "could not check the password"})
 		return
 	}
 	if !verify.OK {
-		s.limiter.recordFailure(ip)
+		done(passwordWrong)
 		writeJSON(w, http.StatusUnauthorized, api.ErrorResponse{Error: "Wrong password.", Field: "password"})
 		return
 	}
-
-	s.limiter.recordSuccess(ip)
+	done(passwordRight)
 	if login.StayLoggedIn {
 		var remembered api.RememberedLogin
 		status, respBody, err := s.rbd.Do(http.MethodPost, "/remembered-logins", []byte("{}"))
@@ -535,27 +568,6 @@ func (s *Server) forward(w http.ResponseWriter, method, rbdPath string, body []b
 	writeRaw(w, status, contentType, respBody)
 }
 
-// handleFactoryReset forwards a factory reset to rbd and, when it is
-// accepted, logs every browser out.
-func (s *Server) handleFactoryReset() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, ok := readBody(w, r)
-		if !ok {
-			return
-		}
-		status, respBody, err := s.rbd.Do(http.MethodPost, "/system/factory-reset", body)
-		if err != nil {
-			writeJSON(w, http.StatusBadGateway, api.ErrorResponse{Error: err.Error()})
-			return
-		}
-		if status == http.StatusNoContent {
-			s.sessions.removeAll()
-			clearSessionCookie(w)
-		}
-		writeRaw(w, status, "application/json", respBody)
-	})
-}
-
 // --- Web UI ---
 
 // handleUI serves the web UI. During setup, requests for any other website
@@ -563,12 +575,7 @@ func (s *Server) handleFactoryReset() http.Handler {
 // setup page, which makes phones show their "Log in to network" screen.
 func (s *Server) handleUI(w http.ResponseWriter, r *http.Request) {
 	st, lan := s.state()
-	host := r.Host
-	if h, _, err := net.SplitHostPort(host); err == nil {
-		host = h
-	}
-	isDevice := host == lan || host == hostName || (st.Hostname != "" && strings.EqualFold(host, st.Hostname)) || host == "localhost" || host == "127.0.0.1"
-	if !isDevice && (st.Mode == api.ModeSetup || st.PortalNotice) {
+	if !s.isDeviceHost(r.Host) && (st.Mode == api.ModeSetup || st.PortalNotice) {
 		// A phone's connectivity check (captive.apple.com, ...) reached us
 		// because our DNS answered it: send it to the setup page or to the
 		// "this network needs a login" notice.
@@ -582,6 +589,7 @@ func (s *Server) handleUI(w http.ResponseWriter, r *http.Request) {
 	}
 	// With HTTPS on, the settings pages move to HTTPS, except while the
 	// setup wizard or the login-page notice may be showing (see UseHTTPS).
+	// r.Host is one of RasBeacon's own names here (onlyFromHotspot).
 	if s.needsHTTPS(r) && st.Mode != api.ModeSetup && !st.PortalNotice {
 		http.Redirect(w, r, "https://"+r.Host+r.URL.RequestURI(), http.StatusFound)
 		return
