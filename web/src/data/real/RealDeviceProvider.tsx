@@ -674,15 +674,14 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
         store('plugins', await attempt(() => api.putPluginSources(sources)));
       },
 
-      backUp: async (adminPassword, backupPassword, includePlugins) => {
-        const fields = { password: 'adminPassword', backupPassword: 'backupPassword' };
-        const ticket = await attempt(() => api.prepareBackup(adminPassword, backupPassword, includePlugins), fields);
+      backUp: async (backupPassword, plugins) => {
+        const ticket = await attempt(() => api.prepareBackup(backupPassword, plugins), sameNames('backupPassword'));
         downloadFile(api.backupDownloadUrl(ticket.token), ticket.fileName);
       },
-      restore: async (file, adminPassword, backupPassword) => {
-        const fields = { file: 'file', password: 'adminPassword', backupPassword: 'backupPassword' };
+      restore: async (file, backupPassword) => {
+        const fields = sameNames('file', 'backupPassword');
         await attempt(() => api.uploadBackup(file), fields);
-        await attempt(() => api.restoreBackup(adminPassword, backupPassword), fields);
+        await attempt(() => api.restoreBackup(backupPassword), fields);
       },
 
       factoryReset: async (adminPassword) => {

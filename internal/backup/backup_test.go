@@ -1,7 +1,9 @@
 package backup
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"crypto/rand"
 	"errors"
 	"os"
@@ -13,7 +15,7 @@ import (
 func makeBackup(t *testing.T, password string, files map[string][]byte) []byte {
 	t.Helper()
 	var buf bytes.Buffer
-	bw, err := Create(&buf, password, Info{Created: time.Unix(1, 0), Version: "v1.2.0", Plugins: true})
+	bw, err := Create(&buf, password, Info{Created: time.Unix(1, 0), Version: "v1.2.0", Plugins: true}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,5 +107,34 @@ func TestBackup_RefusesUnsafeNames(t *testing.T) {
 	data := makeBackup(t, "correct horse", map[string][]byte{"../escape": []byte("x")})
 	if _, err := Extract(bytes.NewReader(data), "correct horse", t.TempDir()); err == nil {
 		t.Error("names leaving the folder must be refused")
+	}
+}
+
+// Backups made before RasBeacon 0.2 are gzipped; they still restore.
+func TestExtract_OldGzipBackup(t *testing.T) {
+	var buf bytes.Buffer
+	enc, err := NewWriter(&buf, "correct horse")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gz := gzip.NewWriter(enc)
+	tw := tar.NewWriter(gz)
+	for _, file := range [][2]string{{InfoFile, `{"version":"v0.1.0","plugins":false}`}, {"config.json", `{"claimed":true}`}} {
+		_ = tw.WriteHeader(&tar.Header{Name: file[0], Mode: 0o600, Size: int64(len(file[1])), Typeflag: tar.TypeReg})
+		_, _ = tw.Write([]byte(file[1]))
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	_ = gz.Close()
+	_ = enc.Close()
+
+	dir := t.TempDir()
+	info, err := Extract(&buf, "correct horse", dir)
+	if err != nil || info.Version != "v0.1.0" {
+		t.Fatalf("info = %+v, %v", info, err)
+	}
+	if got, _ := os.ReadFile(filepath.Join(dir, "config.json")); string(got) != `{"claimed":true}` {
+		t.Errorf("config.json = %q", got)
 	}
 }

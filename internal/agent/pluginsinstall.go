@@ -480,11 +480,7 @@ func (a *Agent) installPluginSteps(id string, s *stagedPlugin, oldImage string) 
 		if err != nil {
 			return "", err
 		}
-		ref := m.Image.Ref
-		if i := strings.LastIndex(ref, ":"); i > strings.LastIndex(ref, "/") {
-			ref = ref[:i] // the digest pins it, not the tag
-		}
-		ref += "@" + m.Image.Digest
+		ref := pinnedRef(*m.Image)
 		if _, err := a.plugins.runner.Run("env", "HTTPS_PROXY=http://"+proxy, "HTTP_PROXY=http://"+proxy,
 			"podman", "pull", "--quiet", "--arch", "arm64", ref); err != nil {
 			return "", fmt.Errorf("its image can't be downloaded: %w", err)

@@ -326,16 +326,14 @@ export const putPluginSources = (sources: string[]) =>
  * Asks for a backup. The answer is a one-time link to it: the browser saves the file as it
  * arrives (with its own progress), instead of holding a large backup in memory first.
  */
-export const prepareBackup = (adminPassword: string, password: string, includePlugins: boolean) =>
-  request<{ token: string; fileName: string }>('POST', '/system/backup', {
-    body: { adminPassword, password, includePlugins },
-  });
+export const prepareBackup = (password: string, plugins: string) =>
+  request<{ token: string; fileName: string }>('POST', '/system/backup', { body: { password, plugins } });
 /** Where the browser downloads a backup asked for with `prepareBackup`. */
 export const backupDownloadUrl = (token: string) => `/api/v1/system/backup/${encodeURIComponent(token)}`;
 export const uploadBackup = (file: File) =>
   request<void>('POST', '/system/restore/upload', { file, timeoutMs: 30 * 60_000 });
-export const restoreBackup = (adminPassword: string, password: string) =>
+export const restoreBackup = (password: string) =>
   request<{ version: string; created: string; plugins: boolean }>('POST', '/system/restore', {
-    body: { adminPassword, password },
+    body: { password },
     timeoutMs: 30 * 60_000,
   });

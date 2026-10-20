@@ -2,6 +2,8 @@ package backup
 
 import (
 	"archive/tar"
+	"bufio"
+	"bytes"
 	"compress/gzip"
 	"encoding/json"
 	"errors"
@@ -9,6 +11,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"strings"
@@ -24,30 +27,72 @@ type Info struct {
 	// Version is the RasBeacon version that made it.
 	Version string `json:"version"`
 	Board   string `json:"board"`
-	// Plugins is true when the plugins (files, images, data) are in it.
+	// Plugins is true when the plugins are in it. Backups made before
+	// RasBeacon 0.2 held all of a plugin (files, image, data) or nothing.
 	Plugins bool `json:"plugins"`
+	// PluginContent says how much of each plugin is in it (see the
+	// constants below); "" in backups made before RasBeacon 0.2.
+	PluginContent string `json:"pluginContent,omitempty"`
 }
 
-// Writer writes a backup: an encrypted, gzipped tar archive.
+// How much of the plugins a backup holds. Every one holds the plugins'
+// settings and files; images left out are downloaded again on restore.
+const (
+	// PluginSettings: the plugins' settings, without their data.
+	PluginSettings = "settings"
+	// PluginData: also their data.
+	PluginData = "data"
+	// PluginEverything: also their images, so a restore works offline.
+	PluginEverything = "everything"
+)
+
+// Writer writes a backup: a tar archive, compressed with zstd, then
+// encrypted.
 type Writer struct {
-	enc io.WriteCloser
-	gz  *gzip.Writer
-	tw  *tar.Writer
+	enc  io.WriteCloser
+	tw   *tar.Writer
+	pipe *io.PipeWriter // into zstd
+	zstd *exec.Cmd
+	// zstdOut is zstd's error output, for the message when it fails.
+	zstdOut bytes.Buffer
 }
 
 // Create starts a backup on w, encrypted with password, with info first.
-func Create(w io.Writer, password string, info Info) (*Writer, error) {
+// big says the backup may be large (plugins' data or images): it is then
+// compressed a little less, so a Raspberry Pi Zero makes it in minutes and
+// within its memory.
+func Create(w io.Writer, password string, info Info, big bool) (*Writer, error) {
 	enc, err := NewWriter(w, password)
 	if err != nil {
 		return nil, err
 	}
-	gz, _ := gzip.NewWriterLevel(enc, gzip.BestSpeed)
-	bw := &Writer{enc: enc, gz: gz, tw: tar.NewWriter(gz)}
+	// zstd compresses better than gzip and much faster with every core
+	// (-T0). Settings alone are a few kilobytes: they get the strongest
+	// level.
+	level := "-19"
+	if big {
+		level = "-9"
+	}
+	reader, pipe := io.Pipe()
+	bw := &Writer{enc: enc, pipe: pipe}
+	bw.zstd = exec.Command("zstd", "--quiet", "-T0", level, "--stdout")
+	bw.zstd.Stdin, bw.zstd.Stdout, bw.zstd.Stderr = reader, enc, &bw.zstdOut
+	if err := bw.zstd.Start(); err != nil {
+		return nil, fmt.Errorf("starting zstd: %w", err)
+	}
+	bw.tw = tar.NewWriter(pipe)
 	data, _ := json.MarshalIndent(info, "", "  ")
 	if err := bw.AddBytes(InfoFile, data, 0o600); err != nil {
+		bw.abort()
 		return nil, err
 	}
 	return bw, nil
+}
+
+// abort stops zstd after a problem.
+func (bw *Writer) abort() {
+	_ = bw.pipe.CloseWithError(errors.New("backup stopped"))
+	_ = bw.zstd.Wait()
 }
 
 // AddBytes adds a file with the given contents.
@@ -112,15 +157,49 @@ func (bw *Writer) AddDir(name, dir string, skip func(relative string) bool) erro
 	return err
 }
 
-// Close finishes the archive and the encryption.
+// Close finishes the archive, the compression and the encryption.
 func (bw *Writer) Close() error {
 	if err := bw.tw.Close(); err != nil {
+		bw.abort()
 		return err
 	}
-	if err := bw.gz.Close(); err != nil {
-		return err
+	_ = bw.pipe.Close()
+	if err := bw.zstd.Wait(); err != nil {
+		return fmt.Errorf("zstd: %v %s", err, strings.TrimSpace(bw.zstdOut.String()))
 	}
 	return bw.enc.Close()
+}
+
+// decompress opens the archive inside a decrypted backup: zstd since
+// RasBeacon 0.2, gzip before. stop ends zstd early (call it when done).
+func decompress(plain io.Reader) (archive io.Reader, stop func(), err error) {
+	br := bufio.NewReader(plain)
+	magic, _ := br.Peek(4)
+	switch {
+	case bytes.HasPrefix(magic, []byte{0x1f, 0x8b}):
+		gz, err := gzip.NewReader(br)
+		if err != nil {
+			return nil, nil, ErrWrongPassword
+		}
+		return gz, func() {}, nil
+	case bytes.Equal(magic, []byte{0x28, 0xb5, 0x2f, 0xfd}):
+		cmd := exec.Command("zstd", "--quiet", "--decompress", "--stdout")
+		cmd.Stdin = br
+		out, err := cmd.StdoutPipe()
+		if err != nil {
+			return nil, nil, err
+		}
+		if err := cmd.Start(); err != nil {
+			return nil, nil, fmt.Errorf("starting zstd: %w", err)
+		}
+		stop := func() {
+			_ = out.Close()
+			_ = cmd.Wait()
+		}
+		return out, stop, nil
+	default:
+		return nil, nil, ErrWrongPassword
+	}
 }
 
 // Extract decrypts a backup into dir (which must be empty) and returns its
@@ -130,11 +209,12 @@ func Extract(r io.Reader, password, dir string) (Info, error) {
 	if err != nil {
 		return Info{}, err
 	}
-	gz, err := gzip.NewReader(plain)
+	archive, stop, err := decompress(plain)
 	if err != nil {
-		return Info{}, ErrWrongPassword
+		return Info{}, err
 	}
-	tr := tar.NewReader(gz)
+	defer stop()
+	tr := tar.NewReader(archive)
 	var info Info
 	first := true
 	for {

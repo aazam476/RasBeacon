@@ -35,6 +35,9 @@ type fakeRunner struct {
 	prefixOutputs map[string]string
 	// failing makes command lines starting with one of these fail.
 	failing []string
+	// effect, if set, runs for every command, for commands that write
+	// files (podman save).
+	effect func(args []string)
 }
 
 func (f *fakeRunner) Run(name string, args ...string) (string, error) {
@@ -42,6 +45,9 @@ func (f *fakeRunner) Run(name string, args ...string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.commands = append(f.commands, line)
+	if f.effect != nil {
+		f.effect(append([]string{name}, args...))
+	}
 	if out, ok := f.outputs[line]; ok {
 		return out, nil
 	}

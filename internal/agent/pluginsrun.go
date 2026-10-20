@@ -285,6 +285,14 @@ func writeIntoVolume(volumeDir, relative string, content []byte, once bool) erro
 // runPlugin (re)starts a plugin's container with its current settings.
 // It must be marked busy by the caller, and is called without a.mu.
 func (a *Agent) runPlugin(id string) error {
+	if err := a.fetchPluginImage(id); err != nil {
+		slog.Error("plugin's image couldn't be downloaded again", "plugin", id, "error", err)
+		a.mu.Lock()
+		a.setPluginState(id, api.PluginFailed, "Its app couldn't be downloaded again ("+err.Error()+
+			"). RasBeacon tries again every few minutes, or start it once the internet works.")
+		a.mu.Unlock()
+		return err
+	}
 	a.mu.Lock()
 	plan, err := a.planPluginRun(id)
 	if err == nil {
@@ -515,7 +523,31 @@ func (a *Agent) watchPlugins() {
 		if round%2 == 0 {
 			a.readPluginHealth()
 		}
+		if round%20 == 19 { // every five minutes
+			a.retryPluginFetches()
+		}
 		a.dailyCatalogCheck()
+	}
+}
+
+// retryPluginFetches tries again to download the images of restored
+// plugins that should run but couldn't get them yet (no internet right
+// after the restart, for example).
+func (a *Agent) retryPluginFetches() {
+	a.mu.Lock()
+	var ids []string
+	for _, id := range a.pluginIDs() {
+		p := a.cfg.Plugins.Installed[id]
+		live := a.plugins.live[id]
+		if p.Fetch != nil && p.Running && live != nil && !live.busy && live.state == api.PluginFailed {
+			live.busy = true
+			ids = append(ids, id)
+		}
+	}
+	a.mu.Unlock()
+	for _, id := range ids {
+		_ = a.runPlugin(id) // a problem shows in its state
+		a.endPluginWork(id)
 	}
 }
 

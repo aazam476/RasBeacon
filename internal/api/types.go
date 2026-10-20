@@ -1025,9 +1025,12 @@ type PluginPowerRequest struct {
 // again, the password that encrypts the file, and whether the plugins
 // (their images and data) are in it.
 type BackupRequest struct {
-	AdminPassword  string `json:"adminPassword"`
-	Password       string `json:"password"`
-	IncludePlugins bool   `json:"includePlugins"`
+	Password string `json:"password"`
+	// Plugins is how much of the plugins goes in: "settings" (the
+	// default), "data" (also their data) or "everything" (also their
+	// images, so a restore works offline). Plugins' images left out are
+	// downloaded again on restore.
+	Plugins string `json:"plugins"`
 }
 
 // BackupTicket is the answer to a BackupRequest: the browser downloads the
@@ -1040,13 +1043,15 @@ type BackupTicket struct {
 
 // RestoreRequest restores the uploaded backup (POST /system/restore).
 type RestoreRequest struct {
-	AdminPassword string `json:"adminPassword"`
-	Password      string `json:"password"`
+	Password string `json:"password"`
 }
 
 // RestoreResult describes the restored backup; RasBeacon restarts.
 type RestoreResult struct {
 	Version string `json:"version"`
 	Created string `json:"created"`
-	Plugins bool   `json:"plugins"`
+	// Plugins is true when the backup's plugins replaced the installed
+	// ones (always, except for backups made before RasBeacon 0.2 without
+	// plugins).
+	Plugins bool `json:"plugins"`
 }

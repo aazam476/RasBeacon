@@ -83,6 +83,12 @@ export interface PortalBrowserState {
   error: string | null;
 }
 
+/**
+ * How much of the plugins a backup holds: their settings; also their data; or also their apps,
+ * so a restore works offline. Apps left out are downloaded again after a restore.
+ */
+export type BackupPlugins = 'settings' | 'data' | 'everything';
+
 /** Everything the screens can read about the router. */
 export interface DeviceState {
   phase: AppPhase;
@@ -293,14 +299,15 @@ export interface DeviceActions {
   /** Erase everything; afterwards the phase is `setup`. Reject when the admin password is wrong. */
   factoryReset: (adminPassword: string) => Promise<void>;
   /**
-   * Make an encrypted backup and save it as a file. Field keys: adminPassword, backupPassword.
+   * Make an encrypted backup and save it as a file. `plugins` is how much of the plugins goes
+   * in. Field keys: backupPassword.
    */
-  backUp: (adminPassword: string, backupPassword: string, includePlugins: boolean) => Promise<void>;
+  backUp: (backupPassword: string, plugins: BackupPlugins) => Promise<void>;
   /**
    * Restore a backup: RasBeacon restarts with its settings (log in with the backup's admin
-   * password). Field keys: file, adminPassword, backupPassword.
+   * password). Field keys: file, backupPassword.
    */
-  restore: (file: File, adminPassword: string, backupPassword: string) => Promise<void>;
+  restore: (file: File, backupPassword: string) => Promise<void>;
 
   // --- Plugins -----------------------------------------------------------------------------
 

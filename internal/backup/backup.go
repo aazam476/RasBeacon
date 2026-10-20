@@ -1,6 +1,6 @@
 // Package backup reads and writes RasBeacon's backup files (.rbbackup): the
-// settings (and optionally the plugins), as a gzipped tar archive encrypted
-// with a password the owner chooses.
+// settings and the plugins, as a tar archive compressed with zstd (gzip
+// before RasBeacon 0.2) and encrypted with a password the owner chooses.
 //
 // # The file
 //

@@ -931,12 +931,9 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
         });
       },
 
-      backUp: async (adminPassword, backupPassword) => {
+      backUp: async (backupPassword) => {
         await wait(1500);
-        const errors: Record<string, string> = {};
-        if (adminPassword === '' || adminPassword === 'wrong') errors.adminPassword = 'Wrong password.';
-        if (backupPassword.length < 8) errors.backupPassword = 'Use at least 8 characters.';
-        failIfAny(errors);
+        if (backupPassword.length < 8) throw new FieldErrors({ backupPassword: 'Use at least 8 characters.' });
         // The demo's "backup" is a small text file.
         const url = URL.createObjectURL(new Blob(['RasBeacon demo backup\n'], { type: 'application/octet-stream' }));
         const link = document.createElement('a');
@@ -945,11 +942,10 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
         link.click();
         setTimeout(() => URL.revokeObjectURL(url), 60_000);
       },
-      restore: async (file, adminPassword, backupPassword) => {
+      restore: async (file, backupPassword) => {
         await wait(2000);
         const errors: Record<string, string> = {};
         if (!file.name.endsWith('.rbbackup')) errors.file = 'This is not a RasBeacon backup (.rbbackup) file.';
-        if (adminPassword === '' || adminPassword === 'wrong') errors.adminPassword = 'Wrong password.';
         if (backupPassword === 'wrong' || backupPassword.length < 8) {
           errors.backupPassword = 'The password is wrong, or the backup file is damaged.';
         }

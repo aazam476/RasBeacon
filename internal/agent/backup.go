@@ -3,18 +3,20 @@ package agent
 // Backing up and restoring the settings (see internal/backup).
 //
 // A backup holds the settings (config.json, secrets.json, SSH keys, the
-// HTTPS certificate, Enterprise certificates), and, if asked, the plugins:
-// their files, images and data. It never holds the device's identity, so a
-// backup can move the settings to another Raspberry Pi.
+// HTTPS certificate, Enterprise certificates) and the plugins' settings and
+// files. The owner chooses whether it also holds the plugins' data, and
+// their images. It never holds the device's identity, so a backup can move
+// the settings to another Raspberry Pi.
 //
 // Making one takes two requests. The first (PrepareBackup) checks the
-// passwords and answers with a ticket; the second (WriteBackup) is a plain
+// request and answers with a ticket; the second (WriteBackup) is a plain
 // download link the browser saves as the file arrives, instead of holding
-// a large backup in memory first.
+// a large backup in memory first. Being logged in is enough: whoever is
+// typed the admin password already.
 //
-// Restoring checks the whole file first, then replaces the settings and
-// restarts RasBeacon. A backup without plugins keeps the plugins installed
-// now; one with plugins replaces them.
+// Restoring checks the whole file first, then replaces the settings and the
+// plugins and restarts RasBeacon. A plugin whose image isn't in the backup
+// downloads it again when it starts (fetchPluginImage).
 
 import (
 	"bytes"
@@ -63,11 +65,15 @@ func (a *Agent) restoreUploadFile() string {
 }
 
 // PrepareBackup checks a backup request and returns the ticket to download
-// it with (POST /system/backup). The admin password is asked again because
-// the backup holds every password and key.
+// it with (POST /system/backup).
 func (a *Agent) PrepareBackup(req api.BackupRequest) (api.BackupTicket, error) {
-	if !a.VerifyAdminPassword(req.AdminPassword) {
-		return api.BackupTicket{}, ErrWrongPassword
+	if req.Plugins == "" {
+		req.Plugins = backup.PluginSettings
+	}
+	switch req.Plugins {
+	case backup.PluginSettings, backup.PluginData, backup.PluginEverything:
+	default:
+		return api.BackupTicket{}, &config.ValidationError{Field: "plugins", Message: `Must be "settings", "data" or "everything".`}
 	}
 	if len(req.Password) < backup.MinPasswordLength {
 		return api.BackupTicket{}, &config.ValidationError{Field: "backupPassword", Message: fmt.Sprintf("Use at least %d characters.", backup.MinPasswordLength)}
@@ -77,7 +83,7 @@ func (a *Agent) PrepareBackup(req api.BackupRequest) (api.BackupTicket, error) {
 	if a.mode != api.ModeNormal {
 		return api.BackupTicket{}, ErrWrongMode
 	}
-	if req.IncludePlugins && a.anyPluginBusy() {
+	if a.anyPluginBusy() {
 		return api.BackupTicket{}, errPluginBusy
 	}
 	random := make([]byte, 16)
@@ -124,30 +130,34 @@ func (a *Agent) writeBackup(w io.Writer, req api.BackupRequest) error {
 		a.mu.Unlock()
 		return ErrWrongMode
 	}
+	if a.anyPluginBusy() {
+		a.mu.Unlock()
+		return errPluginBusy
+	}
 	// Copies, so the settings can't change halfway through the backup.
 	cfg, secrets := a.cfg.Clone(), a.secrets.Clone()
-	var plugins []string
-	images := map[string]string{}
-	running := map[string]bool{}
-	if req.IncludePlugins {
-		if a.anyPluginBusy() {
-			a.mu.Unlock()
-			return errPluginBusy
+	var plugins []pluginInBackup
+	for _, id := range a.pluginIDs() {
+		live := a.plugins.live[id]
+		p := pluginInBackup{
+			id:       id,
+			image:    cfg.Plugins.Installed[id].Image,
+			running:  live != nil && live.state == api.PluginRunning,
+			withData: req.Plugins != backup.PluginSettings,
 		}
-		for _, id := range a.pluginIDs() {
-			live := a.plugins.live[id]
-			plugins = append(plugins, id)
-			images[id] = cfg.Plugins.Installed[id].Image
-			running[id] = live != nil && live.state == api.PluginRunning
+		if req.Plugins != backup.PluginEverything {
+			p.fetch = a.pluginFetch(id)
 		}
-	} else {
-		cfg.Plugins.Installed = nil
-		secrets.Plugins = nil
+		plugins = append(plugins, p)
 	}
 	board := a.pluginBoard()
 	a.mu.Unlock()
 
-	bw, err := backup.Create(w, req.Password, backup.Info{Created: a.now().UTC(), Version: version.Version, Board: board, Plugins: req.IncludePlugins})
+	// Large when it holds data or images: then compressed a little less.
+	big := req.Plugins != backup.PluginSettings ||
+		slices.ContainsFunc(plugins, func(p pluginInBackup) bool { return p.fetch == nil && p.image != "" })
+	info := backup.Info{Created: a.now().UTC(), Version: version.Version, Board: board, Plugins: len(plugins) > 0, PluginContent: req.Plugins}
+	bw, err := backup.Create(w, req.Password, info, big)
 	if err != nil {
 		return err
 	}
@@ -170,32 +180,83 @@ func (a *Agent) writeBackup(w io.Writer, req api.BackupRequest) error {
 			return err
 		}
 	}
-	for _, id := range plugins {
-		if err := a.backupPlugin(bw, id, images[id], running[id]); err != nil {
-			return fmt.Errorf("backing up plugin %s: %w", id, err)
+	for _, p := range plugins {
+		if err := a.backupPlugin(bw, p); err != nil {
+			return fmt.Errorf("backing up plugin %s: %w", p.id, err)
 		}
 	}
-	slog.Info("settings backed up", "plugins", len(plugins))
+	slog.Info("settings backed up", "plugins", len(plugins), "content", req.Plugins)
 	return bw.Close()
 }
 
-// backupPlugin adds one plugin: its files, its image (`podman save`) and
-// its data.
-func (a *Agent) backupPlugin(bw *backup.Writer, id, image string, running bool) error {
+// pluginInBackup is what a backup takes of one plugin.
+type pluginInBackup struct {
+	id, image string
+	running   bool
+	withData  bool
+	// fetch is where its image can be downloaded again; nil puts the
+	// image in the backup.
+	fetch *config.PluginFetch
+}
+
+// pluginFetch says where a plugin's image can be downloaded again: its
+// published image, or its .rba file in the catalog if the catalog still has
+// this version. nil when it can't be (installed from a file, or updated in
+// the catalog since): its image then goes into the backup. The caller
+// holds a.mu.
+func (a *Agent) pluginFetch(id string) *config.PluginFetch {
+	p := a.cfg.Plugins.Installed[id]
+	if live := a.plugins.live[id]; live != nil && live.manifest != nil && live.manifest.Image != nil {
+		return &config.PluginFetch{Ref: pinnedRef(*live.manifest.Image)}
+	}
+	if p.Source == "file" || p.PublicKey == "" {
+		return nil
+	}
+	if entry, ok := a.plugins.catalog.find(p.Source, id); ok && entry.Version == p.Version && strings.HasPrefix(entry.DownloadURL, "https://") {
+		return &config.PluginFetch{URL: entry.DownloadURL}
+	}
+	return nil
+}
+
+// pinnedRef is a published image's name pinned by its digest
+// (ghcr.io/x/y@sha256:...); the digest pins it, not the tag.
+func pinnedRef(image plugin.RegistryImage) string {
+	ref := image.Ref
+	if i := strings.LastIndex(ref, ":"); i > strings.LastIndex(ref, "/") {
+		ref = ref[:i]
+	}
+	return ref + "@" + image.Digest
+}
+
+// backupPlugin adds one plugin: its files, its image (`podman save`) or
+// where to download it again, and its data if asked.
+func (a *Agent) backupPlugin(bw *backup.Writer, p pluginInBackup) error {
+	id, image, running := p.id, p.image, p.running
 	dir := a.paths.PluginDir(id)
 	// Its folder without the data file, which is added last (below).
 	if err := bw.AddDir("plugins/"+id, dir, func(relative string) bool { return relative == pluginDataImage }); err != nil {
 		return err
 	}
-	if image != "" {
+	if p.fetch != nil {
+		data, _ := json.Marshal(p.fetch)
+		if err := bw.AddBytes("plugin-fetch/"+id+".json", data, 0o600); err != nil {
+			return err
+		}
+	} else if image != "" {
 		tarFile := filepath.Join(a.paths.PluginsDir(), "backup-"+id+".tar")
 		defer os.Remove(tarFile)
 		if _, err := a.plugins.runner.Run("podman", "save", "--quiet", "--output", tarFile, image); err != nil {
 			return fmt.Errorf("saving its image: %w", err)
 		}
+		if !fileExists(tarFile) {
+			return errors.New("saving its image: podman wrote no file")
+		}
 		if err := bw.AddFile("plugin-images/"+id+".tar", tarFile); err != nil {
 			return err
 		}
+	}
+	if !p.withData {
+		return nil
 	}
 	data := filepath.Join(dir, pluginDataImage)
 	if !running {
@@ -309,11 +370,8 @@ func (a *Agent) StageRestore(body io.Reader) error {
 }
 
 // Restore opens the uploaded backup with its password, checks it, replaces
-// the settings with it and restarts RasBeacon.
+// the settings and the plugins with the backup's and restarts RasBeacon.
 func (a *Agent) Restore(req api.RestoreRequest) (api.RestoreResult, error) {
-	if !a.VerifyAdminPassword(req.AdminPassword) {
-		return api.RestoreResult{}, ErrWrongPassword
-	}
 	upload := a.restoreUploadFile()
 	f, err := os.Open(upload)
 	if err != nil {
@@ -338,6 +396,11 @@ func (a *Agent) Restore(req api.RestoreRequest) (api.RestoreResult, error) {
 	}
 
 	// The settings must be ones this version understands.
+	if newer, ok := version.Compare(info.Version, version.Version); ok && newer > 0 {
+		return api.RestoreResult{}, &config.ValidationError{Field: "file", Message: fmt.Sprintf(
+			"This backup was made by RasBeacon %s, which is newer than this one (%s). Update RasBeacon first.",
+			strings.TrimPrefix(info.Version, "v"), strings.TrimPrefix(version.Version, "v"))}
+	}
 	var cfg config.Config
 	if err := config.ReadJSON(filepath.Join(staging, "config.json"), &cfg); err != nil {
 		return api.RestoreResult{}, &config.ValidationError{Field: "file", Message: "The backup's settings can't be read."}
@@ -349,7 +412,11 @@ func (a *Agent) Restore(req api.RestoreRequest) (api.RestoreResult, error) {
 	if err := config.ReadJSON(filepath.Join(staging, "secrets.json"), &secrets); err != nil || secrets.AdminPasswordHash == "" || !cfg.Claimed {
 		return api.RestoreResult{}, &config.ValidationError{Field: "file", Message: "The backup's settings are incomplete."}
 	}
-	if info.Plugins {
+	// Backups made before RasBeacon 0.2 without plugins say nothing about
+	// them: the installed ones stay. Every other backup brings its plugins
+	// (perhaps none) in place of the installed ones.
+	keepPlugins := !info.Plugins && info.PluginContent == ""
+	if !keepPlugins {
 		if err := checkRestoredPlugins(cfg, staging); err != nil {
 			return api.RestoreResult{}, &config.ValidationError{Field: "file", Message: sentence(err.Error())}
 		}
@@ -363,11 +430,10 @@ func (a *Agent) Restore(req api.RestoreRequest) (api.RestoreResult, error) {
 	if a.anyPluginBusy() {
 		return api.RestoreResult{}, errPluginBusy
 	}
-	if !info.Plugins {
-		// The plugins installed now stay.
+	if keepPlugins {
 		cfg.Plugins.Installed = a.cfg.Plugins.Installed
 		secrets.Plugins = a.secrets.Plugins
-	} else if err := a.replacePlugins(staging, cfg); err != nil {
+	} else if err := a.replacePlugins(staging, &cfg); err != nil {
 		return api.RestoreResult{}, fmt.Errorf("restoring the plugins: %w", err)
 	}
 
@@ -391,9 +457,9 @@ func (a *Agent) Restore(req api.RestoreRequest) (api.RestoreResult, error) {
 		return api.RestoreResult{}, err
 	}
 	_ = os.Remove(upload)
-	slog.Warn("settings restored from a backup; restarting", "made", info.Created, "version", info.Version, "plugins", info.Plugins)
+	slog.Warn("settings restored from a backup; restarting", "made", info.Created, "version", info.Version, "plugins", len(cfg.Plugins.Installed))
 	a.afterFunc(switchDelay, func() { _, _ = a.runner.Run("systemctl", "reboot") })
-	return api.RestoreResult{Version: info.Version, Created: info.Created.Format(time.RFC3339), Plugins: info.Plugins}, nil
+	return api.RestoreResult{Version: info.Version, Created: info.Created.Format(time.RFC3339), Plugins: !keepPlugins}, nil
 }
 
 // checkRestoredPlugins checks a backup's plugins before they replace the
@@ -411,6 +477,11 @@ func checkRestoredPlugins(cfg config.Config, staging string) error {
 		}
 		if _, err := os.Stat(filepath.Join(staging, "plugins", id, plugin.ManifestFile)); err != nil {
 			return fmt.Errorf("the backup's plugin %s is incomplete", id)
+		}
+		if p.Image != "" && !fileExists(filepath.Join(staging, "plugin-images", id+".tar")) {
+			if _, err := readPluginFetch(staging, id); err != nil {
+				return fmt.Errorf("the backup's plugin %s has no image and no place to download it", id)
+			}
 		}
 		if !render.PluginSubnet.Contains(p.Address) || p.Address == gateway || addresses[p.Address] != "" {
 			return fmt.Errorf("the backup's plugin %s has an invalid address", id)
@@ -433,20 +504,45 @@ func checkRestoredPlugins(cfg config.Config, staging string) error {
 	return nil
 }
 
+// readPluginFetch reads where a backup's plugin image can be downloaded
+// again (plugin-fetch/<id>.json).
+func readPluginFetch(staging, id string) (config.PluginFetch, error) {
+	var fetch config.PluginFetch
+	if err := config.ReadJSON(filepath.Join(staging, "plugin-fetch", id+".json"), &fetch); err != nil {
+		return fetch, err
+	}
+	if (fetch.URL == "") == (fetch.Ref == "") || (fetch.URL != "" && !strings.HasPrefix(fetch.URL, "https://")) ||
+		strings.ContainsAny(fetch.Ref, " \n") || (fetch.Ref != "" && !strings.Contains(fetch.Ref, "@sha256:")) {
+		return fetch, errors.New("invalid download address")
+	}
+	return fetch, nil
+}
+
 // replacePlugins swaps the installed plugins for the backup's: their
 // files, data and images. The backup's images are loaded first, so a
-// problem with them leaves the installed plugins as they are. The caller
-// holds a.mu.
-func (a *Agent) replacePlugins(staging string, cfg config.Config) error {
+// problem with them leaves the installed plugins as they are; plugins
+// whose image isn't in the backup get where to download it (cfg is
+// changed). The caller holds a.mu.
+func (a *Agent) replacePlugins(staging string, cfg *config.Config) error {
 	newImages := map[string]bool{}
 	for id, p := range cfg.Plugins.Installed {
+		p.Fetch = nil
 		image := filepath.Join(staging, "plugin-images", id+".tar")
-		if _, err := os.Stat(image); err != nil {
-			continue
+		if _, err := os.Stat(image); err == nil {
+			if _, err := a.plugins.runner.Run("podman", "load", "--quiet", "--input", image); err != nil {
+				return fmt.Errorf("loading %s's image: %w", id, err)
+			}
+			newImages[p.Image] = true
+		} else if p.Image != "" {
+			fetch, err := readPluginFetch(staging, id)
+			if err != nil {
+				return fmt.Errorf("%s's image isn't in the backup", id)
+			}
+			p.Fetch = &fetch
 		}
-		if _, err := a.plugins.runner.Run("podman", "load", "--quiet", "--input", image); err != nil {
-			return fmt.Errorf("loading %s's image: %w", id, err)
-		}
+		cfg.Plugins.Installed[id] = p
+		// Kept if already here (the same version is installed now): then
+		// it needn't be downloaded again.
 		newImages[p.Image] = true
 	}
 

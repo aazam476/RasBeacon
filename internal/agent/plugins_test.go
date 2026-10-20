@@ -101,6 +101,16 @@ func newPluginEnv(t *testing.T) *testEnv {
 	e := newClaimedEnv(t, false)
 	e.runner.prefixOutputs = map[string]string{"podman load": "Loaded image: localhost/adguard:latest\n", "podman ps": "[]"}
 	e.runner.failing = []string{"mountpoint"} // nothing is mounted yet
+	e.runner.effect = func(args []string) {
+		// podman save writes the image to the file after --output.
+		if len(args) > 2 && args[0] == "podman" && args[1] == "save" {
+			for i, arg := range args[:len(args)-1] {
+				if arg == "--output" {
+					_ = os.WriteFile(args[i+1], []byte("image"), 0o600)
+				}
+			}
+		}
+	}
 	e.runBackground()
 	return e
 }

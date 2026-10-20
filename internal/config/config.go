@@ -133,12 +133,29 @@ type InstalledPlugin struct {
 	// StoppedAfterCrashes is set when it crashed too often and was stopped;
 	// it starts again only when the owner starts it.
 	StoppedAfterCrashes bool `json:"stoppedAfterCrashes,omitempty"`
+	// Fetch, after a restore from a backup without its image, says where
+	// to download the image again; cleared once it is here.
+	Fetch *PluginFetch `json:"fetch,omitempty"`
+}
+
+// PluginFetch is where a plugin's image can be downloaded again: its .rba
+// file in a catalog's release, or a published image.
+type PluginFetch struct {
+	// URL is the .rba file (https). Its signature must match the plugin's
+	// pinned key.
+	URL string `json:"url,omitempty"`
+	// Ref is a published image pinned by digest (name@sha256:...).
+	Ref string `json:"ref,omitempty"`
 }
 
 // Clone returns a copy that can be changed without affecting p.
 func (p InstalledPlugin) Clone() InstalledPlugin {
 	p.Ports = maps.Clone(p.Ports)
 	p.Settings = maps.Clone(p.Settings)
+	if p.Fetch != nil {
+		fetch := *p.Fetch
+		p.Fetch = &fetch
+	}
 	return p
 }
 
