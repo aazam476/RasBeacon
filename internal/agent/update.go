@@ -343,14 +343,19 @@ func (a *Agent) RunUpdateCheck() {
 	}
 	for {
 		time.Sleep(time.Minute)
-		a.mu.Lock()
-		every := time.Duration(a.cfg.Updates.CheckHours) * time.Hour
-		due := every > 0 && a.uplink.status.Connected && a.now().Sub(a.update.lastCheck) >= every
-		a.mu.Unlock()
-		if due {
+		if a.updateCheckDue() {
 			_ = a.checkForUpdate()
 		}
 	}
+}
+
+// updateCheckDue reports whether it is time to ask GitHub: the owner chose
+// a schedule, RasBeacon is online, and the last check is that long ago.
+func (a *Agent) updateCheckDue() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	every := time.Duration(a.cfg.Updates.CheckHours) * time.Hour
+	return every > 0 && a.uplink.status.Connected && a.now().Sub(a.update.lastCheck) >= every
 }
 
 // CheckForUpdateNow asks GitHub right away ("Check now").

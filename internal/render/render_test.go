@@ -511,8 +511,8 @@ func TestWPASupplicant_EnterpriseMethods(t *testing.T) {
 		Country: "US",
 		Networks: []WPANetwork{
 			{SSID: "eduroam", Security: config.UplinkEnterprise, Password: `p"w`, Enterprise: &WPAEnterprise{
-				Method: config.EAPTTLSPAP, Identity: "NetID@rutgers.edu", AnonymousIdentity: "anonymous@rutgers.edu",
-				ServerDomain: "ruw.rutgers.edu", CACert: "/persistent/rasbeacon/certs/a1-ca.pem",
+				Method: config.EAPTTLSPAP, Identity: "me@example.edu", AnonymousIdentity: "anonymous@example.edu",
+				ServerDomain: "login.example.edu", CACert: "/persistent/rasbeacon/certs/a1-ca.pem",
 			}},
 			{SSID: "CorpNet", Security: config.UplinkEnterprise, Password: "secret", Enterprise: &WPAEnterprise{
 				Method: config.EAPPEAP, Identity: "alice", ServerDomain: "radius.corp.example",
@@ -541,10 +541,10 @@ func TestWPASupplicant_EnterpriseMethods(t *testing.T) {
 	}
 	checkGolden(t, "wpa_supplicant_enterprise", got)
 	for _, want := range []string{
-		"eap=TTLS", `phase2="auth=PAP"`, `domain_suffix_match="ruw.rutgers.edu"`,
+		"eap=TTLS", `phase2="auth=PAP"`, `domain_suffix_match="login.example.edu"`,
 		"eap=PEAP", `phase2="auth=MSCHAPV2"`,
 		"eap=TLS", `private_key="/c/key.pem"`, "private_key_passwd=6b65792d70617373706872617365",
-		"identity=4e6574494440727574676572732e656475",
+		"identity=6d65406578616d706c652e656475",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q", want)

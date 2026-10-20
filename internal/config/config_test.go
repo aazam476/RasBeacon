@@ -200,8 +200,8 @@ func TestUplinkConfig_Validate(t *testing.T) {
 func TestUplinkConfig_ValidateEnterprise(t *testing.T) {
 	eduroam := func(change func(*EnterpriseConfig)) SavedNetwork {
 		e := &EnterpriseConfig{
-			Method: EAPTTLSPAP, Identity: "NetID@rutgers.edu", AnonymousIdentity: "anonymous@rutgers.edu",
-			ServerName: "*.ruw.rutgers.edu",
+			Method: EAPTTLSPAP, Identity: "me@example.edu", AnonymousIdentity: "anonymous@example.edu",
+			ServerName: "*.login.example.edu",
 		}
 		if change != nil {
 			change(e)
@@ -223,7 +223,7 @@ func TestUplinkConfig_ValidateEnterprise(t *testing.T) {
 		{"no CA certificate", eduroam(nil), NetworkCredentials{Password: "pw"}, ""},
 		{"no server name", eduroam(func(e *EnterpriseConfig) { e.ServerName = "" }), withCA, ""},
 		{"neither", eduroam(func(e *EnterpriseConfig) { e.ServerName = "" }), NetworkCredentials{Password: "pw"}, ""},
-		{"bad server name", eduroam(func(e *EnterpriseConfig) { e.ServerName = "ruw rutgers" }), withCA, "networks.0.enterprise.serverName"},
+		{"bad server name", eduroam(func(e *EnterpriseConfig) { e.ServerName = "login example" }), withCA, "networks.0.enterprise.serverName"},
 		{"check turned off on purpose", eduroam(func(e *EnterpriseConfig) { e.AllowNoCertificateCheck = true; e.ServerName = "" }),
 			NetworkCredentials{Password: "pw"}, ""},
 		{"no password", eduroam(nil), NetworkCredentials{HasCACert: true}, "networks.0.password"},
@@ -255,7 +255,7 @@ func TestUplinkConfig_ValidateEnterprise(t *testing.T) {
 
 func TestServerDomain(t *testing.T) {
 	for in, want := range map[string]string{
-		"*.ruw.rutgers.edu":    "ruw.rutgers.edu",
+		"*.login.example.edu":  "login.example.edu",
 		"radius.example.edu":   "radius.example.edu",
 		" RADIUS.Example.EDU ": "radius.example.edu",
 	} {

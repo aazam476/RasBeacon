@@ -33,14 +33,14 @@ network={
 	eap=TTLS
 	phase2="auth=PAP"
 	# Username, outer (anonymous) username and password, in hexadecimal.
-	identity=4e6574494440727574676572732e656475
-	anonymous_identity=616e6f6e796d6f757340727574676572732e656475
+	identity=6d65406578616d706c652e656475
+	anonymous_identity=616e6f6e796d6f7573406578616d706c652e656475
 	password=702277
 	# Only talk to the real login server, so a fake network with the same
 	# name can't collect the password.
 	ca_cert="/persistent/rasbeacon/certs/a1-ca.pem"
-	# Its name must be ruw.rutgers.edu or end in .ruw.rutgers.edu.
-	domain_suffix_match="ruw.rutgers.edu"
+	# Its name must be login.example.edu or end in .login.example.edu.
+	domain_suffix_match="login.example.edu"
 }
 
 # Name: CorpNet

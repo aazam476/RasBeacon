@@ -43,8 +43,8 @@ func eduroamRequest(caCert, password string) api.UplinkSettings {
 		Networks: []api.SavedNetwork{{
 			SSID: "eduroam", Security: config.UplinkEnterprise, Password: password,
 			Enterprise: &api.EnterpriseSettings{
-				Method: config.EAPTTLSPAP, Identity: "NetID@rutgers.edu", AnonymousIdentity: "anonymous@rutgers.edu",
-				ServerName: "*.ruw.rutgers.edu", CACert: caCert,
+				Method: config.EAPTTLSPAP, Identity: "me@example.edu", AnonymousIdentity: "anonymous@example.edu",
+				ServerName: "*.login.example.edu", CACert: caCert,
 			},
 		}},
 	}
@@ -56,7 +56,7 @@ func TestEnterprise_ServerNameAloneUsesTheSystemsCAs(t *testing.T) {
 		t.Fatal(err)
 	}
 	conf := e.readFile(e.paths.WPASupplicantConfig())
-	if !strings.Contains(conf, `ca_cert="/etc/ssl/certs/ca-certificates.crt"`) || !strings.Contains(conf, `domain_suffix_match="ruw.rutgers.edu"`) {
+	if !strings.Contains(conf, `ca_cert="/etc/ssl/certs/ca-certificates.crt"`) || !strings.Contains(conf, `domain_suffix_match="login.example.edu"`) {
 		t.Errorf("wpa_supplicant.conf:\n%s", conf)
 	}
 }
@@ -90,7 +90,7 @@ func TestEnterprise_SavesCertificateAndWritesConfig(t *testing.T) {
 
 	caFile := e.paths.CACertFile(n.ID)
 	wpa := e.readFile(e.paths.WPASupplicantConfig())
-	for _, want := range []string{"eap=TTLS", `ca_cert="` + caFile + `"`, `domain_suffix_match="ruw.rutgers.edu"`} {
+	for _, want := range []string{"eap=TTLS", `ca_cert="` + caFile + `"`, `domain_suffix_match="login.example.edu"`} {
 		if !strings.Contains(wpa, want) {
 			t.Errorf("wpa_supplicant.conf is missing %q", want)
 		}
@@ -145,9 +145,9 @@ func TestDiagnostics_MasksEnterpriseUsername(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.runner.outputs["wpa_cli -p "+e.paths.WPAControlDir()+" -i wlan0 status"] =
-		"wpa_state=COMPLETED\nssid=eduroam\nidentity=NetID@rutgers.edu\n"
+		"wpa_state=COMPLETED\nssid=eduroam\nidentity=me@example.edu\n"
 	report := e.agent.Diagnostics()
-	if strings.Contains(report, "NetID@rutgers.edu") || !strings.Contains(report, "N***@rutgers.edu") {
+	if strings.Contains(report, "me@example.edu") || !strings.Contains(report, "m***@example.edu") {
 		t.Error("the username should appear only masked")
 	}
 	if strings.Contains(report, "my-password") {
@@ -157,10 +157,10 @@ func TestDiagnostics_MasksEnterpriseUsername(t *testing.T) {
 
 func TestMaskIdentity(t *testing.T) {
 	for in, want := range map[string]string{
-		"NetID@rutgers.edu": "N***@rutgers.edu",
-		"alice":             "a***",
-		"@realm":            "***@realm",
-		"émile@x.fr":        "é***@x.fr",
+		"me@example.edu": "m***@example.edu",
+		"alice":          "a***",
+		"@realm":         "***@realm",
+		"émile@x.fr":     "é***@x.fr",
 	} {
 		if got := MaskIdentity(in); got != want {
 			t.Errorf("MaskIdentity(%q) = %q, want %q", in, got, want)

@@ -163,3 +163,23 @@ func TestPortal_RecheckRunsTheNextCheckAtOnce(t *testing.T) {
 		t.Error("after RecheckPortal the next round should check again")
 	}
 }
+
+func TestPortal_StoppingLoginModePutsDevicesBackIntoTheTunnel(t *testing.T) {
+	e, _, _ := newPortalEnv(t)
+	// Not on: nothing to stop.
+	if err := e.agent.StopLoginMode(); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.agent.StartLoginMode(); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.agent.StopLoginMode(); err != nil {
+		t.Fatal(err)
+	}
+	if e.agent.PortalStatus().LoginMode {
+		t.Error("login mode should be off")
+	}
+	if got := e.firewallEgress(); got != `elements = { "wg0" }` {
+		t.Errorf("after stopping login mode, egress = %s, want only wg0", got)
+	}
+}

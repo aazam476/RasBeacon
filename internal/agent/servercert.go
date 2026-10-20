@@ -36,21 +36,27 @@ type serverCertState struct {
 func (a *Agent) RunServerCertWatch() {
 	for {
 		time.Sleep(5 * time.Second)
-		a.mu.Lock()
-		iface, watch := a.wifiUplinkInterface(), a.trustsOnFirstConnect()
-		a.mu.Unlock()
-		if iface == "" || !watch {
+		iface := a.serverCertWatchInterface()
+		if iface == "" {
 			continue
 		}
-		keep := func() bool {
-			a.mu.Lock()
-			defer a.mu.Unlock()
-			return a.wifiUplinkInterface() == iface && a.trustsOnFirstConnect()
-		}
+		keep := func() bool { return a.serverCertWatchInterface() == iface }
 		if err := wpaevents.Listen(a.paths.WPAControlDir(), iface, a.paths.RunDir(), keep, a.handleWPAEvent); err != nil {
 			slog.Debug("wpa_supplicant events stopped", "error", err)
 		}
 	}
+}
+
+// serverCertWatchInterface is the Wi-Fi interface whose wpa_supplicant
+// events to listen to, or "" when no saved network trusts its login server
+// on first connect (or no radio joins networks).
+func (a *Agent) serverCertWatchInterface() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if !a.trustsOnFirstConnect() {
+		return ""
+	}
+	return a.wifiUplinkInterface()
 }
 
 // trustsOnFirstConnect reports whether a saved network has neither a CA

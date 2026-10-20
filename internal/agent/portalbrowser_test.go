@@ -242,3 +242,17 @@ func TestPortalBrowser_NoFirewallRuleWithoutBrowserUser(t *testing.T) {
 		t.Error("no browser user on this machine, so no rule")
 	}
 }
+
+func TestPortalBrowser_CloseFromThePage(t *testing.T) {
+	e, _, _ := newPortalEnv(t)
+	last := withFakeBrowser(t, e)
+	if err := e.agent.StartPortalBrowser(api.PortalBrowserStart{Width: 390, Height: 700}); err != nil {
+		t.Fatal(err)
+	}
+	e.agent.StopPortalBrowser()
+	if !last().isClosed() || e.agent.PortalStatus().Browsing {
+		t.Error("Close should close RasBeacon's browser")
+	}
+	// Closing again is fine.
+	e.agent.StopPortalBrowser()
+}

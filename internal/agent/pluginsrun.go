@@ -519,15 +519,20 @@ func (a *Agent) startPlugins() {
 func (a *Agent) watchPlugins() {
 	for round := 0; ; round++ {
 		time.Sleep(a.plugins.watchEvery)
-		a.checkPluginContainers()
-		if round%2 == 0 {
-			a.readPluginHealth()
-		}
-		if round%20 == 19 { // every five minutes
-			a.retryPluginFetches()
-		}
-		a.dailyCatalogCheck()
+		a.pluginWatchRound(round)
 	}
+}
+
+// pluginWatchRound is one round of watchPlugins (they are numbered from 0).
+func (a *Agent) pluginWatchRound(round int) {
+	a.checkPluginContainers()
+	if round%2 == 0 {
+		a.readPluginHealth()
+	}
+	if round%20 == 19 { // every five minutes
+		a.retryPluginFetches()
+	}
+	a.dailyCatalogCheck()
 }
 
 // retryPluginFetches tries again to download the images of restored
