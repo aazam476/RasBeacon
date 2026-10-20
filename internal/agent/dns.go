@@ -11,7 +11,6 @@ import (
 	"net/netip"
 	"os"
 	"os/user"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -47,7 +46,9 @@ const (
 func (a *Agent) DNSSettings() api.DNSSettings {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return api.DNSSettings{Servers: slices.Clone(a.cfg.DNS.Ordered()), WithVPN: a.cfg.DNS.WithVPN}
+	// An empty list, not null, when there are none: the web UI joins it.
+	servers := append([]string{}, a.cfg.DNS.Ordered()...)
+	return api.DNSSettings{Servers: servers, WithVPN: a.cfg.DNS.WithVPN}
 }
 
 // UpdateDNSSettings saves the DNS servers and tells dnsmasq at once. Each

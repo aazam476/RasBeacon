@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -200,5 +201,14 @@ func TestDNS_ServersAreAskedInTheOrderListed(t *testing.T) {
 	}
 	if got := e.readFile(e.paths.DoHEnv()); !strings.Contains(got, "RBDOH_BOOTSTRAP=1.1.1.1 127.0.0.53\n") {
 		t.Errorf("doh.env = %q", got)
+	}
+}
+
+// With no servers saved the list is empty, not null: the web UI joins it.
+func TestDNS_NoServersIsAnEmptyList(t *testing.T) {
+	e := newClaimedEnv(t, false)
+	data, _ := json.Marshal(e.agent.DNSSettings())
+	if !strings.Contains(string(data), `"servers":[]`) {
+		t.Errorf("got %s", data)
 	}
 }
