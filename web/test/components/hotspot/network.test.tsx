@@ -36,3 +36,29 @@ describe('hotspot network', () => {
     expect(screen.getByText('Only the metered setting changed, so the hotspot keeps running.')).toBeTruthy();
   });
 });
+
+describe('hotspot form', () => {
+  it('a new band goes back to the default channel, and the country is upper case', async () => {
+    const device = fakeDevice();
+    const { user } = renderScreen(<HotspotScreen />, device, '/hotspot');
+    await user.selectOptions(screen.getByLabelText('Band'), '2.4GHz');
+    expect(screen.getByLabelText('Channel')).toHaveProperty('value', '0');
+    await user.clear(screen.getByLabelText(/^Country/));
+    await user.type(screen.getByLabelText(/^Country/), 'de');
+    await user.click(screen.getAllByRole('button', { name: 'Save' })[0]);
+    expect(device.saveHotspotSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ band: '2.4GHz', channel: 0, country: 'DE', password: '' }),
+    );
+  });
+
+  it('says when the hotspot isn’t running', () => {
+    renderScreen(
+      <HotspotScreen />,
+      fakeDevice((router) => {
+        router.status.hotspot.running = false;
+      }),
+      '/hotspot',
+    );
+    expect(screen.getByText('Not running')).toBeTruthy();
+  });
+});

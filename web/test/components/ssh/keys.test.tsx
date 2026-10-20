@@ -1,5 +1,5 @@
 // SSH page: adding public keys.
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { SshScreen } from '@/screens/ssh/SshScreen';
 import { fakeDevice, renderScreen } from '../render';
@@ -25,5 +25,24 @@ describe('SSH keys', () => {
       enabled: true,
       authorizedKeys: 'ssh-ed25519 AAAA me@laptop',
     });
+  });
+});
+
+describe('key files', () => {
+  it('adds the keys from chosen files to the end of the list', async () => {
+    const device = fakeDevice((router) => {
+      router.sshSettings = { ...router.sshSettings, authorizedKeys: 'ssh-ed25519 AAAA first\n' };
+    });
+    const { user } = renderScreen(<SshScreen />, device, '/ssh');
+    await user.upload(screen.getByLabelText(/Add from a file/), [
+      new File(['ssh-ed25519 BBBB laptop\n'], 'laptop.pub'),
+      new File(['ssh-rsa CCCC phone'], 'phone.pub'),
+    ]);
+    await waitFor(() =>
+      expect(screen.getByLabelText(/Or paste its contents/)).toHaveProperty(
+        'value',
+        'ssh-ed25519 AAAA first\nssh-ed25519 BBBB laptop\nssh-rsa CCCC phone\n',
+      ),
+    );
   });
 });

@@ -56,3 +56,24 @@ describe('on a computer', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Plugins' })).toBeTruthy();
   });
 });
+
+describe('logging out', () => {
+  it.each(['phone', 'desktop'] as const)('logs out on a %s', async (size) => {
+    setViewport(size);
+    const device = fakeDevice();
+    const { user } = renderScreen(<Pages />, device, '/vpn');
+    await user.click(screen.getByRole('button', { name: 'Log out' }));
+    expect(device.logOut).toHaveBeenCalledOnce();
+  });
+
+  it('says why logging out failed', async () => {
+    const device = fakeDevice(undefined, {
+      logOut: async () => {
+        throw new Error('RasBeacon did not answer.');
+      },
+    });
+    const { user } = renderScreen(<Pages />, device);
+    await user.click(screen.getByRole('button', { name: 'Log out' }));
+    expect(await screen.findByText('RasBeacon did not answer.')).toBeTruthy();
+  });
+});

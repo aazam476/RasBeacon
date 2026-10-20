@@ -50,6 +50,35 @@ describe('first-time setup', () => {
       expect.objectContaining({ adminPassword: 'tangerine-orbit-42', hotspotSsid: 'RasBeacon-7162' }),
     );
   });
+  it('says when the setup network closes', () => {
+    renderScreen(
+      <SetupScreen />,
+      fakeDevice((router) => {
+        router.setup = { ...router.setup, mode: 'setup', claimed: false, setupClosesInSeconds: 1610 };
+      }),
+    );
+    expect(screen.getByText('The setup network closes in about 27 minutes.')).toBeTruthy();
+  });
+
+  it('after finishing, says which network to join and where to go', async () => {
+    const device = fakeDevice(
+      (router) => {
+        router.setup = { ...router.setup, mode: 'setup', claimed: false };
+      },
+      {
+        finishSetup: async () => ({ hotspotSsid: 'Trip-Net', switchInSeconds: 1, adminUrl: 'http://rasbeacon.lan' }),
+      },
+    );
+    const { user } = renderScreen(<SetupScreen />, device);
+    await user.type(screen.getByLabelText('Admin password', { exact: true }), 'tangerine-orbit-42');
+    await user.type(screen.getByLabelText('Type it again'), 'tangerine-orbit-42');
+    await user.click(screen.getByRole('button', { name: 'Finish setup' }));
+    expect(await screen.findByRole('heading', { name: 'Setup complete' })).toBeTruthy();
+    expect(screen.getByRole('status').textContent).toBe(
+      'The setup network turns off in 1 second, and your hotspot starts.',
+    );
+    expect(screen.getAllByRole('link', { name: 'http://rasbeacon.lan' })).toHaveLength(2);
+  });
 });
 
 describe('logging in', () => {
