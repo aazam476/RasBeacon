@@ -5,6 +5,7 @@ import { useForm } from '@/lib/useForm';
 import { Loaded } from '@/shell/Loaded';
 import {
   AlertDialog,
+  Badge,
   BreakableText,
   Button,
   Disclosure,
@@ -93,6 +94,9 @@ function AllowListForm({ settings }: { settings: AccessSettings }) {
         labelNote="(one per line)"
         hint="Phones and laptops often use a private address for each network: on the device, find the one it uses for this network in its Wi-Fi settings."
         mono
+        autoCapitalize="none"
+        autoCorrect="off"
+        spellCheck={false}
         rows={Math.min(8, Math.max(3, listed.size + 1))}
         placeholder={'3a:1f:22:aa:bb:cc\n7e:04:91:5d:20:e8'}
         value={values.list}
@@ -120,7 +124,12 @@ function AllowListForm({ settings }: { settings: AccessSettings }) {
       {wifiClients.map((client) => (
         <Row
           key={client.mac}
-          title={<BreakableText>{clientName(client)}</BreakableText>}
+          title={
+            <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <BreakableText>{clientName(client)}</BreakableText>
+              {client.isThisDevice && <Badge tone="tint">This device</Badge>}
+            </span>
+          }
           subtitle={<span className="font-mono wrap-anywhere">{client.mac}</span>}
           trailing={
             listed.has(normalize(client.mac)) ? (

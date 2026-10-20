@@ -84,7 +84,9 @@ function AboutSection({ status }: { status: Status }) {
           maxLength={63}
           errorKey="hostname"
           busyLabel="Restarting…"
-          footer="Use lowercase letters, digits and hyphens. Devices then reach RasBeacon at this name followed by .lan. It restarts to use the new name, so devices disconnect for about a minute."
+          plain
+          check={checkHostname}
+          footer="Devices reach RasBeacon at this name followed by .lan. RasBeacon restarts to use it, so devices disconnect for about a minute."
           onSave={saveHostname}
           onClose={() => setRenaming(false)}
         />
@@ -140,4 +142,13 @@ function DiagnosticsSection() {
       </a>
     </Section>
   );
+}
+
+/** RasBeacon's rules for its name (internal/config ValidateHostname), checked while typing. */
+function checkHostname(name: string): string | undefined {
+  const lower = name.toLowerCase();
+  if (lower.length > 63) return 'Use at most 63 characters.';
+  if (!/^[a-z0-9-]+$/.test(lower)) return 'Use only lowercase letters, digits and hyphens.';
+  if (lower.startsWith('-') || lower.endsWith('-')) return "The name can't start or end with a hyphen.";
+  return undefined;
 }

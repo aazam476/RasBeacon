@@ -380,12 +380,12 @@ async function main() {
     fs.unlinkSync(file);
   });
 
-  await step("system: renaming refuses a bad name", async () => {
+  await step("system: renaming checks the name while it is typed", async () => {
     await open("System");
     await page.getByRole("button", { name: "Rename RasBeacon" }).click();
     await dialog().getByRole("textbox", { name: "Name" }).fill("my pi");
-    await dialog().getByRole("button", { name: "Save" }).click();
     await dialog().getByText("Use only lowercase letters, digits and hyphens.").waitFor();
+    await dialog().getByRole("button", { name: "Save", disabled: true }).waitFor();
     await dialog().getByRole("button", { name: "Cancel" }).click();
   });
 

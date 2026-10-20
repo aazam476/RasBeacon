@@ -17,6 +17,13 @@ interface RenameSheetProps {
   errorKey?: string;
   /** While saving (default "Saving…"), e.g. "Restarting…" when saving restarts something. */
   busyLabel?: string;
+  /**
+   * Checks the name while it is typed: a message keeps Save gray and shows under the field, so
+   * a rule (such as a host name's characters) is clear before saving.
+   */
+  check?: (name: string) => string | undefined;
+  /** A name like a host name or a code: no capitals, corrections or suggestions while typing. */
+  plain?: boolean;
   onSave: (name: string) => Promise<void>;
   onClose: () => void;
 }
@@ -34,17 +41,20 @@ export function RenameSheet({
   footer,
   errorKey = 'name',
   busyLabel = 'Saving…',
+  check,
+  plain = false,
   onSave,
   onClose,
 }: RenameSheetProps) {
   const [name, setName] = useState(initial);
+  const problem = name.trim() === '' ? undefined : check?.(name.trim());
 
   return (
     <Sheet
       title={title}
       confirmLabel="Save"
       busyLabel={busyLabel}
-      confirmDisabled={name.trim() === ''}
+      confirmDisabled={name.trim() === '' || problem !== undefined}
       onConfirm={() => onSave(name.trim())}
       onClose={onClose}
     >
@@ -57,8 +67,9 @@ export function RenameSheet({
             maxLength={maxLength}
             value={name}
             onChange={setName}
-            error={errors[errorKey]}
+            error={problem ?? errors[errorKey]}
             autoComplete="off"
+            {...(plain && { autoCapitalize: 'none', autoCorrect: 'off', spellCheck: false })}
           />
         </Section>
       )}
