@@ -37,7 +37,8 @@ npm run dev           # http://localhost:5173, against an rbweb on port 8080 (se
 npm run demo          # the same with the demo router: no device needed
 npm run build         # type-check + production build into dist/ (embedded into rbweb)
 npm run build:demo    # the demo, built into dist-demo/
-npm test              # unit tests (vitest) of the real provider's logic
+npm test              # the tests in test/ (logic, requests, components; see docs/testing/README.md)
+npm run coverage      # the same, and how much of src/ they run
 npm run typecheck
 npm run lint          # oxlint
 npm run format        # Prettier, 120-character lines (format:check only checks)
@@ -87,7 +88,6 @@ src/
       RealDeviceProvider.tsx   Every action, through the API; loading and refreshing
       api.ts                   One function per API route (docs/api.md), CSRF token, time limits
       logic.ts                 Pure logic: the phase, input checks, files, gestures, error mapping
-      logic.test.ts            Its unit tests
     demo/            The demo router, for `npm run demo` (only App.tsx imports it)
       DemoDeviceProvider.tsx   Demo implementation of every action
       mockData.ts              One consistent sample router
@@ -104,6 +104,11 @@ src/
   screens/           One folder per page (status, internet, vpn, clients, hotspot, guests, ssh,
                      https, system, portal), the setup/login/notice phases, and common/ for
                      descriptions of states shared by several pages (describe.ts)
+test/
+  logic/             Pure functions (logic.ts, describe.ts, the plugins' wording, Markdown)
+  requests/          Every API call: the request it sends, checked against docs/api.md
+  components/        The screens, clicked and typed into on phone and desktop sizes, and the
+                     real provider against a fake rbweb (see docs/testing/README.md)
 ```
 
 The screens are the same components on phones and computers; the few differences (a sheet's
@@ -123,7 +128,7 @@ on the device) and `DemoDeviceProvider` (`npm run demo`). `App.tsx` picks one by
   It sits inside `<HashRouter>` and uses `useLocation()` to load what the open page needs.
 - `api.ts` has one function per API route (`docs/api.md`), the CSRF token, `ApiError` and a time
   limit on every request.
-- `logic.ts` is the logic from the original UI, kept pure and unit-tested (`logic.test.ts`):
+- `logic.ts` is the logic from the original UI, kept pure and unit-tested (`test/logic/logic.test.ts`):
   `decidePhase`, the input checks, reading the add-network form's files (`fileToUpload`,
   `certificatesToUpload`), the VPN details form (`splitList`, `vpnDetailsRequest`), taps and
   swipes on the login page picture (`classifyGesture`, `pageSizeFor`), and turning the router's

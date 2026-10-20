@@ -21,7 +21,7 @@ image/              Raspberry Pi image definition (rpi-image-gen layers, systemd
 test/netns/         tests with real firewall/DHCP/DNS/WireGuard in network namespaces
 test/hwsim/         WPA-Enterprise logins with simulated Wi-Fi radios
 test/e2e/           browser walkthrough of the web UI
-docs/               design, architecture, API, UI contract, glossary, the hardware test plan
+docs/               design, architecture, API, UI contract, glossary, testing guide and hardware test plan
 ```
 
 ## Tools you need
@@ -55,6 +55,10 @@ make pi       # build both programs for the Raspberry Pi (64-bit ARM)
   the module (see `.github/workflows/ci.yml`).
 - **Browser test:** it needs Playwright's Chromium once:
   `cd test/e2e && npm ci && npx playwright install chromium`.
+
+[docs/testing/README.md](docs/testing/README.md) explains every group of
+tests (back end, front end, end to end, hardware): how to run each one and
+where a new test goes.
 
 ## Running a simulated device
 
