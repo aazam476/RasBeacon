@@ -40,6 +40,10 @@ func TestAccessSettings_AllowListAndLimitReachHostapd(t *testing.T) {
 			t.Errorf("hostapd.conf lacks %q", want)
 		}
 	}
+	if report := e.agent.Diagnostics(); !strings.Contains(report, "access: allow list on (2 addresses), device limit 5") ||
+		strings.Contains(report, "3a:1f:22:aa:bb:cc") {
+		t.Error("diagnostics should say how many devices are allowed, without their addresses")
+	}
 	list, _ := os.ReadFile(e.paths.HostapdAcceptFile())
 	if string(list) != "3a:1f:22:aa:bb:cc\n02:00:00:00:00:01\n" {
 		t.Errorf("allow list file = %q", list)

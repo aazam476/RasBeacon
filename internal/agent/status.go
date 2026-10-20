@@ -257,6 +257,9 @@ func (a *Agent) Diagnostics() string {
 	paused := fmt.Sprintf("blocked devices: %d by the owner, %d over the data limit: %s\n",
 		len(a.cfg.Clients.Paused), len(a.usage.overLimit), strings.Join(a.pausedMACs(), ", "))
 	hotspotEvents := slices.Clone(a.hotspotCheck.events)
+	// Who may join: an allow list or a limit explains a device that can't.
+	access := fmt.Sprintf("access: allow list %s (%d addresses), device limit %s\n",
+		onOff(a.cfg.Access.AllowListOn), len(a.cfg.Access.Allowed), limitText(a.cfg.Access.MaxDevices))
 	a.mu.Unlock()
 
 	var report strings.Builder
@@ -268,6 +271,7 @@ func (a *Agent) Diagnostics() string {
 	fmt.Fprintf(&report, "guest: enabled=%v running=%v ssid=%q clients=%d\n",
 		status.Guest.Enabled, status.Guest.Running, status.Guest.SSID, len(status.Guest.Clients))
 	report.WriteString(plugins)
+	report.WriteString(access)
 	report.WriteString(paused)
 	if len(hotspotEvents) == 0 {
 		report.WriteString("hotspot check: nothing repaired\n")
@@ -324,4 +328,20 @@ func Redact(text string, secrets []string) string {
 		}
 	}
 	return macAddress.ReplaceAllString(text, "$1:xx:xx:xx")
+}
+
+// onOff writes a switch for the diagnostics report.
+func onOff(on bool) string {
+	if on {
+		return "on"
+	}
+	return "off"
+}
+
+// limitText writes the device limit for the diagnostics report.
+func limitText(maxDevices int) string {
+	if maxDevices == 0 {
+		return "none"
+	}
+	return fmt.Sprint(maxDevices)
 }
