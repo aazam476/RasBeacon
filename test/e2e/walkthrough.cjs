@@ -121,15 +121,26 @@ async function main() {
     await page.getByText("Saved. RasBeacon is joining the networks now").waitFor();
   });
 
-  await step("a WPA-Enterprise network (eduroam) needs a CA certificate, then saves", async () => {
+  await step("a WPA-Enterprise network saves without a CA certificate (trusted at the first connection)", async () => {
+    await page.getByRole("button", { name: "Add manually" }).click();
+    const sheet = dialog();
+    await sheet.getByLabel("Network name").fill("Campus Wi-Fi");
+    await sheet.getByLabel("Security").selectOption("enterprise");
+    await sheet.getByLabel("Username", { exact: true }).fill("NetID@example.edu");
+    await sheet.getByLabel("Your password").fill("campus-password");
+    await sheet.getByRole("button", { name: "Add to list" }).click();
+    await saveNetworks();
+    await page.getByText("Trusted at the first connection").waitFor();
+  });
+
+  await step("a WPA-Enterprise network (eduroam) with its CA certificate under Advanced", async () => {
     await page.getByRole("button", { name: "Add manually" }).click();
     const sheet = dialog();
     await sheet.getByLabel("Network name").fill("eduroam");
     await sheet.getByLabel("Security").selectOption("enterprise");
     await sheet.getByLabel("Username", { exact: true }).fill("NetID@example.edu");
     await sheet.getByLabel("Your password").fill("campus-password");
-    await sheet.getByRole("button", { name: "Add to list" }).click();
-    await sheet.getByText("Choose the network's CA certificate file").waitFor();
+    await sheet.getByText("Advanced", { exact: true }).click();
     // A test certificate (fixtures/test-campus-ca.pem; certificate only, no key).
     await sheet.getByLabel(/^CA certificate file/).setInputFiles(__dirname + "/fixtures/test-campus-ca.pem");
     await sheet.getByLabel("Login server name").fill("*.example.edu");
@@ -165,8 +176,7 @@ async function main() {
     await page.getByRole("radio", { name: /wireguard\.conf/ }).waitFor();
   });
 
-  await step("VPN: turning it on protects the devices", async () => {
-    await page.getByRole("switch", { name: "Use the VPN" }).click();
+  await step("VPN: the first profile turns it on and protects the devices", async () => {
     await page.getByRole("switch", { name: "Use the VPN", checked: true }).waitFor();
     await open("Status");
     await page.getByText("Connected: your devices' traffic goes through the VPN.").waitFor();
@@ -259,8 +269,11 @@ async function main() {
     await page.getByRole("switch", { name: "Internet access for Ali's phone" }).waitFor();
     await page.getByText("Calls itself").first().waitFor();
     await page.getByLabel("Limit per device").selectOption("2000");
-    await page.getByRole("button", { name: "Save", exact: true }).click();
-    await page.getByText(/only applies while the hotspot is set as a metered connection/).waitFor();
+    const save = page.getByRole("button", { name: "Save", exact: true });
+    await save.click();
+    // Saved (it works without a metered connection now): the Save button goes away.
+    await save.waitFor({ state: "detached" });
+    await page.getByText("When a device uses up its data, its traffic is blocked").waitFor();
   });
 
   await step("HTTPS can be turned on and shows the certificate fingerprint", async () => {
@@ -284,18 +297,35 @@ async function main() {
     await page.getByText("Saved.", { exact: true }).waitFor();
   });
 
-  await step("the current Wi-Fi password and a QR code are shown with the admin password", async () => {
-    await page.getByLabel("Admin password").fill("tangerine-orbit-42");
+  await step("the current Wi-Fi password and a QR code are shown", async () => {
     await page.getByRole("button", { name: "Show password and QR code" }).click();
     // The password setup suggested (four groups of four letters and digits).
     await page.getByText(/^[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}$/).waitFor();
     await page.getByRole("img", { name: /^QR code to join / }).waitFor();
   });
 
+  await step("who can join: the allow list saves and checks its addresses", async () => {
+    await page.getByText("Allowed devices", { exact: true }).click();
+    await page.getByLabel("Only allow these devices").check();
+    await page.getByLabel(/^MAC addresses/).fill("3a:1f:22:aa:bb:cc");
+    const save = page.getByRole("button", { name: "Save", exact: true }).last();
+    await save.click();
+    // Nobody is "this device" on the simulated device, so it saves; a bad address doesn't.
+    await page.getByText("2 devices").or(page.getByText("1 device", { exact: true })).first().waitFor();
+    await page.getByLabel(/^MAC addresses/).fill("not-a-mac");
+    await save.click();
+    await page.getByText(/is not a MAC address/).waitFor();
+    await page.getByLabel("Only allow these devices").uncheck();
+    await page.getByLabel(/^MAC addresses/).fill("");
+    await save.click();
+    await page.getByText("Anyone with the password").waitFor();
+    await page.getByText("Allowed devices", { exact: true }).click(); // closed again
+  });
+
   await step("the metered setting saves and shows on the status page", async () => {
     await page.getByLabel("Metered connection (for example a phone's hotspot or a paid plan)").check();
     await page.getByRole("button", { name: "Save", exact: true }).click();
-    await page.getByText("Saved.", { exact: true }).waitFor();
+    await page.getByText("Saved.", { exact: true }).first().waitFor();
     await open("Status");
     await page.getByText(/Metered connection\s*On/).waitFor();
   });
@@ -330,7 +360,6 @@ async function main() {
   await step("system: a backup downloads, and restores with its password", async () => {
     await open("System");
     await page.getByRole("button", { name: "Back up settings" }).click();
-    await dialog().getByLabel("Admin password").fill("tangerine-orbit-42");
     await dialog().getByLabel("Password for the backup").fill("backup-pass-42");
     const downloading = page.waitForEvent("download");
     await dialog().getByRole("button", { name: "Back up" }).click();
@@ -342,7 +371,6 @@ async function main() {
     await page.getByRole("button", { name: "Restore from a backup" }).click();
     await dialog().getByLabel("Backup file (.rbbackup)").setInputFiles(file);
     await dialog().getByLabel("The backup's password").fill("not-the-password");
-    await dialog().getByLabel("Admin password (this RasBeacon's)").fill("tangerine-orbit-42");
     await dialog().getByRole("button", { name: "Restore" }).click();
     await dialog().getByText("The password is wrong, or the backup file is damaged.").waitFor();
     await dialog().getByLabel("The backup's password").fill("backup-pass-42");
@@ -352,10 +380,21 @@ async function main() {
     fs.unlinkSync(file);
   });
 
-  await step("system: reboot and factory reset ask first", async () => {
+  await step("system: renaming refuses a bad name", async () => {
     await open("System");
+    await page.getByRole("button", { name: "Rename RasBeacon" }).click();
+    await dialog().getByRole("textbox", { name: "Name" }).fill("my pi");
+    await dialog().getByRole("button", { name: "Save" }).click();
+    await dialog().getByText("Use only lowercase letters, digits and hyphens.").waitFor();
+    await dialog().getByRole("button", { name: "Cancel" }).click();
+  });
+
+  await step("system: reboot, shut down and factory reset ask first", async () => {
     await page.getByRole("button", { name: "Reboot" }).click();
     await dialog().getByRole("button", { name: "Reboot" }).waitFor();
+    await dialog().getByRole("button", { name: "Cancel" }).click();
+    await page.getByRole("button", { name: "Shut down" }).click();
+    await dialog().getByText("Shut down RasBeacon?").waitFor();
     await dialog().getByRole("button", { name: "Cancel" }).click();
     await page.getByText("Factory reset").click();
     await page.getByRole("button", { name: "Erase everything" }).waitFor();
