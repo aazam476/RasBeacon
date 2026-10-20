@@ -320,6 +320,8 @@ async function main() {
     await save.click();
     await page.getByText("Anyone with the password").waitFor();
     await page.getByText("Allowed devices", { exact: true }).click(); // closed again
+    // Its Save goes once the closing animation ends; until then the page has two.
+    await page.getByLabel("Only allow these devices").waitFor({ state: "hidden" });
   });
 
   await step("the metered setting saves and shows on the status page", async () => {
