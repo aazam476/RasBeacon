@@ -97,7 +97,7 @@ func (a *Agent) RunSpeedtest() error {
 
 // speedtestStatus describes the last speed test.
 func (a *Agent) speedtestStatus() api.Speedtest {
-	s := api.Speedtest{Provider: speedtest.Provider}
+	s := api.Speedtest{Provider: speedtest.Provider, Running: a.speedtest.running}
 	if last := a.speedtest.last; last != nil {
 		s.Last = &api.SpeedtestResult{
 			Server:       last.Server,

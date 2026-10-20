@@ -323,6 +323,8 @@ export interface SpeedtestResult {
 export interface Speedtest {
   /** The test service, shown as "using …": "Cloudflare". */
   provider: string;
+  /** A test is running (started from any page or device): the button waits for it. */
+  running: boolean;
   /** null until the first test has run. */
   last: SpeedtestResult | null;
 }

@@ -130,6 +130,24 @@ describe('Internet', () => {
     },
   ]);
 
+  it('a speed test shows as running at once, before the router answers', async () => {
+    const { device } = await withReadyDevice({ 'POST /speedtest': { hang: true } });
+    void device().runSpeedtest();
+    await waitFor(() => expect(device().status.data?.speedtest.running).toBe(true));
+  });
+
+  it('a refused speed test asks the router whether one still runs', async () => {
+    const { device, sent } = await withReadyDevice({
+      'POST /speedtest': { status: 409, body: { error: 'A speed test is already running.' } },
+    });
+    const before = sent.filter((r) => r.path === '/status').length;
+    const error = await device()
+      .runSpeedtest()
+      .catch((e: unknown) => e);
+    expect(String(error)).toContain('A speed test is already running.');
+    expect(sent.filter((r) => r.path === '/status').length).toBeGreaterThan(before);
+  });
+
   it('the Ethernet role is saved with the other uplink settings', async () => {
     const { device, sent, router } = await withReadyDevice({});
     await act(() => device().setEthernetRole('client-port'));

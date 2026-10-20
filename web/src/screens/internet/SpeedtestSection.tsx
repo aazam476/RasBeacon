@@ -3,7 +3,10 @@ import type { Status } from '@/data/types';
 import { formatAgo, mbpsValue } from '@/lib/format';
 import { ButtonRow, Row, Section, StatRow } from '@/ui';
 
-/** The last speed test and a way to run a new one. It only runs when asked. */
+/**
+ * The last speed test and a way to run a new one. It only runs when asked, one at a time: while
+ * one runs, the button says so, also after leaving the page and coming back.
+ */
 export function SpeedtestSection({ status }: { status: Status }) {
   const { runSpeedtest } = useDevice();
   const { provider, last } = status.speedtest;
@@ -31,6 +34,8 @@ export function SpeedtestSection({ status }: { status: Status }) {
       <ButtonRow
         leading={{ icon: 'speed', className: 'text-tint' }}
         action={runSpeedtest}
+        // Also while a test started earlier (before leaving this page) or elsewhere still runs.
+        busy={status.speedtest.running}
         busyLabel="Running…"
         disabled={!status.uplink.connected}
       >

@@ -503,8 +503,16 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
         store('dnsSettings', saved);
       },
       runSpeedtest: async () => {
-        const speedtest = await attempt(api.runSpeedtest);
-        patchStatus((status) => ({ ...status, speedtest }));
+        // Shown as running at once, on every page, until the router answers.
+        patchStatus((status) => ({ ...status, speedtest: { ...status.speedtest, running: true } }));
+        try {
+          const speedtest = await attempt(api.runSpeedtest);
+          patchStatus((status) => ({ ...status, speedtest }));
+        } catch (error) {
+          // The router says whether a test still runs (one started elsewhere, say).
+          await refreshStatus();
+          throw error;
+        }
       },
 
       setVpnEnabled: (enabled) => vpnChange(() => api.putVPNSwitches({ ...vpnSwitches(), enabled })),

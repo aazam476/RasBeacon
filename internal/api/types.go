@@ -208,6 +208,9 @@ type LANInfo struct {
 // the owner asks; see internal/speedtest).
 type Speedtest struct {
 	Provider string `json:"provider"`
+	// Running is true while a test runs, whoever started it, so every
+	// page that shows the button says so until it finishes.
+	Running bool `json:"running"`
 	// Last is null until a test has run since rbd started.
 	Last *SpeedtestResult `json:"last"`
 }

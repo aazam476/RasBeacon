@@ -293,6 +293,7 @@ export function createMockRouter(): MockRouter {
       lan: { maxClients: 16, subnet: '192.168.8.0/24', dhcpRange: '192.168.8.100 - 192.168.8.250' },
       speedtest: {
         provider: 'Cloudflare',
+        running: false,
         last: {
           server: 'San Jose, CA (SJC)',
           ageSeconds: 120,

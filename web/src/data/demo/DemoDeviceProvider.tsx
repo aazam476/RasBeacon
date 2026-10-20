@@ -405,8 +405,12 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
       renewDhcpLease: () => wait(1200),
       rescanEthernetPort: () => wait(1200),
       runSpeedtest: async () => {
+        change((d) => {
+          d.router.status.speedtest.running = true;
+        });
         await wait(4000);
         change((d) => {
+          d.router.status.speedtest.running = false;
           d.router.status.speedtest.last = {
             server: 'San Jose, CA (SJC)',
             ageSeconds: 0,
