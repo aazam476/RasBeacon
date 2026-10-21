@@ -234,6 +234,13 @@ func TestPlugins_InstallFromAFileStartsItWithItsOwnAddressPortsAndData(t *testin
 	if e.runner.ran("--env ") {
 		t.Error("environment variables must not be on podman's command line")
 	}
+	// No command rbd ran holds the password: a command line can end up in
+	// an error message, the journal and so the debug log on the SD card.
+	for _, command := range e.runner.commands {
+		if strings.Contains(command, "s3cret-pass") {
+			t.Errorf("a command line holds the plugin's password: %s", command)
+		}
+	}
 	if _, err := os.Stat(e.paths.PluginEnvFile("adguard-home")); !os.IsNotExist(err) {
 		t.Errorf("the environment file should be deleted after the start: %v", err)
 	}

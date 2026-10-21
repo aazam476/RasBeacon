@@ -139,3 +139,18 @@ func TestClients_PausedDeviceGetsNoIPv6AnswersEither(t *testing.T) {
 		t.Error("only the paused device's own addresses, without link-local ones (they never cross RasBeacon)")
 	}
 }
+
+// One rule for MAC addresses (config.NormalizeMAC), the stricter one: a
+// group (multicast) address is no device's, so it is refused everywhere.
+func TestClients_GroupAddressesAreRefused(t *testing.T) {
+	e := newClaimedEnv(t, false)
+	for _, mac := range []string{"01:00:5e:00:00:01", "ff:ff:ff:ff:ff:ff"} {
+		var refused *config.ValidationError
+		if err := e.agent.SetClientName(mac, "Printer"); !errors.As(err, &refused) || refused.Field != "mac" {
+			t.Errorf("naming %s = %v, want refused", mac, err)
+		}
+		if err := e.agent.SetClientInternetAccess(mac, false); !errors.As(err, &refused) {
+			t.Errorf("pausing %s = %v, want refused", mac, err)
+		}
+	}
+}
