@@ -80,6 +80,31 @@ func (a *Agent) pausedIPv4() []netip.Addr {
 	return addrs
 }
 
+// pausedIPv6 lists the IPv6 addresses the paused devices use, from the
+// kernel's neighbor table: devices choose their own IPv6 addresses, so
+// there is no lease to read. A device is in the table under each address it
+// used lately, which are the ones answers could still reach it on.
+func (a *Agent) pausedIPv6() []netip.Addr {
+	paused := a.pausedMACs()
+	if len(paused) == 0 {
+		return nil
+	}
+	out, err := a.runner.Run("ip", "-json", "-6", "neigh", "show")
+	if err != nil {
+		return nil
+	}
+	neighbors, _ := stations.ParseNeighbors(out)
+	var addrs []netip.Addr
+	for _, n := range neighbors {
+		addr, err := netip.ParseAddr(n.IP)
+		if err != nil || !addr.Is6() || addr.IsLinkLocalUnicast() || !slices.Contains(paused, n.MAC) || slices.Contains(addrs, addr) {
+			continue // link-local addresses never cross RasBeacon
+		}
+		addrs = append(addrs, addr)
+	}
+	return addrs
+}
+
 // SetClientInternetAccess pauses (allowed false) or allows a device's
 // internet access.
 func (a *Agent) SetClientInternetAccess(mac string, allowed bool) error {

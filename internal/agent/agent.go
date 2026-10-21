@@ -623,6 +623,7 @@ func (a *Agent) applyFirewall() error {
 		RoutedIPv6:      a.wantedRoutedIPv6(),
 		PausedMACs:      a.pausedMACs(),
 		PausedIPv4:      a.pausedIPv4(),
+		PausedIPv6:      a.pausedIPv6(),
 	}
 	if a.mode == api.ModeNormal {
 		input.Plugins = a.pluginRules()

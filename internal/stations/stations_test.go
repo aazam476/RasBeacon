@@ -1,6 +1,9 @@
 package stations
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 // A shortened real `iw dev ap0 station dump` with two devices.
 const sampleDump = `Station 3a:1f:22:aa:bb:cc (on ap0)
@@ -69,5 +72,22 @@ func TestParseBridgeFDB_DevicesBehindThePort(t *testing.T) {
 	}
 	if _, err := ParseBridgeFDB("not json"); err == nil {
 		t.Error("expected an error")
+	}
+}
+
+func TestParseNeighbors(t *testing.T) {
+	out := `[{"dst":"fe80::1c2d:3eff:fe4f:5a6b","dev":"br-lan","lladdr":"3A:1F:22:AA:BB:CC","state":["STALE"]},
+{"dst":"2001:db8::5","dev":"br-lan","state":["FAILED"]},
+{"dst":"2001:db8::7","dev":"br-lan","lladdr":"3a:1f:22:aa:bb:cc","state":["REACHABLE"]}]`
+	got, err := ParseNeighbors(out)
+	want := []Neighbor{{IP: "fe80::1c2d:3eff:fe4f:5a6b", MAC: "3a:1f:22:aa:bb:cc"}, {IP: "2001:db8::7", MAC: "3a:1f:22:aa:bb:cc"}}
+	if err != nil || !reflect.DeepEqual(got, want) {
+		t.Errorf("ParseNeighbors = %+v, %v; want %+v", got, err, want)
+	}
+	if got, err := ParseNeighbors(""); got != nil || err != nil {
+		t.Errorf("an empty table = %+v, %v", got, err)
+	}
+	if _, err := ParseNeighbors("not json"); err == nil {
+		t.Error("broken output should be an error")
 	}
 }

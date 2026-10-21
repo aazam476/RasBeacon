@@ -117,3 +117,25 @@ func TestClients_DevicesOnTheEthernetClientPort(t *testing.T) {
 		t.Errorf("got %v", err)
 	}
 }
+
+// A paused device's IPv6 addresses come from the neighbor table (there is
+// no lease for them), so answers to its earlier connections stop there too.
+func TestClients_PausedDeviceGetsNoIPv6AnswersEither(t *testing.T) {
+	e := newClaimedEnv(t, false)
+	mustWrite(t, e.paths.DnsmasqLeases(), "1790800000 3a:1f:22:aa:bb:cc 10.87.0.23 Alis-iPhone *\n")
+	e.runner.outputs["ip -json -6 neigh show"] = `[
+{"dst":"fd12:3456:789a:1::23","dev":"br-lan","lladdr":"3a:1f:22:aa:bb:cc","state":["REACHABLE"]},
+{"dst":"fe80::381f:22ff:feaa:bbcc","dev":"br-lan","lladdr":"3a:1f:22:aa:bb:cc","state":["STALE"]},
+{"dst":"fd12:3456:789a:1::99","dev":"br-lan","lladdr":"8e:00:11:22:33:44","state":["REACHABLE"]}]`
+
+	if err := e.agent.SetClientInternetAccess("3a:1f:22:aa:bb:cc", false); err != nil {
+		t.Fatal(err)
+	}
+	rules := e.readFile(e.paths.FirewallRules())
+	if !strings.Contains(rules, "ip daddr { 10.87.0.23 } drop") || !strings.Contains(rules, "ip6 daddr { fd12:3456:789a:1::23 } drop") {
+		t.Errorf("answers to the paused device's addresses should be dropped:\n%s", rules)
+	}
+	if strings.Contains(rules, "fe80::") || strings.Contains(rules, "::99") {
+		t.Error("only the paused device's own addresses, without link-local ones (they never cross RasBeacon)")
+	}
+}

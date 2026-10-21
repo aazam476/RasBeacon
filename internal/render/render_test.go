@@ -433,7 +433,8 @@ func TestFirewall_LoginBrowserOnlyReachesUplinks(t *testing.T) {
 
 func TestFirewall_PausedDevicesAreNotForwarded(t *testing.T) {
 	got, err := Firewall(FirewallInput{Egress: []string{"wlan0"}, PausedMACs: []string{"3A:1F:22:AA:BB:CC", "8e:00:11:22:33:44"},
-		PausedIPv4: []netip.Addr{netip.MustParseAddr("10.87.0.23")}})
+		PausedIPv4: []netip.Addr{netip.MustParseAddr("10.87.0.23")},
+		PausedIPv6: []netip.Addr{netip.MustParseAddr("fd12:3456:789a:1::23")}})
 	if err != nil {
 		t.Fatal(err)
 	}

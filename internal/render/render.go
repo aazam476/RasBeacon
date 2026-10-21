@@ -463,9 +463,11 @@ type FirewallInput struct {
 	// that used up their data): the firewall refuses to forward anything
 	// from them.
 	PausedMACs []string
-	// PausedIPv4 are those devices' addresses on the hotspot (from the DHCP
-	// leases): nothing is forwarded to them either.
+	// PausedIPv4 and PausedIPv6 are those devices' addresses on the
+	// hotspot (from the DHCP leases and the neighbor table): nothing is
+	// forwarded to them either.
 	PausedIPv4 []netip.Addr
+	PausedIPv6 []netip.Addr
 	// Browser confines the login browser (see internal/browser) to the
 	// uplinks. nil when there is no browser user.
 	Browser *BrowserRule
@@ -528,6 +530,7 @@ type BrowserRule struct {
 type firewallData struct {
 	PausedMACs      []string
 	PausedIPv4      []string
+	PausedIPv6      []string
 	Browser         *BrowserRule
 	RoutedIPv6      string
 	PortalOnly      bool
@@ -611,6 +614,12 @@ func Firewall(in FirewallInput) (string, error) {
 			return "", fmt.Errorf("invalid IPv4 address %v", addr)
 		}
 		data.PausedIPv4 = append(data.PausedIPv4, addr.String())
+	}
+	for _, addr := range in.PausedIPv6 {
+		if !addr.Is6() || addr.Is4In6() {
+			return "", fmt.Errorf("invalid IPv6 address %v", addr)
+		}
+		data.PausedIPv6 = append(data.PausedIPv6, addr.String())
 	}
 	if b := in.Browser; b != nil {
 		if b.UID <= 0 {
