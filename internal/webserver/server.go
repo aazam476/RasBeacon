@@ -385,37 +385,16 @@ const speedtestTime = 4 * time.Minute
 // maxUpdateSize limits update uploads. Real ones are a few hundred MB.
 const maxUpdateSize = 2 << 30
 
-// updateUploadTime is how long an update upload may take (slow Wi-Fi).
-const updateUploadTime = 30 * time.Minute
-
 // handleUpdate streams an uploaded update file to rbd, which checks and
 // installs it (see internal/agent/update.go).
 func (s *Server) handleUpdate(w http.ResponseWriter, r *http.Request) {
-	// The server's normal time limits are far too short for this upload.
-	rc := http.NewResponseController(w)
-	_ = rc.SetReadDeadline(time.Now().Add(updateUploadTime))
-	_ = rc.SetWriteDeadline(time.Now().Add(updateUploadTime + time.Minute))
-
-	status, body, err := s.rbd.Stream("/system/update", http.MaxBytesReader(w, r.Body, maxUpdateSize))
-	if err != nil {
-		writeJSON(w, http.StatusBadGateway, api.ErrorResponse{Error: err.Error()})
-		return
-	}
-	writeRaw(w, status, "application/json", body)
+	s.streamUpload(w, r, "/system/update", maxUpdateSize)
 }
 
 // handlePluginUpload streams an uploaded plugin file to rbd, which checks
 // it and answers what installing it means.
 func (s *Server) handlePluginUpload(w http.ResponseWriter, r *http.Request) {
-	rc := http.NewResponseController(w)
-	_ = rc.SetReadDeadline(time.Now().Add(updateUploadTime))
-	_ = rc.SetWriteDeadline(time.Now().Add(updateUploadTime + 5*time.Minute))
-	status, body, err := s.rbd.Stream("/plugins/upload", http.MaxBytesReader(w, r.Body, maxUpdateSize))
-	if err != nil {
-		writeJSON(w, http.StatusBadGateway, api.ErrorResponse{Error: err.Error()})
-		return
-	}
-	writeRaw(w, status, "application/json", body)
+	s.streamUpload(w, r, "/plugins/upload", maxUpdateSize)
 }
 
 // handleBackupDownload streams a backup from rbd to the browser while rbd
@@ -427,7 +406,8 @@ func (s *Server) handleBackupDownload(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, api.ErrorResponse{Error: "This backup link has expired. Make the backup again."})
 		return
 	}
-	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(updateUploadTime))
+	rc := http.NewResponseController(w)
+	_ = rc.SetWriteDeadline(time.Now().Add(transferIdleTime))
 	resp, err := s.rbd.Open(http.MethodGet, "/system/backup/"+token, nil)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, api.ErrorResponse{Error: err.Error()})
@@ -441,21 +421,13 @@ func (s *Server) handleBackupDownload(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(resp.StatusCode)
-	_, _ = io.Copy(w, resp.Body)
+	_, _ = io.Copy(slidingWriter{w: w, rc: rc}, resp.Body)
 }
 
 // handleRestoreUpload streams an uploaded backup to rbd, which keeps it
 // until its password is given.
 func (s *Server) handleRestoreUpload(w http.ResponseWriter, r *http.Request) {
-	rc := http.NewResponseController(w)
-	_ = rc.SetReadDeadline(time.Now().Add(updateUploadTime))
-	_ = rc.SetWriteDeadline(time.Now().Add(updateUploadTime + time.Minute))
-	status, body, err := s.rbd.Stream("/system/restore/upload", http.MaxBytesReader(w, r.Body, maxBackupSize))
-	if err != nil {
-		writeJSON(w, http.StatusBadGateway, api.ErrorResponse{Error: err.Error()})
-		return
-	}
-	writeRaw(w, status, "application/json", body)
+	s.streamUpload(w, r, "/system/restore/upload", maxBackupSize)
 }
 
 // maxBackupSize limits backup uploads (plugins' data included).
