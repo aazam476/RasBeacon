@@ -830,7 +830,8 @@ wins.
   SHA-256). rbd verifies the signature and board first, streams the bundle
   through `zstd` into `/dev/disk/by-slot/other/*`, verifies the SHA-256,
   then `systemctl reboot "0 tryboot"`. On a tryboot start, rbd confirms
-  after 60 s of normal running by writing `rpi-slot-tryboot`'s output to
+  after 60 s of normal running, once `systemctl is-active rbweb.service
+  rasbeacon-hostapd.service` succeeds (looking again every 15 s), by writing `rpi-slot-tryboot`'s output to
   `autoboot.txt`, or forces a plain reboot (back to the old slot) after
   5 minutes. Keys: `cmd/rbsign`, the `RASBEACON_UPDATE_SIGNING_KEY`
   secret, and `/usr/lib/rasbeacon/update-keys/*.pub` in the image.

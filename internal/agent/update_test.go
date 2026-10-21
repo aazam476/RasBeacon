@@ -248,6 +248,38 @@ func TestUpdate_TrialIsConfirmedAfterANormalStart(t *testing.T) {
 	}
 }
 
+// Without the web UI or the hotspot, the owner couldn't reach RasBeacon to
+// go back, so the update isn't confirmed and the old system comes back.
+func TestUpdate_TrialIsntConfirmedWithoutTheWebUI(t *testing.T) {
+	e := newTestEnv(t)
+	mustWrite(t, e.paths.TrybootFlag(), "\x00\x00\x00\x01")
+	e.runner.outputs["rpi-slot-tryboot"] = "[all]\ntryboot_a_b=1\nboot_partition=3\n[tryboot]\nboot_partition=2\n"
+	e.start()
+	if _, err := e.agent.Claim(validClaim); err != nil {
+		t.Fatal(err)
+	}
+	e.runner.failing = []string{"systemctl is-active rbweb.service"}
+	restarted := New(e.paths, e.runner)
+	timers := &fakeTimers{}
+	restarted.afterFunc, restarted.usbRadioWait = timers.afterFunc, 0
+	if err := restarted.Start(); err != nil {
+		t.Fatal(err)
+	}
+	// Each round runs what is due: the first check, then the checks again.
+	for range 20 {
+		timers.runAll()
+	}
+	if _, err := os.Stat(e.paths.AutobootFile()); err == nil {
+		t.Error("the update must not be confirmed while the web UI isn't running")
+	}
+	if checks := restarted.update.confirmChecks; checks < 2 || checks > 16 {
+		t.Errorf("checked %d times, want a few retries before the rollback", checks)
+	}
+	if !e.runner.ran("systemctl reboot") {
+		t.Error("without confirmation, RasBeacon goes back to the old system")
+	}
+}
+
 func TestUpdate_FailedTrialIsReported(t *testing.T) {
 	e := newTestEnv(t)
 	// An update was installed, but this start is NOT a trial: the new slot

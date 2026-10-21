@@ -45,6 +45,10 @@ const (
 	// rollbackAfter: if the new slot isn't confirmed by then, restart into
 	// the old one.
 	rollbackAfter = 5 * time.Minute
+	// confirmRetry: how long to wait before looking again when the web UI
+	// or the hotspot isn't running yet at confirmAfter. Until rollbackAfter
+	// at most.
+	confirmRetry = 15 * time.Second
 )
 
 // ErrUpdateBusy means another update is being installed.
@@ -56,7 +60,10 @@ type updateState struct {
 	// trying is true when this start is a trial of a new slot.
 	trying    bool
 	confirmed bool
-	message   string
+	// confirmChecks counts how often confirmUpdate looked, so it stops
+	// looking again before rollbackAfter.
+	confirmChecks int
+	message       string
 	// latest is the newest release found by the online check, lastCheck
 	// when it last asked, and checkError why that failed.
 	latest     latestRelease
@@ -300,6 +307,19 @@ func (a *Agent) confirmUpdate() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.update.confirmed || a.mode != api.ModeNormal {
+		return
+	}
+	// The owner must still have the settings page and the hotspot, or they
+	// would have no way back to the old system. "systemctl is-active" fails
+	// unless every unit named is running.
+	if _, err := a.runner.Run("systemctl", "is-active", rbwebService, hostapdService); err != nil {
+		a.update.confirmChecks++
+		if wait := confirmAfter + time.Duration(a.update.confirmChecks)*confirmRetry; wait < rollbackAfter {
+			slog.Warn("not confirming the update yet: the web UI or the hotspot isn't running", "error", err)
+			a.afterFunc(confirmRetry, a.confirmUpdate)
+		} else {
+			slog.Error("not confirming the update: the web UI or the hotspot isn't running", "error", err)
+		}
 		return
 	}
 	// rpi-slot-tryboot prints autoboot.txt for the slot that is running now.

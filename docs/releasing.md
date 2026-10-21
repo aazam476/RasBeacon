@@ -118,5 +118,6 @@ See `internal/agent/update.go`. In short: the signature and board are
 checked first; the new system is written into the slot that isn't
 running; the SHA-256 of everything written must match the signed one;
 RasBeacon then restarts into the new slot *on trial*. If it runs normally
-for a minute, the new slot becomes the default; if not, the device goes
+for a minute, with the web UI and the hotspot running, the new slot becomes
+the default; if not, the device goes
 back to the previous version by itself.
