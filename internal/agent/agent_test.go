@@ -7,10 +7,12 @@ package agent
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"sort"
@@ -204,6 +206,10 @@ func newTestEnv(t *testing.T) *testEnv {
 	a.afterFunc = timers.afterFunc
 	a.usbRadioWait = 0
 	a.sleep = func(time.Duration) {} // don't really wait in tests
+	// Every name is at 203.0.113.7 (a documentation address), with no DNS.
+	a.lookupIP = func(context.Context, string) ([]netip.Addr, error) {
+		return []netip.Addr{netip.MustParseAddr("203.0.113.7")}, nil
+	}
 	// A card with 10 GB free, whatever this computer's disk holds.
 	a.diskFree = func(string) (int64, error) { return 10 << 30, nil }
 	e := &testEnv{t: t, paths: p, runner: runner, timers: timers, agent: a}

@@ -36,10 +36,12 @@
 package agent
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/netip"
 	"os"
@@ -148,6 +150,9 @@ type Agent struct {
 	// usbRadioWait is how long startup waits for a USB Wi-Fi adapter to
 	// appear (see waitForRadios). Tests set it to zero.
 	usbRadioWait time.Duration
+	// lookupIP looks up a host name's addresses (the VPN server's); an
+	// address is answered as it is. Tests fake it.
+	lookupIP func(ctx context.Context, host string) ([]netip.Addr, error)
 }
 
 // New creates an agent that uses the given file locations and command
@@ -170,6 +175,9 @@ func New(p paths.Paths, runner system.Runner) *Agent {
 		plugins:    pluginsState{runner: runner},
 		// USB adapters usually appear within a few seconds of power-on.
 		usbRadioWait: 20 * time.Second,
+		lookupIP: func(ctx context.Context, host string) ([]netip.Addr, error) {
+			return net.DefaultResolver.LookupNetIP(ctx, "ip", host)
+		},
 	}
 	a.plugins.client = a.pluginHTTPClient
 	a.plugins.watchEvery = pluginWatchEvery

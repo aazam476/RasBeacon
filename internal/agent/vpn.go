@@ -26,8 +26,10 @@ package agent
 // for a while ("direct") are they all switched to the uplink.
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/netip"
 	"slices"
 	"strconv"
@@ -257,12 +259,8 @@ func (a *Agent) updateTunnel() error {
 	if active && state != tunnel.Up && a.now().Sub(a.vpn.lastRefresh) >= endpointRefreshInterval {
 		a.vpn.lastRefresh = a.now()
 		p, _ := a.activeProfile()
-		cmd, endpoint, runner := routing.SetEndpoint(p.Peer.PublicKey, p.Peer.Endpoint), p.Peer.Endpoint, a.runner
-		a.background(func() {
-			if _, err := runner.Run(cmd[0], cmd[1:]...); err != nil {
-				slog.Warn("could not look up the VPN server", "endpoint", endpoint, "error", err)
-			}
-		})
+		key, endpoint := p.Peer.PublicKey, p.Peer.Endpoint
+		a.background(func() { a.refreshEndpoint(key, endpoint) })
 	}
 
 	if state == a.vpn.applied {
@@ -271,6 +269,39 @@ func (a *Agent) updateTunnel() error {
 	slog.Info("VPN state changed", "from", a.vpn.applied, "to", state, "killSwitch", a.cfg.VPN.KillSwitch)
 	a.vpn.applied = state
 	return a.applyClientPath()
+}
+
+// endpointLookupTime is the most a lookup of the VPN server's name may take.
+const endpointLookupTime = 15 * time.Second
+
+// refreshEndpoint looks up the VPN server's name in endpoint ("host:port")
+// again and gives WireGuard the address it has now. Called without a.mu:
+// the lookup may take endpointLookupTime. The owner may have saved another
+// server meanwhile, so the address is only set if peerKey and endpoint are
+// still the saved ones; otherwise an old server would replace the new one.
+func (a *Agent) refreshEndpoint(peerKey, endpoint string) {
+	host, port, err := net.SplitHostPort(endpoint)
+	if err != nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), endpointLookupTime)
+	defer cancel()
+	addresses, err := a.lookupIP(ctx, host)
+	if err != nil || len(addresses) == 0 {
+		slog.Warn("could not look up the VPN server", "endpoint", endpoint, "error", err)
+		return
+	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if p, ok := a.activeProfile(); !ok || !a.vpnActive() || p.Peer.PublicKey != peerKey || p.Peer.Endpoint != endpoint {
+		return // the settings changed while looking: they set the endpoint themselves
+	}
+	address := net.JoinHostPort(addresses[0].Unmap().String(), port)
+	cmd := routing.SetEndpoint(peerKey, address)
+	if _, err := a.runner.Run(cmd[0], cmd[1:]...); err != nil {
+		slog.Warn("could not set the VPN server's address", "endpoint", endpoint, "address", address, "error", err)
+	}
 }
 
 // applyClientPath makes the firewall, routing and DNS match where devices'

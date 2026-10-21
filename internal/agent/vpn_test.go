@@ -468,3 +468,37 @@ func TestVPN_ServerLookupRunsOutsideTheLock(t *testing.T) {
 		t.Errorf("lookups = %d, want one more in the background", lookups()-before)
 	}
 }
+
+// The lookup takes a while, and the owner may save another server
+// meanwhile: the old server's address must not replace the new one.
+func TestVPN_ServerLookupDoesntUndoANewerSave(t *testing.T) {
+	e, c := newVPNEnv(t, true)
+	e.runBackground()
+	c.advance(2 * time.Minute)
+	e.agent.mu.Lock()
+	if err := e.agent.updateTunnel(); err != nil {
+		e.agent.mu.Unlock()
+		t.Fatal(err)
+	}
+	// The lookup is queued; before it runs, the server moves.
+	p, _ := e.agent.activeProfile()
+	e.agent.cfg.VPN.Profiles[0].Peer.Endpoint = "new.example.com:51820"
+	e.agent.mu.Unlock()
+	e.runner.commands = nil
+	e.runBackground()
+	for _, cmd := range e.runner.commands {
+		if strings.HasPrefix(cmd, "wg set wg0 peer "+p.Peer.PublicKey+" endpoint") {
+			t.Errorf("the old server's address was set after the save: %q", cmd)
+		}
+	}
+
+	// Without a change in between, the looked-up address is set.
+	c.advance(2 * time.Minute)
+	e.agent.mu.Lock()
+	_ = e.agent.updateTunnel()
+	e.agent.mu.Unlock()
+	e.runBackground()
+	if !e.runner.ran("wg set wg0 peer " + p.Peer.PublicKey + " endpoint 203.0.113.7:51820") {
+		t.Errorf("commands: %q", e.runner.commands)
+	}
+}
