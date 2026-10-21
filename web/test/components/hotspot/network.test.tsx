@@ -51,6 +51,19 @@ describe('hotspot form', () => {
     );
   });
 
+  it('offers only 2.4 GHz when the radio has no 5 GHz band, even if 5 GHz was saved', async () => {
+    const device = fakeDevice((router) => {
+      router.hotspotSettings = { ...router.hotspotSettings, band: '5GHz', channel: 44, no5GHz: true };
+    });
+    const { user } = renderScreen(<HotspotScreen />, device, '/hotspot');
+    const band = screen.getByLabelText<HTMLSelectElement>('Band');
+    expect(Array.from(band.options, (option) => option.value)).toEqual(['2.4GHz']);
+    expect(band.value).toBe('2.4GHz');
+    expect(screen.getByText(/This Wi-Fi adapter can't use 5 GHz\./)).toBeTruthy();
+    await user.click(screen.getAllByRole('button', { name: 'Save' })[0]);
+    expect(device.saveHotspotSettings).toHaveBeenCalledWith(expect.objectContaining({ band: '2.4GHz' }));
+  });
+
   it('says when the hotspot isn’t running', () => {
     renderScreen(
       <HotspotScreen />,

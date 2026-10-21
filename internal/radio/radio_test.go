@@ -218,3 +218,46 @@ func TestMaxAPInterfaces(t *testing.T) {
 		}
 	}
 }
+
+// iwOutputDualBand is a shortened `iw phy info` output of a radio with both
+// bands, after the country was set: channel 12 is off, and 52 needs radar
+// detection, so a hotspot can't start there.
+const iwOutputDualBand = `Wiphy phy1
+	Band 1:
+		Frequencies:
+			* 2412 MHz [1] (20.0 dBm)
+			* 2437 MHz [6] (20.0 dBm)
+			* 2467 MHz [12] (disabled)
+	Band 2:
+		Frequencies:
+			* 5180 MHz [36] (23.0 dBm)
+			* 5260 MHz [52] (20.0 dBm) (no IR, radar detection)
+`
+
+func TestSupports5GHz(t *testing.T) {
+	if !Supports5GHz(iwOutputDualBand) {
+		t.Error("a radio with a Band 2 section has 5 GHz")
+	}
+	if Supports5GHz(iwOutputWithAP) {
+		t.Error("a radio with only Band 1 is 2.4 GHz only")
+	}
+}
+
+func TestChannelAllowed(t *testing.T) {
+	tests := []struct {
+		channel        int
+		allowed, known bool
+	}{
+		{1, true, true},
+		{36, true, true},
+		{12, false, true}, // disabled in this country
+		{52, false, true}, // "no IR": may not start a network
+		{149, false, false},
+	}
+	for _, tt := range tests {
+		allowed, known := ChannelAllowed(iwOutputDualBand, tt.channel)
+		if allowed != tt.allowed || known != tt.known {
+			t.Errorf("channel %d = allowed %v, listed %v; want %v, %v", tt.channel, allowed, known, tt.allowed, tt.known)
+		}
+	}
+}

@@ -535,8 +535,8 @@ func (a *Agent) ownerHotspot() (render.HotspotInput, error) {
 	hotspot := render.HotspotInput{
 		Interface:  radio.HotspotInterfaceName,
 		SSID:       h.SSID,
-		Band:       h.Band,
-		Channel:    h.Channel,
+		Band:       a.hotspotBand(),
+		Channel:    a.hotspotChannel(),
 		Country:    h.Country,
 		Security:   h.Security,
 		Password:   a.secrets.HotspotPassword,

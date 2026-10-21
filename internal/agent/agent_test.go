@@ -122,6 +122,10 @@ func (ft *fakeTimers) runAll() {
 
 const iwInfoWithAP = "Wiphy phy1\n\tSupported interface modes:\n\t\t * managed\n\t\t * AP\n"
 
+// iwInfoDualBand is the same for a radio with both bands, like the USB
+// Archer T3U.
+const iwInfoDualBand = iwInfoWithAP + "\tBand 1:\n\tBand 2:\n"
+
 // testEnv is a fresh fake device.
 type testEnv struct {
 	t      *testing.T
@@ -189,7 +193,7 @@ func newTestEnv(t *testing.T) *testEnv {
 
 	runner := &fakeRunner{outputs: map[string]string{
 		"iw phy phy0 info": iwInfoWithAP,
-		"iw phy phy1 info": iwInfoWithAP,
+		"iw phy phy1 info": iwInfoDualBand,
 	}}
 	timers := &fakeTimers{}
 	a := New(p, runner)

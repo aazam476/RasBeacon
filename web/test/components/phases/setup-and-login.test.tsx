@@ -40,6 +40,17 @@ describe('first-time setup', () => {
     expect(confirm.getAttribute('aria-invalid')).toBe('true');
   });
 
+  it('offers only 2.4 GHz when the radio has no 5 GHz band', () => {
+    renderScreen(
+      <SetupScreen />,
+      fakeDevice((router) => {
+        router.setup = { ...router.setup, mode: 'setup', claimed: false, no5GHz: true };
+      }),
+    );
+    const bands = Array.from(screen.getByLabelText<HTMLSelectElement>('Band').options, (option) => option.value);
+    expect(bands).toEqual(['2.4GHz']);
+  });
+
   it('finishes with the chosen settings', async () => {
     const device = setupDevice();
     const { user } = renderScreen(<SetupScreen />, device);

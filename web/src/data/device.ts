@@ -144,7 +144,7 @@ export interface DeviceActions {
    * Claim the router (POST /api/v1/setup/claim) and answer with what to join next. Leave the
    * phase at `setup`: the screen shows "Setup complete" from the answer until the phone has
    * moved to the new network.
-   * Field keys: adminPassword, adminPasswordConfirm, hotspotSsid, hotspotPassword.
+   * Field keys: adminPassword, adminPasswordConfirm, hotspotSsid, hotspotPassword, hotspotBand.
    */
   finishSetup: (form: SetupForm) => Promise<ClaimResponse>;
   /** Afterwards the phase is `ready`. `stayLoggedIn` keeps the browser logged in for 30 days. */
@@ -243,7 +243,7 @@ export interface DeviceActions {
 
   // --- Hotspot and guests ------------------------------------------------------------------
 
-  /** Field keys: ssid, password, channel, country. */
+  /** Field keys: ssid, password, band, channel, country. */
   saveHotspotSettings: (settings: HotspotSettings) => Promise<void>;
   /** Answer with the current Wi-Fi password (being logged in is enough). */
   revealHotspotPassword: () => Promise<string>;

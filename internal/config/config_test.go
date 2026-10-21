@@ -96,6 +96,29 @@ func TestHotspotValidate_RejectsLowercaseCountry(t *testing.T) {
 	}
 }
 
+// Only real ISO codes: the radio doesn't know any other, and hostapd won't
+// start with one.
+func TestHotspotValidate_CountryCodes(t *testing.T) {
+	for code, want := range map[string]string{
+		"GB":  "",
+		"DE":  "",
+		"UK":  "Use GB for the United Kingdom.",
+		"XX":  "Must be a two-letter country code such as US.",
+		"USA": "Must be a two-letter country code such as US.",
+	} {
+		h := DefaultConfig(Identity{ShortID: "AAAA"}).Hotspot
+		h.Country = code
+		err := h.Validate()
+		var got string
+		if err != nil {
+			got = err.(*ValidationError).Message
+		}
+		if got != want {
+			t.Errorf("country %q: %q, want %q", code, got, want)
+		}
+	}
+}
+
 func TestWriteJSON_ThenReadJSON_RoundTrips(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sub", "config.json")
 	want := DefaultConfig(Identity{ShortID: "BEEF"})

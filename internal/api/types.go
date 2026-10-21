@@ -65,6 +65,9 @@ type SetupState struct {
 	// a login" notice (see PortalStatus). rbweb then sends phones'
 	// connectivity checks to the notice page.
 	PortalNotice bool `json:"portalNotice,omitempty"`
+	// No5GHz is true when the hotspot's radio can't use 5 GHz, so setup
+	// offers only 2.4 GHz.
+	No5GHz bool `json:"no5GHz,omitempty"`
 }
 
 // ClaimRequest finishes first-time setup.
@@ -648,6 +651,9 @@ type HotspotSettings struct {
 	// reads it automatically; see docs/api.md).
 	Metered  bool   `json:"metered"`
 	Password string `json:"password,omitempty"`
+	// No5GHz is true when the hotspot's radio can't use 5 GHz, so the page
+	// offers only 2.4 GHz. Read-only: ignored when saving.
+	No5GHz bool `json:"no5GHz,omitempty"`
 }
 
 // AccessSettings says which and how many devices may join the hotspot over

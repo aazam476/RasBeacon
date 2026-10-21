@@ -52,6 +52,7 @@ func (a *Agent) SetupState() api.SetupState {
 		state.SuggestedHotspotSSID = a.cfg.Hotspot.SSID
 		state.SuggestedHotspotPassword = a.identity.SuggestedHotspotPassword
 		state.SetupClosesInSeconds = int(a.setupDeadline.Sub(a.now()).Seconds())
+		state.No5GHz = !a.hotspotHas5GHz()
 	}
 	return state
 }
@@ -79,6 +80,9 @@ func (a *Agent) Claim(req api.ClaimRequest) (api.ClaimResponse, error) {
 	newCfg.Hotspot.Band = req.HotspotBand
 	newCfg.Guest.SSID = config.GuestSSIDFor(req.HotspotSSID)
 	if err := newCfg.Hotspot.Validate(); err != nil {
+		return api.ClaimResponse{}, err
+	}
+	if err := a.checkHotspotForRadio(newCfg.Hotspot); err != nil {
 		return api.ClaimResponse{}, err
 	}
 
@@ -130,6 +134,19 @@ func (a *Agent) finishClaim() {
 	if err := a.startNormalMode(); err != nil {
 		slog.Error("could not start the hotspot after setup", "error", err)
 		a.warnings = append(a.warnings, "The hotspot failed to start after setup: "+err.Error())
+		return
+	}
+	// If hostapd can't run the chosen band, the owner would have neither
+	// the setup network nor the new hotspot. Fall back to what every radio
+	// can run: 2.4 GHz on its default channel.
+	if !a.hotspotStayedUp() && a.cfg.Hotspot.Band != config.Band2GHz {
+		safe := a.cfg.Clone()
+		safe.Hotspot.Band = config.Band2GHz
+		safe.Hotspot.Channel = 0
+		if err := a.restoreHotspot(safe, a.secrets); err != nil {
+			slog.Error("could not start the hotspot on 2.4 GHz", "error", err)
+		}
+		a.warnings = append(a.warnings, "The hotspot didn't start on 5 GHz, so it runs on 2.4 GHz.")
 	}
 }
 
@@ -194,7 +211,10 @@ func (a *Agent) HotspotSettings() api.HotspotSettings {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	h := a.cfg.Hotspot
-	return api.HotspotSettings{SSID: h.SSID, Band: h.Band, Channel: h.Channel, Security: h.Security, Country: h.Country, Metered: h.Metered}
+	return api.HotspotSettings{
+		SSID: h.SSID, Band: h.Band, Channel: h.Channel, Security: h.Security, Country: h.Country, Metered: h.Metered,
+		No5GHz: !a.hotspotHas5GHz(),
+	}
 }
 
 // UpdateHotspotSettings saves new hotspot settings and restarts the hotspot.
@@ -233,18 +253,34 @@ func (a *Agent) UpdateHotspotSettings(req api.HotspotSettings) error {
 		return &config.ValidationError{Field: "password", Message: "Your guest network already uses this password."}
 	}
 
+	// The radio must be able to run the new settings. The channels it
+	// may use depend on the country, so a new country is set first, and
+	// set back if the settings are refused.
+	countryChanged := newCfg.Hotspot.Country != a.cfg.Hotspot.Country
+	if countryChanged {
+		if err := system.SetRegulatoryCountry(a.runner, newCfg.Hotspot.Country); err != nil {
+			slog.Warn("could not set Wi-Fi country", "error", err)
+		}
+	}
+	if err := a.checkHotspotForRadio(newCfg.Hotspot); err != nil {
+		if countryChanged {
+			_ = system.SetRegulatoryCountry(a.runner, a.cfg.Hotspot.Country)
+		}
+		return err
+	}
+
 	if err := config.WriteJSON(a.paths.SecretsFile(), newSecrets, 0o600); err != nil {
 		return err
 	}
 	if err := config.WriteJSON(a.paths.ConfigFile(), newCfg, 0o644); err != nil {
 		return err
 	}
-	countryChanged := newCfg.Hotspot.Country != a.cfg.Hotspot.Country
 	// Only the metered hint changed? Then the hotspot can keep running:
 	// DHCP alone carries the hint (devices see it when they reconnect).
 	onlyMetered := req.Password == "" && newCfg.Hotspot.SSID == a.cfg.Hotspot.SSID &&
 		newCfg.Hotspot.Band == a.cfg.Hotspot.Band && newCfg.Hotspot.Channel == a.cfg.Hotspot.Channel &&
 		newCfg.Hotspot.Security == a.cfg.Hotspot.Security && !countryChanged
+	oldCfg, oldSecrets := a.cfg, a.secrets
 	a.cfg = newCfg
 	a.secrets = newSecrets
 	if onlyMetered {
@@ -252,12 +288,19 @@ func (a *Agent) UpdateHotspotSettings(req api.HotspotSettings) error {
 		return a.applyDHCP(false)
 	}
 
-	if countryChanged {
-		if err := system.SetRegulatoryCountry(a.runner, newCfg.Hotspot.Country); err != nil {
-			slog.Warn("could not set Wi-Fi country", "error", err)
-		}
+	if err := a.startNormalMode(); err != nil {
+		return err
 	}
-	return a.startNormalMode()
+	// hostapd may still refuse the settings (a radio's own limits that iw
+	// doesn't list). Then the previous ones go back, so the owner keeps
+	// the hotspot, and this page.
+	if !a.hotspotStayedUp() {
+		if err := a.restoreHotspot(oldCfg, oldSecrets); err != nil {
+			return err
+		}
+		return errHotspotDidntStart
+	}
+	return nil
 }
 
 // RevealHotspotPassword returns the hotspot password. It is only shown on

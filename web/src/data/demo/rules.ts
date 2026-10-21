@@ -65,7 +65,9 @@ export function checkHotspotSettings(settings: HotspotSettings): Errors {
     const password = checkWifiPassword(settings.password);
     if (password) errors.password = password;
   }
-  if (!/^[A-Z]{2}$/.test(settings.country)) errors.country = 'Enter a two-letter country code, e.g. US or DE.';
+  // As the router says it: "UK" isn't a country code, the United Kingdom's is GB.
+  if (settings.country === 'UK') errors.country = 'Use GB for the United Kingdom.';
+  else if (!/^[A-Z]{2}$/.test(settings.country)) errors.country = 'Must be a two-letter country code such as US.';
   return errors;
 }
 

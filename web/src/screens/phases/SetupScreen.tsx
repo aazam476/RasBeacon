@@ -5,7 +5,7 @@ import { useCountdown } from '@/lib/useCountdown';
 import { useForm } from '@/lib/useForm';
 import { FullPage, FullPageHeader } from '@/shell/FullPage';
 import { Button, FormError, Icon, Notice, PasswordField, Section, SelectField, TextField } from '@/ui';
-import { BAND_OPTIONS } from '../common/wifiOptions';
+import { bandOptions } from '../common/wifiOptions';
 
 /**
  * First-time setup: the admin password and RasBeacon's own Wi-Fi network. Afterwards it says
@@ -94,9 +94,10 @@ function SetupWizard({ setup, onDone }: { setup: SetupState; onDone: (result: Cl
           />
           <SelectField
             label="Band"
-            options={BAND_OPTIONS}
+            options={bandOptions(setup.no5GHz)}
             value={values.hotspotBand}
             onChange={(value) => setField('hotspotBand', value)}
+            error={fieldErrors.hotspotBand}
           />
         </Section>
 

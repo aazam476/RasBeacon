@@ -30,6 +30,8 @@ export interface SetupState {
   suggestedHotspotSsid?: string;
   suggestedHotspotPassword?: string;
   setupClosesInSeconds?: number;
+  /** The hotspot's radio has no 5 GHz band, so setup offers only 2.4 GHz. */
+  no5GHz?: boolean;
 }
 
 /** The setup form. The API's ClaimRequest is the same without `adminPasswordConfirm`. */
@@ -383,6 +385,8 @@ export interface HotspotSettings {
   /** Tell devices the connection is limited (Android reads it automatically). */
   metered: boolean;
   password?: string;
+  /** Read-only: the hotspot's radio has no 5 GHz band, so only 2.4 GHz is offered. */
+  no5GHz?: boolean;
 }
 
 /**

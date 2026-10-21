@@ -16,7 +16,7 @@ import {
   TextField,
 } from '@/ui';
 import { QrCode } from '../common/QrCode';
-import { BAND_OPTIONS, HOTSPOT_SECURITY_OPTIONS } from '../common/wifiOptions';
+import { bandOptions, HOTSPOT_SECURITY_OPTIONS } from '../common/wifiOptions';
 import { AccessSection } from './AccessSection';
 
 /** The settings that restart the hotspot when they change; only `metered` doesn't. */
@@ -44,7 +44,10 @@ export function HotspotScreen() {
 
 function HotspotForm({ settings }: { settings: HotspotSettings }) {
   const { status, saveHotspotSettings } = useDevice();
-  const form = useForm({ ...settings, password: '' }, saveHotspotSettings);
+  // A hotspot saved on 5 GHz whose radio can't use it runs on 2.4 GHz (after the adapter was
+  // swapped for another), so the form starts there.
+  const band = settings.no5GHz ? '2.4GHz' : settings.band;
+  const form = useForm({ ...settings, band, password: '' }, saveHotspotSettings);
   const { values, setField, fieldErrors } = form;
   const running = status.data?.hotspot.running;
 
@@ -92,16 +95,19 @@ function HotspotForm({ settings }: { settings: HotspotSettings }) {
 
       <Section
         title="Radio"
-        footer={
-          values.security === 'wpa3'
-            ? "The country decides which channels are legal. With WPA3 only, devices older than about 2019 can't join."
-            : 'The country decides which channels are legal.'
-        }
+        footer={[
+          'The country decides which channels are legal.',
+          values.security === 'wpa3' && "With WPA3 only, devices older than about 2019 can't join.",
+          settings.no5GHz && "This Wi-Fi adapter can't use 5 GHz.",
+        ]
+          .filter(Boolean)
+          .join(' ')}
       >
         <SelectField
           label="Band"
-          options={BAND_OPTIONS}
+          options={bandOptions(settings.no5GHz)}
           value={values.band}
+          error={fieldErrors.band}
           // A channel of the old band doesn't exist on the new one, so it goes back to the default.
           onChange={(band) => form.update((current) => ({ ...current, band, channel: 0 }), ['band', 'channel'])}
         />

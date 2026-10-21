@@ -406,6 +406,7 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
           {
             ...sameNames('adminPassword', 'hotspotSsid', 'hotspotPassword'),
             'hotspot.ssid': 'hotspotSsid',
+            'hotspot.band': 'hotspotBand',
           },
         );
       },
@@ -546,6 +547,7 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
         const saved = await attempt(() => api.putHotspotSettings(settings), {
           ...sameNames('ssid', 'password', 'channel', 'country'),
           'hotspot.ssid': 'ssid',
+          'hotspot.band': 'band',
           'hotspot.channel': 'channel',
           'hotspot.country': 'country',
           hotspotPassword: 'password',

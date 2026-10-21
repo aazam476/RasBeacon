@@ -60,8 +60,11 @@ type Radio struct {
 	SupportsAP bool   `json:"supportsAp"`
 	// MaxAPs is how many hotspot networks the radio can broadcast at once
 	// (see MaxAPInterfaces). The guest network needs 2.
-	MaxAPs int  `json:"maxAps"`
-	Role   Role `json:"role"`
+	MaxAPs int `json:"maxAps"`
+	// Has5GHz is true when the radio can use the 5 GHz band (see
+	// Supports5GHz). Many built-in radios, like the Pi Zero 2 W's, can't.
+	Has5GHz bool `json:"has5GHz"`
+	Role    Role `json:"role"`
 }
 
 // PhyInfoFunc returns the output of `iw phy <phy> info`. It is a parameter so
@@ -112,6 +115,7 @@ func Detect(sysClassNet string, phyInfo PhyInfoFunc) ([]Radio, error) {
 		if info, err := phyInfo(phyName); err == nil {
 			r.SupportsAP = SupportsAPMode(info)
 			r.MaxAPs = MaxAPInterfaces(info)
+			r.Has5GHz = Supports5GHz(info)
 		}
 
 		radios = append(radios, r)
@@ -308,6 +312,44 @@ func atoi(s string) int {
 		n = n*10 + int(r-'0')
 	}
 	return n
+}
+
+// Supports5GHz reads `iw phy <name> info` output and reports whether the
+// radio can use the 5 GHz band. iw lists each band the radio has as
+// "Band 1:" (2.4 GHz), "Band 2:" (5 GHz) and so on, so a radio without a
+// "Band 2:" section is 2.4 GHz only.
+func Supports5GHz(iwPhyInfo string) bool {
+	for _, line := range strings.Split(iwPhyInfo, "\n") {
+		if strings.TrimSpace(line) == "Band 2:" {
+			return true
+		}
+	}
+	return false
+}
+
+// ChannelAllowed reads `iw phy <name> info` output and reports whether the
+// radio may run a hotspot on channel under the current country's rules.
+// iw lists every channel with what the country allows, for example:
+//
+//   - 2412 MHz [1] (20.0 dBm)
+//   - 2467 MHz [12] (disabled)
+//   - 5260 MHz [52] (20.0 dBm) (no IR, radar detection)
+//
+// "disabled" means the channel may not be used at all, and "no IR" ("no
+// initiating radiation") that the radio may not start a network on it, so
+// a hotspot can't use either. listed is false when the channel isn't in
+// the output at all, so the caller can't tell.
+func ChannelAllowed(iwPhyInfo string, channel int) (allowed, listed bool) {
+	want := fmt.Sprintf("[%d]", channel)
+	for _, line := range strings.Split(iwPhyInfo, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "* ") || !strings.Contains(trimmed, " MHz "+want) {
+			continue
+		}
+		forbidden := strings.Contains(trimmed, "(disabled)") || strings.Contains(trimmed, "no IR")
+		return !forbidden, true
+	}
+	return false, false
 }
 
 // readTrimmed reads a small sysfs file and removes the trailing newline.

@@ -823,7 +823,7 @@ func (h HotspotConfig) Validate() error {
 		return &ValidationError{Field: "hotspot.channel", Message: "This channel is not offered for this band."}
 	}
 	if !isCountryCode(h.Country) {
-		return &ValidationError{Field: "hotspot.country", Message: "Must be a two-letter country code such as US."}
+		return &ValidationError{Field: "hotspot.country", Message: countryMessage(h.Country)}
 	}
 	return nil
 }
@@ -884,14 +884,6 @@ func DefaultChannel(band Band) int {
 		return 36
 	}
 	return 6
-}
-
-// isCountryCode reports whether code looks like an ISO 3166 two-letter code.
-func isCountryCode(code string) bool {
-	if len(code) != 2 {
-		return false
-	}
-	return strings.ToUpper(code) == code && unicode.IsLetter(rune(code[0])) && unicode.IsLetter(rune(code[1]))
 }
 
 // Clone returns a copy of c that can be changed without affecting c. A plain

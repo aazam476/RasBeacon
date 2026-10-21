@@ -316,7 +316,14 @@ Keep the VPN on with the kill switch.
 1. **Hotspot:** a new Wi-Fi password `short` → **Save**: "Must be 8 to 63
    characters long." Leave it empty and set band **5 GHz** → **Save**:
    *Saved.*, the hotspot comes back on 5 GHz, devices rejoin. Switch back to
-   2.4 GHz if you like.
+   2.4 GHz if you like. Country `UK` → *Use GB for the United Kingdom.*
+   On a radio without 5 GHz (the built-in Wi-Fi of a Zero 2 W or 3B, no
+   USB adapter): the Band list offers only 2.4 GHz, in setup too.
+   **Settings hostapd refuses (new):** set a channel the radio can't use
+   (*SSH:* `iw phy` lists its channels; one marked *no IR*) → **Save**:
+   after about 5 s, *The Wi-Fi adapter couldn't run the hotspot with these
+   settings, so the previous settings were put back.* and the hotspot is
+   back on the old settings.
 2. **Show password and QR code** (no admin password asked): shows the
    current one and a QR code. Scan it with a phone's camera: the phone
    offers to join the hotspot and joins it.
