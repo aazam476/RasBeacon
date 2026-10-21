@@ -75,10 +75,11 @@ export function ClientSection({ client }: { client: NetworkClient }) {
           initial={client.name ?? client.hostname ?? ''}
           placeholder={client.hostname || 'Kitchen tablet'}
           maxLength={40}
+          allowEmpty
           footer={
             <>
               Kept for <span className="font-mono wrap-anywhere">{client.mac}</span>, even after it leaves and comes
-              back.
+              back. Leave it empty to use the name the device sends.
             </>
           }
           onSave={(newName) => renameClient(client.mac, newName)}

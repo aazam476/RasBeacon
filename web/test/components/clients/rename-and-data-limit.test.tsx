@@ -5,7 +5,7 @@ import { ClientsScreen } from '@/screens/clients/ClientsScreen';
 import { fakeDevice, renderScreen } from '../render';
 
 describe('renaming a device', () => {
-  it('names the MAC address it is kept for, and won’t save a blank name', async () => {
+  it('names the MAC address it is kept for, and saves the new name', async () => {
     const device = fakeDevice();
     const client = device.status.data!.clients[0];
     const { user } = renderScreen(<ClientsScreen />, device, '/clients');
@@ -15,10 +15,22 @@ describe('renaming a device', () => {
 
     const field = within(sheet).getByRole('textbox', { name: 'Name' });
     await user.clear(field);
-    expect(within(sheet).getByRole('button', { name: 'Save' })).toHaveProperty('disabled', true);
     await user.type(field, "Ali's phone");
     await user.click(within(sheet).getByRole('button', { name: 'Save' }));
     expect(device.renameClient).toHaveBeenCalledWith(client.mac, "Ali's phone");
+  });
+
+  // Unlike other names, a device's may be cleared: it goes back to the name the device sends.
+  it('saves an empty name, to go back to the device’s own', async () => {
+    const device = fakeDevice();
+    const client = device.status.data!.clients[0];
+    const { user } = renderScreen(<ClientsScreen />, device, '/clients');
+    await user.click(screen.getAllByRole('button', { name: /^Rename / })[0]);
+    const sheet = screen.getByRole('dialog');
+    expect(within(sheet).getByText(/Leave it empty to use the name the device sends/)).toBeTruthy();
+    await user.clear(within(sheet).getByRole('textbox', { name: 'Name' }));
+    await user.click(within(sheet).getByRole('button', { name: 'Save' }));
+    expect(device.renameClient).toHaveBeenCalledWith(client.mac, '');
   });
 });
 

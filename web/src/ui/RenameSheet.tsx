@@ -24,13 +24,15 @@ interface RenameSheetProps {
   check?: (name: string) => string | undefined;
   /** A name like a host name or a code: no capitals, corrections or suggestions while typing. */
   plain?: boolean;
+  /** An empty name may be saved too: it removes the name (a device goes back to its own). */
+  allowEmpty?: boolean;
   onSave: (name: string) => Promise<void>;
   onClose: () => void;
 }
 
 /**
  * A sheet with one name to type. Save stays gray while the name is blank, since Cancel is
- * there for leaving it as it was.
+ * there for leaving it as it was, unless `allowEmpty` says a blank name means something.
  */
 export function RenameSheet({
   title,
@@ -43,6 +45,7 @@ export function RenameSheet({
   busyLabel = 'Saving…',
   check,
   plain = false,
+  allowEmpty = false,
   onSave,
   onClose,
 }: RenameSheetProps) {
@@ -54,7 +57,7 @@ export function RenameSheet({
       title={title}
       confirmLabel="Save"
       busyLabel={busyLabel}
-      confirmDisabled={name.trim() === '' || problem !== undefined}
+      confirmDisabled={(name.trim() === '' && !allowEmpty) || problem !== undefined}
       onConfirm={() => onSave(name.trim())}
       onClose={onClose}
     >
