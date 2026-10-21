@@ -375,7 +375,7 @@ func TestRunArgs(t *testing.T) {
 	})
 	joined := strings.Join(args, " ")
 	for _, want := range []string{
-		"--name rasbeacon-samba", "--network rasbeacon-plugins --ip 10.89.0.3 --dns 10.89.0.1",
+		"--name rasbeacon-samba", "--network rasbeacon-plugins:ip=10.89.0.3,host_interface_name=rbport3 --dns 10.89.0.1",
 		"--memory 128m --cpus 0.5", "--volume /run/x/data/share:/share", "--device /dev/i2c-1",
 		"--security-opt mask=/sys/class/thermal", "--env-file /run/rbd/plugins/samba/env localhost/rasbeacon-plugin/samba:1",
 		"--security-opt no-new-privileges",

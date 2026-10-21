@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"rasbeacon/internal/plugin"
+	"rasbeacon/internal/render"
 )
 
 // Filling in a plugin's templates (fillTemplate in pluginsrun.go).
@@ -35,5 +36,16 @@ func TestFillTemplate_DefinesEveryAllowedFunction(t *testing.T) {
 func TestFillTemplate_RefusesLoops(t *testing.T) {
 	if _, err := fillTemplate("config", []byte("{{range 1000000000000}}x{{end}}"), plugin.Values{}); err == nil || !strings.Contains(err.Error(), "uses range") {
 		t.Errorf("fillTemplate = %v, want refused", err)
+	}
+}
+
+// The firewall (internal/render) names the plugins' bridge and ports
+// without importing the plugin package, so the two must agree.
+func TestPluginNetwork_NamesMatchTheFirewall(t *testing.T) {
+	if render.PluginBridge != plugin.NetworkInterface || render.PluginGateway != plugin.Gateway {
+		t.Errorf("bridge %s/%s, want %s/%s", render.PluginBridge, render.PluginGateway, plugin.NetworkInterface, plugin.Gateway)
+	}
+	if port := plugin.HostPortName("10.89.0.17"); port != "rbport17" || !strings.HasPrefix(port, render.PluginPortPrefix) {
+		t.Errorf("port name %q doesn't start with the firewall's %q", port, render.PluginPortPrefix)
 	}
 }

@@ -14,6 +14,8 @@ const (
 	NetworkName      = "rasbeacon-plugins"
 	NetworkInterface = "rbplug0"
 	Gateway          = "10.89.0.1"
+	// HostPortPrefix starts the name of each plugin's port on the bridge.
+	HostPortPrefix = "rbport"
 	// ContainerPrefix starts every plugin container's name.
 	ContainerPrefix = "rasbeacon-"
 	// Label marks plugin containers, with the plugin ID as its value.
@@ -50,6 +52,14 @@ type RunSpec struct {
 	Command []string
 }
 
+// HostPortName is the name of the port that plugs the plugin with this
+// address into the bridge: "rbport" and the address's last number, such
+// as "rbport3" for 10.89.0.3. Each plugin has its own address, so each
+// port has its own name.
+func HostPortName(address string) string {
+	return HostPortPrefix + address[strings.LastIndex(address, ".")+1:]
+}
+
 // ContainerName is a plugin's container's name.
 func ContainerName(id string) string { return ContainerPrefix + id }
 
@@ -61,9 +71,10 @@ func RunArgs(s RunSpec) []string {
 		"--name", ContainerName(s.ID),
 		// The label finds RasBeacon's containers (podman ps --filter label=…).
 		"--label", Label + "=" + s.ID,
-		// Its network, its fixed address on it, and RasBeacon's DNS server.
-		"--network", NetworkName,
-		"--ip", s.Address,
+		// Its network, its fixed address on it, the name of its port on
+		// the bridge (the firewall drops what plugins send each other by
+		// it), and RasBeacon's DNS server.
+		"--network", NetworkName + ":ip=" + s.Address + ",host_interface_name=" + HostPortName(s.Address),
 		"--dns", Gateway,
 		"--hostname", s.ID,
 		// What it may use: memory, processor, and at most 512 processes (so

@@ -500,10 +500,13 @@ type PluginPort struct {
 }
 
 // PluginBridge is the plugins' network's interface, and PluginGateway
-// RasBeacon's address on it.
+// RasBeacon's address on it. Each plugin's container is plugged into the
+// bridge by a port whose name starts with PluginPortPrefix (named by
+// plugin.HostPortName; the agent's tests check the two packages agree).
 const (
-	PluginBridge  = "rbplug0"
-	PluginGateway = "10.89.0.1"
+	PluginBridge     = "rbplug0"
+	PluginGateway    = "10.89.0.1"
+	PluginPortPrefix = "rbport"
 )
 
 type pluginPortData struct {
@@ -537,11 +540,14 @@ type firewallData struct {
 	TunnelDNS6      []string
 	TunnelInterface string
 	PluginBridge    string
-	PluginGateway   string
-	PluginInternet  []string
-	PluginLAN       []string
-	PluginPorts     []pluginPortData
-	LANAddress      string
+	// PluginBridgePorts matches the names of the plugins' ports on their
+	// bridge, such as "rbport*".
+	PluginBridgePorts string
+	PluginGateway     string
+	PluginInternet    []string
+	PluginLAN         []string
+	PluginPorts       []pluginPortData
+	LANAddress        string
 }
 
 // Firewall produces the nftables ruleset.
@@ -552,15 +558,16 @@ func Firewall(in FirewallInput) (string, error) {
 		}
 	}
 	data := firewallData{
-		Bridge:          BridgeName,
-		SSHEnabled:      in.SSHEnabled,
-		Egress:          in.Egress,
-		TunnelInterface: in.TunnelInterface,
-		PortalOnly:      in.PortalOnly,
-		Guest:           in.Guest,
-		GuestBridge:     GuestBridgeName,
-		PluginBridge:    PluginBridge,
-		PluginGateway:   PluginGateway,
+		Bridge:            BridgeName,
+		SSHEnabled:        in.SSHEnabled,
+		Egress:            in.Egress,
+		TunnelInterface:   in.TunnelInterface,
+		PortalOnly:        in.PortalOnly,
+		Guest:             in.Guest,
+		GuestBridge:       GuestBridgeName,
+		PluginBridge:      PluginBridge,
+		PluginGateway:     PluginGateway,
+		PluginBridgePorts: PluginPortPrefix + "*",
 	}
 	if len(in.Plugins) > 0 && !in.LANAddress.Is4() {
 		return "", fmt.Errorf("plugins need RasBeacon's hotspot address")

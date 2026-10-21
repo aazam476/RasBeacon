@@ -275,7 +275,12 @@ catalogs; `internal/agent/plugins*.go` installs and runs them.
   from the hotspot and only to RasBeacon's address (`dnat`), lets plugins with
   `internet` out like devices (into `wg0` when the VPN is in use; the routing
   rules 102/103 send their traffic to the tunnel table), and lets nothing from
-  the uplink in.
+  the uplink in. Each container's port on the bridge is named after its
+  address (`rbport2` for `10.89.0.2`, Podman's `host_interface_name`), and a
+  `bridge` table drops every packet one plugin's port passes to another's:
+  the bridge passes those itself, so the `inet` rules never see them.
+  (Matching the bridge's name instead, `meta ibrname`, needs
+  `CONFIG_NFT_BRIDGE_META`, which Raspberry Pi kernels don't have.)
 - **Downloads** (catalog, `.rba`, images) carry the firewall mark `0x5242`,
   which rule 111 sends into the tunnel; names are looked up with dnsmasq, which
   asks the VPN's DNS. Podman downloads through a proxy in rbd that makes such

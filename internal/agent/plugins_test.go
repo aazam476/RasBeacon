@@ -218,7 +218,7 @@ func TestPlugins_InstallFromAFileStartsItWithItsOwnAddressPortsAndData(t *testin
 		"podman untag localhost/adguard:latest", // only RasBeacon's name stays
 		"fallocate --length 256M", "mkfs.ext4", "mount -o loop,nosuid,nodev",
 		"podman run --detach --replace --name rasbeacon-adguard-home",
-		"--network rasbeacon-plugins --ip 10.89.0.2 --dns 10.89.0.1",
+		"--network rasbeacon-plugins:ip=10.89.0.2,host_interface_name=rbport2 --dns 10.89.0.1",
 		"--security-opt mask=/sys/class/thermal", "--env-file " + e.paths.PluginEnvFile("adguard-home"),
 	} {
 		if !e.runner.ran(want) {
