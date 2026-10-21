@@ -316,7 +316,13 @@ Keep the VPN on with the kill switch.
 1. **Hotspot:** a new Wi-Fi password `short` → **Save**: "Must be 8 to 63
    characters long." Leave it empty and set band **5 GHz** → **Save**:
    *Saved.*, the hotspot comes back on 5 GHz, devices rejoin. Switch back to
-   2.4 GHz if you like. Country `UK` → *Use GB for the United Kingdom.*
+   2.4 GHz if you like.
+   **Country `UK` with 5 GHz (review check):** Band **5 GHz**, Country `UK`.
+   **Expect** *Use GB for the United Kingdom.* under Country as soon as both
+   letters are typed, and **Save** refused with the same message; the
+   hotspot keeps running on its old settings. With `GB` it saves.
+   **Channels by country (new):** Country `JP`, Band 5 GHz: the Channel list
+   ends at 48 (Japan has no 149 to 165); with `US` it goes up to 165.
    On a radio without 5 GHz (the built-in Wi-Fi of a Zero 2 W or 3B, no
    USB adapter): the Band list offers only 2.4 GHz, in setup too.
    **Settings hostapd refuses (new):** set a channel the radio can't use
@@ -353,6 +359,11 @@ Keep the VPN on with the kill switch.
    Status shows the guest network running with 1 guest.
    **Show QR code** (new) under *Now*: scanning it with a phone's camera
    offers to join the guest network, and joins it.
+   **rbd restarting with the guest network on (review check):** *SSH:*
+   `sudo systemctl restart rbd`. **Expect** within a minute: the Status page
+   shows the same uplink as before (the built-in Wi-Fi or Ethernet, never
+   `guest0`), phones on both networks have internet again, and
+   `journalctl -u rbd -b | grep -i uplink` names no `guest0`.
 8. **Public IPv6 (if your WireGuard server routes a /64 to RasBeacon, and
    its `.conf` gives RasBeacon an IPv6 address and `::/0`):** VPN →
    *Server details* → *Public IPv6 network* → the /64 (like
@@ -420,7 +431,26 @@ Pi 4 in an Argon ONE V2 case, test that plugin too.
 14. **Remove** Samba with **Keep its data**, install it again: its settings
     are new, its data is back. Remove AdGuard Home without keeping data.
 15. *SSH:* `podman ps` shows only plugins RasBeacon runs; `nft list ruleset`
-    has the `plugin_ports` chain.
+    has the `plugin_ports` chain, and a `table bridge rasbeacon` that drops
+    what `rbport*` ports send each other; `ip link` shows each plugin's port
+    as `rbport<n>` in `rbplug0`.
+16. **A plugin whose image carries another plugin's name (review check):**
+    with AdGuard Home installed (say version 0.107.79-2), on a computer
+    with Podman or Docker:
+    `podman pull docker.io/library/alpine:3.20`,
+    `podman tag docker.io/library/alpine:3.20 localhost/rasbeacon-plugin/adguard-home:0.107.79-2`,
+    `podman save -o image.tar docker.io/library/alpine:3.20 localhost/rasbeacon-plugin/adguard-home:0.107.79-2`,
+    then zip it with any plugin's `manifest.json` (another `id`, such as
+    `evil-test`, and no `image.ref`), `icon.png` and `README.md` into
+    `evil-test.rba` (docs/plugins.md, "The file"). **Install from a file.**
+    **Expect** it refused, naming the other plugin's image, and AdGuard Home
+    still running its own image after a restart (*SSH:*
+    `podman image inspect localhost/rasbeacon-plugin/adguard-home:0.107.79-2`
+    shows the same ID as before).
+17. **Kept data of another author (new):** remove Trip Notes or any
+    unsigned plugin with **Keep its data**, then install it again: the
+    sheet shows *Use the data kept from the earlier … install*, off; with
+    it off the plugin starts empty. Repeat with it on: the data is back.
 
 ## 14. Updates (Pi 4/5 only)
 
@@ -507,6 +537,11 @@ install updates (on the Pi 3/Zero 2 W image, check instead that System says
    Repeat with **Everything** and the uplink unplugged: the plugin starts
    without the internet. After the factory reset below, set RasBeacon up
    and restore the backup again: everything comes back.
+   **A cut-off backup (new):** start an **Everything** backup with a plugin's
+   data and cancel the download in the browser halfway. Restore the partial
+   file: **expect** *This backup is incomplete: it was cut off while it was
+   being saved…*, not "the password is wrong". A large backup (several GB)
+   over a slow connection downloads to the end, however long it takes.
 
 1. **Admin password:** log in on a second device too, then on the first
    System → **Change admin password**. A wrong current password says
@@ -581,10 +616,11 @@ Board (Pi 4/5/3B/3B+/Zero 2 W) / RAM:     Adapter:          Card size:          
 9  Speed test: down __ up __ ping __ location __, took __ s / speed.cloudflare.com: down __ up __
 10 Login page notice: / zero-leak login worked, tap delay __ s: / no leak: / login mode:
 11 SSH: / pages OK phone+laptop+dark: / rounded focus outline: / readings: / stay logged in: / unsaved bar:
-12 Hotspot password check + 5 GHz: / show password (no admin password): / WPA3 only: / allowed devices + lockout warning: / device limit: / metered: / guests isolated: / IPv6: / HTTPS fingerprint + redirect:
-13 Version before __ / renamed image refused: / changed byte refused: / update installed, settings kept, took __ min: / rollback: / check schedule + Check now: / ntfy test + new-version notice:
-14 Power cuts x3: / reboot dialog: / shut down + power on: / rename to travel-pi.lan: / long run __ devices __ min, drops: / memory: / diagnostics clean:
-15 Backup Plugin data restored, app downloaded again: / Everything restored offline: / Admin password changed, other device logged out: / Factory reset: / setup.txt password + broken-file LED + deleted: / factory-reset file: / button:
-16 Power idle __ W, load __ W / iperf3:
+12 Hotspot password check + 5 GHz: / UK refused, GB saves: / JP channels end at 48: / show password (no admin password): / WPA3 only: / allowed devices + lockout warning: / device limit: / metered: / guests isolated: / rbd restart with guests, uplink not guest0: / IPv6: / HTTPS fingerprint + redirect: / iPhone Safari accepts the certificate:
+13 Plugins: catalog install AdGuard: / isolation: / ports: / Samba: / crash stop: / changed byte refused: / image with another plugin's name refused, AdGuard unchanged: / kept data asked about: / rbport + bridge table:
+14 Version before __ / renamed image refused: / changed byte refused: / update installed, settings kept, took __ min: / rollback: / check schedule + Check now: / ntfy test + new-version notice:
+15 Power cuts x3: / reboot dialog: / shut down + power on: / rename to travel-pi.lan: / long run __ devices __ min, drops: / memory: / diagnostics clean:
+16 Backup Plugin data restored, app downloaded again: / cut-off backup says incomplete: / Everything restored offline: / Admin password changed, other device logged out: / Factory reset: / setup.txt password + broken-file LED + deleted: / factory-reset file: / button:
+17 Power idle __ W, load __ W / iperf3:
 Anything else odd:
 ```
