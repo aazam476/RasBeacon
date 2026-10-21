@@ -49,9 +49,9 @@ hotspot**, never from the upstream network.
 | Method and path | Request | Response | Notes |
 |---|---|---|---|
 | `GET /api/v1/setup` | — | `SetupState` | Mode, claimed or not, and suggestions for the setup wizard; during setup, `no5GHz: true` when the hotspot's radio has no 5 GHz band |
-| `POST /api/v1/setup/claim` | `ClaimRequest` | `ClaimResponse` | Only in `setup` mode (409 otherwise). Also logs the browser in. 400 with `field: "hotspot.band"` for 5 GHz on a radio without it. If hostapd then doesn't stay running on 5 GHz, the hotspot moves to 2.4 GHz and the Status page says so. |
+| `POST /api/v1/setup/claim` | `ClaimRequest` | `ClaimResponse` | Only in `setup` mode (409 otherwise). JSON only (415 otherwise), like login. Also logs the browser in. 400 with `field: "hotspot.band"` for 5 GHz on a radio without it. If hostapd then doesn't stay running on 5 GHz, the hotspot moves to 2.4 GHz and the Status page says so. |
 | `GET /api/v1/session` | — | `SessionInfo` | Is this browser logged in? Returns the CSRF token if so. |
-| `POST /api/v1/session` | `LoginRequest` (`password`, `stayLoggedIn`) | `SessionInfo` | Login. 401 wrong password, 429 rate-limited. |
+| `POST /api/v1/session` | `LoginRequest` (`password`, `stayLoggedIn`) | `SessionInfo` | Login. 401 wrong password, 429 rate-limited, 415 unless the body is JSON (so a form on another website can't log a browser in). |
 | `DELETE /api/v1/session` | — | 204 | Logout |
 | `GET /api/v1/captive` | — | `CaptivePortalInfo` | RFC 8908 captive-portal API (`application/captive+json`). `captive` is true during setup. |
 

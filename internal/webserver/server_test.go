@@ -88,6 +88,10 @@ func request(s *Server, method, url, body string, headers map[string]string, coo
 	req.RemoteAddr = "10.87.0.23:50000"
 	local := &net.TCPAddr{IP: net.ParseIP("10.87.0.1"), Port: 80}
 	req = req.WithContext(context.WithValue(req.Context(), http.LocalAddrContextKey, local))
+	// A body is JSON unless the test says otherwise, as the web UI sends it.
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
@@ -424,6 +428,18 @@ func TestStayLoggedIn_SurvivesARestartUntilLogout(t *testing.T) {
 	for _, c := range cookies {
 		if c.Name == rememberCookieName {
 			t.Error("unexpected remember cookie")
+		}
+	}
+}
+
+// Logging in and claiming only take JSON, so a form on another website
+// can't send them without the browser asking RasBeacon first.
+func TestPublicPosts_OnlyTakeJSON(t *testing.T) {
+	s, _ := newTestServer(api.ModeSetup)
+	for _, path := range []string{"/api/v1/setup/claim", "/api/v1/session"} {
+		form := map[string]string{"Content-Type": "application/x-www-form-urlencoded"}
+		if rec := request(s, "POST", "http://10.87.0.1"+path, `password=guess`, form, nil); rec.Code != http.StatusUnsupportedMediaType {
+			t.Errorf("POST %s as a form = %d, want 415", path, rec.Code)
 		}
 	}
 }

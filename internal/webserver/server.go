@@ -85,10 +85,13 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
 	// --- Public: no login needed ---
+	// The public POST routes only take JSON: a form on another website
+	// can't send that without the browser asking RasBeacon first (CORS),
+	// so it can't claim RasBeacon or log a browser in.
 	mux.HandleFunc("GET /api/v1/setup", s.handleSetupState)
-	mux.HandleFunc("POST /api/v1/setup/claim", s.handleClaim)
+	mux.Handle("POST /api/v1/setup/claim", requireJSON(http.HandlerFunc(s.handleClaim)))
 	mux.HandleFunc("GET /api/v1/session", s.handleGetSession)
-	mux.HandleFunc("POST /api/v1/session", s.handleLogin)
+	mux.Handle("POST /api/v1/session", requireJSON(http.HandlerFunc(s.handleLogin)))
 	mux.HandleFunc("DELETE /api/v1/session", s.handleLogout)
 	mux.HandleFunc("GET /api/v1/captive", s.handleCaptiveAPI)
 
