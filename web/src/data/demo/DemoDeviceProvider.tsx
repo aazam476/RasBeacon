@@ -33,6 +33,7 @@ import {
   checkSetupForm,
   checkWifiPassword,
   checkWireGuardFile,
+  demoHotspotChannels,
 } from './rules';
 import { CLOSED_BROWSER, createDemoState, SCENARIOS, UNREACHABLE, type DemoState } from './scenarios';
 
@@ -544,9 +545,19 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
         });
       },
 
+      hotspotChannels: async (country) => {
+        await wait(300);
+        return demoHotspotChannels(country);
+      },
       saveHotspotSettings: async (settings) => {
         await wait(1500);
         failIfAny(checkHotspotSettings(settings));
+        if (
+          settings.channel !== 0 &&
+          !demoHotspotChannels(settings.country)[settings.band].includes(settings.channel)
+        ) {
+          failIfAny({ channel: "This channel isn't allowed in this country." });
+        }
         change((d) => {
           const { password, ...rest } = settings;
           d.router.hotspotSettings = rest;

@@ -2,6 +2,7 @@ import { createContext, useContext } from 'react';
 import type {
   AccessSettings,
   AdminPasswordForm,
+  ChannelsByBand,
   ClaimResponse,
   DNSSettings,
   EthernetRole,
@@ -248,6 +249,12 @@ export interface DeviceActions {
   saveHotspotSettings: (settings: HotspotSettings) => Promise<void>;
   /** Answer with the current Wi-Fi password (being logged in is enough). */
   revealHotspotPassword: () => Promise<string>;
+  /**
+   * The channels the router lets the Hotspot page offer for `country`, by band: those the
+   * country allows a hotspot on (Japan has no channel 149). Field key: country (a code that isn't
+   * a country, such as UK for GB).
+   */
+  hotspotChannels: (country: string) => Promise<ChannelsByBand>;
   /** A QR code to join a network: the hotspot or the guest network. */
   wifiQr: (network: 'hotspot' | 'guest') => Promise<WiFiQR>;
   /** Field keys: enabled, ssid, password. */

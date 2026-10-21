@@ -236,6 +236,14 @@ describe('VPN', () => {
 describe('hotspot, guests and who can join', () => {
   testActions([
     {
+      name: 'answers the channels a country allows',
+      run: (d) => d.hotspotChannels('JP'),
+      sends: ['POST /settings/hotspot/channels'],
+      body: { country: 'JP' },
+      answer: { body: { channels: { '2.4GHz': [1], '5GHz': [36] } } },
+      then: (_, answered) => expect(answered).toEqual({ '2.4GHz': [1], '5GHz': [36] }),
+    },
+    {
       name: 'saves the hotspot',
       run: (d) => d.saveHotspotSettings(d.hotspotSettings.data!),
       sends: ['PUT /settings/hotspot'],
@@ -261,6 +269,19 @@ describe('hotspot, guests and who can join', () => {
       sends: ['PUT /settings/guest'],
     },
   ]);
+
+  it('a code that isn’t a country comes back for the Country field', async () => {
+    const { device } = await withReadyDevice({
+      'POST /settings/hotspot/channels': {
+        status: 400,
+        body: { error: 'Use GB for the United Kingdom.', field: 'hotspot.country' },
+      },
+    });
+    const error = await device()
+      .hotspotChannels('UK')
+      .catch((e: unknown) => e);
+    expect(error).toEqual(new FieldErrors({ country: 'Use GB for the United Kingdom.' }));
+  });
 });
 
 describe('clients', () => {

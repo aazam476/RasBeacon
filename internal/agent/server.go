@@ -126,6 +126,18 @@ func (a *Agent) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, code)
 	})
+	mux.HandleFunc("POST /settings/hotspot/channels", func(w http.ResponseWriter, r *http.Request) {
+		var req api.HotspotChannelsRequest
+		if !readJSON(w, r, &req) {
+			return
+		}
+		channels, err := a.HotspotChannels(req)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, channels)
+	})
 	mux.HandleFunc("GET /settings/usage", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, a.UsageSettings())
 	})

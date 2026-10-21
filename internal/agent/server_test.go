@@ -49,7 +49,7 @@ func TestRoutes_RefuseBodiesTheyCantRead(t *testing.T) {
 	routes := []string{
 		"POST /claim", "POST /verify-password", "POST /remembered-logins/check", "POST /remembered-logins/forget",
 		"POST /clients/internet-access", "POST /clients/name", "POST /wifi-qr", "PUT /settings/usage",
-		"PUT /settings/hotspot", "PUT /settings/access", "PUT /settings/guest", "PUT /settings/ssh",
+		"PUT /settings/hotspot", "POST /settings/hotspot/channels", "PUT /settings/access", "PUT /settings/guest", "PUT /settings/ssh",
 		"PUT /settings/uplink", "PUT /settings/swap", "PUT /settings/dns", "PUT /settings/vpn",
 		"POST /settings/vpn/import", "POST /settings/vpn/profile/save", "POST /settings/vpn/profile/rename",
 		"PUT /settings/https", "POST /portal/browser/start", "POST /portal/browser/input",
@@ -252,5 +252,17 @@ func TestListenUnix_ServesTheRoutesOnlyToItsOwnerAndGroup(t *testing.T) {
 	}
 	if info, err := os.Stat(socket); err != nil || info.Mode().Perm() != 0o660 {
 		t.Errorf("socket mode = %v, %v; want 0660 (rbd and rbweb's group only)", info.Mode().Perm(), err)
+	}
+}
+
+func TestRoutes_HotspotChannels(t *testing.T) {
+	e := newClaimedEnv(t, false)
+	status, body := e.call(http.MethodPost, "/settings/hotspot/channels", api.HotspotChannelsRequest{Country: "JP"})
+	var got api.HotspotChannels
+	if status != http.StatusOK || json.Unmarshal(body, &got) != nil || len(got.Channels["5GHz"]) != 4 {
+		t.Errorf("channels for Japan = %d %s", status, body)
+	}
+	if status, body := e.call(http.MethodPost, "/settings/hotspot/channels", api.HotspotChannelsRequest{Country: "UK"}); status != http.StatusBadRequest {
+		t.Errorf("UK = %d %s, want 400", status, body)
 	}
 }

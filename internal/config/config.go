@@ -868,6 +868,10 @@ var allowedChannels = map[Band][]int{
 	Band5GHz: {36, 40, 44, 48, 149, 153, 157, 161, 165},
 }
 
+// OfferedChannels lists the channels RasBeacon offers for band, before a
+// country's rules narrow them down.
+func OfferedChannels(band Band) []int { return slices.Clone(allowedChannels[band]) }
+
 // IsAllowedChannel reports whether channel is offered for band.
 func IsAllowedChannel(band Band, channel int) bool {
 	for _, allowed := range allowedChannels[band] {

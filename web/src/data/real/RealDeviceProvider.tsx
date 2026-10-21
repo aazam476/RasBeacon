@@ -564,6 +564,8 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
         return hotspotPassword;
       },
       wifiQr: (network) => attempt(() => api.wifiQr(network)),
+      hotspotChannels: async (country) =>
+        (await attempt(() => api.getHotspotChannels(country), { 'hotspot.country': 'country' })).channels,
       saveGuestSettings: async (settings) => {
         const problems = checkGuestForm(settings);
         if (Object.keys(problems).length > 0) throw new FieldErrors(problems);

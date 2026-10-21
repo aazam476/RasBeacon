@@ -196,6 +196,12 @@ func newTestEnv(t *testing.T) *testEnv {
 	if err := os.MkdirAll(p.BootConfigDir(), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	// The real Wi-Fi regulatory database, as the image has it.
+	regulatory, err := os.ReadFile("../regdb/testdata/regulatory.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustWrite(t, p.RegulatoryDB(), string(regulatory))
 
 	runner := &fakeRunner{outputs: map[string]string{
 		"iw phy phy0 info": iwInfoWithAP,

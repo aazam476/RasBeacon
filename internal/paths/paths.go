@@ -79,6 +79,9 @@ func (p Paths) SwapFile() string { return p.join("persistent", "swapfile") }
 // ProcSwaps lists the swap areas in use.
 func (p Paths) ProcSwaps() string { return p.join("proc", "swaps") }
 
+// RegulatoryDB is the Wi-Fi regulatory database (see internal/regdb).
+func (p Paths) RegulatoryDB() string { return p.join("lib", "firmware", "regulatory.db") }
+
 // DataDir is RasBeacon's directory on the persistent partition. A factory
 // reset deletes everything inside it.
 func (p Paths) DataDir() string { return p.join("persistent", "rasbeacon") }

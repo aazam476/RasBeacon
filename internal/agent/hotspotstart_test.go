@@ -3,11 +3,15 @@ package agent
 import (
 	"encoding/hex"
 	"errors"
+	"os"
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
 	"rasbeacon/internal/api"
 	"rasbeacon/internal/config"
+	"rasbeacon/internal/regdb"
 )
 
 // Hotspot changes the radio can't run are refused, or undone, so the owner
@@ -155,5 +159,88 @@ func TestHotspot_Saved5GHzRunsOn2GHzOnARadioWithout5GHz(t *testing.T) {
 	warnings := strings.Join(restarted.Status().Warnings, " ")
 	if restarted.mode != api.ModeNormal || !strings.Contains(warnings, "can't use 5 GHz") {
 		t.Errorf("mode %s, warnings %q", restarted.mode, warnings)
+	}
+}
+
+// The channels the Hotspot page offers come from the regulatory database:
+// Japan has no channel 149, and a country without its own rules gets the
+// world's (no 5 GHz hotspot).
+func TestHotspot_ChannelsFollowTheCountry(t *testing.T) {
+	e := newClaimedEnv(t, false)
+	for country, want := range map[string]map[config.Band][]int{
+		"US": {config.Band2GHz: {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}, config.Band5GHz: {36, 40, 44, 48, 149, 153, 157, 161, 165}},
+		"JP": {config.Band2GHz: {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}, config.Band5GHz: {36, 40, 44, 48}},
+	} {
+		got, err := e.agent.HotspotChannels(api.HotspotChannelsRequest{Country: country})
+		if err != nil || !reflect.DeepEqual(got.Channels, want) {
+			t.Errorf("%s: %v, %v; want %v", country, got.Channels, err, want)
+		}
+	}
+	var refused *config.ValidationError
+	if _, err := e.agent.HotspotChannels(api.HotspotChannelsRequest{Country: "UK"}); !errors.As(err, &refused) || refused.Field != "hotspot.country" {
+		t.Errorf("UK = %v, want refused (it's GB)", err)
+	}
+
+	// Saving refuses what the country doesn't allow.
+	settings := e.agent.HotspotSettings()
+	settings.Band, settings.Channel, settings.Country = config.Band5GHz, 149, "JP"
+	if err := e.agent.UpdateHotspotSettings(settings); !errors.As(err, &refused) || refused.Field != "hotspot.channel" {
+		t.Errorf("channel 149 in Japan = %v, want refused on the channel", err)
+	}
+	settings.Channel = 44
+	if err := e.agent.UpdateHotspotSettings(settings); err != nil {
+		t.Errorf("channel 44 in Japan = %v", err)
+	}
+}
+
+// A valid country without its own rules gets the world's, which have no 5
+// GHz hotspot: 5 GHz is refused there, and offered nowhere on the page.
+func TestHotspot_5GHzRefusedWhereTheCountryHasNone(t *testing.T) {
+	e := newClaimedEnv(t, false)
+	got, _ := e.agent.HotspotChannels(api.HotspotChannelsRequest{Country: "AQ"})
+	if len(got.Channels[config.Band5GHz]) != 0 || len(got.Channels[config.Band2GHz]) == 0 {
+		t.Errorf("Antarctica: %v", got.Channels)
+	}
+	settings := e.agent.HotspotSettings()
+	settings.Band, settings.Country = config.Band5GHz, "AQ"
+	var refused *config.ValidationError
+	if err := e.agent.UpdateHotspotSettings(settings); !errors.As(err, &refused) || refused.Field != "hotspot.band" {
+		t.Errorf("5 GHz in Antarctica = %v, want refused on the band", err)
+	}
+}
+
+// "Default" picks the band's usual channel, or the first the country
+// allows when that one isn't (here, only the world's 2.4 GHz rules).
+func TestHotspot_DefaultChannelIsOneTheCountryAllows(t *testing.T) {
+	e := newClaimedEnv(t, false)
+	e.agent.mu.Lock()
+	defer e.agent.mu.Unlock()
+	if got := e.agent.hotspotChannel(); got != 0 {
+		t.Errorf("US, 2.4 GHz: channel %d, want the default (6)", got)
+	}
+	// A database where the band's default isn't allowed: only channel 1.
+	e.agent.regdb = regdb.DB{"US": {{StartKHz: 2402000, EndKHz: 2422000, MaxWidthKHz: 20000}}}
+	if got := e.agent.hotspotChannel(); got != 1 {
+		t.Errorf("only channel 1 allowed: channel %d, want 1", got)
+	}
+}
+
+// Without the database (an image without wireless-regdb), every offered
+// channel is allowed: the radio's own check and the check after the
+// restart still apply.
+func TestHotspot_WithoutTheDatabaseEveryChannelIsOffered(t *testing.T) {
+	e := newTestEnv(t)
+	if err := os.Remove(e.paths.RegulatoryDB()); err != nil {
+		t.Fatal(err)
+	}
+	e.start()
+	got, _ := e.agent.HotspotChannels(api.HotspotChannelsRequest{Country: "JP"})
+	if !slices.Contains(got.Channels[config.Band5GHz], 149) {
+		t.Errorf("without the database: %v", got.Channels)
+	}
+	mustWrite(t, e.paths.RegulatoryDB(), "damaged")
+	e.agent.loadRegulatoryDB()
+	if e.agent.regdb != nil {
+		t.Error("a damaged database must not be used")
 	}
 }

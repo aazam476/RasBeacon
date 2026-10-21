@@ -32,6 +32,10 @@ mmdebstrap:
     - nftables
     # Wi-Fi and network tools used by rbd
     - iw
+    # Each country's Wi-Fi rules (/lib/firmware/regulatory.db): the kernel
+    # needs it for `iw reg set`, and rbd reads it to offer only the
+    # channels the country allows
+    - wireless-regdb
     - iproute2
     - rfkill
     # Shows USB adapters in the diagnostics report

@@ -5,30 +5,31 @@
  */
 
 import type {
+  AccessSettings,
   ClaimResponse,
   DNSSettings,
   GuestSettings,
+  HotspotChannelsResponse,
   HotspotSettings,
   HTTPSSettings,
   NearbyNetwork,
-  PortalStatus,
-  SetupState,
-  Speedtest,
-  SSHSettings,
-  SwapSettings,
-  Status,
-  UpdateSettings,
-  AccessSettings,
-  UpdateStatus,
-  UplinkSettings,
-  UsageSettings,
+  Plugin,
   PluginCatalog,
   PluginChoices,
   PluginDrive,
   PluginLogsResponse,
-  Plugin,
   PluginPreview,
   PluginsState,
+  PortalStatus,
+  SetupState,
+  Speedtest,
+  SSHSettings,
+  Status,
+  SwapSettings,
+  UpdateSettings,
+  UpdateStatus,
+  UplinkSettings,
+  UsageSettings,
   VPNProfile,
   VPNSettings,
   WiFiQR,
@@ -211,6 +212,8 @@ export const putHotspotSettings = (settings: HotspotSettings) =>
 export const revealHotspotPassword = () =>
   request<{ hotspotPassword: string }>('POST', '/settings/hotspot/reveal-password', { body: {} });
 /** A QR code to join the hotspot or the guest network. */
+export const getHotspotChannels = (country: string) =>
+  request<HotspotChannelsResponse>('POST', '/settings/hotspot/channels', { body: { country } });
 export const wifiQr = (network: 'hotspot' | 'guest') => request<WiFiQR>('POST', '/wifi-qr', { body: { network } });
 
 export const getGuestSettings = () => request<GuestSettings>('GET', '/settings/guest');

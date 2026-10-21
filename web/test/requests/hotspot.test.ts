@@ -41,6 +41,13 @@ describe('hotspot', () => {
       body: {},
     },
     {
+      name: 'asks which channels a country allows',
+      call: () => api.getHotspotChannels('JP'),
+      method: 'POST',
+      path: '/settings/hotspot/channels',
+      body: { country: 'JP' },
+    },
+    {
       name: 'makes the QR code',
       call: () => api.wifiQr('hotspot'),
       method: 'POST',

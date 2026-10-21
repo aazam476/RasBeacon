@@ -453,6 +453,13 @@ export interface UsageSettings {
 }
 
 /** POST /api/v1/wifi-qr: a QR code phones scan to join a network. */
+/** The channels a country allows a hotspot on, by band (POST /settings/hotspot/channels). */
+export type ChannelsByBand = Record<Band, number[]>;
+
+export interface HotspotChannelsResponse {
+  channels: ChannelsByBand;
+}
+
 export interface WiFiQR {
   ssid: string;
   /** An SVG image, black on white. */

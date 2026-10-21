@@ -57,6 +57,7 @@ import (
 	"rasbeacon/internal/paths"
 	"rasbeacon/internal/portal"
 	"rasbeacon/internal/radio"
+	"rasbeacon/internal/regdb"
 	"rasbeacon/internal/render"
 	"rasbeacon/internal/routing"
 	"rasbeacon/internal/setupfile"
@@ -150,6 +151,9 @@ type Agent struct {
 	// usbRadioWait is how long startup waits for a USB Wi-Fi adapter to
 	// appear (see waitForRadios). Tests set it to zero.
 	usbRadioWait time.Duration
+	// regdb is the Wi-Fi regulatory database (nil without one; see
+	// hotspotstart.go).
+	regdb regdb.DB
 	// lastCertCheck is when renewCertificateIfDue last looked (https.go).
 	lastCertCheck time.Time
 	// lookupIP looks up a host name's addresses (the VPN server's); an
@@ -264,7 +268,9 @@ func (a *Agent) Start() error {
 		return err
 	}
 
-	// 4. Find the Wi-Fi radios and pick the hotspot radio.
+	// 4. Find the Wi-Fi radios and pick the hotspot radio, and read which
+	//    channels each country allows.
+	a.loadRegulatoryDB()
 	if err := a.setUpRadios(); err != nil {
 		slog.Error("no usable hotspot radio", "error", err)
 		a.mode = api.ModeNoRadio

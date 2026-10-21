@@ -1,6 +1,10 @@
 import type { Band } from './types';
 
-/** Hotspot channels offered per band. They must match the router's list (allowedChannels in Go). */
+/**
+ * Hotspot channels RasBeacon offers per band, before the country narrows them down: they must
+ * match the router's list (allowedChannels in Go). The Hotspot page asks the router which of them
+ * the typed country allows, and shows these until it answers.
+ */
 export const HOTSPOT_CHANNELS: Record<Band, readonly number[]> = {
   '2.4GHz': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
   '5GHz': [36, 40, 44, 48, 149, 153, 157, 161, 165],

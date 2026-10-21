@@ -3,8 +3,11 @@
  * follow the original UI's shared/validation.ts and the checks in its hooks; the real provider
  * should use those (and the router re-checks everything anyway).
  */
+import { HOTSPOT_CHANNELS } from '../constants';
+import { FieldErrors } from '../errors';
 import type {
   AdminPasswordForm,
+  ChannelsByBand,
   GuestSettings,
   HotspotSettings,
   NewNetworkForm,
@@ -130,4 +133,22 @@ export function checkWireGuardFile(text: string): string | null {
     return 'This is not a WireGuard file: it needs an [Interface] and a [Peer] section.';
   }
   return null;
+}
+
+/**
+ * Like the router's regulatory database, for the countries the demo knows well: Japan has no
+ * channels from 149 up, and a code that isn't a country is refused as the router refuses it.
+ */
+export function demoHotspotChannels(country: string): ChannelsByBand {
+  const problem = checkHotspotSettings({
+    ssid: 'x',
+    band: '2.4GHz',
+    channel: 0,
+    security: 'wpa2-wpa3',
+    country,
+    metered: false,
+  });
+  if (problem.country) throw new FieldErrors({ country: problem.country });
+  const fiveGHz = HOTSPOT_CHANNELS['5GHz'].filter((channel) => country !== 'JP' || channel < 149);
+  return { '2.4GHz': [...HOTSPOT_CHANNELS['2.4GHz']], '5GHz': fiveGHz };
 }

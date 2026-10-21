@@ -656,6 +656,19 @@ type HotspotSettings struct {
 	No5GHz bool `json:"no5GHz,omitempty"`
 }
 
+// HotspotChannelsRequest asks which channels a country allows (POST
+// /settings/hotspot/channels).
+type HotspotChannelsRequest struct {
+	Country string `json:"country"`
+}
+
+// HotspotChannels lists, by band, the channels the Hotspot page may offer
+// for a country: those RasBeacon offers that the country allows a hotspot
+// on. A band the radio or the country doesn't allow has none.
+type HotspotChannels struct {
+	Channels map[config.Band][]int `json:"channels"`
+}
+
 // AccessSettings says which and how many devices may join the hotspot over
 // Wi-Fi (GET and PUT /settings/access). Devices on Ethernet always can.
 type AccessSettings struct {
