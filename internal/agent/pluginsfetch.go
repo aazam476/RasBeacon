@@ -90,6 +90,21 @@ func (a *Agent) downloadPluginImage(id string, p config.InstalledPlugin) error {
 	if err := archive.ExtractImage(tarFile); err != nil {
 		return err
 	}
+	return a.loadPluginImage(tarFile, p.Image)
+}
+
+// loadPluginImage loads an image file (`docker save` or `podman save`) and
+// names it image, RasBeacon's name for the plugin's image. The names
+// written in the file are checked first (see plugin.CheckImageNames), and
+// removed again afterwards, so only RasBeacon's name is left.
+func (a *Agent) loadPluginImage(tarFile, image string) error {
+	names, err := plugin.ImageNames(tarFile)
+	if err != nil {
+		return fmt.Errorf("its image can't be loaded: %w", err)
+	}
+	if err := plugin.CheckImageNames(names, image); err != nil {
+		return err
+	}
 	out, err := a.plugins.runner.Run("podman", "load", "--quiet", "--input", tarFile)
 	if err != nil {
 		return fmt.Errorf("its image can't be loaded: %w", err)
@@ -98,11 +113,13 @@ func (a *Agent) downloadPluginImage(id string, p config.InstalledPlugin) error {
 	if loaded == "" {
 		return errors.New("its image can't be loaded: podman named no image")
 	}
-	if _, err := a.plugins.runner.Run("podman", "tag", loaded, p.Image); err != nil {
+	if _, err := a.plugins.runner.Run("podman", "tag", loaded, image); err != nil {
 		return err
 	}
-	if loaded != p.Image {
-		_, _ = a.plugins.runner.Run("podman", "untag", loaded)
+	for _, name := range names {
+		if name != image {
+			_, _ = a.plugins.runner.Run("podman", "untag", name)
+		}
 	}
 	return nil
 }

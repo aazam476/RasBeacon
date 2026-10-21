@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"archive/tar"
 	"archive/zip"
 	"bytes"
 	"context"
@@ -51,8 +52,26 @@ func testIcon() string {
 	return b.String()
 }
 
+// imageTar is a small image file as `docker save` writes it, with these
+// names in its manifest.json.
+func imageTar(names ...string) string {
+	var b bytes.Buffer
+	w := tar.NewWriter(&b)
+	manifest, _ := json.Marshal([]map[string]any{{"Config": "config.json", "RepoTags": names}})
+	w.WriteHeader(&tar.Header{Name: "manifest.json", Mode: 0o644, Size: int64(len(manifest))})
+	w.Write(manifest)
+	w.Close()
+	return b.String()
+}
+
 // writeTestPlugin makes a .rba (signed with key unless nil) and returns its bytes.
 func writeTestPlugin(t *testing.T, manifest map[string]any, key ed25519.PrivateKey) []byte {
+	t.Helper()
+	return writeTestPluginWithImage(t, manifest, key, imageTar("localhost/adguard:latest"))
+}
+
+// writeTestPluginWithImage is writeTestPlugin with this image.tar.
+func writeTestPluginWithImage(t *testing.T, manifest map[string]any, key ed25519.PrivateKey, imageFile string) []byte {
 	t.Helper()
 	dir := t.TempDir()
 	unsigned := filepath.Join(dir, "p.rba")
@@ -68,7 +87,7 @@ func writeTestPlugin(t *testing.T, manifest map[string]any, key ed25519.PrivateK
 	}
 	add(plugin.ManifestFile, string(m))
 	add(plugin.IconFile, testIcon())
-	add(plugin.ImageFile, "image tar")
+	add(plugin.ImageFile, imageFile)
 	// Every template the manifest lists: AdGuardHome.yaml as AdGuard Home's,
 	// any other a line with a setting.
 	templates, _ := manifest["templates"].([]map[string]any)
@@ -102,11 +121,12 @@ func newPluginEnv(t *testing.T) *testEnv {
 	e.runner.prefixOutputs = map[string]string{"podman load": "Loaded image: localhost/adguard:latest\n", "podman ps": "[]"}
 	e.runner.failing = []string{"mountpoint"} // nothing is mounted yet
 	e.runner.effect = func(args []string) {
-		// podman save writes the image to the file after --output.
+		// podman save writes the image (the last argument) to the file
+		// after --output.
 		if len(args) > 2 && args[0] == "podman" && args[1] == "save" {
 			for i, arg := range args[:len(args)-1] {
 				if arg == "--output" {
-					_ = os.WriteFile(args[i+1], []byte("image"), 0o600)
+					_ = os.WriteFile(args[i+1], []byte(imageTar(args[len(args)-1])), 0o600)
 				}
 			}
 		}
@@ -186,6 +206,7 @@ func TestPlugins_InstallFromAFileStartsItWithItsOwnAddressPortsAndData(t *testin
 	}
 	for _, want := range []string{
 		"podman load --quiet --input", "podman tag localhost/adguard:latest localhost/rasbeacon-plugin/adguard-home:1.0",
+		"podman untag localhost/adguard:latest", // only RasBeacon's name stays
 		"fallocate --length 256M", "mkfs.ext4", "mount -o loop,nosuid,nodev",
 		"podman run --detach --replace --name rasbeacon-adguard-home",
 		"--network rasbeacon-plugins --ip 10.89.0.2 --dns 10.89.0.1",
@@ -225,6 +246,35 @@ func TestPlugins_InstallFromAFileStartsItWithItsOwnAddressPortsAndData(t *testin
 	}
 	if strings.Contains(e.agent.Diagnostics(), "s3cret-pass") {
 		t.Error("diagnostics must not show plugin settings")
+	}
+}
+
+// A plugin's image.tar can name images itself, and podman load would take
+// those names from the images that have them. One naming another plugin's
+// image would make that plugin run this one's program.
+func TestPlugins_AnImageCarryingAnotherPluginsNameIsRefused(t *testing.T) {
+	e := newPluginEnv(t)
+	tar := imageTar("localhost/adguard:latest", "localhost/rasbeacon-plugin/samba:4.20")
+	_, err := e.installTestPlugin(writeTestPluginWithImage(t, testPluginManifest("1.0"), nil, tar), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := e.plugin("adguard-home")
+	if p.State == api.PluginRunning || !strings.Contains(p.Message, "another plugin's name, localhost/rasbeacon-plugin/samba:4.20") {
+		t.Errorf("after installing: %+v", p)
+	}
+	if e.runner.ran("podman load") {
+		t.Error("the image must not be loaded")
+	}
+
+	// An image file podman would read but RasBeacon can't (compressed) is
+	// refused too: its names can't be checked.
+	e = newPluginEnv(t)
+	if _, err := e.installTestPlugin(writeTestPluginWithImage(t, testPluginManifest("1.0"), nil, "\x1f\x8b gzip"), nil); err != nil {
+		t.Fatal(err)
+	}
+	if p := e.plugin("adguard-home"); p.State == api.PluginRunning || e.runner.ran("podman load") {
+		t.Errorf("a compressed image: %+v", p)
 	}
 }
 

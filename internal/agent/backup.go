@@ -478,6 +478,10 @@ func checkRestoredPlugins(cfg config.Config, staging string) error {
 		if _, err := os.Stat(filepath.Join(staging, "plugins", id, plugin.ManifestFile)); err != nil {
 			return fmt.Errorf("the backup's plugin %s is incomplete", id)
 		}
+		// Its image keeps RasBeacon's name for this plugin, never another's.
+		if p.Image != "" && p.Image != plugin.LocalImage(id, p.Version) {
+			return fmt.Errorf("the backup's plugin %s has an invalid image name", id)
+		}
 		if p.Image != "" && !fileExists(filepath.Join(staging, "plugin-images", id+".tar")) {
 			if _, err := readPluginFetch(staging, id); err != nil {
 				return fmt.Errorf("the backup's plugin %s has no image and no place to download it", id)
@@ -529,7 +533,7 @@ func (a *Agent) replacePlugins(staging string, cfg *config.Config) error {
 		p.Fetch = nil
 		image := filepath.Join(staging, "plugin-images", id+".tar")
 		if _, err := os.Stat(image); err == nil {
-			if _, err := a.plugins.runner.Run("podman", "load", "--quiet", "--input", image); err != nil {
+			if err := a.loadPluginImage(image, p.Image); err != nil {
 				return fmt.Errorf("loading %s's image: %w", id, err)
 			}
 			newImages[p.Image] = true

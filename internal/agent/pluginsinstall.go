@@ -455,37 +455,15 @@ func (a *Agent) installPluginSteps(id string, s *stagedPlugin, oldImage string) 
 		if err := s.archive.ExtractImage(tarFile); err != nil {
 			return "", err
 		}
-		out, err := a.plugins.runner.Run("podman", "load", "--quiet", "--input", tarFile)
-		if err != nil {
-			return "", fmt.Errorf("its image can't be loaded: %w", err)
-		}
-		loaded := loadedImage(out)
-		if loaded == "" {
-			return "", errors.New("its image can't be loaded: podman named no image")
-		}
-		// Give the image RasBeacon's own name for it, whatever the author
-		// called it.
-		if _, err := a.plugins.runner.Run("podman", "tag", loaded, image); err != nil {
+		if err := a.loadPluginImage(tarFile, image); err != nil {
 			return "", err
-		}
-		if loaded != image {
-			_, _ = a.plugins.runner.Run("podman", "untag", loaded)
 		}
 	} else {
 		if err := a.waitForPluginPath(id); err != nil {
 			return "", err
 		}
 		progress("Downloading its image…")
-		proxy, err := a.downloadProxy()
-		if err != nil {
-			return "", err
-		}
-		ref := pinnedRef(*m.Image)
-		if _, err := a.plugins.runner.Run("env", "HTTPS_PROXY=http://"+proxy, "HTTP_PROXY=http://"+proxy,
-			"podman", "pull", "--quiet", "--arch", "arm64", ref); err != nil {
-			return "", fmt.Errorf("its image can't be downloaded: %w", err)
-		}
-		if _, err := a.plugins.runner.Run("podman", "tag", ref, image); err != nil {
+		if err := a.pullPluginImage(pinnedRef(*m.Image), image); err != nil {
 			return "", err
 		}
 	}

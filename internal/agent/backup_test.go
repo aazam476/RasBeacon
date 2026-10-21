@@ -13,6 +13,7 @@ import (
 
 	"rasbeacon/internal/api"
 	"rasbeacon/internal/config"
+	"rasbeacon/internal/plugin"
 	"rasbeacon/internal/version"
 )
 
@@ -252,17 +253,23 @@ func TestBackup_RestoreRefusesUnsafePluginSettings(t *testing.T) {
 	mustWrite(t, filepath.Join(staging, "plugins", "good", "manifest.json"), "{}")
 	good := config.InstalledPlugin{Address: netip.MustParseAddr("10.89.0.2"), Ports: map[string]int{"tcp/3000": 3000}}
 	cases := map[string]map[string]config.InstalledPlugin{
-		"path in the name":     {"../../etc": good},
-		"address elsewhere":    {"good": {Address: netip.MustParseAddr("192.168.1.1")}},
-		"drive as a path":      {"good": {Address: good.Address, Drive: "../../boot"}},
-		"RasBeacon's own port": {"good": {Address: good.Address, Ports: map[string]int{"tcp/3000": 443}}},
-		"missing files":        {"other": good},
+		"path in the name":       {"../../etc": good},
+		"address elsewhere":      {"good": {Address: netip.MustParseAddr("192.168.1.1")}},
+		"drive as a path":        {"good": {Address: good.Address, Drive: "../../boot"}},
+		"RasBeacon's own port":   {"good": {Address: good.Address, Ports: map[string]int{"tcp/3000": 443}}},
+		"missing files":          {"other": good},
+		"another plugin's image": {"good": {Address: good.Address, Version: "1.0", Image: plugin.LocalImage("samba", "1.0")}},
 	}
 	for name, installed := range cases {
 		cfg := config.Config{Plugins: config.PluginsConfig{Installed: installed}}
 		if err := checkRestoredPlugins(cfg, staging); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
+	}
+	// The image's name is checked before anything else about the image.
+	stolen := config.Config{Plugins: config.PluginsConfig{Installed: cases["another plugin's image"]}}
+	if err := checkRestoredPlugins(stolen, staging); err == nil || !strings.Contains(err.Error(), "invalid image name") {
+		t.Errorf("another plugin's image name: %v", err)
 	}
 	cfg := config.Config{Plugins: config.PluginsConfig{Installed: map[string]config.InstalledPlugin{"good": good}}}
 	if err := checkRestoredPlugins(cfg, staging); err != nil {

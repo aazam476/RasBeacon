@@ -97,7 +97,11 @@ image.tar       its container image (`docker save` / `podman save`, arm64), or
 signature       optional: made by `rbsign plugin-sign`
 ```
 
-Nothing else may be in the file. The image must be for `linux/arm64`.
+Nothing else may be in the file. The image must be for `linux/arm64`, and
+`image.tar` must not be compressed (RasBeacon reads the image names in it
+first). RasBeacon gives the image its own name; a tar that carries the name
+of another plugin's image (`rasbeacon-plugin/…`) is refused, because
+loading it would replace that plugin's program.
 
 Build the image, save it and zip it up:
 
