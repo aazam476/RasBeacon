@@ -223,14 +223,21 @@ func (a *Agent) UpdateHotspotSettings(req api.HotspotSettings) error {
 		newSecrets.HotspotPassword = req.Password
 	}
 
+	// The guest network must stay a different network: another name, and
+	// another password, or guests could join yours. Checked before anything
+	// is saved, so a refused change never takes effect at the next restart.
+	if newCfg.Guest.Enabled && newCfg.Guest.SSID == newCfg.Hotspot.SSID {
+		return &config.ValidationError{Field: "hotspot.ssid", Message: "Your guest network already uses this name."}
+	}
+	if newSecrets.HotspotPassword == newSecrets.GuestPassword {
+		return &config.ValidationError{Field: "password", Message: "Your guest network already uses this password."}
+	}
+
 	if err := config.WriteJSON(a.paths.SecretsFile(), newSecrets, 0o600); err != nil {
 		return err
 	}
 	if err := config.WriteJSON(a.paths.ConfigFile(), newCfg, 0o644); err != nil {
 		return err
-	}
-	if newCfg.Guest.Enabled && newCfg.Guest.SSID == newCfg.Hotspot.SSID {
-		return &config.ValidationError{Field: "hotspot.ssid", Message: "Your guest network already uses this name."}
 	}
 	countryChanged := newCfg.Hotspot.Country != a.cfg.Hotspot.Country
 	// Only the metered hint changed? Then the hotspot can keep running:

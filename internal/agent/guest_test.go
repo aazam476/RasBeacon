@@ -153,3 +153,29 @@ func TestMetered_OnlyRestartsDHCP(t *testing.T) {
 		t.Error("the setting should be shown")
 	}
 }
+
+// The hotspot page can't take the guest network's name or password, and a
+// refused save changes nothing, not even after a restart.
+func TestGuest_HotspotCantTakeTheGuestNetworksNameOrPassword(t *testing.T) {
+	e := newGuestCapableEnv(t)
+	if err := e.agent.UpdateGuestSettings(guestOn); err != nil {
+		t.Fatal(err)
+	}
+	configBefore, secretsBefore := e.readFile(e.paths.ConfigFile()), e.readFile(e.paths.SecretsFile())
+
+	for field, change := range map[string]func(*api.HotspotSettings){
+		"hotspot.ssid": func(s *api.HotspotSettings) { s.SSID = guestOn.SSID },
+		"password":     func(s *api.HotspotSettings) { s.Password = guestOn.Password },
+	} {
+		settings := e.agent.HotspotSettings()
+		change(&settings)
+		err := e.agent.UpdateHotspotSettings(settings)
+		var verr *config.ValidationError
+		if !errors.As(err, &verr) || verr.Field != field {
+			t.Errorf("%s: got %v, want refused on %s", field, err, field)
+		}
+	}
+	if e.readFile(e.paths.ConfigFile()) != configBefore || e.readFile(e.paths.SecretsFile()) != secretsBefore {
+		t.Error("a refused save must not be written to disk")
+	}
+}
