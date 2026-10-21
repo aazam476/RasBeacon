@@ -39,7 +39,7 @@ public IP address) with the tunnel network `10.66.0.0/24`.
    wg genkey | sudo tee /etc/wireguard/server.key | wg pubkey | sudo tee /etc/wireguard/server.pub
    ```
 3. **Get RasBeacon's public key:** on RasBeacon's **VPN** page, open
-   *Server details*, tap **Make a new key pair**, and copy *RasBeacon's
+   *Server details*, tap **Generate new key**, and copy *RasBeacon's
    public key*. (Or, if you'll import a file you write yourself, run
    `wg genkey` on your computer and put the private key in the file.)
 4. **Configure the server**, `/etc/wireguard/wg0.conf` (replace `eth0` with
@@ -104,5 +104,6 @@ On the VPN page, **Kill switch** is on by default:
   the internet directly (the Status page warns about this) and go back to
   the VPN once it has worked again for a while.
 
-Hotel login pages and the kill switch: milestone 5 adds a way to log in
-to a hotel's page while the kill switch is on.
+Hotel login pages and the kill switch: when a hotel's login page is in
+the way, the Status page offers to open it (for a few minutes, or in
+RasBeacon's own browser), and the kill switch stays on the whole time.

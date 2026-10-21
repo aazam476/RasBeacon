@@ -1,6 +1,10 @@
 # Design: open-source portable Wi-Fi travel router
 
-- Status: **Proposed, revision 4**. All questions answered (section 13); waiting for approval to start milestone 1.
+- Status: **Accepted and built** (revision 4, the design the milestones
+  followed). It is kept as the record of what was decided and why. Where
+  the code turned out differently, an **As built** note says so;
+  [architecture.md](architecture.md) and [api.md](api.md) describe what
+  RasBeacon does today.
 - Date: 2026-09-30
 - Depends on: [ADR 0001](decisions/0001-platform.md), which is accepted
 - Project name: **RasBeacon**. Daemons are `rbd` (privileged agent) and
@@ -30,6 +34,8 @@ Roles are assigned automatically:
 - Ethernet is `eth0`.
 
 The UI lets you swap roles, for example to use a second USB adapter as the uplink.
+**As built:** roles are only assigned automatically (`internal/radio`); the
+UI has no way to swap them.
 
 The **M1 hardware gate runs on every hotspot adapter we list**. It must hold at
 least 10 associated clients with WPA2/WPA3 for 30 minutes with no drops. The
@@ -65,6 +71,13 @@ compatibility table records the result.
   - `SHA256SUMS` and `SHA256SUMS.sig` (Ed25519, minisign-compatible format).
   - GitHub build-provenance attestation.
   - `sources-<ver>.tar`: GPL/LGPL corresponding source (section 10).
+
+  **As built:** a release has an image per board
+  (`rasbeacon-<board>-<ver>.img.xz`), the signed `.rbupdate` for the Pi 4/5
+  (the update is signed itself, see section 9), `SHA256SUMS`, and a
+  `.packages.txt` per image listing each package's source and version
+  ([source-code.md](source-code.md)). There is no `SHA256SUMS.sig`,
+  attestation or sources tarball.
 
   Every feature is in the single image. There are no variants.
 
@@ -146,7 +159,9 @@ rbd     root, systemd-hardened; owns /persistent/rasbeacon; renders configs to /
   contributors.
 - **Frontend:** plain HTML, CSS and ES modules, no build step and no npm.
   Mobile-first, one screen per task, works offline, and all assets are served
-  from the device.
+  from the device. **As built:** the UI is React and TypeScript, built with
+  Vite (npm at build time only); the device still serves every file itself,
+  with nothing loaded from the internet.
 
 Secrets:
 - Stored in `/persistent/rasbeacon/secrets.json`, `root:root 0600` (directory 0700).
@@ -403,6 +418,10 @@ The tunnel is **healthy** when `hs_age ≤ 180 s` and the last 3 probes
 succeeded. It is **unhealthy** after 3 consecutive probe failures (about 15 s),
 or when `hs_age > 180 s` while traffic is being sent.
 
+**As built:** health is the handshake age alone (`internal/tunnel`): there
+is no ICMP probe, and no `TIME_SYNC` state that waits for the clock (the
+time floor and the clock fallback in section 4.7 keep it close enough).
+
 **Hysteresis:**
 - `TUNNEL_DOWN → TUNNEL_UP` needs 3 successful probes in a row.
 - For kill switch OFF, going back from `DIRECT` to the tunnel needs 30 s of
@@ -415,7 +434,9 @@ or when `hs_age > 180 s` while traffic is being sent.
 - Every state change is one atomic `nft -f`, applied **before** routing rules
   change when tightening, and **after** they change when loosening.
 - Client conntrack entries are flushed whenever the egress for clients changes,
-  so NATed flows can't linger on the old path.
+  so NATed flows can't linger on the old path. **As built:** nothing is
+  flushed; the firewall only accepts established connections on the
+  *current* path, which has the same effect (see the note in 4.6).
 - Changing kill-switch mode, importing a new WireGuard config or changing the
   uplink passes through a `LOCKDOWN` render first.
 
@@ -427,6 +448,12 @@ every 10 min while the tunnel is unhealthy:
   `http://captive.apple.com/hotspot-detect.html`. The probe URLs are
   configurable, so users who don't want Google or Apple URLs can change them.
 - The uplink's DHCP option 114 (RFC 8910) is read when present.
+
+**As built:** rbd checks every 10 minutes whatever the tunnel's state,
+every minute while the VPN is on but its tunnel down, and every 5 s in
+login mode (`internal/agent/portal.go`). The two URLs are fixed, and the
+uplink's option 114 isn't read. Devices on the hotspot do get option 114
+(the RFC 8908 API), as step 1 below says.
 
 A redirect or unexpected body counts as a portal. The UI shows a banner with
 the portal's URL.
@@ -487,8 +514,8 @@ off:**
   default, at the cost of RAM, image size, and no automatic login sheet on the
   phone.
 
-**As built in M5:** detection uses the two checks above (not yet
-configurable, and the uplink's own DHCP option 114 isn't read yet); the
+**As built in M5:** detection uses the two checks above (not
+configurable, and the uplink's own DHCP option 114 isn't read); the
 notice, login mode (10 min, extendable to 30), automatic end on a passing
 check, and the conntrack question are implemented. Instead of flushing
 conntrack, the firewall only accepts established connections on the
@@ -515,7 +542,9 @@ tunnel health check plus a portal probe, and the flow repeats.
   when at least 2 agree within 5 s and the time is at or after the floor.
 - **Tunnel dependency:** the tunnel waits for synced time, with a 60 s cap,
   because WireGuard servers reject handshakes whose timestamp isn't newer than
-  the last one they accepted.
+  the last one they accepted. **As built:** the tunnel doesn't wait; the
+  time floor applied at boot keeps the clock from going back, which is
+  what WireGuard needs.
 
 ### 4.8 Client behaviour
 - **Private or rotating MAC addresses** only produce new leases; the pool
@@ -580,7 +609,12 @@ tunnel health check plus a portal probe, and the flow repeats.
     a custom hostname you enter.
 
   An optional "redirect HTTP to HTTPS" switch is available. No HSTS, so turning
-  HTTPS off can never lock you out.
+  HTTPS off can never lock you out. **As built:** with HTTPS on, logins over
+  plain HTTP are refused, so a browser that can't open the HTTPS page (one
+  that refuses the certificate) can't turn it off either: then the
+  `factory-reset` file is the way back. Generated certificates are valid
+  for 820 days (Apple's devices refuse more than 825) and renewed
+  automatically.
 - Sessions: HttpOnly, SameSite=Strict cookies with CSRF tokens, 12 h idle
   timeout.
 - Login back-off: exponential per client IP, with a global lockout of 5 min
@@ -591,8 +625,8 @@ tunnel health check plus a portal probe, and the flow repeats.
 2. **Offline:** put the SD card in any computer, create an empty file named
    `factory-reset` on the visible partition, and boot. `rbd` wipes `/persistent/rasbeacon` and
    deletes the file.
-3. **Optional hardware button:** short GPIO3 (pin 5) to GND (pin 6) for 10 s
-   while running. A momentary button can be wired there.
+3. **Optional hardware button:** short GPIO 17 (pin 11) to GND (pin 9) for
+   10 s while running. A momentary button can be wired there.
 
 The Pi 5's power button is left at its default behavior.
 
@@ -796,7 +830,11 @@ wins.
   requires:
   1. Publishing corresponding source for GPL/LGPL packages. CI builds
      `sources-<ver>.tar` with `apt-get source` for the exact installed
-     versions and attaches it to each release.
+     versions and attaches it to each release. **As built:** each release
+     lists every package's source and version (`.packages.txt`), whose
+     sources stay available in the Debian and Raspberry Pi archives, with a
+     written offer for anyone who can't get them
+     ([source-code.md](source-code.md)).
   2. Shipping every package's copyright file (kept under
      `/usr/share/doc/*/copyright` in the image) and listing firmware licenses
      in `LICENSES/THIRD_PARTY.md`. Each firmware license is checked

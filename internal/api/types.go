@@ -1044,10 +1044,11 @@ type PluginPowerRequest struct {
 	Action string `json:"action"`
 }
 
-// BackupRequest asks for a backup (POST /system/backup): the admin password
-// again, the password that encrypts the file, and whether the plugins
-// (their images and data) are in it.
+// BackupRequest asks for a backup (POST /system/backup): the password that
+// encrypts the file (being logged in is enough to ask), and how much of the
+// plugins is in it.
 type BackupRequest struct {
+	// Password encrypts the backup; a restore needs it again.
 	Password string `json:"password"`
 	// Plugins is how much of the plugins goes in: "settings" (the
 	// default), "data" (also their data) or "everything" (also their

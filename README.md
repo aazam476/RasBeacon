@@ -20,9 +20,19 @@ hotel login pages.
 - **Setup happens in your phone's browser.** No command line, no compiling.
 - **No shared default passwords.** Every device generates its own on first
   boot.
-- **No telemetry and no cloud.** Everything works offline. The one
-  exception is the speed test, which only runs when you press its button:
-  like Cloudflare's own speed test page, it sends its result to Cloudflare.
+- **No telemetry and no cloud.** Everything works offline, and nothing
+  about you or your devices is sent anywhere. What RasBeacon itself
+  contacts on the internet:
+  - the speed test, only when you press its button (like Cloudflare's own
+    speed test page, it sends its result to Cloudflare);
+  - Google's and Apple's "is there internet?" addresses, every 10 minutes
+    (more often while the VPN can't connect), to notice a hotel's login
+    page, as phones do;
+  - the time: NTP, or Google, Apple and Cloudflare over HTTPS where NTP is
+    blocked;
+  - GitHub, once a day while plugins from the catalog are installed (to
+    offer their updates), and for new RasBeacon versions only if you
+    choose a schedule on the System page.
 - **Licensed under Apache-2.0.**
 
 > **Status: beta (v0.2). Everything is built and tested in CI; hardware

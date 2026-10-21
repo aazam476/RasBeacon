@@ -5,8 +5,9 @@
 // dist/ into the rbweb program at compile time, so the device needs no
 // Node.js and serves the UI from memory, fully offline.
 //
-// dist/ is not committed (except a placeholder page), so run `make ui`
-// before building a release. See CONTRIBUTING.md.
+// dist/ is not committed (only an empty .gitkeep, so the line below finds
+// the folder), so run `make ui` before building a release. See
+// CONTRIBUTING.md.
 package web
 
 import (

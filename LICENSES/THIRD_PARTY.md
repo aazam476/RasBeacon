@@ -32,11 +32,13 @@ are used to build or test RasBeacon. They are not shipped in the images.
 
 ## Obligations when redistributing the images
 
-1. **Corresponding source for GPL and LGPL packages.** From milestone 6,
-   each release will include a `sources-<version>.tar` built from the exact
-   package versions in the image. Until then, test images are built from
-   public Debian and Raspberry Pi archives at the versions recorded in the
-   image's package list.
+1. **Corresponding source for GPL and LGPL packages.** Each release
+   includes `rasbeacon-<board>-<version>.packages.txt`, which lists every
+   package in the image with its source package and exact version. The
+   sources are in the public Debian and Raspberry Pi archives at those
+   versions (snapshot.debian.org keeps every version), and a written offer
+   covers anyone who can't get them there. See
+   [docs/source-code.md](../docs/source-code.md).
 2. **Keep the copyright files.** The images keep every package's
    `/usr/share/doc/*/copyright`.
 3. **Firmware:** keep the firmware license files that ship with the firmware

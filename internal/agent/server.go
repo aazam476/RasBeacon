@@ -5,9 +5,9 @@ package agent
 // stop other programs.
 //
 // This API trusts its caller: rbweb is responsible for checking that the
-// person using the web UI is logged in. Actions that are especially
-// sensitive (revealing the hotspot password, factory reset) additionally
-// require the admin password in the request, checked here.
+// person using the web UI is logged in. Actions that decide who can get in
+// (factory reset, changing the admin password) also need the admin
+// password in the request, checked here.
 
 import (
 	"context"
