@@ -837,3 +837,18 @@ func TestPlugins_HotspotAndGuestChangesLeaveThemRunning(t *testing.T) {
 		t.Errorf("the plugin was started again %d times", got-runs)
 	}
 }
+
+// When the hotspot network moves (the upstream network uses 10.87.0.0/24),
+// the plugins' ports follow RasBeacon to its new address.
+func TestPlugins_PortsFollowTheHotspotNetworkWhenItMoves(t *testing.T) {
+	e := newPluginEnv(t)
+	if _, err := e.installTestPlugin(writeTestPlugin(t, testPluginManifest("1.0"), nil), nil); err != nil {
+		t.Fatal(err)
+	}
+	e.fakeUplink("wlan0", "10.87.0.50", "24", false)
+	e.check()
+	rules := e.readFile(e.paths.FirewallRules())
+	if !strings.Contains(rules, "ip daddr 10.88.0.1 tcp dport") || strings.Contains(rules, "ip daddr 10.87.0.1 tcp dport") {
+		t.Errorf("the plugin's port should be forwarded from 10.88.0.1:\n%s", rules)
+	}
+}

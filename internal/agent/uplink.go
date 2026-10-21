@@ -516,6 +516,11 @@ func (a *Agent) moveLAN(prefix netip.Prefix) {
 	if a.guestActive() {
 		a.applyGuestBridge(true)
 	}
+	// The plugins' ports are forwarded from RasBeacon's address on the
+	// hotspot, which just changed.
+	if err := a.applyFirewall(); err != nil {
+		slog.Error("could not update the firewall for the new hotspot network", "error", err)
+	}
 	if err := a.applyDHCP(false); err != nil {
 		slog.Error("could not restart DHCP for the new hotspot network", "error", err)
 	}
