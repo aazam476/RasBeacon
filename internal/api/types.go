@@ -718,13 +718,10 @@ type WiFiQR struct {
 // UsageSettings is the data limit (GET/PUT /settings/usage).
 type UsageSettings struct {
 	// LimitMB pauses a device after it used this much (down and up) since
-	// Since, while the connection is marked metered. 0: no limit.
+	// Since, metered connection or not. 0: no limit.
 	LimitMB int `json:"limitMb"`
 	// Since is when counting started (RFC 3339); read-only.
 	Since string `json:"since,omitempty"`
-	// Metered says whether the limit applies now (the hotspot's metered
-	// setting); read-only.
-	Metered bool `json:"metered"`
 	// DevicesPaused is how many devices the limit pauses now; read-only.
 	DevicesPaused int `json:"devicesPaused"`
 }
@@ -984,9 +981,11 @@ type PluginCatalogEntry struct {
 	Size         int64    `json:"size"`
 	DownloadSize int64    `json:"downloadSize,omitempty"`
 	Icon         string   `json:"icon,omitempty"`
-	// InstalledVersion is set when it is installed; RunsHere is false for
+	// InstalledVersion is set when it is installed, and UpdateAvailable
+	// when this version is newer than that one. RunsHere is false for
 	// plugins made for other boards.
 	InstalledVersion string `json:"installedVersion,omitempty"`
+	UpdateAvailable  bool   `json:"updateAvailable,omitempty"`
 	RunsHere         bool   `json:"runsHere"`
 	// NeedsRasBeacon is set when this RasBeacon is too old for it: the
 	// version it needs ("0.2.0").

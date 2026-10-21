@@ -268,6 +268,7 @@ func (a *Agent) PluginCatalog(req api.PluginCatalogRequest) api.PluginCatalog {
 		}
 		if p, ok := a.cfg.Plugins.Installed[e.ID]; ok && e.ID != "" {
 			entry.InstalledVersion = p.Version
+			entry.UpdateAvailable = plugin.NewerVersion(e.Version, p.Version)
 		}
 		result.Entries = append(result.Entries, entry)
 	}

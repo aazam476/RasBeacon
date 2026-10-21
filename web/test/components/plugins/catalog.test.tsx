@@ -46,7 +46,14 @@ describe('catalog', () => {
   it('offers Update for a newer version, and Open when it is up to date', async () => {
     renderCatalog({
       entries: [
-        entry({ name: 'Old', file: 'old.rba', id: 'old', version: '2.0', installedVersion: '1.0' }),
+        entry({
+          name: 'Old',
+          file: 'old.rba',
+          id: 'old',
+          version: '2.0',
+          installedVersion: '1.0',
+          updateAvailable: true,
+        }),
         entry({ name: 'Current', file: 'current.rba', id: 'current', version: '1.0', installedVersion: '1.0' }),
       ],
     });

@@ -430,16 +430,6 @@ func (a *Agent) readLink(path string) string {
 	return target
 }
 
-// subnetMask turns a prefix length into a dotted mask, e.g. 24 into
-// "255.255.255.0".
-func subnetMask(bits int) string {
-	mask := uint32(0xffffffff) << (32 - bits)
-	if bits == 0 {
-		mask = 0
-	}
-	return fmt.Sprintf("%d.%d.%d.%d", byte(mask>>24), byte(mask>>16), byte(mask>>8), byte(mask))
-}
-
 // wifiChannel turns a frequency in MHz into its Wi-Fi channel number.
 func wifiChannel(mhz int) int {
 	switch {

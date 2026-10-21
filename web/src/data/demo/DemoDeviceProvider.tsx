@@ -37,12 +37,12 @@ import {
 import { CLOSED_BROWSER, createDemoState, SCENARIOS, UNREACHABLE, type DemoState } from './scenarios';
 
 /**
- * Like the router: on a metered connection, devices that used the data limit are paused until the
- * counters are reset or the limit is raised.
+ * Like the router: devices that used the data limit are paused until the counters are reset or the
+ * limit is raised.
  */
 function applyUsageLimit(d: DemoState) {
   const { limitMb } = d.router.usageSettings;
-  const limit = d.router.hotspotSettings.metered && limitMb > 0 ? limitMb * 1_000_000 : 0;
+  const limit = limitMb > 0 ? limitMb * 1_000_000 : 0;
   let paused = 0;
   for (const client of d.router.status.clients) {
     const over = limit > 0 && client.downBytes + client.upBytes >= limit;
@@ -998,7 +998,7 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
       updateSettings: loadable('updateSettings', router.updateSettings),
       accessSettings: loadable('accessSettings', router.accessSettings),
       plugins: loadable('plugins', router.plugins),
-      usageSettings: loadable('usageSettings', { ...router.usageSettings, metered: router.hotspotSettings.metered }),
+      usageSettings: loadable('usageSettings', router.usageSettings),
       httpsSettings: loadable('httpsSettings', router.httpsSettings),
       nearbyNetworks: demo.nearbyNetworks,
       portal: loadable('portal', router.status.portal),

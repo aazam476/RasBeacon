@@ -25,7 +25,7 @@ describe('renaming a device', () => {
 describe('data limit', () => {
   it('saves a limit without a metered connection', async () => {
     const device = fakeDevice((router) => {
-      router.usageSettings = { ...router.usageSettings, limitMb: 0, metered: false };
+      router.usageSettings = { ...router.usageSettings, limitMb: 0 };
     });
     const { user } = renderScreen(<ClientsScreen />, device, '/clients');
     await user.selectOptions(screen.getByLabelText('Limit per device'), '2000');

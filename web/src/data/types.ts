@@ -103,7 +103,7 @@ export interface Client {
   /** Data used since the counters were reset (Wi-Fi devices; 0 for wired ones). */
   downBytes: number;
   upBytes: number;
-  /** Paused for going over the data limit on a metered connection. */
+  /** Paused for going over the data limit. */
   limitReached?: boolean;
 }
 
@@ -448,8 +448,6 @@ export interface UsageSettings {
   limitMb: number;
   /** When counting started (RFC 3339); read-only. */
   since?: string;
-  /** Whether the limit applies now (the hotspot's metered setting); read-only. */
-  metered: boolean;
   /** How many devices the limit pauses now; read-only. */
   devicesPaused: number;
 }
@@ -798,6 +796,8 @@ export interface PluginCatalogEntry {
   downloadSize?: number;
   icon?: string;
   installedVersion?: string;
+  /** This version is newer than the installed one (the router compares them). */
+  updateAvailable?: boolean;
   runsHere: boolean;
   /** Set when this RasBeacon is too old for it: the version it needs ("0.2.0"). */
   needsRasBeacon?: string;

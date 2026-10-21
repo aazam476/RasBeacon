@@ -14,7 +14,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net"
 	"net/netip"
 	"os"
 	"slices"
@@ -34,13 +33,14 @@ const hostapdControlDir = "/run/hostapd"
 // ErrNotConnected means the device isn't connected (any more).
 var ErrNotConnected = errors.New("This device isn't connected.")
 
-// normalizeMAC checks a MAC address and returns it in lower case.
+// normalizeMAC checks a device's MAC address with config.NormalizeMAC (the
+// one rule for them), naming the "mac" field when it isn't one.
 func normalizeMAC(mac string) (string, error) {
-	hw, err := net.ParseMAC(mac)
-	if err != nil || len(hw) != 6 {
+	normal, err := config.NormalizeMAC(mac)
+	if err != nil {
 		return "", &config.ValidationError{Field: "mac", Message: "Not a device address."}
 	}
-	return hw.String(), nil
+	return normal, nil
 }
 
 // pausedMACs lists the paused devices for the firewall.

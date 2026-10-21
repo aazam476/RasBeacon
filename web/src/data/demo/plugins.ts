@@ -358,20 +358,26 @@ export function createMockPlugins(): PluginsState {
 /** The catalog entries for the installed plugins and the board. */
 export function catalogEntries(state: PluginsState): PluginCatalogEntry[] {
   return PLUGIN_DEFINITIONS.filter((definition) => state.sources.some((s) => s.source === definition.source)).map(
-    (definition) => ({
-      source: definition.source,
-      file: definition.file,
-      id: definition.id,
-      name: definition.name,
-      version: definition.version,
-      description: definition.description,
-      permissions: definition.permissions,
-      size: definition.size,
-      downloadSize: definition.downloadSize,
-      icon: definition.icon,
-      installedVersion: state.plugins.find((p) => p.id === definition.id)?.version,
-      runsHere: definition.boards.length === 0 || definition.boards.includes(state.board),
-    }),
+    (definition) => {
+      const installedVersion = state.plugins.find((p) => p.id === definition.id)?.version;
+      return {
+        source: definition.source,
+        file: definition.file,
+        id: definition.id,
+        name: definition.name,
+        version: definition.version,
+        description: definition.description,
+        permissions: definition.permissions,
+        size: definition.size,
+        downloadSize: definition.downloadSize,
+        icon: definition.icon,
+        installedVersion,
+        // The demo's catalog versions are never older than the installed ones, so a different
+        // version is a newer one (the router compares them properly).
+        updateAvailable: installedVersion !== undefined && installedVersion !== definition.version,
+        runsHere: definition.boards.length === 0 || definition.boards.includes(state.board),
+      };
+    },
   );
 }
 

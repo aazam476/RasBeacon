@@ -209,12 +209,17 @@ func TestCatalog_InstallAndUpdateFromIt(t *testing.T) {
 	if p := e.plugin("adguard-home"); p.Source != testSource || !p.Signed {
 		t.Fatalf("installed = %+v, want it from the catalog, signed", p)
 	}
+	if entry := e.agent.PluginCatalog(api.PluginCatalogRequest{}).Entries[0]; entry.InstalledVersion != "1.0" || entry.UpdateAvailable {
+		t.Errorf("the installed version, with nothing newer: %+v", entry)
+	}
 
 	// Version 2.0 appears in the catalog.
 	gh.mu.Lock()
 	gh.releases[testSource] = map[string][]byte{"adguard-home-2.0.rba": writeTestPlugin(t, testPluginManifest("2.0"), key)}
 	gh.mu.Unlock()
-	e.agent.PluginCatalog(api.PluginCatalogRequest{Refresh: true})
+	if entry := e.agent.PluginCatalog(api.PluginCatalogRequest{Refresh: true}).Entries[0]; !entry.UpdateAvailable {
+		t.Errorf("version 2.0 should be offered as an update: %+v", entry)
+	}
 	update, err := e.agent.UpdatePluginFromCatalog("adguard-home")
 	if err != nil || update.Version != "2.0" {
 		t.Fatalf("update = %+v, %v", update, err)

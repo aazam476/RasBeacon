@@ -129,11 +129,11 @@ func ULALANAddress(ula48 string) (netip.Prefix, error) {
 func (l LAN) Address() string { return l.Prefix.Addr().String() }
 
 // Netmask returns the classic dotted netmask, e.g. 255.255.255.0 for a /24.
-func (l LAN) Netmask() string {
-	bits := l.Prefix.Bits()
-	mask := uint32(0xffffffff) << (32 - bits)
-	return fmt.Sprintf("%d.%d.%d.%d", byte(mask>>24), byte(mask>>16), byte(mask>>8), byte(mask))
-}
+func (l LAN) Netmask() string { return Netmask(l.Prefix.Bits()) }
+
+// Netmask turns an IPv4 prefix length into a dotted netmask: 24 is
+// 255.255.255.0, 0 is 0.0.0.0.
+func Netmask(bits int) string { return net.IP(net.CIDRMask(bits, 32)).String() }
 
 // DHCP hands out the addresses from .20 to .250 (.1 to .19 are left free
 // for RasBeacon and future use).

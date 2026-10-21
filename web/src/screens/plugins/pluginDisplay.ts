@@ -86,26 +86,6 @@ export function toneText(tone: Tone): string {
   }
 }
 
-/**
- * Whether version a is newer than b, compared as RasBeacon does (internal/plugin/catalog.go):
- * the numbers in them in order, so "1.10.0" is newer than "1.9.2"; other parts as text.
- */
-export function isNewerVersion(a: string, b: string): boolean {
-  const parts = (version: string) =>
-    version
-      .replace(/^[vV]/, '')
-      .split(/[.\-+_]/)
-      .filter(Boolean);
-  const pa = parts(a);
-  const pb = parts(b);
-  for (let i = 0; i < Math.min(pa.length, pb.length); i++) {
-    const bothNumbers = /^\d+$/.test(pa[i]) && /^\d+$/.test(pb[i]);
-    if (bothNumbers && Number(pa[i]) !== Number(pb[i])) return Number(pa[i]) > Number(pb[i]);
-    if (!bothNumbers && pa[i] !== pb[i]) return pa[i] > pb[i];
-  }
-  return pa.length > pb.length;
-}
-
 /** What a number setting takes, next to its label: "(°C, 0 to 85)", "(at least 1)". */
 export function numberNote(setting: Pick<PluginSetting, 'unit' | 'min' | 'max'>): string | undefined {
   const { unit, min, max } = setting;

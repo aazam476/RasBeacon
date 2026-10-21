@@ -212,7 +212,6 @@ func (a *Agent) UsageSettings() api.UsageSettings {
 	return api.UsageSettings{
 		LimitMB:       a.cfg.Clients.UsageLimitMB,
 		Since:         a.usage.file.Since.UTC().Format(time.RFC3339),
-		Metered:       a.cfg.Hotspot.Metered,
 		DevicesPaused: len(a.usage.overLimit),
 	}
 }

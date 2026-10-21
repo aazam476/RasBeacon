@@ -164,10 +164,3 @@ func (m *Machine) enterUp(now time.Time) {
 	m.state = Up
 	m.upSince = now
 }
-
-// RoutesThroughTunnel reports whether devices' traffic is sent into the
-// tunnel in state s. In Connecting and Down that means it is dropped there
-// (the kill switch); only Off and Direct send it straight to the uplink.
-func (s State) RoutesThroughTunnel() bool {
-	return s == Connecting || s == Up || s == Down
-}

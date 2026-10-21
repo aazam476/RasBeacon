@@ -360,8 +360,8 @@ export function applyWorstCase(demo: DemoState) {
     },
   ];
 
-  // The largest data limit, on a metered connection, with two devices over it.
-  router.usageSettings = { limitMb: 1_000_000, since: '2024-02-29T23:59:59Z', metered: true, devicesPaused: 2 };
+  // The largest data limit, with two devices over it.
+  router.usageSettings = { limitMb: 1_000_000, since: '2024-02-29T23:59:59Z', devicesPaused: 2 };
   // A 2 TB SSD instead of an SD card: nearly 1,900 sizes to choose from.
   router.swapSettings = { sizeGb: 0, maxGb: 1_862 };
   router.httpsSettings = {
@@ -395,5 +395,5 @@ export function applyOneOfEach(demo: DemoState) {
   demo.nearbyNetworks = (demo.nearbyNetworks ?? []).slice(0, 1);
   demo.router.swapSettings = { sizeGb: 1, maxGb: 1 };
   demo.router.dnsSettings = { servers: ['1.1.1.1'], withVpn: false };
-  demo.router.usageSettings = { limitMb: 1, since: new Date().toISOString(), metered: true, devicesPaused: 1 };
+  demo.router.usageSettings = { limitMb: 1, since: new Date().toISOString(), devicesPaused: 1 };
 }

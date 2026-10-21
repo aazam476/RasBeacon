@@ -423,7 +423,7 @@ export function createMockRouter(): MockRouter {
     updateSettings: { checkHours: 0, notifyUrl: '' },
     accessSettings: { allowListOn: false, allowed: [], maxDevices: 0 },
     plugins: createMockPlugins(),
-    usageSettings: { limitMb: 0, since: '2026-10-01T08:00:00Z', metered: false, devicesPaused: 0 },
+    usageSettings: { limitMb: 0, since: '2026-10-01T08:00:00Z', devicesPaused: 0 },
 
     sshSettings: {
       enabled: true,

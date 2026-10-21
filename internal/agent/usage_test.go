@@ -95,7 +95,7 @@ func TestClients_DataUseIsCountedAndTheLimitBlocksADevice(t *testing.T) {
 			t.Errorf("laptop = %+v", cl)
 		}
 	}
-	if s := e.agent.UsageSettings(); s.DevicesPaused != 1 || s.Metered || s.LimitMB != 1 {
+	if s := e.agent.UsageSettings(); s.DevicesPaused != 1 || s.LimitMB != 1 {
 		t.Errorf("settings = %+v", s)
 	}
 

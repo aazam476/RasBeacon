@@ -623,6 +623,11 @@ func TestLAN_Helpers(t *testing.T) {
 	if DefaultLAN.Netmask() != "255.255.255.0" {
 		t.Errorf("Netmask = %s", DefaultLAN.Netmask())
 	}
+	for bits, want := range map[int]string{0: "0.0.0.0", 20: "255.255.240.0", 32: "255.255.255.255"} {
+		if got := Netmask(bits); got != want {
+			t.Errorf("Netmask(%d) = %s, want %s", bits, got, want)
+		}
+	}
 	if DefaultLAN.hostAddress(20) != "10.87.0.20" {
 		t.Errorf("hostAddress(20) = %s", DefaultLAN.hostAddress(20))
 	}

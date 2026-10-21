@@ -1,27 +1,8 @@
-// How the plugin pages show versions, metrics, settings and errors.
+// How the plugin pages show metrics, settings and errors.
 import { describe, expect, it } from 'vitest';
 import { FieldErrors } from '@/data/errors';
 import type { PluginPort, PluginSetting } from '@/data/types';
-import {
-  choicesOf,
-  draftOf,
-  errorText,
-  isNewerVersion,
-  numberNote,
-  splitMetric,
-  toneText,
-} from '@/screens/plugins/pluginDisplay';
-
-describe('versions', () => {
-  it.each([
-    ['1.10.0', '1.9.2', true],
-    ['0.107.79-2', '0.107.79-1', true],
-    ['v2.0', '2.0', false],
-    ['1.0', '1.0.1', false],
-  ])('%s is newer than %s: %s', (a, b, newer) => {
-    expect(isNewerVersion(a, b)).toBe(newer);
-  });
-});
+import { choicesOf, draftOf, errorText, numberNote, splitMetric, toneText } from '@/screens/plugins/pluginDisplay';
 
 describe('metrics', () => {
   it('splits a number from its unit at the non-breaking space only', () => {

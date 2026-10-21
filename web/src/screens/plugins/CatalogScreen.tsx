@@ -6,7 +6,7 @@ import { formatBytes } from '@/lib/format';
 import { usePageTitle } from '@/shell/navigation';
 import { ActivityIndicator, Button, ButtonRow, FormError, IconButton, Notice, Row, Section, TextField } from '@/ui';
 import { InstallSheet } from './InstallSheet';
-import { errorText, isNewerVersion } from './pluginDisplay';
+import { errorText } from './pluginDisplay';
 
 /** "8 Oct, 14:05": when the catalog was last checked. */
 function checkedLabel(iso: string | undefined): string {
@@ -106,7 +106,7 @@ function CatalogRow({ entry }: { entry: PluginCatalogEntry }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const installed = entry.installedVersion !== undefined;
-  const newer = installed && entry.version !== undefined && isNewerVersion(entry.version, entry.installedVersion ?? '');
+  const newer = installed && entry.updateAvailable === true;
 
   async function get() {
     setBusy(true);

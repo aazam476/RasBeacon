@@ -372,7 +372,7 @@ func (a *Agent) observeUplink() (api.UplinkStatus, []netip.Prefix) {
 				upstreamIPv4 = append(upstreamIPv4, prefix)
 				if name == s.Interface && s.Address == "" {
 					s.Address = prefix.Addr().String()
-					s.SubnetMask = subnetMask(prefix.Bits())
+					s.SubnetMask = render.Netmask(prefix.Bits())
 				}
 			}
 		}
