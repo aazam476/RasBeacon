@@ -43,9 +43,11 @@ describe('app', () => {
     expect(await screen.findByRole('button', { name: 'Try again' })).toBeTruthy();
   });
 
-  it('opens the hotel login page screen without logging in', async () => {
+  // rbweb sends phones' "Log in to network" sheets to /#portal (internal/webserver), without the
+  // slash the router's own links have: both open the login page screen.
+  it.each(['#/portal', '#portal'])('opens the hotel login page screen at %s without logging in', async (hash) => {
     fakeRbweb({ loggedIn: false });
-    openApp('#/portal');
+    openApp(hash);
     expect(await screen.findByText('Nothing to do')).toBeTruthy();
   });
 
