@@ -68,8 +68,8 @@ type Radio struct {
 // tests can supply canned output instead of running the command.
 type PhyInfoFunc func(phy string) (string, error)
 
-// Detect lists the Wi-Fi interfaces under sysClassNet (normally
-// /sys/class/net), sorted by interface name. Roles are not assigned yet; see
+// Detect lists the Wi-Fi radios under sysClassNet (normally
+// /sys/class/net): one interface per radio, sorted by interface name. Roles are not assigned yet; see
 // AssignRoles.
 func Detect(sysClassNet string, phyInfo PhyInfoFunc) ([]Radio, error) {
 	entries, err := os.ReadDir(sysClassNet)
@@ -118,7 +118,24 @@ func Detect(sysClassNet string, phyInfo PhyInfoFunc) ([]Radio, error) {
 	}
 
 	sort.Slice(radios, func(i, j int) bool { return radios[i].Interface < radios[j].Interface })
-	return radios, nil
+	return onePerRadio(radios), nil
+}
+
+// onePerRadio keeps the first interface of each radio (phy). One radio can
+// have several interfaces: while hostapd runs the guest network, the
+// hotspot's radio has both ap0 and guest0. If rbd restarts then, guest0 must
+// not look like a second radio, or it would be given the uplink.
+func onePerRadio(radios []Radio) []Radio {
+	seen := map[string]bool{}
+	var kept []Radio
+	for _, r := range radios {
+		if seen[r.Phy] {
+			continue
+		}
+		seen[r.Phy] = true
+		kept = append(kept, r)
+	}
+	return kept
 }
 
 // AssignRoles decides which radio runs the hotspot and which joins the uplink.

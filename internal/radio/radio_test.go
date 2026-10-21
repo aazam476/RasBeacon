@@ -112,6 +112,36 @@ func TestDetect_FindsBuiltInAndUSBRadios(t *testing.T) {
 	}
 }
 
+// While the guest network is on, the hotspot's USB radio has two
+// interfaces, ap0 and guest0. After an rbd restart the radio is still one
+// radio: guest0 must not become the uplink, the built-in wlan0 must.
+func TestDetect_ARadioWithTwoInterfacesIsOneRadio(t *testing.T) {
+	classNet := fakeSysfs(t)
+	// The hotspot radio was renamed ap0; hostapd added guest0 on it.
+	if err := os.Rename(filepath.Join(classNet, "wlan1"), filepath.Join(classNet, "ap0")); err != nil {
+		t.Fatal(err)
+	}
+	guest := filepath.Join(classNet, "guest0")
+	os.MkdirAll(filepath.Join(guest, "phy80211"), 0o755)
+	os.WriteFile(filepath.Join(guest, "phy80211", "name"), []byte("phy1\n"), 0o644)
+
+	radios, err := Detect(classNet, func(string) (string, error) { return iwOutputWithAP, nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, r := range radios {
+		names = append(names, r.Interface)
+	}
+	if strings.Join(names, " ") != "ap0 wlan0" {
+		t.Fatalf("radios = %v, want ap0 and wlan0 (guest0 is ap0's radio)", names)
+	}
+	assigned, _ := AssignRoles(radios)
+	if assigned[0].Role != RoleHotspot || assigned[1].Role != RoleUplink {
+		t.Errorf("roles = %+v", assigned)
+	}
+}
+
 func TestAssignRoles_USBAdapterRunsHotspot(t *testing.T) {
 	radios := []Radio{
 		{Interface: "wlan0", Driver: "brcmfmac", SupportsAP: true},
