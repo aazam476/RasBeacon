@@ -218,6 +218,19 @@ describe('VPN', () => {
       body: { conf: '[Interface]\n', name: 'home.conf' },
     },
   ]);
+
+  // Each switch sends the other's saved value too; guessing it could turn the VPN off.
+  it.each([
+    ['the kill switch', (d: Device) => d.setKillSwitch(false)],
+    ['the VPN', (d: Device) => d.setVpnEnabled(true)],
+  ])('%s can’t be changed before the VPN settings load', async (_, change) => {
+    const { sent } = fakeRbweb({ answers: { 'GET /settings/vpn': { hang: true } } });
+    const device = renderProvider();
+    await waitFor(() => expect(device().status.data).toBeTruthy());
+    const error = await Promise.resolve(change(device())).catch((e: unknown) => e);
+    expect(error).toEqual(new Error("The VPN settings haven't loaded yet."));
+    expect(sent.some((r) => r.method === 'PUT')).toBe(false);
+  });
 });
 
 describe('hotspot, guests and who can join', () => {

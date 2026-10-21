@@ -359,9 +359,13 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
       );
     }
 
+    // Both VPN switches are saved together, so the one that isn't changing comes from the loaded
+    // settings. Without them, guessing could turn the VPN off while the owner only changed the
+    // kill switch.
     const vpnSwitches = () => {
       const vpn = latest.current.vpnSettings.data;
-      return { enabled: vpn?.enabled ?? false, killSwitch: vpn?.killSwitch ?? true };
+      if (!vpn) throw new Error("The VPN settings haven't loaded yet.");
+      return { enabled: vpn.enabled, killSwitch: vpn.killSwitch };
     };
 
     async function vpnChange(request: () => Promise<VPNSettings>, fields?: Record<string, string>) {

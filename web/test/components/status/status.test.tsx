@@ -119,6 +119,16 @@ describe('VPN', () => {
     expect(device.setVpnEnabled).toHaveBeenCalledWith(false);
     expect(device.setKillSwitch).toHaveBeenCalledWith(false);
   });
+
+  // Saving a switch sends the other's saved value too, so both wait for the VPN settings.
+  it('the kill switch waits for the VPN settings to load', () => {
+    const device = fakeDevice();
+    device.vpnSettings = { data: undefined, error: null };
+    renderScreen(<StatusScreen />, device);
+    const vpn = within(section('VPN'));
+    expect(vpn.getByRole('switch', { name: /Kill switch/ })).toHaveProperty('disabled', true);
+    expect(vpn.getByRole('switch', { name: /Use the VPN/ })).toHaveProperty('disabled', true);
+  });
 });
 
 describe('devices and networks', () => {
