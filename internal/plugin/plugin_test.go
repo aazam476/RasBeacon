@@ -387,8 +387,24 @@ func TestRunArgs(t *testing.T) {
 	if strings.Contains(joined, "--publish") || strings.Contains(joined, "--privileged") {
 		t.Error("ports are RasBeacon's firewall's job, and nothing runs privileged")
 	}
-	if LocalImage("x", "1.0+b/2") != "localhost/rasbeacon-plugin/x:1.0_b_2" {
-		t.Error(LocalImage("x", "1.0+b/2"))
+}
+
+// Image tags may only hold some characters. A version that has others gets
+// a tag of its own all the same, so two versions never share an image.
+func TestLocalImage_EachVersionGetsItsOwnTag(t *testing.T) {
+	if got := LocalImage("x", "1.0.2"); got != "localhost/rasbeacon-plugin/x:1.0.2" {
+		t.Errorf("a version that is a valid tag stays as it is: %s", got)
+	}
+	plus, underscore := LocalImage("x", "1.0+a"), LocalImage("x", "1.0_a")
+	if plus == underscore || !strings.HasPrefix(plus, "localhost/rasbeacon-plugin/x:1.0_a-") {
+		t.Errorf("1.0+a = %s, 1.0_a = %s: want two tags", plus, underscore)
+	}
+	long := LocalImage("x", strings.Repeat("9", 200)+"+build")
+	if tag := long[strings.LastIndex(long, ":")+1:]; len(tag) > 128 {
+		t.Errorf("tags are at most 128 characters: %d", len(tag))
+	}
+	if got := LocalImage("x", ".hidden"); !strings.HasPrefix(got, "localhost/rasbeacon-plugin/x:v.hidden-") {
+		t.Errorf("a tag can't start with a dot: %s", got)
 	}
 }
 

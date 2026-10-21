@@ -1,6 +1,8 @@
 package plugin
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"slices"
 	"strconv"
@@ -146,10 +148,14 @@ func LocalImage(id, version string) string {
 }
 
 // sanitizeTag turns a version into a valid image tag: letters, digits, '.',
-// '-' and '_', at most 120 long, not starting with '.' or '-'.
+// '-' and '_', at most 128 long, not starting with '.' or '-'. A version
+// that had to change also gets the start of its SHA-256, so two versions
+// that change into the same text ("1.0+a" and "1.0_a") still get two tags:
+// otherwise an update between them would replace the old image, and going
+// back to it would fail.
 func sanitizeTag(v string) string {
 	out := []byte{}
-	for i := 0; i < len(v) && len(out) < 120; i++ {
+	for i := 0; i < len(v) && len(out) < 110; i++ {
 		c := v[i]
 		if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '.' || c == '-' || c == '_' {
 			out = append(out, c)
@@ -159,6 +165,10 @@ func sanitizeTag(v string) string {
 	}
 	if len(out) == 0 || out[0] == '.' || out[0] == '-' {
 		out = append([]byte{'v'}, out...)
+	}
+	if string(out) != v {
+		sum := sha256.Sum256([]byte(v))
+		out = append(out, "-"+hex.EncodeToString(sum[:])[:8]...)
 	}
 	return string(out)
 }
