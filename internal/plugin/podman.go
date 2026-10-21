@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
+	"strings"
 )
 
 // Podman's network for plugins: a bridge RasBeacon makes itself
@@ -35,7 +36,13 @@ type RunSpec struct {
 	CPUs     float64
 	Mounts   []Mount
 	Devices  []string
-	Env      map[string]string
+	// Env are the container's environment variables. They aren't put on
+	// the command line, where an error message or log would show them
+	// (plugin passwords are among them), but in EnvFile.
+	Env map[string]string
+	// EnvFile is where the caller writes EnvFileContents(Env) before
+	// running podman, in a folder only root can read.
+	EnvFile string
 	// Masked paths are hidden from the container (e.g. the temperature
 	// without that permission).
 	Masked  []string
@@ -86,18 +93,29 @@ func RunArgs(s RunSpec) []string {
 	for _, path := range s.Masked {
 		args = append(args, "--security-opt", "mask="+path)
 	}
-	// Sorted, so the same settings always give the same command (a map's
-	// order changes from one loop to the next).
-	keys := make([]string, 0, len(s.Env))
-	for k := range s.Env {
-		keys = append(keys, k)
-	}
-	slices.Sort(keys)
-	for _, k := range keys {
-		args = append(args, "--env", k+"="+s.Env[k])
+	if s.EnvFile != "" {
+		args = append(args, "--env-file", s.EnvFile)
 	}
 	args = append(args, s.Image)
 	return append(args, s.Command...)
+}
+
+// EnvFileContents is Podman's --env-file format for env: one KEY=value line
+// per variable, sorted, so the same settings always give the same file (a
+// map's order changes from one loop to the next). Values are one line each
+// (the manifest and settings checks refuse line breaks), and Podman takes
+// everything after the first "=" as the value, as it is.
+func EnvFileContents(env map[string]string) []byte {
+	keys := make([]string, 0, len(env))
+	for k := range env {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	var b strings.Builder
+	for _, k := range keys {
+		b.WriteString(k + "=" + env[k] + "\n")
+	}
+	return []byte(b.String())
 }
 
 // NetworkCreateArgs make Podman's network for plugins.

@@ -369,14 +369,14 @@ func TestRunArgs(t *testing.T) {
 	args := RunArgs(RunSpec{
 		ID: "samba", Image: "localhost/rasbeacon-plugin/samba:1", Address: "10.89.0.3", MemoryMB: 128, CPUs: 0.5,
 		Mounts:  []Mount{{Host: "/run/x/data/share", Container: "/share"}},
-		Devices: []string{"/dev/i2c-1"}, Env: map[string]string{"B": "2", "A": "1"},
+		Devices: []string{"/dev/i2c-1"}, Env: map[string]string{"B": "2", "A": "1"}, EnvFile: "/run/rbd/plugins/samba/env",
 		Masked: []string{"/sys/class/thermal"}, LogFile: "/run/rasbeacon/plugin-logs/samba.log",
 	})
 	joined := strings.Join(args, " ")
 	for _, want := range []string{
 		"--name rasbeacon-samba", "--network rasbeacon-plugins --ip 10.89.0.3 --dns 10.89.0.1",
 		"--memory 128m --cpus 0.5", "--volume /run/x/data/share:/share", "--device /dev/i2c-1",
-		"--security-opt mask=/sys/class/thermal", "--env A=1 --env B=2 localhost/rasbeacon-plugin/samba:1",
+		"--security-opt mask=/sys/class/thermal", "--env-file /run/rbd/plugins/samba/env localhost/rasbeacon-plugin/samba:1",
 		"--security-opt no-new-privileges",
 	} {
 		if !strings.Contains(joined, want) {
@@ -388,6 +388,19 @@ func TestRunArgs(t *testing.T) {
 	}
 	if LocalImage("x", "1.0+b/2") != "localhost/rasbeacon-plugin/x:1.0_b_2" {
 		t.Error(LocalImage("x", "1.0+b/2"))
+	}
+}
+
+// The environment file lists each variable once, sorted, and nothing else:
+// the values (plugin passwords among them) stay off the command line.
+func TestEnvFileContents(t *testing.T) {
+	got := string(EnvFileContents(map[string]string{"PASSWORD": "a b=c", "A": "1"}))
+	if got != "A=1\nPASSWORD=a b=c\n" {
+		t.Errorf("env file = %q", got)
+	}
+	args := strings.Join(RunArgs(RunSpec{ID: "x", Image: "i", Env: map[string]string{"PASSWORD": "a b=c"}}), " ")
+	if strings.Contains(args, "a b=c") {
+		t.Errorf("the value is on the command line: %s", args)
 	}
 }
 

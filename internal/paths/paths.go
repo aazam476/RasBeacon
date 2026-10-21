@@ -62,6 +62,10 @@ func (p Paths) ContainersDir() string { return p.join("persistent", "containers"
 // written, and its socket to rbd is.
 func (p Paths) PluginRunDir(id string) string { return filepath.Join(p.RunDir(), "plugins", id) }
 
+// PluginEnvFile holds a plugin's environment variables (its settings, with
+// passwords) for podman, while its container is being started.
+func (p Paths) PluginEnvFile(id string) string { return filepath.Join(p.PluginRunDir(id), "env") }
+
 // DriveMountDir is where a USB drive is mounted for a plugin.
 func (p Paths) DriveMountDir(uuid string) string { return filepath.Join(p.RunDir(), "drives", uuid) }
 

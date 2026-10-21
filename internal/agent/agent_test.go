@@ -134,6 +134,10 @@ type testEnv struct {
 	timers *fakeTimers
 	agent  *Agent
 
+	// runEnvs are the environment files the plugins were started with, as
+	// podman read them (newPluginEnv).
+	runEnvs []string
+
 	// dhcpServer is the address the fake DHCP probe reports ("" = none).
 	dhcpServer string
 	probes     int

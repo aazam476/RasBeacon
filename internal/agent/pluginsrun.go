@@ -125,7 +125,7 @@ func (a *Agent) planPluginRun(id string) (*pluginRunPlan, error) {
 	}
 	spec := plugin.RunSpec{
 		ID: id, Image: p.Image, Address: p.Address.String(), MemoryMB: m.Memory(), CPUs: m.CPULimit(),
-		Env: env, LogFile: a.pluginLogFile(id), Command: m.Command,
+		Env: env, EnvFile: a.paths.PluginEnvFile(id), LogFile: a.pluginLogFile(id), Command: m.Command,
 	}
 	dataMount := a.pluginDataMount(id)
 	for _, v := range m.Volumes {
@@ -303,9 +303,7 @@ func (a *Agent) runPlugin(id string) error {
 		err = a.preparePluginRun(plan)
 	}
 	if err == nil {
-		if _, err = a.plugins.runner.Run("podman", plugin.RunArgs(plan.spec)...); err != nil {
-			err = fmt.Errorf("podman couldn't start it: %w", err)
-		}
+		err = a.startPluginContainer(plan.spec)
 	}
 
 	a.mu.Lock()
@@ -320,6 +318,21 @@ func (a *Agent) runPlugin(id string) error {
 	}
 	a.setPluginState(id, api.PluginRunning, "")
 	slog.Info("plugin started", "plugin", id)
+	return nil
+}
+
+// startPluginContainer runs `podman run` for spec. The environment goes in
+// a file only root can read, deleted again once Podman has read it: on the
+// command line, it would show in error messages and logs, and it holds the
+// plugin's passwords.
+func (a *Agent) startPluginContainer(spec plugin.RunSpec) error {
+	if err := config.WriteFileAtomic(spec.EnvFile, plugin.EnvFileContents(spec.Env), 0o600); err != nil {
+		return err
+	}
+	defer os.Remove(spec.EnvFile)
+	if _, err := a.plugins.runner.Run("podman", plugin.RunArgs(spec)...); err != nil {
+		return fmt.Errorf("podman couldn't start it: %w", err)
+	}
 	return nil
 }
 

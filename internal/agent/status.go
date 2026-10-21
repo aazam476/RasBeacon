@@ -240,6 +240,12 @@ func (a *Agent) Diagnostics() string {
 	for _, password := range a.secrets.UplinkPasswords {
 		secretsToHide = append(secretsToHide, password)
 	}
+	// Plugins' password settings, which an error from Podman could carry.
+	for _, values := range a.secrets.Plugins {
+		for _, password := range values {
+			secretsToHide = append(secretsToHide, password)
+		}
+	}
 	// Enterprise usernames are personal: show only a masked form.
 	identities := map[string]string{}
 	for _, n := range a.cfg.Uplink.Networks {

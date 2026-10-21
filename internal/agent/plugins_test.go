@@ -130,6 +130,15 @@ func newPluginEnv(t *testing.T) *testEnv {
 				}
 			}
 		}
+		// podman run reads the environment from the file after --env-file.
+		if len(args) > 2 && args[0] == "podman" && args[1] == "run" {
+			for i, arg := range args[:len(args)-1] {
+				if arg == "--env-file" {
+					env, _ := os.ReadFile(args[i+1])
+					e.runEnvs = append(e.runEnvs, string(env))
+				}
+			}
+		}
 	}
 	e.runBackground()
 	return e
@@ -210,11 +219,22 @@ func TestPlugins_InstallFromAFileStartsItWithItsOwnAddressPortsAndData(t *testin
 		"fallocate --length 256M", "mkfs.ext4", "mount -o loop,nosuid,nodev",
 		"podman run --detach --replace --name rasbeacon-adguard-home",
 		"--network rasbeacon-plugins --ip 10.89.0.2 --dns 10.89.0.1",
-		"--security-opt mask=/sys/class/thermal", "--env UPSTREAM=quad9",
+		"--security-opt mask=/sys/class/thermal", "--env-file " + e.paths.PluginEnvFile("adguard-home"),
 	} {
 		if !e.runner.ran(want) {
 			t.Errorf("never ran %q", want)
 		}
+	}
+	// The settings reach the container through a file only root can read,
+	// gone once podman has read it, never on the command line.
+	if len(e.runEnvs) != 1 || !strings.Contains(e.runEnvs[0], "UPSTREAM=quad9\n") {
+		t.Errorf("environment files = %q", e.runEnvs)
+	}
+	if e.runner.ran("--env ") {
+		t.Error("environment variables must not be on podman's command line")
+	}
+	if _, err := os.Stat(e.paths.PluginEnvFile("adguard-home")); !os.IsNotExist(err) {
+		t.Errorf("the environment file should be deleted after the start: %v", err)
 	}
 	// The password is a secret, not a setting; the template got its hash.
 	if strings.Contains(e.readFile(e.paths.ConfigFile()), "s3cret-pass") {
@@ -449,7 +469,7 @@ func TestPlugins_SettingsChangeRestartsIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if e.runner.count("podman run") != runs+1 || !e.runner.ran("--env UPSTREAM=cloudflare") {
+	if e.runner.count("podman run") != runs+1 || !strings.Contains(e.runEnvs[len(e.runEnvs)-1], "UPSTREAM=cloudflare\n") {
 		t.Error("changing settings restarts it with them")
 	}
 	if p.Ports[0].Host != 3001 || !strings.Contains(e.readFile(e.paths.FirewallRules()), "tcp dport 3001 dnat ip to 10.89.0.2:3000") {
@@ -496,10 +516,13 @@ func TestPlugins_PowerSocketShutsDown(t *testing.T) {
 	if _, err := e.installTestPlugin(writeTestPlugin(t, m, nil), nil); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"--device " + filepath.Join(e.paths.DevDir(), "i2c-1"), "--device " + filepath.Join(e.paths.DevDir(), "gpiochip0"), "RASBEACON_SOCKET=/run/rasbeacon/rbd.sock"} {
+	for _, want := range []string{"--device " + filepath.Join(e.paths.DevDir(), "i2c-1"), "--device " + filepath.Join(e.paths.DevDir(), "gpiochip0")} {
 		if !e.runner.ran(want) {
 			t.Errorf("missing %q", want)
 		}
+	}
+	if !strings.Contains(e.runEnvs[len(e.runEnvs)-1], "RASBEACON_SOCKET=/run/rasbeacon/rbd.sock\n") {
+		t.Errorf("the plugin should be told where the socket is: %q", e.runEnvs)
 	}
 	if e.runner.ran("mask=/sys/class/thermal") && strings.Contains(e.runner.commands[len(e.runner.commands)-1], "mask=") {
 		t.Error("with the temperature permission the sensors aren't hidden")
@@ -731,5 +754,20 @@ func TestPlugins_TheBuiltInSourceCanBeRemovedAndAddedBack(t *testing.T) {
 	}
 	if len(state.Sources) != 2 || !state.Sources[0].BuiltIn {
 		t.Errorf("typing its name brings it back: %+v", state.Sources)
+	}
+}
+
+// A plugin's password never reaches the diagnostics report, even when an
+// error message carries it.
+func TestDiagnostics_HidesPluginPasswords(t *testing.T) {
+	e := newPluginEnv(t)
+	if _, err := e.installTestPlugin(writeTestPlugin(t, testPluginManifest("1.0"), nil), nil); err != nil {
+		t.Fatal(err)
+	}
+	e.agent.mu.Lock()
+	e.agent.setPluginState("adguard-home", api.PluginFailed, "It couldn't start: bad password s3cret-pass")
+	e.agent.mu.Unlock()
+	if report := e.agent.Diagnostics(); strings.Contains(report, "s3cret-pass") {
+		t.Errorf("the plugin's password is in the report:\n%s", report)
 	}
 }
