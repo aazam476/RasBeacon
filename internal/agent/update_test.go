@@ -179,6 +179,32 @@ func TestUpdate_InstallWritesTheOtherSlotAndTriesIt(t *testing.T) {
 	}
 }
 
+// While the signing key is being changed, the image holds the old key and the
+// new one (docs/releasing.md), and an update signed with either must install.
+func TestUpdate_AcceptsEveryKeyInTheImage(t *testing.T) {
+	e, oldKey := newUpdateEnv(t)
+	newPublic, newKey, _ := ed25519.GenerateKey(rand.Reader)
+	mustWrite(t, filepath.Join(e.paths.UpdateKeysDir(), "release-2.pub"), base64.StdEncoding.EncodeToString(newPublic))
+	// A broken key file is skipped, not a reason to refuse every update.
+	mustWrite(t, filepath.Join(e.paths.UpdateKeysDir(), "broken.pub"), "not a key")
+	if got := len(e.agent.trustedUpdateKeys()); got != 2 {
+		t.Fatalf("trusted keys = %d, want 2", got)
+	}
+
+	for name, key := range map[string]ed25519.PrivateKey{"old key": oldKey, "new key": newKey} {
+		t.Run(name, func(t *testing.T) {
+			system := strings.Repeat(strings.ToUpper(name[:1]), 64) // "O…" or "N…", unlike the slot's "o…"
+			file := updateFile(t, key, "pi4", testBundle(strings.Repeat("B", 32), system))
+			if err := e.agent.InstallUpdate(bytes.NewReader(file)); err != nil {
+				t.Fatal(err)
+			}
+			if got := e.readFile(e.paths.SlotDevice("other", "system")); got != system {
+				t.Errorf("system partition = %q", got)
+			}
+		})
+	}
+}
+
 func TestUpdate_RefusesBadFilesWithoutTouchingTheSlot(t *testing.T) {
 	e, key := newUpdateEnv(t)
 	_, otherKey, _ := ed25519.GenerateKey(rand.Reader)
