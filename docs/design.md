@@ -506,9 +506,13 @@ tunnel health check plus a portal probe, and the flow repeats.
   validity checks (EAP) and WireGuard handshake timestamps start from a sane
   time.
 - **Sync:** `systemd-timesyncd` does NTP via the uplink. **If NTP is blocked**
-  (no answer in 20 s), `rbd` falls back to the HTTP `Date` header from three
-  plain-HTTP hosts. It accepts a time only when at least 2 agree within 5 s
-  and the time is at or after the floor.
+  (not synchronized 30 s after the uplink connects), `rbd` falls back to the
+  `Date` header of three HTTPS servers (Google, Apple, Cloudflare), at most
+  once an hour and never while a login page is in the way. Their
+  certificates are checked as of the day each became valid, since the clock
+  that would check the dates is the one being set; plain HTTP would let a
+  network with a login page answer with any time. It accepts a time only
+  when at least 2 agree within 5 s and the time is at or after the floor.
 - **Tunnel dependency:** the tunnel waits for synced time, with a 60 s cap,
   because WireGuard servers reject handshakes whose timestamp isn't newer than
   the last one they accepted.

@@ -16,6 +16,7 @@ import (
 
 	"rasbeacon/internal/clock"
 	"rasbeacon/internal/config"
+	"rasbeacon/internal/portal"
 )
 
 const (
@@ -81,7 +82,7 @@ func (a *Agent) ntpSynchronized() bool {
 // on the current network, sets the clock from web servers' "Date" headers.
 // cmd/rbd starts it in the background (not on the simulated device).
 func (a *Agent) RunClockMonitor() {
-	client := &http.Client{Timeout: 5 * time.Second}
+	client := clock.Client(nil)
 	watch := &clockWatch{fetch: func() []time.Time { return fetchDates(client) }}
 	for {
 		time.Sleep(clockCheckInterval)
@@ -108,11 +109,14 @@ func (a *Agent) checkClock(w *clockWatch, now time.Time) {
 
 	// Only fall back to web servers when NTP hasn't worked, the uplink has
 	// been connected for a while, and we haven't just done it.
+	// Not while a login page is in the way either: the network answers
+	// in the servers' place then, so there is no time to get.
 	a.mu.Lock()
 	connected := a.uplink.status.Connected
 	connectedFor := a.now().Sub(a.uplink.connectedSince)
+	open := a.portal.result.State == portal.Open
 	a.mu.Unlock()
-	if !connected || connectedFor < ntpGrace || now.Sub(w.lastSet) < time.Hour || a.ntpSynchronized() {
+	if !connected || !open || connectedFor < ntpGrace || now.Sub(w.lastSet) < time.Hour || a.ntpSynchronized() {
 		return
 	}
 

@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"rasbeacon/internal/portal"
 )
 
 // The clock monitor's rounds (checkClock): saving the time floor, and
@@ -13,13 +15,15 @@ import (
 // (hotel networks often block it).
 
 // clockEnv is a set-up RasBeacon whose uplink has been connected for an
-// hour, with NTP not working, and web servers answering `servers`.
+// hour, with no login page in the way and NTP not working, and web servers
+// answering `servers`.
 func clockEnv(t *testing.T, servers ...time.Time) (*testEnv, *clockWatch) {
 	t.Helper()
 	e := newClaimedEnv(t, false)
 	e.agent.mu.Lock()
 	e.agent.uplink.status.Connected = true
 	e.agent.uplink.connectedSince = time.Now().Add(-time.Hour)
+	e.agent.portal.result.State = portal.Open
 	e.agent.mu.Unlock()
 	return e, &clockWatch{fetch: func() []time.Time { return servers }}
 }
@@ -124,5 +128,21 @@ func TestClock_NeverSavesAnEarlierTime(t *testing.T) {
 	e.agent.SaveClock()
 	if got, _ := os.ReadFile(e.paths.ClockFile()); strings.TrimSpace(string(got)) != strconv.FormatInt(later, 10) {
 		t.Errorf("clock file = %q, want the later time kept", got)
+	}
+}
+
+// Behind a login page, the network answers in the servers' place, so the
+// clock isn't set from what it says.
+func TestClock_NotSetWhileALoginPageIsInTheWay(t *testing.T) {
+	now := time.Now()
+	future := now.Add(5 * 365 * 24 * time.Hour)
+	e, watch := clockEnv(t, future, future, future)
+	e.agent.mu.Lock()
+	e.agent.portal.result.State = portal.Portal
+	e.agent.mu.Unlock()
+
+	e.agent.checkClock(watch, now)
+	if sets := clockSets(e); len(sets) != 0 {
+		t.Errorf("the clock was set behind a login page: %q", sets)
 	}
 }
