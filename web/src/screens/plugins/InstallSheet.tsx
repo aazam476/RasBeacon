@@ -201,7 +201,6 @@ function KeptDataSection({
       footer={`${why} Turn this on only if you trust it with that plugin's settings, passwords and files.`}
     >
       <FormSwitchRow
-        leading={{ icon: 'folder' }}
         label={`Use the data kept from ${earlier}`}
         description={
           kept.keyId ? (
