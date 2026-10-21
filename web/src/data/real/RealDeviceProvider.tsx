@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router';
-import { FALLBACK_LOGIN_URL } from '../constants';
+import { loginPageAddress } from '../constants';
 import {
   DeviceContext,
   type AppPhase,
@@ -429,7 +429,7 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
       startLoginMode: async () => {
         const portal = await portalChange(() => api.portalAction('start'));
         // As the original: then go to the login page in this window.
-        setTimeout(() => window.location.assign(portal.loginUrl || FALLBACK_LOGIN_URL), 2000);
+        setTimeout(() => window.location.assign(loginPageAddress(portal.loginUrl)), 2000);
       },
       extendLoginMode: async () => void (await portalChange(() => api.portalAction('extend'))),
       stopLoginMode: async () => void (await portalChange(() => api.portalAction('stop'))),

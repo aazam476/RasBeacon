@@ -93,7 +93,9 @@ func probeOne(ctx context.Context, client *http.Client, check Check) Result {
 	// Anything else means someone answered in the real server's place.
 	loginURL := check.URL
 	if location := resp.Header.Get("Location"); location != "" {
-		if u, err := resp.Request.URL.Parse(location); err == nil {
+		// Only a web address: a "javascript:" or "data:" Location would
+		// run in RasBeacon's own page when the UI opens the login page.
+		if u, err := resp.Request.URL.Parse(location); err == nil && (u.Scheme == "http" || u.Scheme == "https") {
 			loginURL = u.String()
 		}
 	}

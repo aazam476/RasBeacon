@@ -168,7 +168,7 @@ func (s *Server) Handler() http.Handler {
 	// Everything else is the web UI.
 	mux.HandleFunc("/", s.handleUI)
 
-	return s.onlyFromHotspot(mux)
+	return withSecurityHeaders(s.onlyFromHotspot(mux))
 }
 
 // onlyFromHotspot rejects requests that did not arrive on RasBeacon's

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { FALLBACK_LOGIN_URL } from '@/data/constants';
+import { loginPageAddress } from '@/data/constants';
 import { useDevice } from '@/data/device';
 import type { PortalStatus } from '@/data/types';
 import { formatCountdown } from '@/lib/format';
@@ -166,7 +166,7 @@ function LoginModeOffer() {
 function LoginModeOn({ status }: { status: PortalStatus }) {
   const { extendLoginMode, stopLoginMode } = useDevice();
   const secondsLeft = useCountdown(status.secondsLeft);
-  const loginUrl = status.loginUrl || FALLBACK_LOGIN_URL;
+  const loginUrl = loginPageAddress(status.loginUrl);
 
   return (
     <>

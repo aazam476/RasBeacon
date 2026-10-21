@@ -11,3 +11,12 @@ export const HOTSPOT_CHANNELS: Record<Band, readonly number[]> = {
  * plain-HTTP site makes the network show its login page instead.
  */
 export const FALLBACK_LOGIN_URL = 'http://neverssl.com/';
+
+/**
+ * The login page to open: the address the network redirected to, if it is a web address.
+ * Anything else, such as a `javascript:` address a hostile network sent, would run as code on
+ * RasBeacon's own page, so it is replaced by FALLBACK_LOGIN_URL.
+ */
+export function loginPageAddress(url: string | undefined): string {
+  return url && /^https?:\/\//i.test(url) ? url : FALLBACK_LOGIN_URL;
+}

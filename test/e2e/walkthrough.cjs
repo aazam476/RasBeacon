@@ -52,6 +52,14 @@ async function main() {
   console.log(`Screen: ${DESKTOP ? "desktop, 1280 x 800" : "phone, 390 x 844"}`);
   const pageErrors = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
+  // rbweb's Content-Security-Policy must never block the UI's own scripts,
+  // styles or pictures.
+  const blockedByPolicy = (message) => {
+    if (message.type() === "error" && message.text().includes("Content Security Policy")) {
+      pageErrors.push(message.text());
+    }
+  };
+  page.on("console", blockedByPolicy);
 
   const step = async (name, action) => {
     process.stdout.write(`- ${name} ... `);
@@ -236,6 +244,7 @@ async function main() {
       await fetch(HOTEL_URL + "/require-login");
       const phone = await browser.newPage({ viewport: { width: 390, height: 844 } });
       phone.on("pageerror", (error) => pageErrors.push(error.message));
+      phone.on("console", blockedByPolicy);
       await phone.goto(BASE_URL + "/#/portal");
       await phone.getByRole("button", { name: "Check again" }).click();
       await phone.getByRole("button", { name: "Open the login page here" }).click({ timeout: 20000 });

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { FALLBACK_LOGIN_URL, loginPageAddress } from '@/data/constants';
 import { FieldErrors } from '@/data/errors';
 import type { NewNetworkForm, SavedNetwork, SetupState, VPNDetailsForm } from '@/data/types';
 import { ApiError } from '@/data/real/api';
@@ -245,5 +246,17 @@ describe('checkAdminPasswordForm', () => {
   it('refuses a new password with the device name in it', () => {
     const named = { ...form, newPassword: 'my-rasbeacon-pass', newPasswordConfirm: 'my-rasbeacon-pass' };
     expect(checkAdminPasswordForm(named).newPassword).toBe('Must not contain the device name.');
+  });
+});
+
+describe('loginPageAddress', () => {
+  it('keeps a web address', () => {
+    expect(loginPageAddress('http://hotel.example/login')).toBe('http://hotel.example/login');
+    expect(loginPageAddress('HTTPS://hotel.example/')).toBe('HTTPS://hotel.example/');
+  });
+  it('replaces anything that could run as code, or nothing', () => {
+    for (const bad of ['javascript:alert(1)', ' javascript:alert(1)', 'data:text/html,hi', '/login', '', undefined]) {
+      expect(loginPageAddress(bad)).toBe(FALLBACK_LOGIN_URL);
+    }
   });
 });
