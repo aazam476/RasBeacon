@@ -192,6 +192,10 @@ func fillTemplate(name string, text []byte, values plugin.Values) ([]byte, error
 			return string(data), err
 		},
 	}
+	// Plugins installed before the check existed are checked here too.
+	if err := plugin.CheckTemplate(name, text); err != nil {
+		return nil, err
+	}
 	// missingkey=zero: {{.Settings.unknown}} is empty instead of an error.
 	t, err := template.New(name).Funcs(funcs).Option("missingkey=zero").Parse(string(text))
 	if err != nil {

@@ -102,6 +102,7 @@ func TestOpen_RefusesBadFiles(t *testing.T) {
 		"unexpected file":  func(f map[string]string) { f["run.sh"] = "rm -rf /" },
 		"path escape":      func(f map[string]string) { f["../evil"] = "x" },
 		"missing template": func(f map[string]string) { delete(f, "templates/AdGuardHome.yaml") },
+		"template loops":   func(f map[string]string) { f["templates/AdGuardHome.yaml"] = "{{range 1000000000000}}{{end}}" },
 		"image twice":      func(f map[string]string) { f[ImageFile] = "tar" },
 		"unknown field":    func(f map[string]string) { m := validManifest(); m["root"] = true; f[ManifestFile] = manifestJSON(m) },
 		"bad permission": func(f map[string]string) {
