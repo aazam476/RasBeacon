@@ -32,6 +32,10 @@ import (
 // readingsState keeps the previous sample of the counters that become
 // rates (processor time, bytes).
 type readingsState struct {
+	// persistent is how much /persistent holds, on the Pi Zero 2 W image
+	// (see persistentBytes).
+	persistent persistentSize
+
 	sampledAt  time.Time
 	cpuBefore  readings.CPUTimes
 	cpuPercent float64
@@ -270,15 +274,7 @@ func (a *Agent) singleSystemStorage() api.StorageInfo {
 		Filesystem: "Writable system",
 		Health:     "unknown",
 	}
-	var persistent uint64
-	_ = filepath.WalkDir(a.paths.PersistentDir(), func(_ string, d fs.DirEntry, err error) error {
-		if err == nil && d.Type().IsRegular() {
-			if info, err := d.Info(); err == nil {
-				persistent += uint64(info.Size())
-			}
-		}
-		return nil
-	})
+	persistent := a.persistentBytes()
 	var st syscall.Statfs_t
 	if err := syscall.Statfs(a.paths.DataDir(), &st); err == nil {
 		total := st.Blocks * uint64(st.Bsize)
@@ -292,6 +288,50 @@ func (a *Agent) singleSystemStorage() api.StorageInfo {
 		s.Filesystem += " (" + fsType + ")"
 	}
 	return s
+}
+
+// persistentSizeEvery is how often persistentBytes measures again.
+const persistentSizeEvery = 10 * time.Minute
+
+// persistentSize is the last measurement of /persistent.
+type persistentSize struct {
+	bytes     uint64
+	measured  time.Time
+	measuring bool
+}
+
+// persistentBytes returns how much the files in /persistent add up to. With
+// a plugin or two, that is tens of thousands of files (Podman's image
+// layers), which take a while to add up on an SD card. So they are added up
+// in the background, at most every persistentSizeEvery, while the status
+// shows the last result (0 until the first one). The caller holds a.mu.
+func (a *Agent) persistentBytes() uint64 {
+	p := &a.readings.persistent
+	due := p.measured.IsZero() || a.now().Sub(p.measured) >= persistentSizeEvery
+	if due && !p.measuring {
+		p.measuring = true
+		a.background(func() {
+			size := filesSize(a.paths.PersistentDir())
+			a.mu.Lock()
+			defer a.mu.Unlock()
+			p.bytes, p.measured, p.measuring = size, a.now(), false
+		})
+	}
+	return p.bytes
+}
+
+// filesSize adds up the sizes of the regular files in dir and below it.
+func filesSize(dir string) uint64 {
+	var total uint64
+	_ = filepath.WalkDir(dir, func(_ string, d fs.DirEntry, err error) error {
+		if err == nil && d.Type().IsRegular() {
+			if info, err := d.Info(); err == nil {
+				total += uint64(info.Size())
+			}
+		}
+		return nil
+	})
+	return total
 }
 
 // mountType returns the filesystem type of the mount that holds path.

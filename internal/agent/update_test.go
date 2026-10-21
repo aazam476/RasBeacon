@@ -371,14 +371,31 @@ func TestStorage_ThePi3ImageHasOneSystemPartition(t *testing.T) {
 	mustWrite(t, filepath.Join(e.paths.SysClassBlock(), "mmcblk0p1", "size"), "524288\n")
 	mustWrite(t, filepath.Join(e.paths.PersistentDir(), "rasbeacon", "settings"), strings.Repeat("x", 4096))
 
-	e.agent.mu.Lock()
-	s := e.agent.storageInfo()
-	e.agent.mu.Unlock()
+	storage := func() api.StorageInfo {
+		e.agent.mu.Lock()
+		defer e.agent.mu.Unlock()
+		return e.agent.storageInfo()
+	}
+	// /persistent is added up in the background, outside rbd's lock: the
+	// first answer doesn't wait for it.
+	if s := storage(); s.UserGB != 0 {
+		t.Errorf("before the first measurement: %+v", s)
+	}
+	e.runBackground()
+	s := storage()
 	if s.Medium != "microSD card" || !strings.HasPrefix(s.Filesystem, "Writable system") {
 		t.Errorf("storage = %+v", s)
 	}
 	if s.FirmwareGB < 0.268 || s.UserGB <= 0 || s.TotalGB < s.FirmwareGB+s.UserGB {
 		t.Errorf("storage = %+v: RasBeacon is the boot partition and the system files, settings what /persistent holds", s)
+	}
+	// Not measured again for 10 minutes.
+	storage()
+	e.backgroundMu.Lock()
+	queued := len(e.pending)
+	e.backgroundMu.Unlock()
+	if queued != 0 {
+		t.Errorf("%d measurements queued right after one, want none for 10 minutes", queued)
 	}
 }
 
