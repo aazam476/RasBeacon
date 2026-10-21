@@ -2,6 +2,7 @@
 import { screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { createMockPlugins, definitionOf, previewOf } from '@/data/demo/plugins';
+import type { PluginKeptData } from '@/data/types';
 import { PluginsScreen } from '@/screens/plugins/PluginsScreen';
 import { fakeDevice, renderScreen } from '../render';
 
@@ -49,7 +50,7 @@ describe('data kept from an earlier install', () => {
     ],
     [{ name: 'Trip Notes' }, "That one wasn't signed, so nothing shows this is the same plugin."],
     [{}, "It was kept by RasBeacon 0.1, which didn't note whose it was."],
-  ])('asks before using it (%o)', async (keptData, why) => {
+  ] as [PluginKeptData, string][])('asks before using it (%o)', async (keptData, why) => {
     const answer = { ...preview(), keptData };
     const device = fakeDevice(undefined, { previewPluginFile: async () => answer });
     const { user } = renderScreen(<PluginsScreen />, device, '/plugins');
