@@ -742,6 +742,7 @@ func (a *Agent) RemovePlugin(req api.PluginRemoveRequest) error {
 		return err
 	}
 	image := a.cfg.Plugins.Installed[req.ID].Image
+	publicKey := a.cfg.Plugins.Installed[req.ID].PublicKey
 	a.mu.Unlock()
 
 	a.stopPluginContainer(req.ID)
@@ -751,9 +752,7 @@ func (a *Agent) RemovePlugin(req api.PluginRemoveRequest) error {
 	}
 	dir := a.paths.PluginDir(req.ID)
 	if req.KeepData {
-		if err := os.MkdirAll(a.paths.PluginKeptDir(), 0o700); err == nil {
-			_ = os.Rename(filepath.Join(dir, pluginDataImage), filepath.Join(a.paths.PluginKeptDir(), req.ID+".img"))
-		}
+		a.keepPluginData(req.ID, publicKey)
 	}
 	if err := os.RemoveAll(dir); err != nil {
 		slog.Warn("could not delete the plugin's files", "plugin", req.ID, "error", err)

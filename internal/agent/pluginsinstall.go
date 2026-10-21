@@ -42,6 +42,15 @@ type stagedPlugin struct {
 	downloadSize int64
 }
 
+// publicKey is the key the plugin file is signed with (base64), as the
+// settings keep it; "" when it isn't signed.
+func (s *stagedPlugin) publicKey() string {
+	if s.archive.PublicKey == nil {
+		return ""
+	}
+	return base64.StdEncoding.EncodeToString(s.archive.PublicKey)
+}
+
 // stagingLifetime is how long a file waits in the install sheet.
 const stagingLifetime = time.Hour
 
@@ -221,10 +230,7 @@ func (a *Agent) preview(s *stagedPlugin) (api.PluginPreview, error) {
 	// An update must come from the same author: once a version was signed,
 	// every later one must be signed with the same key (like Android apps).
 	installed, update := a.cfg.Plugins.Installed[m.ID]
-	var key string
-	if s.archive.PublicKey != nil {
-		key = base64.StdEncoding.EncodeToString(s.archive.PublicKey)
-	}
+	key := s.publicKey()
 	if update {
 		switch {
 		case installed.PublicKey != "" && key == "":
@@ -269,6 +275,10 @@ func (a *Agent) preview(s *stagedPlugin) (api.PluginPreview, error) {
 				}
 			}
 		}
+	}
+	if waiting, matches := a.keptDataFor(m.ID, key); !update && waiting && !matches {
+		preview.Warnings = append(preview.Warnings, fmt.Sprintf(
+			"The data you kept from an earlier %s stays set aside: that one was signed by a different author (or not signed), so this may not be the same plugin.", m.Name))
 	}
 	if board == "zero2w" || board == "pi3" || (memory > 0 && memory < 1024) {
 		preview.Warnings = append(preview.Warnings, fmt.Sprintf(
@@ -345,7 +355,7 @@ func (a *Agent) InstallPlugin(req api.PluginInstallRequest) (api.Plugin, error) 
 		Ports: ports, Settings: values, Drive: req.Drive, Running: true,
 	}
 	if preview.Signed {
-		record.PublicKey = base64.StdEncoding.EncodeToString(s.archive.PublicKey)
+		record.PublicKey = s.publicKey()
 	}
 	if !update {
 		if record.Address, err = a.nextPluginAddress(); err != nil {
@@ -485,16 +495,9 @@ func (a *Agent) installPluginSteps(id string, s *stagedPlugin, oldImage string) 
 	if oldImage != "" && oldImage != image {
 		_, _ = a.plugins.runner.Run("podman", "rmi", "--ignore", oldImage)
 	}
-	// Data kept from an earlier install comes back.
-	kept := filepath.Join(a.paths.PluginKeptDir(), id+".img")
-	data := filepath.Join(a.paths.PluginDir(id), pluginDataImage)
-	if _, err := os.Stat(data); errors.Is(err, os.ErrNotExist) {
-		if _, err := os.Stat(kept); err == nil {
-			if err := os.Rename(kept, data); err == nil {
-				slog.Info("plugin's kept data restored", "plugin", id)
-			}
-		}
-	}
+	// Data kept from an earlier install comes back, if it is the same
+	// plugin (signed with the same key).
+	a.restoreKeptData(id, s.publicKey())
 	return image, nil
 }
 
