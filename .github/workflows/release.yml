@@ -33,8 +33,10 @@ on:
         type: string
         default: ""
 
+# Jobs can only read the repository unless they say otherwise: the image
+# job runs npm and many build tools, and only publish needs to write.
 permissions:
-  contents: write
+  contents: read
 
 env:
   IMAGE_GEN_REPO: https://github.com/raspberrypi/rpi-image-gen.git
@@ -92,6 +94,8 @@ jobs:
         env:
           # Signs the update file. Stored as a repository secret (see
           # docs/releasing.md); without it, no update file is made.
+          # build.sh removes it from the environment before running
+          # anything else and passes it only to rbsign.
           RASBEACON_UPDATE_SIGNING_KEY: ${{ secrets.RASBEACON_UPDATE_SIGNING_KEY }}
         run: image/build.sh ${{ matrix.target.board }} ${{ steps.version.outputs.version }}
 
@@ -109,6 +113,9 @@ jobs:
     if: github.ref_type == 'tag' || inputs.release != ''
     needs: image
     runs-on: ubuntu-24.04
+    permissions:
+      # To make the release and upload its files.
+      contents: write
     steps:
       - uses: actions/download-artifact@v8
         with:

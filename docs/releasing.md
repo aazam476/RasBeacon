@@ -62,6 +62,11 @@ public half is built into the image; the private half signs releases.
 Images built **before** step 3 have no key and can't install update files;
 their owners update by flashing once. From then on, updates work.
 
+Only `rbsign` ever sees the key: `image/build.sh` takes it out of the
+environment before it runs anything else (npm and its packages' install
+scripts included), and only the release workflow's `publish` job may write
+to the repository.
+
 **If the private key leaks:** make a new key pair, add the new public key
 as a second file (`release-2.pub`), make a release signed with the *old*
 key that contains both public keys, then switch the secret to the new key
