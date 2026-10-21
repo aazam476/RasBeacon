@@ -226,10 +226,14 @@ Updates use the two copies ("slots", A and B) of the system on the SD card
 Settings live on the shared `/persistent` partition, so they carry over.
 
 The optional online check (every 1, 6, 24 or 168 hours, or on *Check
-now*) reads the latest release from GitHub, and its small
-`<name>-<version>.update.json` file (version and `minFromVersion`), so the
-System page can say a new version needs a fresh install before anyone
-downloads it. Installing still needs the signed `.rbupdate` file. A new
+now*) reads the newest 30 releases from GitHub (drafts and pre-releases
+left out) and the small `<name>-<version>.update.json` file (version and
+`minFromVersion`) of those newer than the running version. It offers the
+newest release that can be installed over the running version: when the
+newest one needs a newer starting version (a new signing key, say), the
+device moves up one step at a time, and the System page names the version
+that comes after the step. Only when no step exists does it say the new
+version needs a fresh install, before anyone downloads it. Installing still needs the signed `.rbupdate` file. A new
 version is announced once to the owner's ntfy topic or webhook
 (`internal/notify`).
 

@@ -67,13 +67,22 @@ environment before it runs anything else (npm and its packages' install
 scripts included), and only the release workflow's `publish` job may write
 to the repository.
 
-**If the private key leaks:** make a new key pair, add the new public key
-as a second file (`release-2.pub`), make a release signed with the *old*
-key that contains both public keys, then switch the secret to the new key
-and, in a later release, remove the old public key. A device that skipped
-the release with both keys refuses updates signed with the new one; its
-owner installs that release's update file first (from its GitHub release),
-then the newer one.
+**Changing the key** (for example if the private key may have leaked):
+
+1. Make a new key pair and add the new public key as a second file
+   (`release-2.pub`).
+2. Release, still signed with the *old* key. That release holds both
+   public keys, so devices that install it trust both.
+3. Switch the secret to the new key. In the next release, remove the old
+   public key and write the release from step 2 into `image/update-from`
+   (see below): devices older than it don't know the new key.
+
+Devices from v0.2.0 on then move up in steps by themselves: their online
+check offers the newest release they can install (the one from step 2),
+and after it, the next one. Devices on v0.1.0 only read the newest release,
+so they show it as needing a fresh install from the step-2 version on;
+installing that version's update file first (from its GitHub release) also
+works.
 
 **Forks** don't have the secret, so their builds make images but no update
 files.
@@ -93,7 +102,10 @@ can install it into [`image/update-from`](../image/update-from), e.g.
   flash the new image, set it up and restore the backup. Make sure that
   version can still restore backups from the older ones.
 - The online check reads the same from the release's `.update.json` file,
-  so owners see it before downloading anything.
+  so owners see it before downloading anything. When an older release
+  can be installed and can then install the new one, the check offers
+  that one first, and the System page names the new version that comes
+  after it; a fresh install is only needed when there is no such step.
 
 Empty `image/update-from` again for the next release unless the reason
 still holds; a version that can install `v2.0.0` usually can install
