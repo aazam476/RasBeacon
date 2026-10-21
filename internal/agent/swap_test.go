@@ -2,6 +2,7 @@ package agent
 
 import (
 	"errors"
+	"net/http"
 	"os"
 	"testing"
 
@@ -69,5 +70,25 @@ func TestSwap_SmallCardGetsLess(t *testing.T) {
 	}
 	if !e.runner.ran("fallocate -l 1073741824 " + e.paths.SwapFile()) {
 		t.Errorf("commands: %v", e.runner.commands)
+	}
+}
+
+// Memory written to swap can hold Wi-Fi and VPN keys, so a factory reset
+// turns swap off and deletes the file; the next start makes a new one.
+func TestFactoryReset_DeletesTheSwapFile(t *testing.T) {
+	e := newClaimedEnv(t, false)
+	file := e.paths.SwapFile()
+	mustWrite(t, file, "old memory")
+	mustWrite(t, e.paths.ProcSwaps(), "Filename Type Size Used Priority\n"+file+" file 2097148 0 -2\n")
+	e.runner.commands = nil
+
+	if status, body := e.call(http.MethodPost, "/system/factory-reset", api.PasswordRequest{Password: validClaim.AdminPassword}); status != http.StatusNoContent {
+		t.Fatalf("factory reset = %d %s", status, body)
+	}
+	if !e.runner.ran("swapoff " + file) {
+		t.Errorf("swap should be turned off first: %v", e.runner.commands)
+	}
+	if _, err := os.Stat(file); !os.IsNotExist(err) {
+		t.Errorf("the swap file should be gone: %v", err)
 	}
 }

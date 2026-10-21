@@ -284,10 +284,11 @@ func (a *Agent) handleFactoryResetFile() error {
 	return nil
 }
 
-// wipeData deletes everything in RasBeacon's data directory, and the
-// plugins' images and containers.
+// wipeData deletes everything in RasBeacon's data directory, the plugins'
+// images and containers, and the swap file.
 func (a *Agent) wipeData() error {
 	a.stopAllPlugins()
+	a.removeSwapFile()
 	if err := os.RemoveAll(a.paths.DataDir()); err != nil {
 		return fmt.Errorf("erasing settings: %w", err)
 	}

@@ -75,6 +75,22 @@ func (a *Agent) swapActive() bool {
 	return false
 }
 
+// removeSwapFile turns swap off and deletes the swap file, for a factory
+// reset: memory written to it can hold Wi-Fi and VPN keys. The next start
+// makes a new one.
+func (a *Agent) removeSwapFile() {
+	if a.swapActive() {
+		if _, err := a.runner.Run("swapoff", a.paths.SwapFile()); err != nil {
+			// Deleted anyway: the space is freed once swap is off, at the
+			// latest when RasBeacon restarts.
+			slog.Warn("could not turn off swap", "error", err)
+		}
+	}
+	if err := os.Remove(a.paths.SwapFile()); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		slog.Warn("could not delete the swap file", "error", err)
+	}
+}
+
 // applySwap makes the swap file the wanted size and turns it on (or off
 // and removes it, for 0). The caller holds a.mu.
 func (a *Agent) applySwap() error {

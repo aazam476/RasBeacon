@@ -68,6 +68,12 @@ func TestBackup_RestoreBringsSettingsAndPluginsBack(t *testing.T) {
 	e.agent.mu.Unlock()
 	os.Remove(e.paths.SSHAuthorizedKeysFile())
 
+	// A browser that chose "Stay logged in" before the restore.
+	token, _, err := e.agent.RememberLogin()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	if err := e.agent.StageRestore(bytes.NewReader(file)); err != nil {
 		t.Fatal(err)
 	}
@@ -82,6 +88,9 @@ func TestBackup_RestoreBringsSettingsAndPluginsBack(t *testing.T) {
 	}
 	if !result.Plugins {
 		t.Error("the result should say plugins were restored")
+	}
+	if e.agent.CheckRememberedLogin(token) {
+		t.Error("a restore ends \"Stay logged in\" everywhere: the backup's admin password may be another")
 	}
 	var cfg config.Config
 	config.ReadJSON(e.paths.ConfigFile(), &cfg)

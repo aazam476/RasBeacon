@@ -457,6 +457,11 @@ func (a *Agent) Restore(req api.RestoreRequest) (api.RestoreResult, error) {
 		return api.RestoreResult{}, err
 	}
 	_ = os.Remove(upload)
+	// "Stay logged in" ends everywhere: the backup's admin password may
+	// not be the one those browsers typed.
+	if err := a.forgetAllLogins(); err != nil {
+		slog.Warn("could not forget the remembered logins", "error", err)
+	}
 	slog.Warn("settings restored from a backup; restarting", "made", info.Created, "version", info.Version, "plugins", len(cfg.Plugins.Installed))
 	a.afterFunc(switchDelay, func() { _, _ = a.runner.Run("systemctl", "reboot") })
 	return api.RestoreResult{Version: info.Version, Created: info.Created.Format(time.RFC3339), Plugins: !keepPlugins}, nil
