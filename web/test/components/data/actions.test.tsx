@@ -431,7 +431,13 @@ describe('plugins', () => {
       name: 'installs, then reloads the plugins',
       run: (d) => d.installPlugin('staged-1', choices),
       sends: ['POST /plugins/install'],
-      body: { stagingId: 'staged-1', ...choices },
+      body: { stagingId: 'staged-1', ...choices, useKeptData: false },
+    },
+    {
+      name: 'installs with the data kept from an earlier install, when chosen',
+      run: (d) => d.installPlugin('staged-1', choices, true),
+      sends: ['POST /plugins/install'],
+      body: { stagingId: 'staged-1', ...choices, useKeptData: true },
     },
     {
       name: 'cancelling an install never fails',

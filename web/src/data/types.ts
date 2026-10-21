@@ -779,9 +779,21 @@ export interface PluginPreview {
   cpus: number;
   storageMb: number;
   warnings?: string[];
+  /** Set when data kept from an earlier install waits, but not from the same author. */
+  keptData?: PluginKeptData;
 }
 
 /** The owner's choices in the install sheet or on a plugin's page. */
+/**
+ * Data kept from an earlier install with the same ID that doesn't come back by itself (it wasn't
+ * signed with the same key): the install sheet asks. `name` is the earlier plugin's, `keyId` its
+ * signing key; both are missing for data RasBeacon 0.1 kept, which didn't note them.
+ */
+export interface PluginKeptData {
+  name?: string;
+  keyId?: string;
+}
+
 export interface PluginChoices {
   /** By port key ("tcp/3000"). */
   ports: Record<string, number>;

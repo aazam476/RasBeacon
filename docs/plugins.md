@@ -63,11 +63,12 @@ installed, RasBeacon checks the catalog once a day, and the plugin's page
 offers **Update to …**. Updates keep the plugin's settings and data.
 
 **Removing** deletes the plugin and its image. **Keep its data** saves its
-data, for installing it again later. The data only goes back to a plugin
-signed with the same key (or, if the removed one wasn't signed, to one
-that isn't either): anyone can give a plugin the same ID. Otherwise it
-stays aside, and the install sheet says so. A factory reset removes all
-plugins.
+data, for installing it again later. Anyone can give a plugin the same ID,
+so the data only comes back by itself to a plugin signed with the same key.
+For any other (another key, or either of them unsigned), the install sheet
+asks, with a switch that is off: *Use the data kept from the earlier …
+install*, naming the earlier plugin and its key. A factory reset removes
+all plugins.
 A backup (System → Back up settings) can include the plugins with their
 images and data.
 

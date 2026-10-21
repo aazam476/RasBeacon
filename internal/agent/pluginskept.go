@@ -4,25 +4,32 @@ package agent
 // <plugins>/kept/<id>.img for a later install of the same plugin. A plugin's
 // ID is chosen by its author, so another author's plugin could use the
 // same one, such as "adguard-home", to collect the old configuration,
-// passwords and files. So the removed plugin's signing key is kept next to
-// its data (<id>.key.json), and the data only goes back to an install
-// signed with that same key (or, for a plugin that wasn't signed, to one
-// that isn't either). Otherwise it stays aside, and the install sheet
-// says so.
+// passwords and files. So the removed plugin's name and signing key are
+// kept next to its data (<id>.key.json):
+//
+//   - an install signed with that same key gets the data back by itself;
+//   - any other install (another key, or either of them unsigned, so
+//     nothing proves they are the same plugin) only gets it if the owner
+//     turns on "Use the data kept from the earlier … install" in the
+//     install sheet, which names the earlier plugin and its key.
 
 import (
+	"encoding/base64"
 	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
 
+	"rasbeacon/internal/api"
 	"rasbeacon/internal/config"
+	"rasbeacon/internal/plugin"
 )
 
-// keptDataOwner is who the kept data belonged to.
+// keptDataOwner is whose the kept data was.
 type keptDataOwner struct {
-	// PublicKey is the removed plugin's signing key (base64), "" when it
-	// wasn't signed.
+	// Name is the removed plugin's name, for the install sheet.
+	Name string `json:"name"`
+	// PublicKey is its signing key (base64), "" when it wasn't signed.
 	PublicKey string `json:"publicKey"`
 }
 
@@ -32,10 +39,10 @@ func (a *Agent) keptDataFiles(id string) (data, owner string) {
 	return filepath.Join(dir, id+".img"), filepath.Join(dir, id+".key.json")
 }
 
-// keepPluginData moves a plugin's data aside when it is removed, with the
-// key it was signed with.
-func (a *Agent) keepPluginData(id, publicKey string) {
-	data, owner := a.keptDataFiles(id)
+// keepPluginData moves a plugin's data aside when it is removed, with its
+// name and the key it was signed with.
+func (a *Agent) keepPluginData(id string, owner keptDataOwner) {
+	data, ownerFile := a.keptDataFiles(id)
 	if err := os.MkdirAll(filepath.Dir(data), 0o700); err != nil {
 		slog.Warn("could not keep the plugin's data", "plugin", id, "error", err)
 		return
@@ -44,45 +51,61 @@ func (a *Agent) keepPluginData(id, publicKey string) {
 		slog.Warn("could not keep the plugin's data", "plugin", id, "error", err)
 		return
 	}
-	if err := config.WriteJSON(owner, keptDataOwner{PublicKey: publicKey}, 0o600); err != nil {
+	if err := config.WriteJSON(ownerFile, owner, 0o600); err != nil {
 		slog.Warn("could not note whose data was kept", "plugin", id, "error", err)
 	}
 }
 
 // keptDataFor says whether data kept for id is waiting, and whether an
-// install signed with publicKey ("" for unsigned) may have it. Data kept
-// before the key was noted (by RasBeacon 0.1) has no owner, so it stays
-// aside too.
-func (a *Agent) keptDataFor(id, publicKey string) (waiting, matches bool) {
-	data, owner := a.keptDataFiles(id)
+// install signed with publicKey ("" for unsigned) gets it back by itself:
+// only when both are signed with the same key. owner is whose it was (empty
+// for data RasBeacon 0.1 kept, which didn't note it).
+func (a *Agent) keptDataFor(id, publicKey string) (waiting, sameAuthor bool, owner keptDataOwner) {
+	data, ownerFile := a.keptDataFiles(id)
 	if _, err := os.Stat(data); err != nil {
-		return false, false
+		return false, false, owner
 	}
-	var kept keptDataOwner
-	if err := config.ReadJSON(owner, &kept); err != nil {
-		return true, false
+	if err := config.ReadJSON(ownerFile, &owner); err != nil {
+		return true, false, keptDataOwner{}
 	}
-	return true, kept.PublicKey == publicKey
+	return true, owner.PublicKey != "" && owner.PublicKey == publicKey, owner
+}
+
+// keptDataQuestion is what the install sheet asks about kept data that
+// doesn't come back by itself (nil when there's nothing to ask).
+func (a *Agent) keptDataQuestion(id, publicKey string) *api.PluginKeptData {
+	waiting, sameAuthor, owner := a.keptDataFor(id, publicKey)
+	if !waiting || sameAuthor {
+		return nil
+	}
+	question := &api.PluginKeptData{Name: owner.Name}
+	if key, err := base64.StdEncoding.DecodeString(owner.PublicKey); err == nil && len(key) > 0 {
+		question.KeyID = plugin.KeyID(key)
+	}
+	return question
 }
 
 // restoreKeptData gives kept data back to a new install of id signed with
-// publicKey, if it may have it (keptDataFor).
-func (a *Agent) restoreKeptData(id, publicKey string) {
+// publicKey: by itself for the same author, or because the owner chose to
+// (useKeptData).
+func (a *Agent) restoreKeptData(id, publicKey string, useKeptData bool) {
 	target := filepath.Join(a.paths.PluginDir(id), pluginDataImage)
 	if _, err := os.Stat(target); !errors.Is(err, os.ErrNotExist) {
 		return // it has data of its own already
 	}
-	if waiting, matches := a.keptDataFor(id, publicKey); !waiting || !matches {
-		if waiting {
-			slog.Warn("kept data stays aside: the plugin is signed by another key", "plugin", id)
-		}
+	waiting, sameAuthor, _ := a.keptDataFor(id, publicKey)
+	if !waiting {
 		return
 	}
-	data, owner := a.keptDataFiles(id)
+	if !sameAuthor && !useKeptData {
+		slog.Info("kept data stays aside: not the same signing key, and the owner didn't choose it", "plugin", id)
+		return
+	}
+	data, ownerFile := a.keptDataFiles(id)
 	if err := os.Rename(data, target); err != nil {
 		slog.Warn("could not restore the plugin's kept data", "plugin", id, "error", err)
 		return
 	}
-	_ = os.Remove(owner)
-	slog.Info("plugin's kept data restored", "plugin", id)
+	_ = os.Remove(ownerFile)
+	slog.Info("plugin's kept data restored", "plugin", id, "chosenByOwner", !sameAuthor)
 }

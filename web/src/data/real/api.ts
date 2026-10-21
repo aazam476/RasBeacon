@@ -310,8 +310,8 @@ export const downloadCatalogPlugin = (source: string, file: string) =>
   request<PluginPreview>('POST', '/plugins/catalog/download', { body: { source, file }, timeoutMs: 30 * 60_000 });
 export const downloadPluginUpdate = (id: string) =>
   request<PluginPreview>('POST', '/plugins/update', { body: { id }, timeoutMs: 30 * 60_000 });
-export const installPlugin = (stagingId: string, choices: PluginChoices) =>
-  request<Plugin>('POST', '/plugins/install', { body: { stagingId, ...choices } });
+export const installPlugin = (stagingId: string, choices: PluginChoices, useKeptData = false) =>
+  request<Plugin>('POST', '/plugins/install', { body: { stagingId, ...choices, useKeptData } });
 export const cancelPluginInstall = (stagingId: string) =>
   request<void>('POST', '/plugins/cancel', { body: { stagingId } });
 export const putPluginSettings = (id: string, choices: PluginChoices) =>

@@ -805,7 +805,15 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
           PLUGIN_DEFINITIONS.find((d) => file.name.startsWith(d.id.split('-')[0])) ?? definitionOf('trip-notes')!;
         const stagingId = newStagingId('file');
         staged.set(stagingId, { id: definition.id, source: 'file' });
-        return { ...previewOf(definition, currentDemo.router.plugins, stagingId), source: 'file' };
+        return {
+          ...previewOf(
+            definition,
+            currentDemo.router.plugins,
+            stagingId,
+            currentDemo.router.keptPluginData[definition.id],
+          ),
+          source: 'file',
+        };
       },
       pluginCatalog: async (refresh) => {
         await wait(refresh ? 1600 : 500);
@@ -820,7 +828,12 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
           throw new FieldErrors({ file: "This plugin isn't in the catalog any more. Check the catalog again." });
         const stagingId = newStagingId('catalog');
         staged.set(stagingId, { id: definition.id, source });
-        return previewOf(definition, currentDemo.router.plugins, stagingId);
+        return previewOf(
+          definition,
+          currentDemo.router.plugins,
+          stagingId,
+          currentDemo.router.keptPluginData[definition.id],
+        );
       },
       previewPluginUpdate: async (id) => {
         await wait(1800);
@@ -828,7 +841,12 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
         if (!definition) throw new Error('No update for this plugin is in the catalog.');
         const stagingId = newStagingId('update');
         staged.set(stagingId, { id, source: definition.source });
-        return previewOf(definition, currentDemo.router.plugins, stagingId);
+        return previewOf(
+          definition,
+          currentDemo.router.plugins,
+          stagingId,
+          currentDemo.router.keptPluginData[definition.id],
+        );
       },
       installPlugin: async (stagingId, choices) => {
         await wait(700);
@@ -845,6 +863,7 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
         const existing = plugins.plugins.find((p) => p.id === definition.id);
         const address = existing?.address ?? `10.89.0.${2 + plugins.plugins.length}`;
         change((d) => {
+          delete d.router.keptPluginData[definition.id]; // given back or not, the question is answered
           const list = d.router.plugins.plugins;
           const plugin: Plugin = {
             ...installedPlugin(definition, address, choices, 'installing'),
@@ -914,9 +933,15 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
           );
         });
       },
-      removePlugin: async (id) => {
+      removePlugin: async (id, keepData) => {
         await wait(1200);
-        change((d) => void (d.router.plugins.plugins = d.router.plugins.plugins.filter((p) => p.id !== id)));
+        change((d) => {
+          const removed = d.router.plugins.plugins.find((p) => p.id === id);
+          d.router.plugins.plugins = d.router.plugins.plugins.filter((p) => p.id !== id);
+          // Like the router: data of an unsigned plugin isn't known to be the next one's, so its
+          // next install asks. (A signed plugin's comes back to the same key by itself.)
+          if (keepData && removed && !removed.signed) d.router.keptPluginData[id] = { name: removed.name };
+        });
       },
       pluginLogs: async (id) => {
         await wait(400);

@@ -943,6 +943,10 @@ type PluginPreview struct {
 	StorageMB    int     `json:"storageMb"`
 	// Warnings are shown above the Install button (e.g. little memory).
 	Warnings []string `json:"warnings,omitempty"`
+	// KeptData is set when data kept from an earlier install with this ID
+	// waits, signed by another key or not signed: the sheet asks whether
+	// to use it (PluginInstallRequest.UseKeptData).
+	KeptData *PluginKeptData `json:"keptData,omitempty"`
 }
 
 // PluginInstallRequest installs a previewed plugin (POST /plugins/install):
@@ -953,6 +957,19 @@ type PluginInstallRequest struct {
 	Ports     map[string]int    `json:"ports"`
 	Settings  map[string]string `json:"settings"`
 	Drive     string            `json:"drive"`
+	// UseKeptData gives the new install the data kept from an earlier one
+	// of the same ID that wasn't signed with the same key (the preview's
+	// KeptData). Data of the same author comes back without it.
+	UseKeptData bool `json:"useKeptData,omitempty"`
+}
+
+// PluginKeptData describes data kept from an earlier install with the same
+// ID that doesn't come back by itself: the install sheet offers to use it.
+type PluginKeptData struct {
+	// Name is what the earlier plugin was called ("" if not known).
+	Name string `json:"name,omitempty"`
+	// KeyID is the earlier plugin's signing key ("" if it wasn't signed).
+	KeyID string `json:"keyId,omitempty"`
 }
 
 // PluginSettingsRequest changes an installed plugin's settings (PUT

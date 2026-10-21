@@ -376,9 +376,7 @@ func TestPlugins_SigningKeyIsPinnedOnFirstSignedInstall(t *testing.T) {
 		t.Error("an update keeps the settings and removes the old image")
 	}
 
-	// Remove it with its data kept. Another author's plugin with the same
-	// ID may be installed, but doesn't get the data: it stays aside, and
-	// the install sheet says so.
+	// Remove it with its data kept.
 	dataFile := filepath.Join(e.paths.PluginDir("adguard-home"), pluginDataImage)
 	mustWrite(t, dataFile, "data") // fallocate is fake here
 	if err := e.agent.RemovePlugin(api.PluginRemoveRequest{ID: "adguard-home", KeepData: true}); err != nil {
@@ -387,29 +385,30 @@ func TestPlugins_SigningKeyIsPinnedOnFirstSignedInstall(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(e.paths.PluginKeptDir(), "adguard-home.img")); err != nil {
 		t.Errorf("the data should be kept: %v", err)
 	}
-	for name, signer := range map[string]ed25519.PrivateKey{"a different key": otherKey, "no key": nil} {
-		preview, err := e.agent.StagePluginFile(bytes.NewReader(writeTestPlugin(t, testPluginManifest("2.0"), signer)))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !strings.Contains(strings.Join(preview.Warnings, " "), "stays set aside") {
-			t.Errorf("signed with %s, the sheet should say the kept data stays aside: %q", name, preview.Warnings)
-		}
+
+	// Another author's plugin with the same ID: the sheet asks, naming the
+	// earlier plugin and its key, and the data stays aside unless chosen.
+	preview, err := e.agent.StagePluginFile(bytes.NewReader(writeTestPlugin(t, testPluginManifest("2.0"), otherKey)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if k := preview.KeptData; k == nil || k.Name != "AdGuard Home" || k.KeyID != p.KeyID {
+		t.Fatalf("the sheet should ask about the data kept from the earlier AdGuard Home (key %s): %+v", p.KeyID, k)
 	}
 	if _, err := e.installTestPlugin(writeTestPlugin(t, testPluginManifest("2.0"), otherKey), nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(dataFile); err == nil {
-		t.Error("a plugin signed with another key must not get the kept data")
+		t.Error("a plugin signed with another key must not get the kept data without being asked")
 	}
 
-	// The same author's plugin gets it back.
+	// The same author's plugin gets it back by itself, without a question.
 	if err := e.agent.RemovePlugin(api.PluginRemoveRequest{ID: "adguard-home"}); err != nil {
 		t.Fatal(err)
 	}
-	preview, err := e.agent.StagePluginFile(bytes.NewReader(writeTestPlugin(t, testPluginManifest("2.0"), key)))
-	if err != nil || len(preview.Warnings) != 0 {
-		t.Errorf("the same key: %q, %v", preview.Warnings, err)
+	preview, err = e.agent.StagePluginFile(bytes.NewReader(writeTestPlugin(t, testPluginManifest("2.0"), key)))
+	if err != nil || preview.KeptData != nil {
+		t.Errorf("the same key: %+v, %v", preview.KeptData, err)
 	}
 	if _, err := e.installTestPlugin(writeTestPlugin(t, testPluginManifest("2.0"), key), nil); err != nil {
 		t.Fatal(err)
@@ -422,15 +421,54 @@ func TestPlugins_SigningKeyIsPinnedOnFirstSignedInstall(t *testing.T) {
 	}
 }
 
-// Data kept by RasBeacon 0.1 has no note of whose it was, so it stays aside.
+// When nothing proves two installs are the same plugin (here both are
+// unsigned), kept data comes back only if the owner chooses it.
+func TestPlugins_UnsignedKeptDataComesBackOnlyWhenChosen(t *testing.T) {
+	for _, chosen := range []bool{false, true} {
+		e := newPluginEnv(t)
+		if _, err := e.installTestPlugin(writeTestPlugin(t, testPluginManifest("1.0"), nil), nil); err != nil {
+			t.Fatal(err)
+		}
+		dataFile := filepath.Join(e.paths.PluginDir("adguard-home"), pluginDataImage)
+		mustWrite(t, dataFile, "data")
+		if err := e.agent.RemovePlugin(api.PluginRemoveRequest{ID: "adguard-home", KeepData: true}); err != nil {
+			t.Fatal(err)
+		}
+		preview, err := e.agent.StagePluginFile(bytes.NewReader(writeTestPlugin(t, testPluginManifest("1.0"), nil)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if k := preview.KeptData; k == nil || k.Name != "AdGuard Home" || k.KeyID != "" {
+			t.Fatalf("the sheet should ask, saying the earlier one wasn't signed: %+v", k)
+		}
+		_, err = e.agent.InstallPlugin(api.PluginInstallRequest{
+			StagingID: preview.StagingID, Settings: map[string]string{"password": "s3cret-pass"}, UseKeptData: chosen,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		e.runBackground()
+		_, statErr := os.Stat(dataFile)
+		if back := statErr == nil; back != chosen {
+			t.Errorf("chosen %v: the data came back %v", chosen, back)
+		}
+	}
+}
+
+// Data kept by RasBeacon 0.1 has no note of whose it was: the sheet asks,
+// without a name or key, and it stays aside unless chosen.
 func TestPlugins_KeptDataWithoutAnOwnerStaysAside(t *testing.T) {
 	e := newPluginEnv(t)
 	mustWrite(t, filepath.Join(e.paths.PluginKeptDir(), "adguard-home.img"), "old data")
+	preview, err := e.agent.StagePluginFile(bytes.NewReader(writeTestPlugin(t, testPluginManifest("1.0"), nil)))
+	if err != nil || preview.KeptData == nil || *preview.KeptData != (api.PluginKeptData{}) {
+		t.Fatalf("preview = %+v, %v", preview.KeptData, err)
+	}
 	if _, err := e.installTestPlugin(writeTestPlugin(t, testPluginManifest("1.0"), nil), nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(e.paths.PluginDir("adguard-home"), pluginDataImage)); err == nil {
-		t.Error("data of unknown origin must not be given to a new install")
+		t.Error("data of unknown origin must not be given to a new install unasked")
 	}
 }
 

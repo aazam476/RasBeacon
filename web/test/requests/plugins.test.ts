@@ -42,7 +42,14 @@ describe('plugins', () => {
       call: () => api.installPlugin('abc123', choices),
       method: 'POST',
       path: '/plugins/install',
-      body: { stagingId: 'abc123', ...choices },
+      body: { stagingId: 'abc123', ...choices, useKeptData: false },
+    },
+    {
+      name: 'installs with the kept data the owner chose',
+      call: () => api.installPlugin('abc123', choices, true),
+      method: 'POST',
+      path: '/plugins/install',
+      body: { stagingId: 'abc123', ...choices, useKeptData: true },
     },
     {
       name: 'cancels an install',

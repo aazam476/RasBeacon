@@ -3,6 +3,7 @@ import type {
   PluginCatalogEntry,
   PluginChoices,
   PluginDrive,
+  PluginKeptData,
   PluginLogLine,
   PluginPermission,
   PluginPreview,
@@ -382,8 +383,16 @@ export function catalogEntries(state: PluginsState): PluginCatalogEntry[] {
   );
 }
 
-/** The install sheet's contents for a plugin (an update when it is installed). */
-export function previewOf(definition: PluginDefinition, state: PluginsState, stagingId: string): PluginPreview {
+/**
+ * The install sheet's contents for a plugin (an update when it is installed). `kept` is data kept
+ * from an earlier install of it that the sheet asks about.
+ */
+export function previewOf(
+  definition: PluginDefinition,
+  state: PluginsState,
+  stagingId: string,
+  kept?: PluginKeptData,
+): PluginPreview {
   const installed = state.plugins.find((p) => p.id === definition.id);
   const taken = new Set(
     state.plugins.filter((p) => p.id !== definition.id).flatMap((p) => p.ports.map((port) => port.host)),
@@ -401,6 +410,7 @@ export function previewOf(definition: PluginDefinition, state: PluginsState, sta
       : [];
   return {
     stagingId,
+    keptData: installed ? undefined : kept,
     id: definition.id,
     name: definition.name,
     version: definition.version,

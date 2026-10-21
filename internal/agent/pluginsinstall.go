@@ -40,6 +40,9 @@ type stagedPlugin struct {
 	created time.Time
 	// downloadSize is what installing still downloads (-1: unknown).
 	downloadSize int64
+	// useKeptData is the owner's choice in the install sheet: use data
+	// kept from an earlier install of another author (see pluginskept.go).
+	useKeptData bool
 }
 
 // publicKey is the key the plugin file is signed with (base64), as the
@@ -276,9 +279,8 @@ func (a *Agent) preview(s *stagedPlugin) (api.PluginPreview, error) {
 			}
 		}
 	}
-	if waiting, matches := a.keptDataFor(m.ID, key); !update && waiting && !matches {
-		preview.Warnings = append(preview.Warnings, fmt.Sprintf(
-			"The data you kept from an earlier %s stays set aside: that one was signed by a different author (or not signed), so this may not be the same plugin.", m.Name))
+	if !update {
+		preview.KeptData = a.keptDataQuestion(m.ID, key)
 	}
 	if board == "zero2w" || board == "pi3" || (memory > 0 && memory < 1024) {
 		preview.Warnings = append(preview.Warnings, fmt.Sprintf(
@@ -375,6 +377,7 @@ func (a *Agent) InstallPlugin(req api.PluginInstallRequest) (api.Plugin, error) 
 	}
 	a.cfg = newCfg
 	delete(a.plugins.staged, req.StagingID)
+	s.useKeptData = req.UseKeptData
 
 	// Until it is installed, its page shows the new version's details.
 	live.manifest, live.busy, live.crashes = m, true, 0
@@ -495,9 +498,9 @@ func (a *Agent) installPluginSteps(id string, s *stagedPlugin, oldImage string) 
 	if oldImage != "" && oldImage != image {
 		_, _ = a.plugins.runner.Run("podman", "rmi", "--ignore", oldImage)
 	}
-	// Data kept from an earlier install comes back, if it is the same
-	// plugin (signed with the same key).
-	a.restoreKeptData(id, s.publicKey())
+	// Data kept from an earlier install comes back if it is the same
+	// author's, or if the owner chose to use it (pluginskept.go).
+	a.restoreKeptData(id, s.publicKey(), s.useKeptData)
 	return image, nil
 }
 

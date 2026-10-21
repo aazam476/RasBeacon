@@ -303,6 +303,11 @@ export function applyWorstCase(demo: DemoState) {
     ],
     withVpn: true,
   };
+  // Data kept from an earlier Trip Notes of another author, with a long name.
+  router.keptPluginData['trip-notes'] = {
+    name: 'Trip Notes & Shared Itinerary Planner for Families',
+    keyId: 'E4C1 0A77 93BD 2F05',
+  };
   // Plugins in every state, with the longest names and messages.
   const base = router.plugins.plugins[0];
   router.plugins.plugins = [

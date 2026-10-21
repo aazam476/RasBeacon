@@ -668,8 +668,8 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
       pluginCatalog: (refresh) => attempt(() => api.getPluginCatalog(refresh)),
       previewCatalogPlugin: (source, file) => attempt(() => api.downloadCatalogPlugin(source, file), sameNames('file')),
       previewPluginUpdate: (id) => attempt(() => api.downloadPluginUpdate(id), sameNames('id')),
-      installPlugin: async (stagingId, choices) => {
-        await attempt(() => api.installPlugin(stagingId, choices), pluginFields(choices));
+      installPlugin: async (stagingId, choices, useKeptData = false) => {
+        await attempt(() => api.installPlugin(stagingId, choices, useKeptData), pluginFields(choices));
         await load('plugins');
       },
       cancelPluginInstall: async (stagingId) => {

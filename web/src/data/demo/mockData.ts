@@ -1,19 +1,20 @@
 import type {
   AccessSettings,
-  DNSSettings,
-  SwapSettings,
-  UpdateSettings,
   Client,
+  DNSSettings,
   GuestSettings,
   HotspotSettings,
   HTTPSSettings,
   NearbyNetwork,
+  PluginKeptData,
+  PluginsState,
   SetupState,
   SSHSettings,
   Status,
+  SwapSettings,
+  UpdateSettings,
   UplinkSettings,
   UsageSettings,
-  PluginsState,
   VPNSettings,
 } from '../types';
 import { createMockPlugins } from './plugins';
@@ -36,6 +37,8 @@ export interface MockRouter {
   accessSettings: AccessSettings;
   usageSettings: UsageSettings;
   plugins: PluginsState;
+  /** Data kept when a plugin was removed, by plugin ID, that its next install asks about. */
+  keptPluginData: Record<string, PluginKeptData>;
   httpsSettings: HTTPSSettings;
   nearbyNetworks: NearbyNetwork[];
   /** What "Show password" reveals. */
@@ -423,6 +426,7 @@ export function createMockRouter(): MockRouter {
     updateSettings: { checkHours: 0, notifyUrl: '' },
     accessSettings: { allowListOn: false, allowed: [], maxDevices: 0 },
     plugins: createMockPlugins(),
+    keptPluginData: {},
     usageSettings: { limitMb: 0, since: '2026-10-01T08:00:00Z', devicesPaused: 0 },
 
     sshSettings: {
