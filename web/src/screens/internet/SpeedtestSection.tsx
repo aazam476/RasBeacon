@@ -10,12 +10,16 @@ import { ButtonRow, Row, Section, StatRow } from '@/ui';
 export function SpeedtestSection({ status }: { status: Status }) {
   const { runSpeedtest } = useDevice();
   const { provider, last } = status.speedtest;
+  // On a metered connection (a phone's hotspot, a paid plan), the data a test downloads counts.
+  const footer = [
+    `Uses ${provider} Speedtest. A test uses the internet connection for about 20 seconds.`,
+    status.hotspot.metered && 'A test can use several hundred MB of data.',
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   return (
-    <Section
-      title="Speed test"
-      footer={`Uses ${provider} Speedtest. A test uses the internet connection for about 20 seconds.`}
-    >
+    <Section title="Speed test" footer={footer}>
       {last ? (
         <>
           <StatRow

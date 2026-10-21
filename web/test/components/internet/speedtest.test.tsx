@@ -64,4 +64,15 @@ describe('speed test', () => {
     await user.click(within(section('Speed test')).getByRole('button', { name: 'Run speed test' }));
     expect(device.runSpeedtest).toHaveBeenCalledOnce();
   });
+
+  it.each([
+    [true, true],
+    [false, false],
+  ])('warns about the data a test uses only on a metered connection (metered: %s)', (metered, warns) => {
+    const device = fakeDevice((router) => {
+      router.status.hotspot.metered = metered;
+    });
+    renderScreen(<InternetScreen />, device, '/internet');
+    expect(within(section('Speed test')).queryByText(/several hundred MB of data/) !== null).toBe(warns);
+  });
 });
