@@ -259,7 +259,11 @@ address, and the certificate RasBeacon makes for HTTPS names both.
   checks the certificate and gives rbweb a readable copy; rbweb serves
   port 443 when the copy exists. The setup wizard and the login-page notice
   stay on plain HTTP, because phones' login sheets refuse self-signed
-  certificates.
+  certificates. A certificate RasBeacon makes is valid for 820 days (Apple's
+  devices refuse server certificates valid for more than 825), and rbd
+  makes a new one 30 days before it runs out, or at the next start for
+  0.1's ten-year ones. Browsers then show their warning once more, with
+  the new fingerprint. An uploaded certificate is never replaced.
 - **Reset button** (`internal/button`): a button on GPIO 17 appears to
   Linux as a key (via the `gpio-key` overlay in `config.txt`); holding it
   10 seconds erases all settings, like the `factory-reset` file.

@@ -48,3 +48,26 @@ func TestCheck_RejectsMismatchedOrExpired(t *testing.T) {
 		t.Errorf("got %v", err)
 	}
 }
+
+// Apple's devices refuse server certificates valid for more than 825 days.
+func TestGenerate_IsValidForLessThan825Days(t *testing.T) {
+	now := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	certPEM, _, err := Generate("RasBeacon 4F2A", nil, nil, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, _ := Describe(certPEM)
+	if days := info.NotAfter.Sub(info.NotBefore).Hours() / 24; days > 825 {
+		t.Errorf("valid for %.0f days, want at most 825", days)
+	}
+	if info.NeedsRenewal(now) {
+		t.Error("a new certificate doesn't need renewing")
+	}
+	if !info.NeedsRenewal(info.NotAfter.Add(-RenewBefore + time.Hour)) {
+		t.Error("a certificate that runs out within RenewBefore needs renewing")
+	}
+	tenYears := Info{NotBefore: now, NotAfter: now.AddDate(10, 0, 0)}
+	if !tenYears.NeedsRenewal(now) {
+		t.Error("RasBeacon 0.1's ten-year certificates need replacing")
+	}
+}

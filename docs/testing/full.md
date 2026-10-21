@@ -364,6 +364,9 @@ Keep the VPN on with the kill switch.
 9. **HTTPS:** turn on **Use HTTPS for these settings pages**. Open
    `https://10.87.0.1`: the fingerprint in the browser's warning matches
    the page's *SHA-256 fingerprint*; `http://` redirects to `https://`.
+   **On an iPhone and a Mac (new):** Safari offers to continue past the
+   warning (the certificate is valid for 820 days, under Apple's 825-day
+   limit), and *Valid until* is about 27 months away.
    Turn it off again if you prefer.
 
 ## 13. Plugins (new)

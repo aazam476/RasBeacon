@@ -150,6 +150,8 @@ type Agent struct {
 	// usbRadioWait is how long startup waits for a USB Wi-Fi adapter to
 	// appear (see waitForRadios). Tests set it to zero.
 	usbRadioWait time.Duration
+	// lastCertCheck is when renewCertificateIfDue last looked (https.go).
+	lastCertCheck time.Time
 	// lookupIP looks up a host name's addresses (the VPN server's); an
 	// address is answered as it is. Tests fake it.
 	lookupIP func(ctx context.Context, host string) ([]netip.Addr, error)
@@ -240,8 +242,14 @@ func (a *Agent) Start() error {
 		slog.Warn("swap could not be set up", "error", err)
 	}
 
-	// 2c. The HTTPS certificate for rbweb, if HTTPS is on. (rbweb waits
-	//     for rbd before starting, so it finds the files.)
+	// 2c. The HTTPS certificate for rbweb, if HTTPS is on, renewed first
+	//     if it runs out soon. (rbweb waits for rbd before starting, so it
+	//     finds the files.)
+	if a.certificateDue() {
+		if err := a.generateCertificate(); err != nil {
+			slog.Error("could not make a new HTTPS certificate", "error", err)
+		}
+	}
 	if _, err := a.applyHTTPS(); err != nil {
 		slog.Error("HTTPS could not be set up; the web UI stays on HTTP", "error", err)
 		a.warnings = append(a.warnings, "HTTPS could not be set up: "+err.Error())
