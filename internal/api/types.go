@@ -365,8 +365,13 @@ type UpdateStatus struct {
 	CheckHours     int    `json:"checkHours"`
 	LastChecked    string `json:"lastChecked,omitempty"`
 	CheckError     string `json:"checkError,omitempty"`
-	LatestVersion  string `json:"latestVersion,omitempty"`
-	LatestURL      string `json:"latestUrl,omitempty"`
+	// LatestVersion is the newest release this RasBeacon can install, and
+	// LatestURL its release page. NewerVersion is set when an even newer
+	// release exists that can only be installed over LatestVersion (or a
+	// later one): it is offered once LatestVersion runs.
+	LatestVersion string `json:"latestVersion,omitempty"`
+	LatestURL     string `json:"latestUrl,omitempty"`
+	NewerVersion  string `json:"newerVersion,omitempty"`
 	// Reflash is set when a newer version can't be installed over this one
 	// (the online check found one, or its update file was refused): the
 	// owner backs up the settings, flashes the new image and restores the

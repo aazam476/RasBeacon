@@ -52,6 +52,9 @@ export function SoftwareSection({ status }: { status: Status }) {
             actions={update.latestUrl && <ReleaseLink url={update.latestUrl} />}
           >
             <p>Download its .rbupdate file for your board, then install it below.</p>
+            {update.newerVersion && (
+              <p>After this, RasBeacon offers {update.newerVersion}, which needs this version first.</p>
+            )}
           </Notice>
         )
       )}

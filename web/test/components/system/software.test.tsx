@@ -26,6 +26,16 @@ describe('software', () => {
     );
   });
 
+  it('says when a newer version comes after the one offered', () => {
+    renderSoftware({ latestVersion: '0.3.0', newerVersion: '0.4.0' });
+    expect(screen.getByText('After this, RasBeacon offers 0.4.0, which needs this version first.')).toBeTruthy();
+  });
+
+  it('says nothing more when the offered version is the newest', () => {
+    renderSoftware({ latestVersion: '0.3.0' });
+    expect(screen.queryByText(/After this, RasBeacon offers/)).toBeNull();
+  });
+
   it('gives the steps for a version that needs a fresh install, with Back up settings', async () => {
     const { user } = renderSoftware({ reflash: { version: '1.0.0', minFromVersion: '0.9.0' } });
     expect(screen.getByText('RasBeacon 1.0.0 needs a fresh install')).toBeTruthy();

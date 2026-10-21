@@ -605,6 +605,20 @@ export const SCENARIOS: DemoScenario[] = [
     },
   },
   {
+    id: 'update-step',
+    group: 'System',
+    title: 'New version, reached in two steps',
+    route: '/system',
+    apply: (d) => {
+      Object.assign(d.router.status.update, {
+        checkHours: 24,
+        latestVersion: 'v1.1.0',
+        latestUrl: 'https://github.com/rasbeacon/rasbeacon/releases/tag/v1.1.0',
+        newerVersion: 'v1.2.0',
+      });
+    },
+  },
+  {
     id: 'update-reflash',
     group: 'System',
     title: 'New version needs a fresh install',

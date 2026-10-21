@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -155,6 +156,17 @@ func TestUpdateStatus_OnlineCheckOffersOnlyNewerVersions(t *testing.T) {
 	s := status(latestRelease{TagName: "v2.0.0", HTMLURL: "https://example.com/v2", minFromVersion: "v1.5.0"})
 	if s.LatestVersion != "v2.0.0" || s.Reflash == nil || s.Reflash.MinFromVersion != "v1.5.0" || s.Reflash.URL == "" {
 		t.Errorf("a release that needs a fresh install: %+v", s)
+	}
+
+	// A step on the way to a newer release names that release too.
+	e.agent.mu.Lock()
+	e.agent.update.newest = "v1.4.0"
+	e.agent.mu.Unlock()
+	if s := status(latestRelease{TagName: "v1.3.0"}); s.LatestVersion != "v1.3.0" || s.NewerVersion != "v1.4.0" {
+		t.Errorf("a step: %+v", s)
+	}
+	if s := status(latestRelease{TagName: "v1.4.0"}); s.NewerVersion != "" {
+		t.Errorf("the newest release is no step: %+v", s)
 	}
 }
 
@@ -337,26 +349,114 @@ func TestUpdate_RealZstdDecompression(t *testing.T) {
 	}
 }
 
-func TestFetchLatestRelease(t *testing.T) {
+// releaseServer is a fake GitHub with a repository's releases: each one
+// given as its tag and, if not "", the minFromVersion of its .update.json.
+func releaseServer(t *testing.T, releases string, minFrom map[string]string) *httptest.Server {
+	t.Helper()
 	var serverURL string
 	mux := http.NewServeMux()
-	mux.HandleFunc("/repos/owner/rasbeacon/releases/latest", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"tag_name":"v1.2.0","html_url":"https://github.com/owner/rasbeacon/releases/tag/v1.2.0",
-			"assets":[{"name":"rasbeacon-v1.2.0.img.xz","browser_download_url":"` + serverURL + `/img"},
-			{"name":"rasbeacon-v1.2.0.update.json","browser_download_url":"` + serverURL + `/info"}]}`))
+	mux.HandleFunc("/repos/owner/rasbeacon/releases", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("per_page") == "" {
+			t.Error("the check should ask for a page of releases")
+		}
+		w.Write([]byte(strings.ReplaceAll(releases, "SERVER", serverURL)))
 	})
-	mux.HandleFunc("/info", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"version":"v1.2.0","minFromVersion":"v1.1.0"}`))
+	mux.HandleFunc("/info/", func(w http.ResponseWriter, r *http.Request) {
+		tag := strings.TrimPrefix(r.URL.Path, "/info/")
+		if tag == "broken" {
+			http.Error(w, "gone", http.StatusNotFound)
+			return
+		}
+		fmt.Fprintf(w, `{"version":%q,"minFromVersion":%q}`, tag, minFrom[tag])
 	})
 	server := httptest.NewServer(mux)
-	defer server.Close()
+	t.Cleanup(server.Close)
 	serverURL = server.URL
-	got, err := fetchLatestRelease(server.Client(), server.URL, "owner/rasbeacon")
-	if err != nil || got.TagName != "v1.2.0" || !strings.HasSuffix(got.HTMLURL, "v1.2.0") || got.minFromVersion != "v1.1.0" {
-		t.Errorf("got %+v, %v", got, err)
+	return server
+}
+
+// release is one release in GitHub's answer, with an .update.json file.
+func release(tag, extra string) string {
+	return fmt.Sprintf(`{"tag_name":%q,"html_url":"https://github.com/owner/rasbeacon/releases/tag/%s",%s
+		"assets":[{"name":"rasbeacon-%s.img.xz","browser_download_url":"SERVER/img"},
+		{"name":"rasbeacon-%s.update.json","browser_download_url":"SERVER/info/%s"}]}`, tag, tag, extra, tag, tag, tag)
+}
+
+func TestFetchUpdateRelease_StepsThroughVersionsThatNeedANewerStart(t *testing.T) {
+	// v0.3.0 needs v0.2.0 (say, a new signing key), and v0.2.1 needs
+	// nothing; v0.4.0-beta.1 is a pre-release and v0.5.0 a draft.
+	releases := "[" + strings.Join([]string{
+		release("v0.2.1", ""),
+		release("v0.4.0-beta.1", `"prerelease":true,`),
+		release("v0.5.0", `"draft":true,`),
+		release("v0.3.0", ""),
+		release("v0.1.0", ""),
+		release("v0.2.0", ""),
+	}, ",") + "]"
+	server := releaseServer(t, releases, map[string]string{"v0.3.0": "v0.2.0"})
+	fetch := func(running string) (latestRelease, string) {
+		t.Helper()
+		got, newest, err := fetchUpdateRelease(server.Client(), server.URL, "owner/rasbeacon", running)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got, newest
 	}
-	if _, err := fetchLatestRelease(server.Client(), server.URL, "owner/missing"); err == nil {
+
+	// v0.1.0 can't install v0.3.0 yet: it is offered v0.2.1 first.
+	got, newest := fetch("v0.1.0")
+	if got.TagName != "v0.2.1" || newest != "v0.3.0" || !strings.HasSuffix(got.HTMLURL, "v0.2.1") {
+		t.Errorf("from v0.1.0: offered %q, newest %q", got.TagName, newest)
+	}
+	// Once on v0.2.1, the next check offers v0.3.0.
+	if got, newest := fetch("v0.2.1"); got.TagName != "v0.3.0" || newest != "v0.3.0" || got.minFromVersion != "v0.2.0" {
+		t.Errorf("from v0.2.1: offered %+v, newest %q", got, newest)
+	}
+	// Nothing newer than the newest release.
+	if got, newest := fetch("v0.3.0"); got.TagName != "" || newest != "" {
+		t.Errorf("from v0.3.0: offered %q, newest %q", got.TagName, newest)
+	}
+}
+
+func TestFetchUpdateRelease_OffersTheNewestWhenNoneCanBeInstalled(t *testing.T) {
+	releases := "[" + release("v2.0.0", "") + "," + release("v1.5.0", "") + "]"
+	server := releaseServer(t, releases, map[string]string{"v2.0.0": "v1.5.0", "v1.5.0": "v1.5.0"})
+	got, newest, err := fetchUpdateRelease(server.Client(), server.URL, "owner/rasbeacon", "v1.0.0")
+	if err != nil || got.TagName != "v2.0.0" || newest != "v2.0.0" || got.minFromVersion != "v1.5.0" {
+		t.Errorf("got %+v, %q, %v; want v2.0.0, which needs a fresh install", got, newest, err)
+	}
+}
+
+func TestFetchUpdateRelease_UnreadableUpdateInfoIsFoundOutWhenInstalling(t *testing.T) {
+	// Without readable update info, the release is offered: installing its
+	// file says whether it fits (TestUpdate_TooNewAnUpdateAsksForAFreshInstall).
+	releases := `[{"tag_name":"v1.1.0","assets":[{"name":"x.update.json","browser_download_url":"SERVER/info/broken"}]},
+		{"tag_name":"v1.0.5","assets":[{"name":"x.update.json","browser_download_url":"SERVER/info/v1.0.4"}]},
+		{"tag_name":"v1.0.1"}]`
+	server := releaseServer(t, releases, map[string]string{"v1.0.4": "v9.0.0"})
+	got, newest, err := fetchUpdateRelease(server.Client(), server.URL, "owner/rasbeacon", "v1.0.0")
+	if err != nil || got.TagName != "v1.1.0" || got.minFromVersion != "" || newest != "v1.1.0" {
+		t.Errorf("got %+v, %q, %v", got, newest, err)
+	}
+	// Update info that names another version is ignored too.
+	if got := readMinFromVersion(server.Client(), latestRelease{TagName: "v1.0.5", Assets: []releaseAsset{{Name: "x.update.json", URL: server.URL + "/info/v1.0.4"}}}); got != "" {
+		t.Errorf("update info for another version: minFrom %q", got)
+	}
+}
+
+func TestFetchUpdateRelease_Errors(t *testing.T) {
+	server := releaseServer(t, "not json", nil)
+	if _, _, err := fetchUpdateRelease(server.Client(), server.URL, "owner/rasbeacon", "v1.0.0"); err == nil {
+		t.Error("an unreadable answer should be an error")
+	}
+	if _, _, err := fetchUpdateRelease(server.Client(), server.URL, "owner/missing", "v1.0.0"); err == nil {
 		t.Error("a missing repository should be an error")
+	}
+	if _, _, err := fetchUpdateRelease(server.Client(), "http://127.0.0.1:1", "owner/rasbeacon", "v1.0.0"); err == nil {
+		t.Error("an unreachable GitHub should be an error")
+	}
+	if _, _, err := fetchUpdateRelease(server.Client(), "http://bad host", "owner/rasbeacon", "v1.0.0"); err == nil {
+		t.Error("a bad address should be an error")
 	}
 }
 
@@ -433,9 +533,15 @@ func TestUpdateCheck_AnnouncesANewVersionOnce(t *testing.T) {
 	version.Repository = "owner/rasbeacon"
 
 	var announced []string
+	var serverURL string
 	mux := http.NewServeMux()
-	mux.HandleFunc("/repos/owner/rasbeacon/releases/latest", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"tag_name":"v1.1.0","html_url":"https://github.com/owner/rasbeacon/releases/tag/v1.1.0"}`))
+	mux.HandleFunc("/repos/owner/rasbeacon/releases", func(w http.ResponseWriter, r *http.Request) {
+		// v1.2.0 can only be installed over v1.1.0, so v1.1.0 is announced.
+		w.Write([]byte(`[{"tag_name":"v1.2.0","assets":[{"name":"rasbeacon-v1.2.0.update.json","browser_download_url":"` + serverURL + `/info"}]},
+			{"tag_name":"v1.1.0","html_url":"https://github.com/owner/rasbeacon/releases/tag/v1.1.0"}]`))
+	})
+	mux.HandleFunc("/info", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"version":"v1.2.0","minFromVersion":"v1.1.0"}`))
 	})
 	mux.HandleFunc("/topic", func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
@@ -443,6 +549,7 @@ func TestUpdateCheck_AnnouncesANewVersionOnce(t *testing.T) {
 	})
 	server := httptest.NewServer(mux)
 	defer server.Close()
+	serverURL = server.URL
 	githubAPI = server.URL
 
 	if err := e.agent.UpdateUpdateSettings(api.UpdateSettings{CheckHours: 24, NotifyURL: server.URL + "/topic"}); err != nil {
@@ -452,13 +559,13 @@ func TestUpdateCheck_AnnouncesANewVersionOnce(t *testing.T) {
 		t.Error("only the listed schedules may be chosen")
 	}
 	status, err := e.agent.CheckForUpdateNow()
-	if err != nil || status.LatestVersion != "v1.1.0" || status.LastChecked == "" || status.CheckHours != 24 {
+	if err != nil || status.LatestVersion != "v1.1.0" || status.NewerVersion != "v1.2.0" || status.LastChecked == "" || status.CheckHours != 24 {
 		t.Fatalf("status %+v, %v", status, err)
 	}
 	if _, err := e.agent.CheckForUpdateNow(); err != nil {
 		t.Fatal(err)
 	}
-	if len(announced) != 1 || !strings.Contains(announced[0], "RasBeacon v1.1.0") {
+	if len(announced) != 1 || !strings.Contains(announced[0], "RasBeacon v1.1.0") || !strings.Contains(announced[0], "v1.2.0 can only be installed over it") {
 		t.Errorf("announced %q, want the new version once", announced)
 	}
 	if err := e.agent.SendTestNotification(""); err != nil || len(announced) != 2 {

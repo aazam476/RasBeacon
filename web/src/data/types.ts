@@ -198,8 +198,14 @@ export interface UpdateStatus {
   /** When it last asked (ISO 8601), and why that failed. */
   lastChecked?: string;
   checkError?: string;
+  /** The newest release this RasBeacon can install, and its release page. */
   latestVersion?: string;
   latestUrl?: string;
+  /**
+   * An even newer release that can only be installed over `latestVersion` (or a later one), such as
+   * one signed with a new key. It is offered once `latestVersion` runs.
+   */
+  newerVersion?: string;
   /**
    * A newer version that can't be installed over this one: the online check found it, or its
    * update file was refused. The way to it is a backup, the new image, and the backup restored.

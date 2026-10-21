@@ -28,6 +28,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -64,9 +65,12 @@ type updateState struct {
 	// looking again before rollbackAfter.
 	confirmChecks int
 	message       string
-	// latest is the newest release found by the online check, lastCheck
-	// when it last asked, and checkError why that failed.
+	// latest is the release the online check offers (the newest one this
+	// RasBeacon can install, see fetchUpdateRelease), newest the newest
+	// release of all, lastCheck when it last asked, and checkError why that
+	// failed.
 	latest     latestRelease
+	newest     string
 	lastCheck  time.Time
 	checkError string
 	// refused is set when an update file was refused because it needs a
@@ -132,10 +136,10 @@ func (a *Agent) updateStatus() api.UpdateStatus {
 	latest := a.update.latest
 	if result, ok := version.Compare(latest.TagName, version.Version); ok && result > 0 {
 		s.LatestVersion, s.LatestURL = latest.TagName, latest.HTMLURL
-		if min := latest.minFromVersion; min != "" {
-			if result, ok := version.Compare(version.Version, min); ok && result < 0 {
-				s.Reflash = &api.UpdateReflash{Version: latest.TagName, MinFromVersion: min, URL: latest.HTMLURL}
-			}
+		if !canInstallOver(latest, version.Version) {
+			s.Reflash = &api.UpdateReflash{Version: latest.TagName, MinFromVersion: latest.minFromVersion, URL: latest.HTMLURL}
+		} else if a.update.newest != latest.TagName {
+			s.NewerVersion = a.update.newest
 		}
 	}
 	// A refused update file says the same more surely (it was signed).
@@ -395,7 +399,7 @@ func (a *Agent) CheckForUpdateNow() (api.UpdateStatus, error) {
 // checkForUpdate asks GitHub for the newest release and, if it is new and
 // a notification address is saved, announces it once.
 func (a *Agent) checkForUpdate() error {
-	release, err := fetchLatestRelease(updateHTTP, githubAPI, version.Repository)
+	release, newest, err := fetchUpdateRelease(updateHTTP, githubAPI, version.Repository, version.Version)
 	a.mu.Lock()
 	a.update.lastCheck = a.now()
 	if err != nil {
@@ -404,7 +408,7 @@ func (a *Agent) checkForUpdate() error {
 		a.mu.Unlock()
 		return err
 	}
-	a.update.latest, a.update.checkError = release, ""
+	a.update.latest, a.update.newest, a.update.checkError = release, newest, ""
 	notifyURL := a.secrets.UpdateNotifyURL
 	newer, ok := version.Compare(release.TagName, version.Version)
 	announce := notifyURL != "" && ok && newer > 0 && release.TagName != a.cfg.Updates.NotifiedVersion
@@ -416,6 +420,8 @@ func (a *Agent) checkForUpdate() error {
 	message := fmt.Sprintf("RasBeacon %s is available (this one runs %s).", release.TagName, version.Version)
 	if s := a.updateStatusLocked(); s.Reflash != nil {
 		message += " It needs a fresh install: open the System page for the steps."
+	} else if s.NewerVersion != "" {
+		message += fmt.Sprintf(" Install it first: %s can only be installed over it.", s.NewerVersion)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -497,11 +503,14 @@ func (a *Agent) SendTestNotification(address string) error {
 	return nil
 }
 
-// latestRelease is the part of GitHub's answer RasBeacon reads.
+// latestRelease is the part of GitHub's answer RasBeacon reads about one
+// release.
 type latestRelease struct {
-	TagName string         `json:"tag_name"`
-	HTMLURL string         `json:"html_url"`
-	Assets  []releaseAsset `json:"assets"`
+	TagName    string         `json:"tag_name"`
+	HTMLURL    string         `json:"html_url"`
+	Draft      bool           `json:"draft"`
+	Prerelease bool           `json:"prerelease"`
+	Assets     []releaseAsset `json:"assets"`
 	// minFromVersion comes from the release's .update.json file (see
 	// update.Info): the oldest version that can install its update.
 	minFromVersion string
@@ -516,42 +525,99 @@ type releaseAsset struct {
 // githubAPI is GitHub's public API.
 var githubAPI = "https://api.github.com"
 
-// fetchLatestRelease asks GitHub's API (at apiURL) for a repository's
-// newest release.
-func fetchLatestRelease(client *http.Client, apiURL, repository string) (latestRelease, error) {
-	req, err := http.NewRequest(http.MethodGet, apiURL+"/repos/"+repository+"/releases/latest", nil)
+// releasesToRead is how many of the newest releases the online check reads.
+const releasesToRead = 30
+
+// fetchUpdateRelease asks GitHub's API (at apiURL) for a repository's
+// releases and picks the one to offer a RasBeacon that runs version
+// running: the newest release that can be installed over it. A newer
+// release may need a newer starting version (its .update.json says so, for
+// example when the update signing key changed), so a device a few versions
+// behind moves up one step at a time: after each update, the next check
+// offers the next step.
+//
+// It returns the release to offer and the tag of the newest release. When
+// no newer release can be installed over running, the newest one is
+// returned, and the System page shows how to flash it. Drafts and
+// pre-releases are never offered. With no newer release, the release is
+// empty.
+func fetchUpdateRelease(client *http.Client, apiURL, repository, running string) (latestRelease, string, error) {
+	url := fmt.Sprintf("%s/repos/%s/releases?per_page=%d", apiURL, repository, releasesToRead)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
-		return latestRelease{}, err
+		return latestRelease{}, "", err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("User-Agent", "RasBeacon/"+version.Version)
 	resp, err := client.Do(req)
 	if err != nil {
-		return latestRelease{}, err
+		return latestRelease{}, "", err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return latestRelease{}, fmt.Errorf("GitHub answered %s", resp.Status)
+		return latestRelease{}, "", fmt.Errorf("GitHub answered %s", resp.Status)
 	}
-	var release latestRelease
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&release); err != nil {
-		return latestRelease{}, err
+	var releases []latestRelease
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&releases); err != nil {
+		return latestRelease{}, "", err
 	}
-	// The release's update info says whether this RasBeacon can install it.
-	// Without it (a release made before it existed), RasBeacon finds out
-	// when the update file is installed.
-	for _, asset := range release.Assets {
-		if strings.HasSuffix(asset.Name, ".update.json") {
-			info, err := fetchUpdateInfo(client, asset.URL)
-			if err != nil {
-				slog.Warn("could not read the release's update info", "error", err)
-			} else if info.Version == release.TagName {
-				release.minFromVersion = info.MinFromVersion
-			}
-			break
+
+	// The published releases newer than running, newest first.
+	var newer []latestRelease
+	for _, release := range releases {
+		result, ok := version.Compare(release.TagName, running)
+		if ok && result > 0 && !release.Draft && !release.Prerelease {
+			newer = append(newer, release)
 		}
 	}
-	return release, nil
+	if len(newer) == 0 {
+		return latestRelease{}, "", nil
+	}
+	sort.SliceStable(newer, func(i, j int) bool {
+		result, _ := version.Compare(newer[i].TagName, newer[j].TagName)
+		return result > 0
+	})
+
+	// The first (newest) one that can be installed over running.
+	for i := range newer {
+		newer[i].minFromVersion = readMinFromVersion(client, newer[i])
+		if canInstallOver(newer[i], running) {
+			return newer[i], newer[0].TagName, nil
+		}
+	}
+	return newer[0], newer[0].TagName, nil
+}
+
+// readMinFromVersion reads the oldest version that can install a release's
+// update from its .update.json file. Without the file (a release made
+// before it existed) or when it can't be read, it is "": RasBeacon then
+// finds out when the update file is installed.
+func readMinFromVersion(client *http.Client, release latestRelease) string {
+	for _, asset := range release.Assets {
+		if !strings.HasSuffix(asset.Name, ".update.json") {
+			continue
+		}
+		info, err := fetchUpdateInfo(client, asset.URL)
+		if err != nil {
+			slog.Warn("could not read the release's update info", "release", release.TagName, "error", err)
+			return ""
+		}
+		if info.Version != release.TagName {
+			return ""
+		}
+		return info.MinFromVersion
+	}
+	return ""
+}
+
+// canInstallOver reports whether a release's update can be installed over
+// version running, as far as its .update.json says.
+func canInstallOver(release latestRelease, running string) bool {
+	if release.minFromVersion == "" {
+		return true
+	}
+	result, ok := version.Compare(running, release.minFromVersion)
+	return !ok || result >= 0
 }
 
 // fetchUpdateInfo downloads a release's small .update.json file.

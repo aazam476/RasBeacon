@@ -716,16 +716,19 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
         await wait(4000);
         if (!file.name.endsWith('.rbupdate')) throw new Error('This is not a RasBeacon update file (.rbupdate).');
         change((d) => void (d.router.status.update.installing = true));
-        // The router restarts into the new version a little later.
+        // The router restarts into the new version a little later, and then offers the next step,
+        // if there is one.
         setTimeout(
           () =>
             change((d) => {
-              d.router.status.version = 'v1.1.0';
+              const { latestVersion = 'v1.1.0', newerVersion } = d.router.status.update;
+              d.router.status.version = latestVersion;
               Object.assign(d.router.status.update, {
                 installing: false,
-                message: 'Updated to v1.1.0.',
-                latestVersion: undefined,
-                latestUrl: undefined,
+                message: `Updated to ${latestVersion}.`,
+                latestVersion: newerVersion,
+                latestUrl: newerVersion && `https://github.com/rasbeacon/rasbeacon/releases/tag/${newerVersion}`,
+                newerVersion: undefined,
               });
             }),
           8000,
