@@ -260,6 +260,9 @@ func (a *Agent) Start() error {
 		if err := a.startNormalMode(); err != nil {
 			return err
 		}
+		// The plugins start once, here: a later startNormalMode (after a
+		// hotspot or guest change) leaves them running.
+		a.background(a.startPlugins)
 		a.scheduleConfirmation() // only does something on an update's trial
 		return nil
 	}
@@ -525,7 +528,6 @@ func (a *Agent) startNormalMode() error {
 	}
 	a.checkUplink() // fill in the status page right away
 	slog.Info("hotspot started", "ssid", h.SSID, "band", h.Band)
-	a.background(a.startPlugins)
 	return nil
 }
 

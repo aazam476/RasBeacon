@@ -813,3 +813,27 @@ func TestDiagnostics_HidesPluginPasswords(t *testing.T) {
 		t.Errorf("the plugin's password is in the report:\n%s", report)
 	}
 }
+
+// Plugins start with RasBeacon, and a change to the hotspot or the guest
+// network leaves them running: restarting them would cut AdGuard Home's DNS
+// or a Samba transfer for nothing.
+func TestPlugins_HotspotAndGuestChangesLeaveThemRunning(t *testing.T) {
+	e := newPluginEnv(t)
+	if _, err := e.installTestPlugin(writeTestPlugin(t, testPluginManifest("1.0"), nil), nil); err != nil {
+		t.Fatal(err)
+	}
+	runs := e.runner.count("podman run")
+
+	settings := e.agent.HotspotSettings()
+	settings.SSID = "New Name"
+	if err := e.agent.UpdateHotspotSettings(settings); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.agent.UpdateGuestSettings(api.GuestSettings{Enabled: false, SSID: "Guests"}); err != nil {
+		t.Fatal(err)
+	}
+	e.runBackground()
+	if got := e.runner.count("podman run"); got != runs {
+		t.Errorf("the plugin was started again %d times", got-runs)
+	}
+}

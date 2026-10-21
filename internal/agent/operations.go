@@ -136,6 +136,7 @@ func (a *Agent) finishClaim() {
 		a.warnings = append(a.warnings, "The hotspot failed to start after setup: "+err.Error())
 		return
 	}
+	a.background(a.startPlugins)
 	// If hostapd can't run the chosen band, the owner would have neither
 	// the setup network nor the new hotspot. Fall back to what every radio
 	// can run: 2.4 GHz on its default channel.
