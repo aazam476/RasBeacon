@@ -70,7 +70,10 @@ to the repository.
 **If the private key leaks:** make a new key pair, add the new public key
 as a second file (`release-2.pub`), make a release signed with the *old*
 key that contains both public keys, then switch the secret to the new key
-and, in a later release, remove the old public key.
+and, in a later release, remove the old public key. A device that skipped
+the release with both keys refuses updates signed with the new one; its
+owner installs that release's update file first (from its GitHub release),
+then the newer one.
 
 **Forks** don't have the secret, so their builds make images but no update
 files.
