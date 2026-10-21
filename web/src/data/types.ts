@@ -819,5 +819,11 @@ export interface PluginDrive {
 }
 
 export interface PluginLogsResponse {
-  lines: string[];
+  lines: PluginLogLine[];
+}
+
+/** One line a plugin wrote. `time` is when (RFC 3339, UTC), left out when it isn't known. */
+export interface PluginLogLine {
+  time?: string;
+  text: string;
 }

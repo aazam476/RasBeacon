@@ -1,15 +1,9 @@
 import { createContext, useContext } from 'react';
 import type {
   AccessSettings,
+  AdminPasswordForm,
   ClaimResponse,
   DNSSettings,
-  UsageSettings,
-  WiFiQR,
-  PluginCatalog,
-  PluginChoices,
-  PluginDrive,
-  PluginPreview,
-  PluginsState,
   EthernetRole,
   GuestSettings,
   HotspotSettings,
@@ -17,21 +11,28 @@ import type {
   NearbyNetwork,
   NewNetworkForm,
   PictureBox,
+  PluginCatalog,
+  PluginChoices,
+  PluginDrive,
+  PluginLogLine,
+  PluginPreview,
+  PluginsState,
   PointerSpot,
   PortalBrowserFrame,
   PortalKey,
   PortalStatus,
   SavedNetwork,
   SetupForm,
-  AdminPasswordForm,
   SetupState,
   SSHSettings,
+  Status,
   SwapSettings,
   UpdateSettings,
-  Status,
   UplinkSettings,
+  UsageSettings,
   VPNDetailsForm,
   VPNSettings,
+  WiFiQR,
 } from './types';
 
 /** Data that arrives from the router: undefined until the first answer. */
@@ -334,7 +335,7 @@ export interface DeviceActions {
   setPluginRunning: (id: string, running: boolean) => Promise<void>;
   removePlugin: (id: string, keepData: boolean) => Promise<void>;
   /** Its last 500 lines of output. */
-  pluginLogs: (id: string) => Promise<string[]>;
+  pluginLogs: (id: string) => Promise<PluginLogLine[]>;
   pluginDrives: () => Promise<PluginDrive[]>;
   /** The extra catalog sources ("owner/repo"). Field keys: sources.<n>. */
   savePluginSources: (sources: string[]) => Promise<void>;

@@ -40,11 +40,17 @@ describe('looking after a plugin', () => {
     );
   });
 
-  it('shows its log when opened', async () => {
-    const device = fakeDevice(undefined, { pluginLogs: async () => ['started', 'listening on :53'] });
+  it('shows its log when opened, with times in the viewer’s own time', async () => {
+    const written = '2026-10-19T08:12:03Z';
+    const device = fakeDevice(undefined, {
+      pluginLogs: async () => [{ text: 'started' }, { time: written, text: 'listening on :53' }],
+    });
     const { user } = renderScreen(<Pages />, device, '/plugins/adguard-home');
     const row = within(await openRow(user, 'Log'));
-    expect(await row.findByText(/listening on :53/)).toBeTruthy();
+    const log = await row.findByText(/listening on :53/);
+    expect(log.textContent).toBe(
+      `started\n${new Date(written).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })} listening on :53`,
+    );
   });
 
   it('says why the log can’t be read', async () => {

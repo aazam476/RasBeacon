@@ -789,17 +789,17 @@ func (a *Agent) PluginLogs(id string) (api.PluginLogs, error) {
 	}
 	data, err := os.ReadFile(a.pluginLogFile(id))
 	if err != nil {
-		return api.PluginLogs{Lines: []string{}}, nil
+		return api.PluginLogs{Lines: []api.PluginLogLine{}}, nil
 	}
 	return api.PluginLogs{Lines: lastLogLines(string(data), 500)}, nil
 }
 
-// lastLogLines reads Podman's k8s-file log and keeps the last n lines as
-// "<hh:mm:ss> <text>". Each log line is "<time> <stream> <tag> <text>":
+// lastLogLines reads Podman's k8s-file log and keeps the last n lines, each
+// with its time in UTC. Each log line is "<time> <stream> <tag> <text>":
 // the tag is F for a full line, or P for part of a long line that goes on
 // in the next one (those parts are joined back together).
-func lastLogLines(text string, n int) []string {
-	var lines []string
+func lastLogLines(text string, n int) []api.PluginLogLine {
+	var lines []api.PluginLogLine
 	partial := ""
 	for _, line := range strings.Split(strings.TrimRight(text, "\n"), "\n") {
 		if line == "" {
@@ -808,7 +808,7 @@ func lastLogLines(text string, n int) []string {
 		fields := strings.SplitN(line, " ", 4)
 		t, err := time.Parse(time.RFC3339Nano, fields[0])
 		if len(fields) < 3 || err != nil {
-			lines = append(lines, line) // not in Podman's format: as it is
+			lines = append(lines, api.PluginLogLine{Text: line}) // not in Podman's format: as it is
 			continue
 		}
 		content := ""
@@ -819,14 +819,14 @@ func lastLogLines(text string, n int) []string {
 			partial += content
 			continue
 		}
-		lines = append(lines, t.Local().Format("15:04:05")+" "+partial+content)
+		lines = append(lines, api.PluginLogLine{Time: t.UTC().Format(time.RFC3339), Text: partial + content})
 		partial = ""
 	}
 	if len(lines) > n {
 		lines = lines[len(lines)-n:]
 	}
 	if lines == nil {
-		lines = []string{}
+		lines = []api.PluginLogLine{}
 	}
 	return lines
 }

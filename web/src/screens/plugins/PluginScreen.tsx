@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router';
 import { useDevice } from '@/data/device';
-import type { Plugin, PluginPreview } from '@/data/types';
-import { formatBytes } from '@/lib/format';
+import type { Plugin, PluginLogLine, PluginPreview } from '@/data/types';
+import { formatBytes, formatClockTime } from '@/lib/format';
 import { useForm } from '@/lib/useForm';
 import { Loaded } from '@/shell/Loaded';
 import { usePageTitle } from '@/shell/navigation';
@@ -244,10 +244,15 @@ function PermissionsSection({ plugin }: { plugin: Plugin }) {
   );
 }
 
+/** A log line as shown: the time it was written, in the viewer's own time, then the text. */
+function logLineText(line: PluginLogLine): string {
+  return line.time ? `${formatClockTime(line.time)} ${line.text}` : line.text;
+}
+
 /** The last 500 lines it wrote, loaded when opened. */
 function LogSection({ plugin }: { plugin: Plugin }) {
   const { pluginLogs } = useDevice();
-  const [lines, setLines] = useState<string[] | null>(null);
+  const [lines, setLines] = useState<PluginLogLine[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
@@ -279,7 +284,7 @@ function LogSection({ plugin }: { plugin: Plugin }) {
             <p className="text-subhead text-label-2">Nothing yet.</p>
           ) : (
             <pre className="selectable max-h-80 overflow-auto overscroll-contain rounded-lg bg-fill-2 p-3 font-mono text-footnote whitespace-pre-wrap wrap-anywhere text-label">
-              {lines.join('\n')}
+              {lines.map(logLineText).join('\n')}
             </pre>
           )}
         </div>

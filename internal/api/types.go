@@ -1008,7 +1008,15 @@ type PluginDownloadRequest struct {
 
 // PluginLogs are a plugin's last lines of output.
 type PluginLogs struct {
-	Lines []string `json:"lines"`
+	Lines []PluginLogLine `json:"lines"`
+}
+
+// PluginLogLine is one line a plugin wrote: Time is when (RFC 3339, in UTC;
+// the page shows it in the viewer's own time), left out for a line whose
+// time isn't known.
+type PluginLogLine struct {
+	Time string `json:"time,omitempty"`
+	Text string `json:"text"`
 }
 
 // PluginSourcesRequest sets the extra catalog sources.

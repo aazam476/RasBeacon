@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -542,10 +543,12 @@ func TestPlugins_WaitsForTheVPNBeforeDownloading(t *testing.T) {
 }
 
 func TestPlugins_LogLines(t *testing.T) {
-	text := "2026-10-14T10:00:00.000000000+00:00 stdout F started\n2026-10-14T10:00:01.5+00:00 stderr F oops\nraw line\n"
+	text := "2026-10-14T10:00:00.000000000+00:00 stdout F started\n2026-10-14T12:00:01.5+02:00 stderr F oops\nraw line\n"
 	lines := lastLogLines(text, 2)
-	if len(lines) != 2 || !strings.HasSuffix(lines[0], " oops") || lines[1] != "raw line" {
-		t.Errorf("lines = %q", lines)
+	// Times are sent in UTC, for the page to show in the viewer's time.
+	want := []api.PluginLogLine{{Time: "2026-10-14T10:00:01Z", Text: "oops"}, {Text: "raw line"}}
+	if !reflect.DeepEqual(lines, want) {
+		t.Errorf("lines = %+v, want %+v", lines, want)
 	}
 }
 
@@ -710,8 +713,8 @@ func TestPlugins_PasswordsKeepTheirSpaces(t *testing.T) {
 func TestPlugins_LongLogLinesAreJoined(t *testing.T) {
 	text := "2026-10-14T10:00:00Z stdout P part one, \n2026-10-14T10:00:00Z stdout F part two\n"
 	lines := lastLogLines(text, 10)
-	if len(lines) != 1 || !strings.HasSuffix(lines[0], " part one, part two") {
-		t.Errorf("lines = %q", lines)
+	if len(lines) != 1 || lines[0].Text != "part one, part two" {
+		t.Errorf("lines = %+v", lines)
 	}
 }
 

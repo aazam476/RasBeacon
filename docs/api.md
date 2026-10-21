@@ -153,7 +153,7 @@ shown, and `GET /api/v1/captive` (RFC 8908) then answers
 | `PUT /api/v1/plugins/settings` | `{ id, ports, settings, drive }` | `Plugin` | Saves a plugin's ports, settings and drive; restarts it if it runs. |
 | `POST /api/v1/plugins/start`, `POST /api/v1/plugins/stop` | `{ id }` | `PluginsState` | Running or not, kept across restarts. Starting also clears a crash stop. |
 | `POST /api/v1/plugins/remove` | `{ id, keepData }` | `PluginsState` | Stops it and deletes it and its image; `keepData` keeps its data for a later install signed with the same key (or unsigned, if this one is); the preview of another plugin with this ID warns that the data stays aside. |
-| `POST /api/v1/plugins/logs` | `{ id }` | `{ lines }` | Its last 500 lines of output. |
+| `POST /api/v1/plugins/logs` | `{ id }` | `{ lines }` | Its last 500 lines of output, each `{ time, text }`: `time` is when it was written (RFC 3339, UTC; the page shows it in the viewer's own time), left out for a line whose time isn't known. |
 | `GET /api/v1/plugins/drives` | — | `{ drives }` | USB drives' partitions plugins may use (`uuid`, `label`, `fsType`, `size`, `usedBy`). |
 | `PUT /api/v1/plugins/sources` | `{ sources }` | `PluginsState` | The catalog sources, `owner/repo` (errors name `sources.<n>`). The built-in source can be removed (left out of the list) and added back. |
 | `GET /api/v1/diagnostics` | — | text file | Troubleshooting report. Passwords are removed and MAC addresses partly hidden. |

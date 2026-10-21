@@ -3,6 +3,7 @@ import type {
   PluginCatalogEntry,
   PluginChoices,
   PluginDrive,
+  PluginLogLine,
   PluginPermission,
   PluginPreview,
   PluginSetting,
@@ -435,12 +436,12 @@ export const DEMO_DRIVES: PluginDrive[] = [
   { uuid: '0d8e5b2a-4f3c-4c1e-9d55-81b0c6f2e9a7', label: '', fsType: 'ext4', size: 500_107_862_016 },
 ];
 
-export const DEMO_LOG = [
-  '08:12:03 [info] AdGuard Home, version v0.107.57',
-  '08:12:03 [info] home: this is the first launch of AdGuard Home',
-  '08:12:04 [info] dnsproxy: starting dns proxy server',
-  '08:12:04 [info] Upstream 0: https://dns.quad9.net:443/dns-query',
-  '08:12:04 [info] dnsproxy: entering listener loop proto=udp addr=0.0.0.0:53',
-  '08:12:05 [info] go to http://127.0.0.1:3000',
-  '08:14:41 [info] filtering: updated filter 1: 98213 rules',
+export const DEMO_LOG: PluginLogLine[] = [
+  { time: '2026-10-19T08:12:03Z', text: '[info] AdGuard Home, version v0.107.57' },
+  { time: '2026-10-19T08:12:03Z', text: '[info] home: this is the first launch of AdGuard Home' },
+  { time: '2026-10-19T08:12:04Z', text: '[info] dnsproxy: starting dns proxy server' },
+  { time: '2026-10-19T08:12:04Z', text: '[info] Upstream 0: https://dns.quad9.net:443/dns-query' },
+  { time: '2026-10-19T08:12:04Z', text: '[info] dnsproxy: entering listener loop proto=udp addr=0.0.0.0:53' },
+  { time: '2026-10-19T08:12:05Z', text: '[info] go to http://127.0.0.1:3000' },
+  { time: '2026-10-19T08:14:41Z', text: '[info] filtering: updated filter 1: 98213 rules' },
 ];

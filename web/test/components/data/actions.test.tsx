@@ -435,8 +435,8 @@ describe('plugins', () => {
       name: 'answers a plugin’s log lines',
       run: (d) => d.pluginLogs('adguard'),
       sends: ['POST /plugins/logs'],
-      answer: { body: { lines: ['started'] } },
-      then: (_, answered) => expect(answered).toEqual(['started']),
+      answer: { body: { lines: [{ time: '2026-10-19T08:12:03Z', text: 'started' }] } },
+      then: (_, answered) => expect(answered).toEqual([{ time: '2026-10-19T08:12:03Z', text: 'started' }]),
     },
     {
       name: 'answers the USB drives',
