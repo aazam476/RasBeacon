@@ -323,3 +323,22 @@ func TestBackup_RestoreRefusesBackupsFromNewerVersions(t *testing.T) {
 		t.Errorf("got %v; want a message naming both versions", err)
 	}
 }
+
+// A backup whose download stopped early is cut off. The owner only finds
+// out when restoring, so the message says what happened and what to do,
+// not "wrong password".
+func TestBackup_ACutOffBackupSaysSo(t *testing.T) {
+	e := newClaimedEnv(t, false)
+	file, err := e.backUp(api.BackupRequest{Password: "backup-pass-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.agent.StageRestore(bytes.NewReader(file[:len(file)*2/3])); err != nil {
+		t.Fatal(err)
+	}
+	_, err = e.agent.Restore(api.RestoreRequest{Password: "backup-pass-1"})
+	var refused *config.ValidationError
+	if !errors.As(err, &refused) || refused.Field != "file" || !strings.Contains(refused.Message, "incomplete") {
+		t.Errorf("a cut-off backup = %v, want it called incomplete", err)
+	}
+}

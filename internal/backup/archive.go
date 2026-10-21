@@ -209,6 +209,17 @@ func Extract(r io.Reader, password, dir string) (Info, error) {
 	if err != nil {
 		return Info{}, err
 	}
+	info, err := extractArchive(plain, dir)
+	// When decrypting failed, the decompressor and the tar reader only saw
+	// the stream end early; the decryption's own error says why.
+	if rd, ok := plain.(*reader); ok && err != nil && rd.err != nil {
+		return Info{}, rd.err
+	}
+	return info, err
+}
+
+// extractArchive writes the files of the decrypted archive into dir.
+func extractArchive(plain io.Reader, dir string) (Info, error) {
 	archive, stop, err := decompress(plain)
 	if err != nil {
 		return Info{}, err

@@ -42,6 +42,11 @@ const MinPasswordLength = 8
 // the file was changed).
 var ErrWrongPassword = errors.New("the password is wrong, or the backup file is damaged")
 
+// ErrIncomplete is returned for a backup that ends before its last chunk:
+// it was cut off while it was being saved (the download stopped, or the
+// disk filled up).
+var ErrIncomplete = errors.New("the backup file is incomplete: it was cut off while it was saved")
+
 // ErrNotBackup is returned for a file that isn't a RasBeacon backup.
 var ErrNotBackup = errors.New("this is not a RasBeacon backup (.rbbackup) file")
 
@@ -182,6 +187,9 @@ type reader struct {
 	plain   []byte
 	counter uint64
 	done    bool
+	// err is the first error opening a chunk. Extract reports it instead
+	// of what the decompressor or tar reader made of the stream ending.
+	err error
 }
 
 // NewReader opens an encrypted backup file. A wrong password fails here
@@ -219,18 +227,29 @@ func NewReader(r io.Reader, password string) (io.Reader, error) {
 	return rd, nil
 }
 
-// next opens the next chunk.
+// next opens the next chunk, remembering the first error in rd.err.
 func (rd *reader) next() error {
+	if rd.err == nil {
+		rd.err = rd.open()
+	}
+	return rd.err
+}
+
+// open reads and decrypts the next chunk. A file that ends before its last
+// chunk, or in the middle of one, was cut off (ErrIncomplete): a wrong
+// password never makes the file shorter. A chunk that doesn't decrypt is a
+// wrong password or a changed file, which look the same.
+func (rd *reader) open() error {
 	var length uint32
 	if err := binary.Read(rd.r, binary.BigEndian, &length); err != nil {
-		return ErrWrongPassword // cut off before the last chunk
+		return ErrIncomplete // the file ends before the last chunk
 	}
 	if length > chunkSize+uint32(rd.aead.Overhead()) {
 		return ErrWrongPassword
 	}
 	sealed := make([]byte, length)
 	if _, err := io.ReadFull(rd.r, sealed); err != nil {
-		return ErrWrongPassword
+		return ErrIncomplete // the file ends inside a chunk
 	}
 	n := nonce(rd.counter)
 	rd.counter++

@@ -387,6 +387,8 @@ func (a *Agent) Restore(req api.RestoreRequest) (api.RestoreResult, error) {
 
 	info, err := backup.Extract(f, req.Password, staging)
 	switch {
+	case errors.Is(err, backup.ErrIncomplete):
+		return api.RestoreResult{}, &config.ValidationError{Field: "file", Message: "This backup is incomplete: it was cut off while it was being saved (the download stopped early), so it can't be restored. Make the backup again."}
 	case errors.Is(err, backup.ErrWrongPassword):
 		return api.RestoreResult{}, &config.ValidationError{Field: "backupPassword", Message: "The password is wrong, or the backup file is damaged."}
 	case errors.Is(err, backup.ErrNotBackup):

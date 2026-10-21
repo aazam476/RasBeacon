@@ -63,9 +63,18 @@ func TestBackup_WrongPasswordAndDamage(t *testing.T) {
 	if _, err := Extract(bytes.NewReader(data), "wrong horse", t.TempDir()); !errors.Is(err, ErrWrongPassword) {
 		t.Errorf("wrong password: %v", err)
 	}
-	// Cut off: the last chunk is missing.
-	if _, err := Extract(bytes.NewReader(data[:len(data)-100]), "correct horse", t.TempDir()); err == nil {
-		t.Error("a cut-off file must be refused")
+	// Cut off: the last chunk is missing. A wrong password never makes a
+	// file shorter, so it is known to be cut off.
+	if _, err := Extract(bytes.NewReader(data[:len(data)-100]), "correct horse", t.TempDir()); !errors.Is(err, ErrIncomplete) {
+		t.Errorf("a cut-off file: %v, want ErrIncomplete", err)
+	}
+	// Cut off halfway, in the middle of a chunk.
+	if _, err := Extract(bytes.NewReader(data[:len(data)/2]), "correct horse", t.TempDir()); !errors.Is(err, ErrIncomplete) {
+		t.Errorf("cut off halfway: %v, want ErrIncomplete", err)
+	}
+	// Cut off inside its header: not even the header is whole.
+	if _, err := Extract(bytes.NewReader(data[:20]), "correct horse", t.TempDir()); !errors.Is(err, ErrNotBackup) {
+		t.Errorf("cut off in the header: %v", err)
 	}
 	// One byte changed in the middle.
 	changed := bytes.Clone(data)
