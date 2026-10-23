@@ -41,6 +41,7 @@ export function SoftwareSection({ status }: { status: Status }) {
           <p>RasBeacon restarts when it&apos;s done. Connected devices are offline for about two minutes.</p>
         </Notice>
       )}
+      {update.restartPending && <RestartPendingNotice message={update.message} />}
       {update.reflash ? (
         <ReflashNotice reflash={update.reflash} running={version} hasPlugins={status.plugins.length > 0} />
       ) : (
@@ -65,7 +66,7 @@ export function SoftwareSection({ status }: { status: Status }) {
           title={`RasBeacon ${version}`}
           subtitle={board ? `For ${board}` : undefined}
         />
-        {update.message && <Row title="Last update" subtitle={update.message} />}
+        {update.message && !update.restartPending && <Row title="Last update" subtitle={update.message} />}
         {update.canCheckOnline && <UpdateCheckRows status={status} />}
         {update.canInstall && <InstallUpdate busy={update.installing} />}
       </Section>
@@ -229,6 +230,42 @@ function NotificationsForm({ settings }: { settings: UpdateSettings }) {
 }
 
 /** A link to a release's page on GitHub, where its files are. */
+/**
+ * An installed update that RasBeacon hasn't restarted into yet (the restart failed, or the power
+ * went off first): why, and the restart that finishes it, asked first like Reboot.
+ */
+function RestartPendingNotice({ message }: { message?: string }) {
+  const { restartIntoUpdate } = useDevice();
+  const [confirming, setConfirming] = useState(false);
+
+  return (
+    <Notice
+      tone="warning"
+      icon="system_update_alt"
+      role="status"
+      title="Restart to finish the update"
+      actions={
+        <Button variant="secondary" size="sm" icon="restart_alt" onClick={() => setConfirming(true)}>
+          Restart
+        </Button>
+      }
+    >
+      {message && <p>{message}</p>}
+      {confirming && (
+        <AlertDialog
+          title="Restart RasBeacon?"
+          confirmLabel="Restart"
+          busyLabel="Restarting…"
+          onConfirm={restartIntoUpdate}
+          onClose={() => setConfirming(false)}
+        >
+          <p>It starts the new version. Connected devices disconnect for about two minutes.</p>
+        </AlertDialog>
+      )}
+    </Notice>
+  );
+}
+
 function ReleaseLink({ url }: { url: string }) {
   return (
     <a href={url} target="_blank" rel="noreferrer" className={buttonClasses('secondary', 'sm')}>

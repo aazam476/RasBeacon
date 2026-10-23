@@ -73,6 +73,24 @@ describe('rebooting', () => {
     await waitFor(() => expect(String(error)).toContain("RasBeacon didn't answer after restarting"));
   });
 
+  it('restarting into an update waits for the restart the same way', async () => {
+    const { sent, answers } = fakeRbweb();
+    const device = renderProvider();
+    await waitFor(() => expect(device().phase.kind).toBe('ready'));
+    let done = false;
+    void device()
+      .restartIntoUpdate()
+      .then(() => (done = true));
+    await wait(5_000);
+    answers['GET /setup'] = { status: 502 };
+    await wait(20_000);
+    expect(done).toBe(false);
+    delete answers['GET /setup'];
+    await wait(5_000);
+    await waitFor(() => expect(done).toBe(true));
+    expect(count(sent, 'POST /system/update/restart')).toBe(1);
+  });
+
   it('renaming waits for the restart the same way', async () => {
     const { sent } = fakeRbweb();
     const device = renderProvider();

@@ -288,6 +288,7 @@ export const checkForUpdates = () => request<UpdateStatus>('POST', '/system/upda
 export const testUpdateNotification = (url: string) =>
   request<void>('POST', '/settings/updates/test', { body: { url }, timeoutMs: 30_000 });
 export const reboot = () => request<void>('POST', '/system/reboot');
+export const restartIntoUpdate = () => request<void>('POST', '/system/update/restart');
 export const shutDown = () => request<void>('POST', '/system/shutdown');
 export const saveHostname = (hostname: string) => request<void>('POST', '/system/hostname', { body: { hostname } });
 export const changeAdminPassword = (currentPassword: string, newPassword: string) =>

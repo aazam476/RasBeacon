@@ -9,7 +9,8 @@ package agent
 //     system is never touched.
 //  2. RasBeacon restarts with "tryboot": the bootloader starts the other
 //     slot once, on trial. (A power cut or a crash during the trial simply
-//     means the next start is the old slot again.)
+//     means the next start is the old slot again.) If that restart fails,
+//     the System page says so and offers "Restart to finish the update".
 //  3. In the new slot, if rbd has been running normally for a minute,
 //     confirmUpdate makes the new slot the default (autoboot.txt).
 //     Otherwise, after 5 minutes rbd restarts the device, which goes back
@@ -76,6 +77,10 @@ type updateState struct {
 	// refused is set when an update file was refused because it needs a
 	// newer RasBeacon to install it (update.NeedsReflashError).
 	refused *api.UpdateReflash
+	// restartPending is true when an update is installed but RasBeacon
+	// hasn't restarted into it yet: the restart failed, or rbd or the
+	// power stopped first.
+	restartPending bool
 }
 
 // pendingUpdate is saved after installing, so the next start knows what
@@ -83,7 +88,17 @@ type updateState struct {
 type pendingUpdate struct {
 	Version     string `json:"version"`
 	FromVersion string `json:"fromVersion"`
+	// Restarting is set just before RasBeacon restarts into the update, so
+	// the next start can tell a trial that failed (true) from one that
+	// never began (false). Files from RasBeacon 0.1 don't have it.
+	Restarting bool `json:"restarting,omitempty"`
 }
+
+// trybootCommand restarts the device into the other slot once, on trial:
+// "0 tryboot" is the Raspberry Pi firmware's reboot argument for that.
+// systemd 257 (Debian 13) refuses it as a plain extra word ("Too many
+// arguments"), so it goes in --reboot-argument.
+var trybootCommand = []string{"systemctl", "reboot", "--reboot-argument=0 tryboot"}
 
 // board returns this image's board name ("" if unknown).
 func (a *Agent) board() string {
@@ -125,6 +140,7 @@ func (a *Agent) updateStatus() api.UpdateStatus {
 		CanInstall:     !a.singleSystem() && len(a.trustedUpdateKeys()) > 0,
 		SingleSystem:   a.singleSystem(),
 		Installing:     a.update.installing,
+		RestartPending: a.update.restartPending,
 		Message:        a.update.message,
 		CanCheckOnline: version.Repository != "",
 		CheckHours:     a.cfg.Updates.CheckHours,
@@ -197,11 +213,65 @@ func (a *Agent) InstallUpdate(r io.Reader) error {
 	}
 	slog.Warn("update installed; restarting to try it", "version", newVersion)
 	a.update.message = fmt.Sprintf("Update %s installed. RasBeacon is restarting to try it (about 2 minutes).", newVersion)
-	a.afterFunc(switchDelay, func() {
-		// "0 tryboot": start the other slot once, on trial.
-		_, _ = a.runner.Run("systemctl", "reboot", "0 tryboot")
-	})
+	a.afterFunc(switchDelay, func() { _ = a.restartIntoUpdate() })
 	return nil
+}
+
+// RestartIntoUpdate restarts into an installed update that is waiting for
+// its restart ("Restart to finish the update" on the System page). The
+// restart happens shortly after the request is answered; if it fails, the
+// status says why.
+func (a *Agent) RestartIntoUpdate() error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	var pending pendingUpdate
+	if a.update.trying || config.ReadJSON(a.paths.UpdatePendingFile(), &pending) != nil {
+		return &config.ValidationError{Field: "update", Message: "No installed update is waiting for a restart."}
+	}
+	slog.Info("restart into the update requested from the web UI", "version", pending.Version)
+	a.update.message = fmt.Sprintf("RasBeacon is restarting to try %s (about 2 minutes).", pending.Version)
+	a.afterFunc(switchDelay, func() { _ = a.restartIntoUpdate() })
+	return nil
+}
+
+// restartIntoUpdate restarts into the installed update, on trial. It first
+// notes in the pending file that the restart was asked for. If the restart
+// command fails, it takes the note back, logs the error and keeps the
+// update waiting, so the System page can show why and offer the restart
+// again.
+func (a *Agent) restartIntoUpdate() error {
+	a.mu.Lock()
+	var pending pendingUpdate
+	if err := config.ReadJSON(a.paths.UpdatePendingFile(), &pending); err != nil {
+		a.mu.Unlock()
+		return err
+	}
+	pending.Restarting = true
+	err := a.savePendingUpdate(pending)
+	a.mu.Unlock()
+	if err == nil {
+		// Not under the lock: the command may take a moment.
+		_, err = a.runner.Run(trybootCommand[0], trybootCommand[1:]...)
+	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if err != nil {
+		pending.Restarting = false
+		_ = a.savePendingUpdate(pending)
+		slog.Error("could not restart into the update", "version", pending.Version, "error", err)
+		a.update.restartPending = true
+		a.update.message = fmt.Sprintf("Update %s is installed, but RasBeacon couldn't restart into it: %v", pending.Version, err)
+		return err
+	}
+	a.update.restartPending = false
+	return nil
+}
+
+// savePendingUpdate writes the pending file. The caller holds a.mu.
+func (a *Agent) savePendingUpdate(pending pendingUpdate) error {
+	data, _ := json.Marshal(pending)
+	return config.WriteFileAtomic(a.paths.UpdatePendingFile(), data, 0o644)
 }
 
 // writeUpdate checks the update file and writes it into the other slot. It
@@ -279,8 +349,9 @@ func zstdDecompress(compressed io.Reader) (io.Reader, func() error, error) {
 
 // checkTrialStart runs at startup. If the bootloader started this slot on
 // trial, it schedules the confirmation (and the fallback restart). If an
-// update was pending but this is NOT a trial, the trial failed and the old
-// slot is running again.
+// update is pending but this is NOT a trial, either RasBeacon never
+// restarted into it (it waits for "Restart to finish the update"), or the
+// trial failed and the old slot is running again.
 func (a *Agent) checkTrialStart() {
 	flag, _ := os.ReadFile(a.paths.TrybootFlag())
 	a.update.trying = strings.Trim(string(flag), "\x00") != ""
@@ -292,6 +363,11 @@ func (a *Agent) checkTrialStart() {
 	case a.update.trying:
 		slog.Warn("running a new system on trial", "version", version.Version)
 		a.afterFunc(rollbackAfter, a.rollbackIfUnconfirmed)
+	case hasPending && !pending.Restarting:
+		// Installed, but RasBeacon never restarted into it: keep it waiting.
+		slog.Warn("an installed update is waiting for a restart", "update", pending.Version)
+		a.update.restartPending = true
+		a.update.message = fmt.Sprintf("Update %s is installed. Restart RasBeacon to finish installing it.", pending.Version)
 	case hasPending:
 		slog.Error("the updated system did not start correctly; running the previous one", "update", pending.Version)
 		a.update.message = fmt.Sprintf("The update to %s didn't start correctly, so RasBeacon went back to %s.", pending.Version, version.Version)

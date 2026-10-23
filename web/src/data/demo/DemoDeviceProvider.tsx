@@ -780,6 +780,15 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
         }
       },
       reboot: () => wait(3000),
+      restartIntoUpdate: async () => {
+        await wait(3000);
+        change((d) => {
+          const { message } = d.router.status.update;
+          const installed = /Update (\S+) is installed/.exec(message ?? '')?.[1] ?? 'v1.1.0';
+          d.router.status.version = installed;
+          Object.assign(d.router.status.update, { restartPending: false, message: `Updated to ${installed}.` });
+        });
+      },
       shutDown: async () => {
         await wait(1500);
         change((d) => void (d.phase = { kind: 'notice', notice: 'off' }));

@@ -183,11 +183,89 @@ func TestUpdate_InstallWritesTheOtherSlotAndTriesIt(t *testing.T) {
 		t.Errorf("boot partition = %q", got)
 	}
 	e.timers.runAll()
-	if !e.runner.ran("systemctl reboot 0 tryboot") {
-		t.Error("RasBeacon should restart into the new slot on trial")
+	// systemd 257 refuses "systemctl reboot '0 tryboot'" (Too many
+	// arguments): the argument must go in --reboot-argument.
+	if !e.runner.ran("systemctl reboot --reboot-argument=0 tryboot") {
+		t.Errorf("RasBeacon should restart into the new slot on trial; ran %q", e.runner.commands)
+	}
+	if e.runner.ran("systemctl reboot 0 tryboot") {
+		t.Error("the argument must not be passed as a plain extra word")
+	}
+	var pending pendingUpdate
+	if err := config.ReadJSON(e.paths.UpdatePendingFile(), &pending); err != nil || !pending.Restarting {
+		t.Errorf("the pending update should be remembered as restarting: %+v, %v", pending, err)
+	}
+	if e.agent.Status().Update.RestartPending {
+		t.Error("nothing waits for a restart once it was asked for")
+	}
+}
+
+func TestUpdate_AFailedRestartIsShownAndCanBeTriedAgain(t *testing.T) {
+	e, key := newUpdateEnv(t)
+	e.runner.failing = append(e.runner.failing, "systemctl reboot")
+	if err := e.agent.InstallUpdate(bytes.NewReader(updateFile(t, key, "pi4", testBundle(strings.Repeat("B", 32), strings.Repeat("S", 64))))); err != nil {
+		t.Fatal(err)
+	}
+	e.timers.runAll()
+
+	// The failure is shown with its reason, and the update keeps waiting.
+	update := e.agent.Status().Update
+	if !update.RestartPending || !strings.Contains(update.Message, "couldn't restart into it") || !strings.Contains(update.Message, "failed: systemctl reboot") {
+		t.Errorf("status after a failed restart: %+v", update)
+	}
+	var pending pendingUpdate
+	if err := config.ReadJSON(e.paths.UpdatePendingFile(), &pending); err != nil || pending.Restarting || pending.Version != "v9.9.9" {
+		t.Errorf("the update should wait, not marked as restarting: %+v, %v", pending, err)
+	}
+
+	// "Restart to finish the update" tries again, and this time it works.
+	e.runner.failing = nil
+	if err := e.agent.RestartIntoUpdate(); err != nil {
+		t.Fatal(err)
+	}
+	e.timers.runAll()
+	if update := e.agent.Status().Update; update.RestartPending {
+		t.Errorf("the restart went through, so nothing waits: %+v", update)
+	}
+	if err := config.ReadJSON(e.paths.UpdatePendingFile(), &pending); err != nil || !pending.Restarting {
+		t.Errorf("the restart should be noted: %+v, %v", pending, err)
+	}
+}
+
+func TestUpdate_RestartingNeedsAnInstalledUpdate(t *testing.T) {
+	e, _ := newUpdateEnv(t)
+	var verr *config.ValidationError
+	if err := e.agent.RestartIntoUpdate(); !errors.As(err, &verr) {
+		t.Errorf("got %v, want a refusal when no update waits", err)
+	}
+	// On trial, the update is already running.
+	mustWrite(t, e.paths.UpdatePendingFile(), `{"version":"v9.9.9","fromVersion":"dev"}`)
+	e.agent.mu.Lock()
+	e.agent.update.trying = true
+	e.agent.mu.Unlock()
+	if err := e.agent.RestartIntoUpdate(); !errors.As(err, &verr) {
+		t.Errorf("got %v, want a refusal on trial", err)
+	}
+	if err := e.agent.restartIntoUpdate(); err != nil {
+		t.Errorf("the restart itself reads the pending file: %v", err)
+	}
+	_ = os.Remove(e.paths.UpdatePendingFile())
+	if err := e.agent.restartIntoUpdate(); err == nil {
+		t.Error("without a pending file there is nothing to restart into")
+	}
+}
+
+func TestUpdate_AnUpdateThatNeverRestartedWaitsAtTheNextStart(t *testing.T) {
+	e := newTestEnv(t)
+	// Installed, but rbd or the power stopped before the restart was asked for.
+	mustWrite(t, e.paths.UpdatePendingFile(), `{"version":"v9.9.9","fromVersion":"dev"}`)
+	e.start()
+	update := e.agent.Status().Update
+	if !update.RestartPending || !strings.Contains(update.Message, "Restart RasBeacon to finish installing it") {
+		t.Errorf("status = %+v", update)
 	}
 	if _, err := os.Stat(e.paths.UpdatePendingFile()); err != nil {
-		t.Error("the pending update should be remembered")
+		t.Error("the waiting update must be kept")
 	}
 }
 
@@ -322,10 +400,14 @@ func TestUpdate_FailedTrialIsReported(t *testing.T) {
 	e := newTestEnv(t)
 	// An update was installed, but this start is NOT a trial: the new slot
 	// didn't come up, and the bootloader went back to the old one.
-	mustWrite(t, e.paths.UpdatePendingFile(), `{"version":"v9.9.9","fromVersion":"dev"}`)
+	mustWrite(t, e.paths.UpdatePendingFile(), `{"version":"v9.9.9","fromVersion":"dev","restarting":true}`)
 	e.start()
-	if msg := e.agent.Status().Update.Message; !strings.Contains(msg, "didn't start correctly") {
-		t.Errorf("message = %q", msg)
+	update := e.agent.Status().Update
+	if !strings.Contains(update.Message, "didn't start correctly") || update.RestartPending {
+		t.Errorf("status = %+v", update)
+	}
+	if _, err := os.Stat(e.paths.UpdatePendingFile()); err == nil {
+		t.Error("a failed trial is over: the pending file goes")
 	}
 }
 

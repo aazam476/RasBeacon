@@ -36,6 +36,28 @@ describe('software', () => {
     expect(screen.queryByText(/After this, RasBeacon offers/)).toBeNull();
   });
 
+  it('offers to finish an installed update that RasBeacon couldn’t restart into, after asking', async () => {
+    const message = "Update v0.3.0 is installed, but RasBeacon couldn't restart into it: Too many arguments.";
+    const { device, user } = renderSoftware({ restartPending: true, message });
+    const notice = screen.getByRole('status', { name: '' });
+    expect(within(notice).getByText('Restart to finish the update')).toBeTruthy();
+    expect(within(notice).getByText(message)).toBeTruthy();
+    // The reason shows once, in the notice, not again as the last update's result.
+    expect(screen.queryByText('Last update')).toBeNull();
+    await user.click(within(notice).getByRole('button', { name: 'Restart' }));
+    expect(device.restartIntoUpdate).not.toHaveBeenCalled();
+    await user.click(
+      within(screen.getByRole('dialog', { name: 'Restart RasBeacon?' })).getByRole('button', { name: 'Restart' }),
+    );
+    expect(device.restartIntoUpdate).toHaveBeenCalledOnce();
+  });
+
+  it('shows no restart notice when nothing waits', () => {
+    renderSoftware({ message: 'Updated to 0.2.0.' });
+    expect(screen.queryByText('Restart to finish the update')).toBeNull();
+    expect(screen.getByText('Last update')).toBeTruthy();
+  });
+
   it('gives the steps for a version that needs a fresh install, with Back up settings', async () => {
     const { user } = renderSoftware({ reflash: { version: '1.0.0', minFromVersion: '0.9.0' } });
     expect(screen.getByText('RasBeacon 1.0.0 needs a fresh install')).toBeTruthy();

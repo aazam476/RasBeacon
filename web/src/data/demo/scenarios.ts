@@ -637,6 +637,18 @@ export const SCENARIOS: DemoScenario[] = [
     },
   },
   {
+    id: 'update-restart-pending',
+    group: 'System',
+    title: 'Update waits for its restart',
+    route: '/system',
+    apply: (d) =>
+      void Object.assign(d.router.status.update, {
+        restartPending: true,
+        message:
+          "Update v1.1.0 is installed, but RasBeacon couldn't restart into it: systemctl reboot: exit status 1: Too many arguments.",
+      }),
+  },
+  {
     id: 'update-installing',
     group: 'System',
     title: 'Installing an update',

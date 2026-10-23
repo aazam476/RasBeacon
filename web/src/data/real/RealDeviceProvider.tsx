@@ -647,6 +647,12 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
         // The session may have ended with the restart ("Stay logged in" keeps it).
         await loadStartup();
       },
+      restartIntoUpdate: async () => {
+        await attempt(api.restartIntoUpdate);
+        await waitForRestart();
+        // Back on the new version, or on the old one with the reason in status.update.message.
+        await loadStartup();
+      },
       shutDown: async () => {
         await attempt(api.shutDown);
         setPoweredOff(true);

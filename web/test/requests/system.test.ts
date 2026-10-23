@@ -22,6 +22,12 @@ describe('updates', () => {
     },
     { name: 'checks now', call: api.checkForUpdates, method: 'POST', path: '/system/update/check' },
     {
+      name: 'restarts into an installed update',
+      call: api.restartIntoUpdate,
+      method: 'POST',
+      path: '/system/update/restart',
+    },
+    {
       name: 'sends a test notification',
       call: () => api.testUpdateNotification('https://ntfy.sh/rasbeacon'),
       method: 'POST',

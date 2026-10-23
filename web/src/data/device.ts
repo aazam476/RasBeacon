@@ -292,6 +292,8 @@ export interface DeviceActions {
   saveAccessSettings: (settings: AccessSettings) => Promise<void>;
   /** Ask GitHub now; the result lands in status.update. */
   checkForUpdates: () => Promise<void>;
+  /** Restart into an installed update that waits for it (status.update.restartPending). */
+  restartIntoUpdate: () => Promise<void>;
   /** Send a test message to `url` (or the saved address). Field key: notifyUrl. */
   testUpdateNotification: (url: string) => Promise<void>;
   /** The swap file's size in whole gigabytes (0 = off). Field key: sizeGb. */

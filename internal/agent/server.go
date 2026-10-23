@@ -659,6 +659,13 @@ func (a *Agent) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, struct{}{})
 	})
+	mux.HandleFunc("POST /system/update/restart", func(w http.ResponseWriter, r *http.Request) {
+		if err := a.RestartIntoUpdate(); err != nil {
+			writeError(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
 	mux.HandleFunc("POST /system/update/check", func(w http.ResponseWriter, r *http.Request) {
 		status, err := a.CheckForUpdateNow()
 		if err != nil {

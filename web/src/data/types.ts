@@ -211,6 +211,11 @@ export interface UpdateStatus {
    * update file was refused. The way to it is a backup, the new image, and the backup restored.
    */
   reflash?: UpdateReflash;
+  /**
+   * An installed update waits for its restart: the restart after installing failed (`message` says
+   * why), or RasBeacon was switched off first. `restartIntoUpdate` finishes it.
+   */
+  restartPending?: boolean;
 }
 
 /** A new version that needs a fresh install (`UpdateStatus.reflash`). */

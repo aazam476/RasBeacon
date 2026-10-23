@@ -147,6 +147,24 @@ func TestRoutes_RebootAndShutDownAnswerFirst(t *testing.T) {
 	}
 }
 
+func TestRoutes_RestartIntoTheUpdate(t *testing.T) {
+	e := newClaimedEnv(t, false)
+	if status, body := e.call(http.MethodPost, "/system/update/restart", nil); status != http.StatusBadRequest {
+		t.Errorf("with no update waiting = %d %s, want 400", status, body)
+	}
+	mustWrite(t, e.paths.UpdatePendingFile(), `{"version":"v9.9.9","fromVersion":"dev"}`)
+	if status, body := e.call(http.MethodPost, "/system/update/restart", nil); status != http.StatusNoContent {
+		t.Errorf("with an update waiting = %d %s, want 204", status, body)
+	}
+	if e.runner.ran("systemctl reboot") {
+		t.Error("it must answer before restarting")
+	}
+	e.timers.runAll()
+	if !e.runner.ran("systemctl reboot --reboot-argument=0 tryboot") {
+		t.Errorf("never restarted into the update; ran %q", e.runner.commands)
+	}
+}
+
 func TestRoutes_FactoryResetNeedsTheAdminPassword(t *testing.T) {
 	e := newClaimedEnv(t, false)
 	status, body := e.call(http.MethodPost, "/system/factory-reset", api.PasswordRequest{Password: "wrong"})

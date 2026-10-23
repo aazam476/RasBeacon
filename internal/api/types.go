@@ -377,6 +377,11 @@ type UpdateStatus struct {
 	// owner backs up the settings, flashes the new image and restores the
 	// backup.
 	Reflash *UpdateReflash `json:"reflash,omitempty"`
+	// RestartPending is true when an update is installed but RasBeacon
+	// hasn't restarted into it yet (the restart failed, or the power went
+	// off first). POST /system/update/restart finishes it; Message says
+	// why it waits.
+	RestartPending bool `json:"restartPending,omitempty"`
 }
 
 // UpdateReflash describes a new version that needs a fresh install.
