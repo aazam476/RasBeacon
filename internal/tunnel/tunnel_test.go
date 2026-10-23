@@ -42,10 +42,7 @@ func (s *sim) expect(want State, d time.Duration) {
 
 func TestKillSwitchOn_NeverGoesDirect(t *testing.T) {
 	s := newSim(t, true)
-	s.expect(Connecting, time.Hour) // the server never answers
-	if Connecting.RoutesThroughTunnel() != true {
-		t.Fatal("Connecting must keep traffic in the (dead) tunnel")
-	}
+	s.expect(Connecting, time.Hour) // the server never answers: traffic stays in the dead tunnel
 
 	s.working = true
 	s.expect(Up, 10*time.Second)
@@ -102,7 +99,8 @@ func TestTurningKillSwitchOnStopsDirectTrafficImmediately(t *testing.T) {
 	s := newSim(t, false)
 	s.expect(Direct, time.Minute) // never connected, kill switch off
 	s.killSwitch = true
-	if got := s.run(0); got.RoutesThroughTunnel() != true {
+	// Only Off and Direct send devices' traffic straight to the uplink.
+	if got := s.run(0); got == Direct || got == Off {
 		t.Fatalf("state %s: traffic must go back into the tunnel at once", got)
 	}
 }
@@ -113,7 +111,7 @@ func TestTurningVPNOff(t *testing.T) {
 	if m.Update(Inputs{Now: now, Enabled: true, KillSwitch: true}) != Connecting {
 		t.Fatal("turning on starts in Connecting")
 	}
-	if got := m.Update(Inputs{Now: now, Enabled: false}); got != Off || got.RoutesThroughTunnel() {
+	if got := m.Update(Inputs{Now: now, Enabled: false}); got != Off {
 		t.Fatalf("turning off: %s", got)
 	}
 }

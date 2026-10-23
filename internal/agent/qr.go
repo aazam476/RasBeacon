@@ -47,13 +47,9 @@ func qrSVG(text string) (string, error) {
 		size, size, size, size, path.String()), nil
 }
 
-// WiFiQR returns the QR code for joining the hotspot ("hotspot", which
-// needs the admin password, like showing its password) or the guest network
-// ("guest", whose password is meant to be handed out).
+// WiFiQR returns the QR code for joining the hotspot ("hotspot") or the
+// guest network ("guest").
 func (a *Agent) WiFiQR(req api.WiFiQRRequest) (api.WiFiQR, error) {
-	if req.Network == "hotspot" && !a.VerifyAdminPassword(req.AdminPassword) {
-		return api.WiFiQR{}, ErrWrongPassword
-	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	var ssid, password string

@@ -43,19 +43,33 @@ func eduroamRequest(caCert, password string) api.UplinkSettings {
 		Networks: []api.SavedNetwork{{
 			SSID: "eduroam", Security: config.UplinkEnterprise, Password: password,
 			Enterprise: &api.EnterpriseSettings{
-				Method: config.EAPTTLSPAP, Identity: "NetID@rutgers.edu", AnonymousIdentity: "anonymous@rutgers.edu",
-				ServerName: "*.ruw.rutgers.edu", CACert: caCert,
+				Method: config.EAPTTLSPAP, Identity: "me@example.edu", AnonymousIdentity: "anonymous@example.edu",
+				ServerName: "*.login.example.edu", CACert: caCert,
 			},
 		}},
 	}
 }
 
-func TestEnterprise_RefusesToSaveWithoutCACertificate(t *testing.T) {
+func TestEnterprise_ServerNameAloneUsesTheSystemsCAs(t *testing.T) {
 	e := newClaimedEnv(t, false)
-	err := e.agent.UpdateUplinkSettings(eduroamRequest("", "my-password"))
-	var verr *config.ValidationError
-	if !errors.As(err, &verr) || verr.Field != "networks.0.enterprise.caCert" {
-		t.Fatalf("got %v, want a CA certificate error", err)
+	if err := e.agent.UpdateUplinkSettings(eduroamRequest("", "my-password")); err != nil {
+		t.Fatal(err)
+	}
+	conf := e.readFile(e.paths.WPASupplicantConfig())
+	if !strings.Contains(conf, `ca_cert="/etc/ssl/certs/ca-certificates.crt"`) || !strings.Contains(conf, `domain_suffix_match="login.example.edu"`) {
+		t.Errorf("wpa_supplicant.conf:\n%s", conf)
+	}
+}
+
+func TestEnterprise_NeitherFirstFetchesTheServersCertificate(t *testing.T) {
+	e := newClaimedEnv(t, false)
+	req := eduroamRequest("", "my-password")
+	req.Networks[0].Enterprise.ServerName = ""
+	if err := e.agent.UpdateUplinkSettings(req); err != nil {
+		t.Fatal(err)
+	}
+	if conf := e.readFile(e.paths.WPASupplicantConfig()); !strings.Contains(conf, `ca_cert="probe://"`) {
+		t.Errorf("the first connection must only fetch the certificate:\n%s", conf)
 	}
 }
 
@@ -76,7 +90,7 @@ func TestEnterprise_SavesCertificateAndWritesConfig(t *testing.T) {
 
 	caFile := e.paths.CACertFile(n.ID)
 	wpa := e.readFile(e.paths.WPASupplicantConfig())
-	for _, want := range []string{"eap=TTLS", `ca_cert="` + caFile + `"`, `domain_suffix_match="ruw.rutgers.edu"`} {
+	for _, want := range []string{"eap=TTLS", `ca_cert="` + caFile + `"`, `domain_suffix_match="login.example.edu"`} {
 		if !strings.Contains(wpa, want) {
 			t.Errorf("wpa_supplicant.conf is missing %q", want)
 		}
@@ -131,9 +145,9 @@ func TestDiagnostics_MasksEnterpriseUsername(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.runner.outputs["wpa_cli -p "+e.paths.WPAControlDir()+" -i wlan0 status"] =
-		"wpa_state=COMPLETED\nssid=eduroam\nidentity=NetID@rutgers.edu\n"
+		"wpa_state=COMPLETED\nssid=eduroam\nidentity=me@example.edu\n"
 	report := e.agent.Diagnostics()
-	if strings.Contains(report, "NetID@rutgers.edu") || !strings.Contains(report, "N***@rutgers.edu") {
+	if strings.Contains(report, "me@example.edu") || !strings.Contains(report, "m***@example.edu") {
 		t.Error("the username should appear only masked")
 	}
 	if strings.Contains(report, "my-password") {
@@ -143,10 +157,10 @@ func TestDiagnostics_MasksEnterpriseUsername(t *testing.T) {
 
 func TestMaskIdentity(t *testing.T) {
 	for in, want := range map[string]string{
-		"NetID@rutgers.edu": "N***@rutgers.edu",
-		"alice":             "a***",
-		"@realm":            "***@realm",
-		"émile@x.fr":        "é***@x.fr",
+		"me@example.edu": "m***@example.edu",
+		"alice":          "a***",
+		"@realm":         "***@realm",
+		"émile@x.fr":     "é***@x.fr",
 	} {
 		if got := MaskIdentity(in); got != want {
 			t.Errorf("MaskIdentity(%q) = %q, want %q", in, got, want)
@@ -168,5 +182,47 @@ func TestObserveWiFi_ReportsFailedLogin(t *testing.T) {
 	wifi := e.agent.Status().Uplink.WiFi
 	if wifi.State != "login-failed" || wifi.SSID != "eduroam" {
 		t.Errorf("got %+v, want login-failed for eduroam", wifi)
+	}
+}
+
+func TestEnterprise_TrustsTheServerSeenAtTheFirstConnection(t *testing.T) {
+	e := newClaimedEnv(t, false)
+	req := eduroamRequest("", "my-password")
+	req.Networks[0].Enterprise.ServerName = ""
+	if err := e.agent.UpdateUplinkSettings(req); err != nil {
+		t.Fatal(err)
+	}
+	hash := strings.Repeat("5a", 32)
+	// wpa_supplicant joins and reports the server's certificate.
+	e.agent.handleWPAEvent("Trying to associate with 00:11:22:33:44:55 (SSID='eduroam' freq=2412 MHz)")
+	e.agent.handleWPAEvent("CTRL-EVENT-EAP-PEER-CERT depth=1 subject='/CN=Example CA' hash=" + strings.Repeat("11", 32))
+	e.agent.handleWPAEvent("CTRL-EVENT-EAP-PEER-CERT depth=0 subject='/CN=radius.example.com' hash=" + hash)
+
+	conf := e.readFile(e.paths.WPASupplicantConfig())
+	if !strings.Contains(conf, `ca_cert="hash://server/sha256/`+hash+`"`) || strings.Contains(conf, "probe://") {
+		t.Fatalf("only the trusted certificate should be accepted now:\n%s", conf)
+	}
+	settings := e.agent.UplinkSettings()
+	if got := settings.Networks[0].Enterprise.ServerCertHash; got != hash {
+		t.Errorf("serverCertHash = %q", got)
+	}
+
+	// Another certificate later is not trusted instead.
+	e.agent.handleWPAEvent("CTRL-EVENT-EAP-PEER-CERT depth=0 subject='/CN=evil' hash=" + strings.Repeat("ee", 32))
+	e.agent.handleWPAEvent("CTRL-EVENT-EAP-TLS-CERT-ERROR reason=8 depth=0 subject='/CN=evil' err='Server certificate mismatch'")
+	if got := e.agent.UplinkSettings().Networks[0].Enterprise.ServerCertHash; got != hash {
+		t.Errorf("the trusted certificate must not change: %q", got)
+	}
+	if warnings := strings.Join(e.agent.Status().Warnings, "\n"); !strings.Contains(warnings, "different certificate") {
+		t.Errorf("warnings = %q", warnings)
+	}
+
+	// Saving the list again keeps it.
+	again := e.agent.UplinkSettings()
+	if err := e.agent.UpdateUplinkSettings(again); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.agent.UplinkSettings().Networks[0].Enterprise.ServerCertHash; got != hash {
+		t.Errorf("saving the list again forgot the trusted certificate: %q", got)
 	}
 }

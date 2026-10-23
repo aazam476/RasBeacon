@@ -1,16 +1,14 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { HOTSPOT_CHANNELS } from '@/data/constants';
 import { useDevice } from '@/data/device';
-import type { HotspotSettings, WiFiQR } from '@/data/types';
-import { useAction } from '@/lib/useAction';
+import { FieldErrors } from '@/data/errors';
+import type { ChannelsByBand, HotspotSettings, WiFiQR } from '@/data/types';
 import { useForm } from '@/lib/useForm';
 import { Loaded } from '@/shell/Loaded';
 import {
   Badge,
-  Button,
   ButtonRow,
   FormActions,
-  FormError,
   FormSwitchRow,
   PasswordField,
   Row,
@@ -19,7 +17,8 @@ import {
   TextField,
 } from '@/ui';
 import { QrCode } from '../common/QrCode';
-import { BAND_OPTIONS, HOTSPOT_SECURITY_OPTIONS } from '../common/wifiOptions';
+import { bandOptions, HOTSPOT_SECURITY_OPTIONS } from '../common/wifiOptions';
+import { AccessSection } from './AccessSection';
 
 /** The settings that restart the hotspot when they change; only `metered` doesn't. */
 const RESTARTING_FIELDS = ['ssid', 'band', 'channel', 'security', 'country'] as const;
@@ -27,7 +26,7 @@ const RESTARTING_FIELDS = ['ssid', 'band', 'channel', 'security', 'country'] as 
 /** Typing settings for names and codes: no capitals, corrections or suggestions. */
 const PLAIN_INPUT = { autoComplete: 'off', autoCapitalize: 'none', autoCorrect: 'off', spellCheck: false } as const;
 
-/** RasBeacon's own Wi-Fi network: name, password, radio settings, and the metered hint. */
+/** RasBeacon's own Wi-Fi network: name, password, radio settings, the metered hint, and who can join. */
 export function HotspotScreen() {
   const { hotspotSettings, reload } = useDevice();
 
@@ -37,23 +36,69 @@ export function HotspotScreen() {
         <>
           <HotspotForm settings={settings} />
           <CurrentPassword />
+          <AccessSection />
         </>
       )}
     </Loaded>
   );
 }
 
+/**
+ * The channels the router allows for `country` (its regulatory database), asked for again once a
+ * full two-letter code is typed. Until it answers, or if it can't, every channel RasBeacon offers;
+ * a code that isn't a country comes back as `countryError`, shown under the field at once.
+ */
+function useCountryChannels(country: string, no5GHz?: boolean): { channels: ChannelsByBand; countryError?: string } {
+  const { hotspotChannels } = useDevice();
+  const [answer, setAnswer] = useState<{ country: string; channels?: ChannelsByBand; error?: string } | null>(null);
+  useEffect(() => {
+    if (!/^[A-Z]{2}$/.test(country)) return;
+    let current = true; // a later country's answer wins, whichever arrives first
+    hotspotChannels(country).then(
+      (channels) => {
+        if (current && channels) setAnswer({ country, channels });
+      },
+      (problem: unknown) => {
+        if (current) setAnswer({ country, error: countryProblem(problem) });
+      },
+    );
+    return () => {
+      current = false;
+    };
+  }, [country, hotspotChannels]);
+
+  const offered = { '2.4GHz': [...HOTSPOT_CHANNELS['2.4GHz']], '5GHz': no5GHz ? [] : [...HOTSPOT_CHANNELS['5GHz']] };
+  if (answer?.country !== country) return { channels: offered };
+  return { channels: answer.channels ?? offered, countryError: answer.error };
+}
+
+/** The router's reason a country code was refused ("Use GB for the United Kingdom."). */
+function countryProblem(problem: unknown): string | undefined {
+  if (problem instanceof FieldErrors) return problem.fields.country;
+  return undefined; // RasBeacon didn't answer: nothing to say about the code, and every channel stays
+}
+
 function HotspotForm({ settings }: { settings: HotspotSettings }) {
   const { status, saveHotspotSettings } = useDevice();
-  const form = useForm({ ...settings, password: '' }, saveHotspotSettings);
+  // A hotspot saved on 5 GHz whose radio can't use it runs on 2.4 GHz (after the adapter was
+  // swapped for another), so the form starts there.
+  const band = settings.no5GHz ? '2.4GHz' : settings.band;
+  const form = useForm({ ...settings, band, password: '' }, saveHotspotSettings);
   const { values, setField, fieldErrors } = form;
   const running = status.data?.hotspot.running;
 
   const restarts = values.password !== '' || RESTARTING_FIELDS.some((field) => values[field] !== settings[field]);
+  const allowed = useCountryChannels(values.country, settings.no5GHz);
   const channelOptions = [
     { value: '0', label: 'Default' },
-    ...HOTSPOT_CHANNELS[values.band].map((channel) => ({ value: String(channel), label: String(channel) })),
+    ...allowed.channels[values.band].map((channel) => ({ value: String(channel), label: String(channel) })),
   ];
+  // A channel picked before the country changed stays shown, marked, until another is picked.
+  const channelRefused = values.channel !== 0 && !allowed.channels[values.band].includes(values.channel);
+  if (channelRefused) {
+    channelOptions.push({ value: String(values.channel), label: `${values.channel} (not allowed here)` });
+  }
+  const bandRefused = values.band === '5GHz' && allowed.channels['5GHz'].length === 0;
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -71,7 +116,6 @@ function HotspotForm({ settings }: { settings: HotspotSettings }) {
             <Badge tone="red">Not running</Badge>
           )
         }
-        footer="The Wi-Fi network your devices join."
       >
         <TextField
           label="Network name"
@@ -92,11 +136,31 @@ function HotspotForm({ settings }: { settings: HotspotSettings }) {
         />
       </Section>
 
-      <Section title="Radio" footer="The country decides which channels are legal.">
+      <Section
+        title="Radio"
+        footer={[
+          'The country decides which channels are legal.',
+          values.security === 'wpa3' && "With WPA3 only, devices older than about 2019 can't join.",
+          settings.no5GHz && "This Wi-Fi adapter can't use 5 GHz.",
+        ]
+          .filter(Boolean)
+          .join(' ')}
+      >
+        <TextField
+          label="Country"
+          labelNote="(two-letter code)"
+          maxLength={2}
+          value={values.country}
+          onChange={(country) => setField('country', country.toUpperCase())}
+          error={fieldErrors.country ?? allowed.countryError}
+          {...PLAIN_INPUT}
+          autoCapitalize="characters"
+        />
         <SelectField
           label="Band"
-          options={BAND_OPTIONS}
+          options={bandOptions(settings.no5GHz || (allowed.channels['5GHz'].length === 0 && values.band !== '5GHz'))}
           value={values.band}
+          error={fieldErrors.band ?? (bandRefused ? "This country doesn't allow a hotspot on 5 GHz." : undefined)}
           // A channel of the old band doesn't exist on the new one, so it goes back to the default.
           onChange={(band) => form.update((current) => ({ ...current, band, channel: 0 }), ['band', 'channel'])}
         />
@@ -105,7 +169,7 @@ function HotspotForm({ settings }: { settings: HotspotSettings }) {
           options={channelOptions}
           value={String(values.channel)}
           onChange={(channel) => setField('channel', Number(channel))}
-          error={fieldErrors.channel}
+          error={fieldErrors.channel ?? (channelRefused ? "This channel isn't allowed in this country." : undefined)}
         />
         <SelectField
           label="Security"
@@ -113,24 +177,14 @@ function HotspotForm({ settings }: { settings: HotspotSettings }) {
           value={values.security}
           onChange={(security) => setField('security', security)}
         />
-        <TextField
-          label="Country"
-          labelNote="(two-letter code)"
-          maxLength={2}
-          value={values.country}
-          onChange={(country) => setField('country', country.toUpperCase())}
-          error={fieldErrors.country}
-          {...PLAIN_INPUT}
-          autoCapitalize="characters"
-        />
       </Section>
 
       <Section
         footer={
           <>
-            Tells devices to hold back big downloads and backups. Android phones read this automatically when they
-            reconnect. On iPhones and Macs, turn on &quot;Low Data Mode&quot; for this network in Wi-Fi settings; on
-            Windows, set it as a metered connection. Changing only this doesn&apos;t restart the hotspot.
+            Asks devices to hold back large downloads and backups. Android reads this automatically when it connects. On
+            iPhone and Mac, turn on Low Data Mode for this network in Wi-Fi settings; on Windows, set it as a metered
+            connection. Changing only this doesn&apos;t restart the hotspot.
           </>
         }
       >
@@ -159,18 +213,12 @@ function HotspotForm({ settings }: { settings: HotspotSettings }) {
 }
 
 /**
- * Shows the hotspot's current password and a QR code to join it, after the admin password is
- * typed again.
+ * Shows the hotspot's current password and a QR code to join it, hidden until asked for (it is
+ * the password to your network). Being logged in is enough.
  */
 function CurrentPassword() {
   const { revealHotspotPassword, wifiQr } = useDevice();
-  const [adminPassword, setAdminPassword] = useState('');
   const [revealed, setRevealed] = useState<{ password: string; qr: WiFiQR } | null>(null);
-  const revealing = useAction(async () => {
-    const [password, qr] = await Promise.all([revealHotspotPassword(adminPassword), wifiQr('hotspot', adminPassword)]);
-    setRevealed({ password, qr });
-    setAdminPassword('');
-  });
 
   if (revealed !== null) {
     return (
@@ -192,37 +240,17 @@ function CurrentPassword() {
   }
 
   return (
-    <form
-      onSubmit={(event) => {
-        event.preventDefault();
-        revealing.run();
-      }}
-      noValidate
-    >
-      <Section title="Join the hotspot" footer="Type the admin password to see the Wi-Fi password and a QR code.">
-        <PasswordField
-          label="Admin password"
-          autoComplete="current-password"
-          value={adminPassword}
-          onChange={setAdminPassword}
-        />
-        {revealing.error && (
-          <div className="row">
-            <FormError>{revealing.error}</FormError>
-          </div>
-        )}
-        <div className="row">
-          <Button
-            type="submit"
-            variant="secondary"
-            icon="qr_code"
-            loading={revealing.pending}
-            disabled={adminPassword === ''}
-          >
-            Show password and QR code
-          </Button>
-        </div>
-      </Section>
-    </form>
+    <Section title="Join the hotspot">
+      <ButtonRow
+        leading={{ icon: 'qr_code' }}
+        action={async () => {
+          const [password, qr] = await Promise.all([revealHotspotPassword(), wifiQr('hotspot')]);
+          setRevealed({ password, qr });
+        }}
+        busyLabel="Loading…"
+      >
+        Show password and QR code
+      </ButtonRow>
+    </Section>
   );
 }

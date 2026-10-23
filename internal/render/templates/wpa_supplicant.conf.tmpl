@@ -56,12 +56,20 @@ network={
 	password={{.PasswordHex}}
 {{- end}}
 {{- with .Enterprise}}
-{{- if .CACertFile}}
-	# Only talk to a login server whose certificate is signed by this CA and
-	# whose name is {{.ServerDomain}} or ends in .{{.ServerDomain}}. This stops
-	# a fake network from collecting the password.
-	ca_cert="{{.CACertFile}}"
+{{- if .Probe}}
+	# First connection: only fetch the login server's certificate, without
+	# logging in (the password is never sent). RasBeacon remembers it and
+	# from then on accepts only that certificate, so a fake network can't
+	# collect the password later.
+	ca_cert="{{.CACert}}"
+{{- else if .CACert}}
+	# Only talk to the real login server, so a fake network with the same
+	# name can't collect the password.
+	ca_cert="{{.CACert}}"
+{{- if .ServerDomain}}
+	# Its name must be {{.ServerDomain}} or end in .{{.ServerDomain}}.
 	domain_suffix_match="{{.ServerDomain}}"
+{{- end}}
 {{- else}}
 	# WARNING: the owner turned off checking the login server's certificate.
 {{- end}}

@@ -7,8 +7,10 @@
 # seconds for the first 10 minutes after power-on.
 #
 # Logs normally stay in memory only (no history is kept on the card), so
-# this is opt-in. The log doesn't contain passwords, but it does contain
-# device names and MAC addresses, so delete it when you're done.
+# this is opt-in. RasBeacon keeps passwords out of its logs (plugin
+# passwords too: they reach Podman in a file, not on its command line), but
+# the log does contain device names and MAC addresses, so delete it when
+# you're done.
 
 out=/bootfs/rasbeacon-debug.txt
 

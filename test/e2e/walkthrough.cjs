@@ -4,11 +4,14 @@
 // http://127.0.0.1:8080 (run.sh starts them). It then acts like a person
 // with a phone: finishes setup, checks the status page, changes settings on
 // every page, uses the VPN profiles, the per-device controls and the speed
-// test, logs out and tries a wrong password.
+// test, changes the admin password, logs out and tries the old one.
 //
 // Steps find elements by their role and visible name (like a person or a
 // screen reader would), so a restyled UI keeps passing as long as it keeps
 // the wording listed in docs/ui-contract.md.
+//
+// E2E_VIEWPORT=desktop runs it on a computer-sized screen (the sidebar
+// layout) instead of a phone's (the tab bar); CI runs both.
 
 const { chromium } = require("playwright");
 const fs = require("fs");
@@ -21,6 +24,9 @@ const SCREENSHOT_DIR = process.env.SCREENSHOT_DIR ?? "";
 // Chromium is available for the simulated device's own browser, which the
 // zero-leak login and the speed test need).
 const HOTEL_URL = process.env.RASBEACON_E2E_HOTEL ?? "";
+const DESKTOP = process.env.E2E_VIEWPORT === "desktop";
+// Screenshots of each screen size are kept apart.
+const PREFIX = DESKTOP ? "desktop-" : "phone-";
 
 // A WireGuard file with the WireGuard documentation's example keys.
 const WIREGUARD_CONF = `[Interface]
@@ -41,10 +47,19 @@ async function main() {
   const browser = await chromium.launch(
     process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {},
   );
-  // Phone-sized screen (iPhone 14/15).
-  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  // A phone (iPhone 14/15) or a laptop.
+  const page = await browser.newPage({ viewport: DESKTOP ? { width: 1280, height: 800 } : { width: 390, height: 844 } });
+  console.log(`Screen: ${DESKTOP ? "desktop, 1280 x 800" : "phone, 390 x 844"}`);
   const pageErrors = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
+  // rbweb's Content-Security-Policy must never block the UI's own scripts,
+  // styles or pictures.
+  const blockedByPolicy = (message) => {
+    if (message.type() === "error" && message.text().includes("Content Security Policy")) {
+      pageErrors.push(message.text());
+    }
+  };
+  page.on("console", blockedByPolicy);
 
   const step = async (name, action) => {
     process.stdout.write(`- ${name} ... `);
@@ -52,21 +67,22 @@ async function main() {
       await action();
     } catch (error) {
       if (SCREENSHOT_DIR) {
-        await page.screenshot({ path: `${SCREENSHOT_DIR}/FAILED-${name.replace(/\W+/g, "-")}.png`, fullPage: true });
+        await page.screenshot({ path: `${SCREENSHOT_DIR}/${PREFIX}FAILED-${name.replace(/\W+/g, "-")}.png`, fullPage: true });
       }
       throw error;
     }
     if (SCREENSHOT_DIR) {
-      await page.screenshot({ path: `${SCREENSHOT_DIR}/${name.replace(/\W+/g, "-")}.png`, fullPage: true });
+      await page.screenshot({ path: `${SCREENSHOT_DIR}/${PREFIX}${name.replace(/\W+/g, "-")}.png`, fullPage: true });
     }
     console.log("ok");
   };
 
   const nav = page.getByRole("navigation", { name: "Main navigation" });
   const main = page.getByRole("main");
-  // Opens a page the way a person would: from the tab bar, or through "More".
+  // Opens a page the way a person would: from the sidebar, the tab bar, or
+  // through "More".
   const open = async (name) => {
-    if (ON_MORE_PAGE.has(name)) {
+    if (!DESKTOP && ON_MORE_PAGE.has(name)) {
       await nav.getByRole("link", { name: "More", exact: true }).click();
       await main.getByRole("link", { name, exact: true }).click();
     } else {
@@ -121,15 +137,26 @@ async function main() {
     await page.getByText("Saved. RasBeacon is joining the networks now").waitFor();
   });
 
-  await step("a WPA-Enterprise network (eduroam) needs a CA certificate, then saves", async () => {
+  await step("a WPA-Enterprise network saves without a CA certificate (trusted at the first connection)", async () => {
+    await page.getByRole("button", { name: "Add manually" }).click();
+    const sheet = dialog();
+    await sheet.getByLabel("Network name").fill("Campus Wi-Fi");
+    await sheet.getByLabel("Security").selectOption("enterprise");
+    await sheet.getByLabel("Username", { exact: true }).fill("NetID@example.edu");
+    await sheet.getByLabel("Your password").fill("campus-password");
+    await sheet.getByRole("button", { name: "Add to list" }).click();
+    await saveNetworks();
+    await page.getByText("Trusted at the first connection").waitFor();
+  });
+
+  await step("a WPA-Enterprise network (eduroam) with its CA certificate under Advanced", async () => {
     await page.getByRole("button", { name: "Add manually" }).click();
     const sheet = dialog();
     await sheet.getByLabel("Network name").fill("eduroam");
     await sheet.getByLabel("Security").selectOption("enterprise");
     await sheet.getByLabel("Username", { exact: true }).fill("NetID@example.edu");
     await sheet.getByLabel("Your password").fill("campus-password");
-    await sheet.getByRole("button", { name: "Add to list" }).click();
-    await sheet.getByText("Choose the network's CA certificate file").waitFor();
+    await sheet.getByText("Advanced", { exact: true }).click();
     // A test certificate (fixtures/test-campus-ca.pem; certificate only, no key).
     await sheet.getByLabel(/^CA certificate file/).setInputFiles(__dirname + "/fixtures/test-campus-ca.pem");
     await sheet.getByLabel("Login server name").fill("*.example.edu");
@@ -165,8 +192,7 @@ async function main() {
     await page.getByRole("radio", { name: /wireguard\.conf/ }).waitFor();
   });
 
-  await step("VPN: turning it on protects the devices", async () => {
-    await page.getByRole("switch", { name: "Use the VPN" }).click();
+  await step("VPN: the first profile turns it on and protects the devices", async () => {
     await page.getByRole("switch", { name: "Use the VPN", checked: true }).waitFor();
     await open("Status");
     await page.getByText("Connected: your devices' traffic goes through the VPN.").waitFor();
@@ -218,6 +244,7 @@ async function main() {
       await fetch(HOTEL_URL + "/require-login");
       const phone = await browser.newPage({ viewport: { width: 390, height: 844 } });
       phone.on("pageerror", (error) => pageErrors.push(error.message));
+      phone.on("console", blockedByPolicy);
       await phone.goto(BASE_URL + "/#/portal");
       await phone.getByRole("button", { name: "Check again" }).click();
       await phone.getByRole("button", { name: "Open the login page here" }).click({ timeout: 20000 });
@@ -259,8 +286,11 @@ async function main() {
     await page.getByRole("switch", { name: "Internet access for Ali's phone" }).waitFor();
     await page.getByText("Calls itself").first().waitFor();
     await page.getByLabel("Limit per device").selectOption("2000");
-    await page.getByRole("button", { name: "Save", exact: true }).click();
-    await page.getByText(/only applies while the hotspot is set as a metered connection/).waitFor();
+    const save = page.getByRole("button", { name: "Save", exact: true });
+    await save.click();
+    // Saved (it works without a metered connection now): the Save button goes away.
+    await save.waitFor({ state: "detached" });
+    await page.getByText("When a device uses up its data, its traffic is blocked").waitFor();
   });
 
   await step("HTTPS can be turned on and shows the certificate fingerprint", async () => {
@@ -284,18 +314,37 @@ async function main() {
     await page.getByText("Saved.", { exact: true }).waitFor();
   });
 
-  await step("the current Wi-Fi password and a QR code are shown with the admin password", async () => {
-    await page.getByLabel("Admin password").fill("tangerine-orbit-42");
+  await step("the current Wi-Fi password and a QR code are shown", async () => {
     await page.getByRole("button", { name: "Show password and QR code" }).click();
     // The password setup suggested (four groups of four letters and digits).
     await page.getByText(/^[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}$/).waitFor();
     await page.getByRole("img", { name: /^QR code to join / }).waitFor();
   });
 
+  await step("who can join: the allow list saves and checks its addresses", async () => {
+    await page.getByText("Allowed devices", { exact: true }).click();
+    await page.getByLabel("Only allow these devices").check();
+    await page.getByLabel(/^MAC addresses/).fill("3a:1f:22:aa:bb:cc");
+    const save = page.getByRole("button", { name: "Save", exact: true }).last();
+    await save.click();
+    // Nobody is "this device" on the simulated device, so it saves; a bad address doesn't.
+    await page.getByText("2 devices").or(page.getByText("1 device", { exact: true })).first().waitFor();
+    await page.getByLabel(/^MAC addresses/).fill("not-a-mac");
+    await save.click();
+    await page.getByText(/is not a MAC address/).waitFor();
+    await page.getByLabel("Only allow these devices").uncheck();
+    await page.getByLabel(/^MAC addresses/).fill("");
+    await save.click();
+    await page.getByText("Anyone with the password").waitFor();
+    await page.getByText("Allowed devices", { exact: true }).click(); // closed again
+    // Its Save goes once the closing animation ends; until then the page has two.
+    await page.getByLabel("Only allow these devices").waitFor({ state: "hidden" });
+  });
+
   await step("the metered setting saves and shows on the status page", async () => {
     await page.getByLabel("Metered connection (for example a phone's hotspot or a paid plan)").check();
     await page.getByRole("button", { name: "Save", exact: true }).click();
-    await page.getByText("Saved.", { exact: true }).waitFor();
+    await page.getByText("Saved.", { exact: true }).first().waitFor();
     await open("Status");
     await page.getByText(/Metered connection\s*On/).waitFor();
   });
@@ -330,7 +379,6 @@ async function main() {
   await step("system: a backup downloads, and restores with its password", async () => {
     await open("System");
     await page.getByRole("button", { name: "Back up settings" }).click();
-    await dialog().getByLabel("Admin password").fill("tangerine-orbit-42");
     await dialog().getByLabel("Password for the backup").fill("backup-pass-42");
     const downloading = page.waitForEvent("download");
     await dialog().getByRole("button", { name: "Back up" }).click();
@@ -342,7 +390,6 @@ async function main() {
     await page.getByRole("button", { name: "Restore from a backup" }).click();
     await dialog().getByLabel("Backup file (.rbbackup)").setInputFiles(file);
     await dialog().getByLabel("The backup's password").fill("not-the-password");
-    await dialog().getByLabel("Admin password (this RasBeacon's)").fill("tangerine-orbit-42");
     await dialog().getByRole("button", { name: "Restore" }).click();
     await dialog().getByText("The password is wrong, or the backup file is damaged.").waitFor();
     await dialog().getByLabel("The backup's password").fill("backup-pass-42");
@@ -352,27 +399,50 @@ async function main() {
     fs.unlinkSync(file);
   });
 
-  await step("system: reboot and factory reset ask first", async () => {
+  await step("system: renaming checks the name while it is typed", async () => {
     await open("System");
+    await page.getByRole("button", { name: "Rename RasBeacon" }).click();
+    await dialog().getByRole("textbox", { name: "Name" }).fill("my pi");
+    await dialog().getByText("Use only lowercase letters, digits and hyphens.").waitFor();
+    await dialog().getByRole("button", { name: "Save", disabled: true }).waitFor();
+    await dialog().getByRole("button", { name: "Cancel" }).click();
+  });
+
+  await step("system: reboot, shut down and factory reset ask first", async () => {
     await page.getByRole("button", { name: "Reboot" }).click();
     await dialog().getByRole("button", { name: "Reboot" }).waitFor();
+    await dialog().getByRole("button", { name: "Cancel" }).click();
+    await page.getByRole("button", { name: "Shut down" }).click();
+    await dialog().getByText("Shut down RasBeacon?").waitFor();
     await dialog().getByRole("button", { name: "Cancel" }).click();
     await page.getByText("Factory reset").click();
     await page.getByRole("button", { name: "Erase everything" }).waitFor();
   });
 
-  await step("log out, then a wrong password is refused", async () => {
+  await step("system: the admin password changes, given the current one", async () => {
+    await page.getByRole("button", { name: "Change admin password" }).click();
+    await dialog().getByLabel("Current password").fill("not-the-password");
+    await dialog().getByLabel("New password").fill("plum-harbor-sunrise-7");
+    await dialog().getByLabel("Type it again").fill("plum-harbor-sunrise-7");
+    await dialog().getByRole("button", { name: "Change" }).click();
+    await dialog().getByText("Wrong password.").waitFor();
+    await dialog().getByLabel("Current password").fill("tangerine-orbit-42");
+    await dialog().getByRole("button", { name: "Change" }).click();
+    await page.getByText("Admin password changed.").waitFor();
+  });
+
+  await step("log out, then the old password is refused", async () => {
     await page.getByRole("button", { name: "Log out" }).click();
     // Wait for the login screen: the System page also has an "Admin
     // password" box (for factory reset), which must not be the one we fill.
     await page.getByText("Forgot the password?").waitFor();
-    await page.getByLabel("Admin password").fill("wrong-password");
+    await page.getByLabel("Admin password").fill("tangerine-orbit-42");
     await page.getByRole("button", { name: "Log in" }).click();
     await page.getByText("Wrong password.").waitFor();
   });
 
-  await step("the right password logs in, staying logged in", async () => {
-    await page.getByLabel("Admin password").fill("tangerine-orbit-42");
+  await step("the new password logs in, staying logged in", async () => {
+    await page.getByLabel("Admin password").fill("plum-harbor-sunrise-7");
     await page.getByLabel("Stay logged in").check();
     await page.getByRole("button", { name: "Log in" }).click();
     await page.getByRole("heading", { level: 1, name: "Status" }).waitFor();

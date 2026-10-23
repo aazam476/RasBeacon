@@ -32,7 +32,7 @@ import (
 var ErrWrongMode = errors.New("this action is not available in the device's current mode")
 
 // ErrWrongPassword means the admin password given with a request was wrong.
-var ErrWrongPassword = errors.New("wrong admin password")
+var ErrWrongPassword = errors.New("Wrong password.")
 
 // SetupState returns the public information the UI needs before login.
 func (a *Agent) SetupState() api.SetupState {
@@ -45,12 +45,14 @@ func (a *Agent) SetupState() api.SetupState {
 		SetupNetworkSecured: a.setupSecured,
 		DeviceShortID:       a.identity.ShortID,
 		LANAddress:          a.lan.Address(),
+		Hostname:            a.cfg.Name() + ".lan",
 		PortalNotice:        a.noticeActive(),
 	}
 	if a.mode == api.ModeSetup {
 		state.SuggestedHotspotSSID = a.cfg.Hotspot.SSID
 		state.SuggestedHotspotPassword = a.identity.SuggestedHotspotPassword
 		state.SetupClosesInSeconds = int(a.setupDeadline.Sub(a.now()).Seconds())
+		state.No5GHz = !a.hotspotHas5GHz()
 	}
 	return state
 }
@@ -78,6 +80,9 @@ func (a *Agent) Claim(req api.ClaimRequest) (api.ClaimResponse, error) {
 	newCfg.Hotspot.Band = req.HotspotBand
 	newCfg.Guest.SSID = config.GuestSSIDFor(req.HotspotSSID)
 	if err := newCfg.Hotspot.Validate(); err != nil {
+		return api.ClaimResponse{}, err
+	}
+	if err := a.checkHotspotForRadio(newCfg.Hotspot); err != nil {
 		return api.ClaimResponse{}, err
 	}
 
@@ -129,6 +134,20 @@ func (a *Agent) finishClaim() {
 	if err := a.startNormalMode(); err != nil {
 		slog.Error("could not start the hotspot after setup", "error", err)
 		a.warnings = append(a.warnings, "The hotspot failed to start after setup: "+err.Error())
+		return
+	}
+	a.background(a.startPlugins)
+	// If hostapd can't run the chosen band, the owner would have neither
+	// the setup network nor the new hotspot. Fall back to what every radio
+	// can run: 2.4 GHz on its default channel.
+	if !a.hotspotStayedUp() && a.cfg.Hotspot.Band != config.Band2GHz {
+		safe := a.cfg.Clone()
+		safe.Hotspot.Band = config.Band2GHz
+		safe.Hotspot.Channel = 0
+		if err := a.restoreHotspot(safe, a.secrets); err != nil {
+			slog.Error("could not start the hotspot on 2.4 GHz", "error", err)
+		}
+		a.warnings = append(a.warnings, "The hotspot didn't start on 5 GHz, so it runs on 2.4 GHz.")
 	}
 }
 
@@ -156,12 +175,47 @@ func (a *Agent) VerifyAdminPassword(password string) bool {
 	return ok
 }
 
+// ChangeAdminPassword replaces the admin password, if currentPassword is
+// the one in use. Every "Stay logged in" ends, so other devices need the
+// new password (rbweb also ends their sessions).
+func (a *Agent) ChangeAdminPassword(req api.AdminPasswordRequest) error {
+	if err := auth.CheckAdminPasswordStrength(req.NewPassword); err != nil {
+		return &config.ValidationError{Field: "newPassword", Message: err.Error()}
+	}
+	if !a.VerifyAdminPassword(req.CurrentPassword) {
+		return ErrWrongPassword
+	}
+	if req.NewPassword == req.CurrentPassword {
+		return &config.ValidationError{Field: "newPassword", Message: "Choose a password different from the current one."}
+	}
+	hash, err := auth.HashPassword(req.NewPassword)
+	if err != nil {
+		return err
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	newSecrets := a.secrets.Clone()
+	newSecrets.AdminPasswordHash = hash
+	if err := config.WriteJSON(a.paths.SecretsFile(), newSecrets, 0o600); err != nil {
+		return err
+	}
+	a.secrets = newSecrets
+	if err := a.forgetAllLogins(); err != nil {
+		slog.Warn("could not forget the remembered logins", "error", err)
+	}
+	slog.Info("admin password changed")
+	return nil
+}
+
 // HotspotSettings returns the current hotspot settings (without password).
 func (a *Agent) HotspotSettings() api.HotspotSettings {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	h := a.cfg.Hotspot
-	return api.HotspotSettings{SSID: h.SSID, Band: h.Band, Channel: h.Channel, Security: h.Security, Country: h.Country, Metered: h.Metered}
+	return api.HotspotSettings{
+		SSID: h.SSID, Band: h.Band, Channel: h.Channel, Security: h.Security, Country: h.Country, Metered: h.Metered,
+		No5GHz: !a.hotspotHas5GHz(),
+	}
 }
 
 // UpdateHotspotSettings saves new hotspot settings and restarts the hotspot.
@@ -190,21 +244,44 @@ func (a *Agent) UpdateHotspotSettings(req api.HotspotSettings) error {
 		newSecrets.HotspotPassword = req.Password
 	}
 
+	// The guest network must stay a different network: another name, and
+	// another password, or guests could join yours. Checked before anything
+	// is saved, so a refused change never takes effect at the next restart.
+	if newCfg.Guest.Enabled && newCfg.Guest.SSID == newCfg.Hotspot.SSID {
+		return &config.ValidationError{Field: "hotspot.ssid", Message: "Your guest network already uses this name."}
+	}
+	if newSecrets.HotspotPassword == newSecrets.GuestPassword {
+		return &config.ValidationError{Field: "password", Message: "Your guest network already uses this password."}
+	}
+
+	// The radio must be able to run the new settings. The channels it
+	// may use depend on the country, so a new country is set first, and
+	// set back if the settings are refused.
+	countryChanged := newCfg.Hotspot.Country != a.cfg.Hotspot.Country
+	if countryChanged {
+		if err := system.SetRegulatoryCountry(a.runner, newCfg.Hotspot.Country); err != nil {
+			slog.Warn("could not set Wi-Fi country", "error", err)
+		}
+	}
+	if err := a.checkHotspotForRadio(newCfg.Hotspot); err != nil {
+		if countryChanged {
+			_ = system.SetRegulatoryCountry(a.runner, a.cfg.Hotspot.Country)
+		}
+		return err
+	}
+
 	if err := config.WriteJSON(a.paths.SecretsFile(), newSecrets, 0o600); err != nil {
 		return err
 	}
 	if err := config.WriteJSON(a.paths.ConfigFile(), newCfg, 0o644); err != nil {
 		return err
 	}
-	if newCfg.Guest.Enabled && newCfg.Guest.SSID == newCfg.Hotspot.SSID {
-		return &config.ValidationError{Field: "hotspot.ssid", Message: "Your guest network already uses this name."}
-	}
-	countryChanged := newCfg.Hotspot.Country != a.cfg.Hotspot.Country
 	// Only the metered hint changed? Then the hotspot can keep running:
 	// DHCP alone carries the hint (devices see it when they reconnect).
 	onlyMetered := req.Password == "" && newCfg.Hotspot.SSID == a.cfg.Hotspot.SSID &&
 		newCfg.Hotspot.Band == a.cfg.Hotspot.Band && newCfg.Hotspot.Channel == a.cfg.Hotspot.Channel &&
 		newCfg.Hotspot.Security == a.cfg.Hotspot.Security && !countryChanged
+	oldCfg, oldSecrets := a.cfg, a.secrets
 	a.cfg = newCfg
 	a.secrets = newSecrets
 	if onlyMetered {
@@ -212,20 +289,25 @@ func (a *Agent) UpdateHotspotSettings(req api.HotspotSettings) error {
 		return a.applyDHCP(false)
 	}
 
-	if countryChanged {
-		if err := system.SetRegulatoryCountry(a.runner, newCfg.Hotspot.Country); err != nil {
-			slog.Warn("could not set Wi-Fi country", "error", err)
-		}
+	if err := a.startNormalMode(); err != nil {
+		return err
 	}
-	return a.startNormalMode()
+	// hostapd may still refuse the settings (a radio's own limits that iw
+	// doesn't list). Then the previous ones go back, so the owner keeps
+	// the hotspot, and this page.
+	if !a.hotspotStayedUp() {
+		if err := a.restoreHotspot(oldCfg, oldSecrets); err != nil {
+			return err
+		}
+		return errHotspotDidntStart
+	}
+	return nil
 }
 
-// RevealHotspotPassword returns the hotspot password if adminPassword is
-// correct. The password is only shown on request, never in normal responses.
-func (a *Agent) RevealHotspotPassword(adminPassword string) (string, error) {
-	if !a.VerifyAdminPassword(adminPassword) {
-		return "", ErrWrongPassword
-	}
+// RevealHotspotPassword returns the hotspot password. It is only shown on
+// request, never in normal responses; being logged in is enough to ask
+// (whoever is logged in typed the admin password already).
+func (a *Agent) RevealHotspotPassword() (string, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.secrets.HotspotPassword, nil
@@ -319,6 +401,13 @@ func (a *Agent) FactoryReset(adminPassword string) error {
 func (a *Agent) Reboot() {
 	slog.Info("reboot requested from the web UI")
 	a.afterFunc(switchDelay, func() { _, _ = a.runner.Run("systemctl", "reboot") })
+}
+
+// Shutdown turns the device off shortly after answering the request. It
+// starts again when its power is unplugged and plugged back in.
+func (a *Agent) Shutdown() {
+	slog.Info("shutdown requested from the web UI")
+	a.afterFunc(switchDelay, func() { _, _ = a.runner.Run("systemctl", "poweroff") })
 }
 
 // ResetHold is how long the reset button must be held for a factory reset.

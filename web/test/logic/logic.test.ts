@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { FieldErrors } from '../errors';
-import type { NewNetworkForm, SavedNetwork, SetupState, VPNDetailsForm } from '../types';
-import { ApiError } from './api';
+import { FALLBACK_LOGIN_URL, loginPageAddress } from '@/data/constants';
+import { FieldErrors } from '@/data/errors';
+import type { NewNetworkForm, SavedNetwork, SetupState, VPNDetailsForm } from '@/data/types';
+import { ApiError } from '@/data/real/api';
 import {
   certificatesToUpload,
   checkAdminPassword,
+  checkAdminPasswordForm,
   checkGuestForm,
   checkNewNetwork,
   checkSetupForm,
@@ -19,7 +21,7 @@ import {
   splitList,
   toSavedNetwork,
   vpnDetailsRequest,
-} from './logic';
+} from '@/data/real/logic';
 
 const normal: SetupState = {
   mode: 'normal',
@@ -112,9 +114,9 @@ describe('adding a network', () => {
     expect(checkNewNetwork({ ...emptyForm, ssid: 'Cafe', security: 'open' }, [])).toEqual({});
     expect(checkNewNetwork({ ...emptyForm, ssid: 'Home', security: 'open' }, [home]).ssid).toMatch(/already/);
   });
-  it('needs the CA certificate and server name for Enterprise, unless the check is off', () => {
+  it('takes Enterprise networks without a CA certificate or server name, but checks a name given', () => {
     const eduroam = { ...emptyForm, ssid: 'eduroam', security: 'enterprise' as const, identity: 'me', password: 'pw' };
-    expect(Object.keys(checkNewNetwork(eduroam, [])).sort()).toEqual(['caCert', 'serverName']);
+    expect(checkNewNetwork(eduroam, [])).toEqual({});
     expect(checkNewNetwork({ ...eduroam, serverName: 'not a name!' }, []).serverName).toMatch(/radius\.example/);
     expect(checkNewNetwork({ ...eduroam, allowNoCertificateCheck: true }, [])).toEqual({});
     expect(
@@ -219,5 +221,42 @@ describe('refusals', () => {
     const error = screenError(new ApiError(403, 'Wrong password.', 'password'));
     expect(error).not.toBeInstanceOf(FieldErrors);
     expect(error.message).toBe('Wrong password.');
+  });
+});
+
+describe('checkAdminPasswordForm', () => {
+  const form = {
+    currentPassword: 'tangerine-orbit-42',
+    newPassword: 'plum-harbor-sunrise-7',
+    newPasswordConfirm: 'plum-harbor-sunrise-7',
+  };
+
+  it('accepts a good new password typed twice', () => {
+    expect(checkAdminPasswordForm(form)).toEqual({});
+  });
+
+  it('names every problem by its field', () => {
+    expect(checkAdminPasswordForm({ currentPassword: '', newPassword: 'short', newPasswordConfirm: 'other' })).toEqual({
+      currentPassword: 'Enter the current password.',
+      newPassword: 'Must be at least 10 characters long.',
+      newPasswordConfirm: "The two passwords don't match.",
+    });
+  });
+
+  it('refuses a new password with the device name in it', () => {
+    const named = { ...form, newPassword: 'my-rasbeacon-pass', newPasswordConfirm: 'my-rasbeacon-pass' };
+    expect(checkAdminPasswordForm(named).newPassword).toBe('Must not contain the device name.');
+  });
+});
+
+describe('loginPageAddress', () => {
+  it('keeps a web address', () => {
+    expect(loginPageAddress('http://hotel.example/login')).toBe('http://hotel.example/login');
+    expect(loginPageAddress('HTTPS://hotel.example/')).toBe('HTTPS://hotel.example/');
+  });
+  it('replaces anything that could run as code, or nothing', () => {
+    for (const bad of ['javascript:alert(1)', ' javascript:alert(1)', 'data:text/html,hi', '/login', '', undefined]) {
+      expect(loginPageAddress(bad)).toBe(FALLBACK_LOGIN_URL);
+    }
   });
 });

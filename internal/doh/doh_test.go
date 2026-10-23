@@ -88,7 +88,7 @@ func TestExchange_AsksOverHTTPSAndKeepsTheID(t *testing.T) {
 	}
 }
 
-func TestExchange_MovesOnAndRemembersTheServerThatAnswered(t *testing.T) {
+func TestExchange_MovesOnAndSkipsAFailedServerForAWhile(t *testing.T) {
 	var deadAsked, goodAsked atomic.Int32
 	dead := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		deadAsked.Add(1)
@@ -107,7 +107,14 @@ func TestExchange_MovesOnAndRemembersTheServerThatAnswered(t *testing.T) {
 		}
 	}
 	if deadAsked.Load() != 1 || goodAsked.Load() != 3 {
-		t.Errorf("dead asked %d times, good %d: the server that answered should be asked first", deadAsked.Load(), goodAsked.Load())
+		t.Errorf("dead asked %d times, good %d: a server that just failed should be skipped", deadAsked.Load(), goodAsked.Load())
+	}
+	// After the pause, the first server is asked first again.
+	later := time.Now().Add(failurePause + time.Second)
+	f.now = func() time.Time { return later }
+	f.Exchange(context.Background(), question(1, "example.org", 0))
+	if deadAsked.Load() != 2 {
+		t.Errorf("dead asked %d times: the list should start from the first server again", deadAsked.Load())
 	}
 }
 

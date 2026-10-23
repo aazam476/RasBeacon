@@ -14,7 +14,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net"
 	"net/netip"
 	"os"
 	"slices"
@@ -34,13 +33,14 @@ const hostapdControlDir = "/run/hostapd"
 // ErrNotConnected means the device isn't connected (any more).
 var ErrNotConnected = errors.New("This device isn't connected.")
 
-// normalizeMAC checks a MAC address and returns it in lower case.
+// normalizeMAC checks a device's MAC address with config.NormalizeMAC (the
+// one rule for them), naming the "mac" field when it isn't one.
 func normalizeMAC(mac string) (string, error) {
-	hw, err := net.ParseMAC(mac)
-	if err != nil || len(hw) != 6 {
+	normal, err := config.NormalizeMAC(mac)
+	if err != nil {
 		return "", &config.ValidationError{Field: "mac", Message: "Not a device address."}
 	}
-	return hw.String(), nil
+	return normal, nil
 }
 
 // pausedMACs lists the paused devices for the firewall.
@@ -57,6 +57,52 @@ func (a *Agent) pausedMACs() []string {
 	}
 	slices.Sort(macs)
 	return macs
+}
+
+// pausedIPv4 lists the paused devices' addresses on the hotspot, from the
+// DHCP leases, so the firewall drops traffic to them too.
+func (a *Agent) pausedIPv4() []netip.Addr {
+	paused := a.pausedMACs()
+	if len(paused) == 0 {
+		return nil
+	}
+	leases, _ := os.ReadFile(a.paths.DnsmasqLeases())
+	var addrs []netip.Addr
+	for _, lease := range stations.ParseLeases(string(leases)) {
+		mac, err := normalizeMAC(lease.MAC)
+		if err != nil || !slices.Contains(paused, mac) {
+			continue
+		}
+		if addr, err := netip.ParseAddr(lease.IP); err == nil && addr.Is4() && !slices.Contains(addrs, addr) {
+			addrs = append(addrs, addr)
+		}
+	}
+	return addrs
+}
+
+// pausedIPv6 lists the IPv6 addresses the paused devices use, from the
+// kernel's neighbor table: devices choose their own IPv6 addresses, so
+// there is no lease to read. A device is in the table under each address it
+// used lately, which are the ones answers could still reach it on.
+func (a *Agent) pausedIPv6() []netip.Addr {
+	paused := a.pausedMACs()
+	if len(paused) == 0 {
+		return nil
+	}
+	out, err := a.runner.Run("ip", "-json", "-6", "neigh", "show")
+	if err != nil {
+		return nil
+	}
+	neighbors, _ := stations.ParseNeighbors(out)
+	var addrs []netip.Addr
+	for _, n := range neighbors {
+		addr, err := netip.ParseAddr(n.IP)
+		if err != nil || !addr.Is6() || addr.IsLinkLocalUnicast() || !slices.Contains(paused, n.MAC) || slices.Contains(addrs, addr) {
+			continue // link-local addresses never cross RasBeacon
+		}
+		addrs = append(addrs, addr)
+	}
+	return addrs
 }
 
 // SetClientInternetAccess pauses (allowed false) or allows a device's

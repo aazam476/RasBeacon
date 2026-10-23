@@ -72,3 +72,35 @@ func TestSpeedtest_RunsOnlyWhenAskedAndKeepsTheResult(t *testing.T) {
 		t.Errorf("got %v", err)
 	}
 }
+
+// The status says a test is running for as long as it runs, so a page
+// opened (or opened again) meanwhile shows it instead of the button.
+func TestSpeedtest_StatusSaysItIsRunningUntilItEnds(t *testing.T) {
+	e := newClaimedEnv(t, false)
+	e.agent.SetBrowser("/bin/sh", true)
+	e.fakeUplink("wlan0", "192.168.4.20", "24", false)
+	e.check()
+	started, finish := make(chan struct{}), make(chan struct{})
+	e.agent.speedtest.run = func(context.Context, browser.Options, string) (speedtest.Result, error) {
+		close(started)
+		<-finish
+		return speedtest.Result{DownloadMbps: 50}, nil
+	}
+
+	if e.agent.Status().Speedtest.Running {
+		t.Fatal("running before any test")
+	}
+	done := make(chan error)
+	go func() { done <- e.agent.RunSpeedtest() }()
+	<-started
+	if s := e.agent.Status().Speedtest; !s.Running || s.Last != nil {
+		t.Errorf("while it runs: %+v", s)
+	}
+	close(finish)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if s := e.agent.Status().Speedtest; s.Running || s.Last == nil {
+		t.Errorf("after it ended: %+v", s)
+	}
+}

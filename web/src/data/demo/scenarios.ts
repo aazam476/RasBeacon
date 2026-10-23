@@ -202,6 +202,19 @@ export const SCENARIOS: DemoScenario[] = [
     },
   },
   {
+    id: 'vpn-blocked',
+    group: 'Status',
+    title: 'VPN off, kill switch on (no internet)',
+    route: '/',
+    apply: (d) => {
+      d.router.status.vpn = { ...d.router.status.vpn, enabled: false, state: 'blocked' };
+      d.router.vpnSettings.enabled = false;
+      d.router.status.warnings = [
+        'Your devices have no internet: the kill switch is on and the VPN is off. Turn on the VPN, or turn off the kill switch.',
+      ];
+    },
+  },
+  {
     id: 'vpn-connecting',
     group: 'Status',
     title: 'VPN connecting',
@@ -216,8 +229,9 @@ export const SCENARIOS: DemoScenario[] = [
     title: 'VPN off, metered, public IPv6',
     route: '/',
     apply: (d) => {
-      d.router.status.vpn = { ...d.router.status.vpn, enabled: false, state: 'off' };
+      d.router.status.vpn = { ...d.router.status.vpn, enabled: false, killSwitch: false, state: 'off' };
       d.router.vpnSettings.enabled = false;
+      d.router.vpnSettings.killSwitch = false;
       d.router.status.hotspot.metered = true;
       d.router.hotspotSettings.metered = true;
       d.router.status.uplink.ipv6 = true;
@@ -494,6 +508,18 @@ export const SCENARIOS: DemoScenario[] = [
   // Hotspot and guests
   { id: 'hotspot', group: 'Hotspot and guests', title: 'Hotspot settings', route: '/hotspot' },
   {
+    id: 'hotspot-allow-list',
+    group: 'Hotspot and guests',
+    title: 'Only allowed devices, at most 10',
+    route: '/hotspot',
+    apply: (d) =>
+      void (d.router.accessSettings = {
+        allowListOn: true,
+        allowed: ['f4:d4:88:62:3b:01', '3c:06:30:19:9e:11', '98:b6:e9:14:42:07'],
+        maxDevices: 10,
+      }),
+  },
+  {
     id: 'guests-off',
     group: 'Hotspot and guests',
     title: 'Guest network off',
@@ -572,9 +598,23 @@ export const SCENARIOS: DemoScenario[] = [
     route: '/system',
     apply: (d) => {
       Object.assign(d.router.status.update, {
-        checkOnline: true,
+        checkHours: 24,
         latestVersion: 'v1.1.0',
         latestUrl: 'https://github.com/rasbeacon/rasbeacon/releases/tag/v1.1.0',
+      });
+    },
+  },
+  {
+    id: 'update-step',
+    group: 'System',
+    title: 'New version, reached in two steps',
+    route: '/system',
+    apply: (d) => {
+      Object.assign(d.router.status.update, {
+        checkHours: 24,
+        latestVersion: 'v1.1.0',
+        latestUrl: 'https://github.com/rasbeacon/rasbeacon/releases/tag/v1.1.0',
+        newerVersion: 'v1.2.0',
       });
     },
   },
@@ -585,7 +625,7 @@ export const SCENARIOS: DemoScenario[] = [
     route: '/system',
     apply: (d) => {
       Object.assign(d.router.status.update, {
-        checkOnline: true,
+        checkHours: 24,
         latestVersion: 'v2.0.0',
         latestUrl: 'https://github.com/rasbeacon/rasbeacon/releases/tag/v2.0.0',
         reflash: {
@@ -595,6 +635,18 @@ export const SCENARIOS: DemoScenario[] = [
         },
       });
     },
+  },
+  {
+    id: 'update-restart-pending',
+    group: 'System',
+    title: 'Update waits for its restart',
+    route: '/system',
+    apply: (d) =>
+      void Object.assign(d.router.status.update, {
+        restartPending: true,
+        message:
+          "Update v1.1.0 is installed, but RasBeacon couldn't restart into it: systemctl reboot: exit status 1: Too many arguments.",
+      }),
   },
   {
     id: 'update-installing',

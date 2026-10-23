@@ -3,6 +3,8 @@ import type {
   PluginCatalogEntry,
   PluginChoices,
   PluginDrive,
+  PluginKeptData,
+  PluginLogLine,
   PluginPermission,
   PluginPreview,
   PluginSetting,
@@ -117,7 +119,7 @@ export const PLUGIN_DEFINITIONS: PluginDefinition[] = [
     icon: PLUGIN_ICONS.adguard,
     // The README files are the real plugins' (Markdown, wrapped as the files are).
     readme:
-      "AdGuard Home answers your devices' DNS questions and blocks the ones for ads,\ntrackers and malware. It asks **Quad9** over DNS-over-HTTPS for everything\nelse, through the VPN when it is on.\n\n**After installing:** on RasBeacon's Internet page, set the DNS servers to\nthe address shown under *Next steps*, and turn on **Also use while the VPN is\non**. Guests' lookups are filtered too, but only your devices can open\nAdGuard Home's web interface.\n\nIn AdGuard Home all questions come from RasBeacon (it asks on your devices'\nbehalf), so its per-device lists show one client.\n\nAdGuard Home is made by AdGuard (GPL-3.0); this plugin runs their official\nimage, pinned to one version.",
+      "AdGuard Home answers your devices' DNS questions and blocks the ones for ads,\ntrackers and malware. It asks **Quad9** over DNS-over-HTTPS for everything\nelse, through the VPN when it is on.\n\n**After installing:** on RasBeacon's Internet page, set the DNS servers to\nthe address shown under *Next steps*, and turn on **Use these servers while the\nVPN is on**. Guests' lookups are filtered too, but only your devices can open\nAdGuard Home's web interface.\n\nIn AdGuard Home all questions come from RasBeacon (it asks on your devices'\nbehalf), so its per-device lists show one client.\n\nAdGuard Home is made by AdGuard (GPL-3.0); this plugin runs their official\nimage, pinned to one version.",
     signed: true,
     keyId: '7F3A 9C2E 4B1D 7162',
     permissions: ['internet'],
@@ -135,7 +137,7 @@ export const PLUGIN_DEFINITIONS: PluginDefinition[] = [
     ],
     usesDrive: false,
     afterInstall:
-      'Set the DNS servers on the Internet page to {address}, and turn on "Also use while the VPN is on". Then open AdGuard Home to choose its block lists.',
+      'Set the DNS servers on the Internet page to {address}, and turn on "Use these servers while the VPN is on". Then open AdGuard Home to choose its block lists.',
     metricLabels: ['Queries today', 'Blocked', 'Average answer', 'Rules'],
     memoryMb: 256,
     cpus: 0.5,
@@ -358,25 +360,39 @@ export function createMockPlugins(): PluginsState {
 /** The catalog entries for the installed plugins and the board. */
 export function catalogEntries(state: PluginsState): PluginCatalogEntry[] {
   return PLUGIN_DEFINITIONS.filter((definition) => state.sources.some((s) => s.source === definition.source)).map(
-    (definition) => ({
-      source: definition.source,
-      file: definition.file,
-      id: definition.id,
-      name: definition.name,
-      version: definition.version,
-      description: definition.description,
-      permissions: definition.permissions,
-      size: definition.size,
-      downloadSize: definition.downloadSize,
-      icon: definition.icon,
-      installedVersion: state.plugins.find((p) => p.id === definition.id)?.version,
-      runsHere: definition.boards.length === 0 || definition.boards.includes(state.board),
-    }),
+    (definition) => {
+      const installedVersion = state.plugins.find((p) => p.id === definition.id)?.version;
+      return {
+        source: definition.source,
+        file: definition.file,
+        id: definition.id,
+        name: definition.name,
+        version: definition.version,
+        description: definition.description,
+        permissions: definition.permissions,
+        size: definition.size,
+        downloadSize: definition.downloadSize,
+        icon: definition.icon,
+        installedVersion,
+        // The demo's catalog versions are never older than the installed ones, so a different
+        // version is a newer one (the router compares them properly).
+        updateAvailable: installedVersion !== undefined && installedVersion !== definition.version,
+        runsHere: definition.boards.length === 0 || definition.boards.includes(state.board),
+      };
+    },
   );
 }
 
-/** The install sheet's contents for a plugin (an update when it is installed). */
-export function previewOf(definition: PluginDefinition, state: PluginsState, stagingId: string): PluginPreview {
+/**
+ * The install sheet's contents for a plugin (an update when it is installed). `kept` is data kept
+ * from an earlier install of it that the sheet asks about.
+ */
+export function previewOf(
+  definition: PluginDefinition,
+  state: PluginsState,
+  stagingId: string,
+  kept?: PluginKeptData,
+): PluginPreview {
   const installed = state.plugins.find((p) => p.id === definition.id);
   const taken = new Set(
     state.plugins.filter((p) => p.id !== definition.id).flatMap((p) => p.ports.map((port) => port.host)),
@@ -394,6 +410,7 @@ export function previewOf(definition: PluginDefinition, state: PluginsState, sta
       : [];
   return {
     stagingId,
+    keptData: installed ? undefined : kept,
     id: definition.id,
     name: definition.name,
     version: definition.version,
@@ -429,12 +446,12 @@ export const DEMO_DRIVES: PluginDrive[] = [
   { uuid: '0d8e5b2a-4f3c-4c1e-9d55-81b0c6f2e9a7', label: '', fsType: 'ext4', size: 500_107_862_016 },
 ];
 
-export const DEMO_LOG = [
-  '08:12:03 [info] AdGuard Home, version v0.107.57',
-  '08:12:03 [info] home: this is the first launch of AdGuard Home',
-  '08:12:04 [info] dnsproxy: starting dns proxy server',
-  '08:12:04 [info] Upstream 0: https://dns.quad9.net:443/dns-query',
-  '08:12:04 [info] dnsproxy: entering listener loop proto=udp addr=0.0.0.0:53',
-  '08:12:05 [info] go to http://127.0.0.1:3000',
-  '08:14:41 [info] filtering: updated filter 1: 98213 rules',
+export const DEMO_LOG: PluginLogLine[] = [
+  { time: '2026-10-19T08:12:03Z', text: '[info] AdGuard Home, version v0.107.57' },
+  { time: '2026-10-19T08:12:03Z', text: '[info] home: this is the first launch of AdGuard Home' },
+  { time: '2026-10-19T08:12:04Z', text: '[info] dnsproxy: starting dns proxy server' },
+  { time: '2026-10-19T08:12:04Z', text: '[info] Upstream 0: https://dns.quad9.net:443/dns-query' },
+  { time: '2026-10-19T08:12:04Z', text: '[info] dnsproxy: entering listener loop proto=udp addr=0.0.0.0:53' },
+  { time: '2026-10-19T08:12:05Z', text: '[info] go to http://127.0.0.1:3000' },
+  { time: '2026-10-19T08:14:41Z', text: '[info] filtering: updated filter 1: 98213 rules' },
 ];

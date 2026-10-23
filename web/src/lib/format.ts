@@ -82,6 +82,11 @@ export function formatAgo(seconds: number): string {
   return seconds < 5 ? 'just now' : `${formatDuration(seconds)} ago`;
 }
 
+/** An RFC 3339 time as the viewer's own clock time: "08:12:03" (or "8:12:03 AM", by locale). */
+export function formatClockTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
 /** Time left on a countdown as a clock: "8:32", "0:05". */
 export function formatCountdown(totalSeconds: number): string {
   const seconds = Math.max(0, Math.ceil(totalSeconds));

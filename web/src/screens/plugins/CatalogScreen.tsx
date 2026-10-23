@@ -6,7 +6,7 @@ import { formatBytes } from '@/lib/format';
 import { usePageTitle } from '@/shell/navigation';
 import { ActivityIndicator, Button, ButtonRow, FormError, IconButton, Notice, Row, Section, TextField } from '@/ui';
 import { InstallSheet } from './InstallSheet';
-import { errorText, isNewerVersion } from './pluginDisplay';
+import { errorText } from './pluginDisplay';
 
 /** "8 Oct, 14:05": when the catalog was last checked. */
 function checkedLabel(iso: string | undefined): string {
@@ -106,7 +106,7 @@ function CatalogRow({ entry }: { entry: PluginCatalogEntry }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const installed = entry.installedVersion !== undefined;
-  const newer = installed && entry.version !== undefined && isNewerVersion(entry.version, entry.installedVersion ?? '');
+  const newer = installed && entry.updateAvailable === true;
 
   async function get() {
     setBusy(true);
@@ -184,7 +184,8 @@ function SourcesSection() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const sources = plugins.data?.sources ?? [];
-  const extra = sources.filter((s) => !s.builtIn).map((s) => s.source);
+  // Every source, the built-in one too: removing it is allowed, and typing its name adds it back.
+  const listed = sources.map((s) => s.source);
 
   async function save(next: string[]) {
     setSaving(true);
@@ -211,14 +212,12 @@ function SourcesSection() {
           title={<span className="wrap-anywhere">{source.source}</span>}
           value={source.builtIn ? 'Built in' : undefined}
           trailing={
-            source.builtIn ? undefined : (
-              <IconButton
-                icon="delete"
-                ariaLabel={`Remove ${source.source}`}
-                disabled={saving}
-                onClick={() => void save(extra.filter((s) => s !== source.source))}
-              />
-            )
+            <IconButton
+              icon="delete"
+              ariaLabel={`Remove ${source.source}`}
+              disabled={saving}
+              onClick={() => void save(listed.filter((s) => s !== source.source))}
+            />
           }
         />
       ))}
@@ -227,7 +226,7 @@ function SourcesSection() {
         noValidate
         onSubmit={(event) => {
           event.preventDefault();
-          if (adding.trim()) void save([...extra, adding.trim()]);
+          if (adding.trim()) void save([...listed, adding.trim()]);
         }}
       >
         <TextField

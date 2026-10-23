@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router';
-import { FALLBACK_LOGIN_URL } from '../constants';
+import { loginPageAddress } from '../constants';
 import {
   DeviceContext,
+  type AppPhase,
   type DataKey,
   type Device,
   type DeviceActions,
@@ -21,6 +22,8 @@ import type {
   SetupState,
   SSHSettings,
   SwapSettings,
+  UpdateSettings,
+  AccessSettings,
   Status,
   UplinkSettings,
   UsageSettings,
@@ -30,6 +33,7 @@ import type {
 import * as api from './api';
 import { ApiError } from './api';
 import {
+  checkAdminPasswordForm,
   checkGuestForm,
   checkNewNetwork,
   checkSetupForm,
@@ -54,6 +58,8 @@ interface DataTypes {
   sshSettings: SSHSettings;
   dnsSettings: DNSSettings;
   swapSettings: SwapSettings;
+  updateSettings: UpdateSettings;
+  accessSettings: AccessSettings;
   usageSettings: UsageSettings;
   plugins: PluginsState;
   httpsSettings: HTTPSSettings;
@@ -71,6 +77,8 @@ const LOADERS: { [K in DataKey]: () => Promise<DataTypes[K]> } = {
   sshSettings: api.getSSHSettings,
   dnsSettings: api.getDNSSettings,
   swapSettings: api.getSwapSettings,
+  updateSettings: api.getUpdateSettings,
+  accessSettings: api.getAccessSettings,
   usageSettings: api.getUsageSettings,
   plugins: api.getPlugins,
   httpsSettings: api.getHTTPSSettings,
@@ -87,6 +95,8 @@ const NO_DATA: AllData = {
   sshSettings: NOTHING,
   dnsSettings: NOTHING,
   swapSettings: NOTHING,
+  updateSettings: NOTHING,
+  accessSettings: NOTHING,
   usageSettings: NOTHING,
   plugins: NOTHING,
   httpsSettings: NOTHING,
@@ -102,6 +112,8 @@ const SETTINGS: DataKey[] = [
   'sshSettings',
   'dnsSettings',
   'swapSettings',
+  'updateSettings',
+  'accessSettings',
   'usageSettings',
   'httpsSettings',
 ];
@@ -111,12 +123,12 @@ const PAGE_DATA: Record<string, DataKey[]> = {
   '/': ['status'],
   '/internet': ['uplinkSettings', 'dnsSettings', 'status'],
   '/vpn': ['vpnSettings', 'status'],
-  '/hotspot': ['hotspotSettings'],
+  '/hotspot': ['hotspotSettings', 'accessSettings', 'status'],
   '/guests': ['guestSettings'],
   '/clients': ['status', 'usageSettings'],
   '/ssh': ['sshSettings'],
   '/https': ['httpsSettings'],
-  '/system': ['status', 'swapSettings'],
+  '/system': ['status', 'swapSettings', 'updateSettings'],
   '/more': ['sshSettings', 'httpsSettings'],
 };
 
@@ -156,8 +168,12 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<AllData>(NO_DATA);
   const [nearbyNetworks, setNearbyNetworks] = useState<NearbyNetwork[] | null>(null);
   const [portalBrowser, setPortalBrowser] = useState<PortalBrowserState>(CLOSED_BROWSER);
+  const [poweredOff, setPoweredOff] = useState(false);
 
-  const phase = useMemo(() => decidePhase(setup, loggedIn, startupError), [setup, loggedIn, startupError]);
+  const phase = useMemo<AppPhase>(
+    () => (poweredOff ? { kind: 'notice', notice: 'off' } : decidePhase(setup, loggedIn, startupError)),
+    [poweredOff, setup, loggedIn, startupError],
+  );
   const ready = phase.kind === 'ready';
   const setupDone = phase.kind === 'ready' || phase.kind === 'login';
 
@@ -343,9 +359,13 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
       );
     }
 
+    // Both VPN switches are saved together, so the one that isn't changing comes from the loaded
+    // settings. Without them, guessing could turn the VPN off while the owner only changed the
+    // kill switch.
     const vpnSwitches = () => {
       const vpn = latest.current.vpnSettings.data;
-      return { enabled: vpn?.enabled ?? false, killSwitch: vpn?.killSwitch ?? true };
+      if (!vpn) throw new Error("The VPN settings haven't loaded yet.");
+      return { enabled: vpn.enabled, killSwitch: vpn.killSwitch };
     };
 
     async function vpnChange(request: () => Promise<VPNSettings>, fields?: Record<string, string>) {
@@ -369,7 +389,10 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
     }
 
     return {
-      retry: loadStartup,
+      retry: async () => {
+        setPoweredOff(false);
+        await loadStartup();
+      },
       reload: load,
 
       finishSetup: async (form) => {
@@ -387,6 +410,7 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
           {
             ...sameNames('adminPassword', 'hotspotSsid', 'hotspotPassword'),
             'hotspot.ssid': 'hotspotSsid',
+            'hotspot.band': 'hotspotBand',
           },
         );
       },
@@ -410,7 +434,7 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
       startLoginMode: async () => {
         const portal = await portalChange(() => api.portalAction('start'));
         // As the original: then go to the login page in this window.
-        setTimeout(() => window.location.assign(portal.loginUrl || FALLBACK_LOGIN_URL), 2000);
+        setTimeout(() => window.location.assign(loginPageAddress(portal.loginUrl)), 2000);
       },
       extendLoginMode: async () => void (await portalChange(() => api.portalAction('extend'))),
       stopLoginMode: async () => void (await portalChange(() => api.portalAction('stop'))),
@@ -485,14 +509,23 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
         store('dnsSettings', saved);
       },
       runSpeedtest: async () => {
-        const speedtest = await attempt(api.runSpeedtest);
-        patchStatus((status) => ({ ...status, speedtest }));
+        // Shown as running at once, on every page, until the router answers.
+        patchStatus((status) => ({ ...status, speedtest: { ...status.speedtest, running: true } }));
+        try {
+          const speedtest = await attempt(api.runSpeedtest);
+          patchStatus((status) => ({ ...status, speedtest }));
+        } catch (error) {
+          // The router says whether a test still runs (one started elsewhere, say).
+          await refreshStatus();
+          throw error;
+        }
       },
 
       setVpnEnabled: (enabled) => vpnChange(() => api.putVPNSwitches({ ...vpnSwitches(), enabled })),
       setKillSwitch: (killSwitch) => vpnChange(() => api.putVPNSwitches({ ...vpnSwitches(), killSwitch })),
       setActiveVpnProfile: (name) => vpnChange(() => api.vpnProfileAction('activate', name)),
       removeVpnProfile: (name) => vpnChange(() => api.vpnProfileAction('remove', name)),
+      renameVpnProfile: (name, newName) => vpnChange(() => api.renameVPNProfile(name, newName), { newName: 'name' }),
       importVpnProfile: ({ text, fileName }) => vpnChange(() => api.importVPNProfile(text, fileName)),
       saveVpnDetails: async (profile, form) => {
         const details = vpnDetailsRequest(profile, form);
@@ -518,6 +551,7 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
         const saved = await attempt(() => api.putHotspotSettings(settings), {
           ...sameNames('ssid', 'password', 'channel', 'country'),
           'hotspot.ssid': 'ssid',
+          'hotspot.band': 'band',
           'hotspot.channel': 'channel',
           'hotspot.country': 'country',
           hotspotPassword: 'password',
@@ -525,11 +559,13 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
         store('hotspotSettings', saved);
         await refreshStatus();
       },
-      revealHotspotPassword: async (adminPassword) => {
-        const { hotspotPassword } = await attempt(() => api.revealHotspotPassword(adminPassword));
+      revealHotspotPassword: async () => {
+        const { hotspotPassword } = await attempt(() => api.revealHotspotPassword());
         return hotspotPassword;
       },
-      wifiQr: (network, adminPassword) => attempt(() => api.wifiQr(network, adminPassword)),
+      wifiQr: (network) => attempt(() => api.wifiQr(network)),
+      hotspotChannels: async (country) =>
+        (await attempt(() => api.getHotspotChannels(country), { 'hotspot.country': 'country' })).channels,
       saveGuestSettings: async (settings) => {
         const problems = checkGuestForm(settings);
         if (Object.keys(problems).length > 0) throw new FieldErrors(problems);
@@ -589,22 +625,57 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
         store('swapSettings', await attempt(() => api.putSwapSettings(sizeGb), sameNames('sizeGb')));
         await refreshStatus();
       },
-      setCheckOnline: async (enabled) => {
-        const update = await attempt(() => api.setCheckOnline(enabled));
+      saveUpdateSettings: async (settings) => {
+        const update = await attempt(() => api.putUpdateSettings(settings), sameNames('checkHours', 'notifyUrl'));
+        store('updateSettings', settings);
         patchStatus((status) => ({ ...status, update }));
       },
+      saveAccessSettings: async (settings) => {
+        store(
+          'accessSettings',
+          await attempt(() => api.putAccessSettings(settings), sameNames('allowed', 'maxDevices')),
+        );
+      },
+      checkForUpdates: async () => {
+        const update = await attempt(api.checkForUpdates);
+        patchStatus((status) => ({ ...status, update }));
+      },
+      testUpdateNotification: (url) => attempt(() => api.testUpdateNotification(url), sameNames('notifyUrl')),
       reboot: async () => {
         await attempt(api.reboot);
         await waitForRestart();
         // The session may have ended with the restart ("Stay logged in" keeps it).
         await loadStartup();
       },
+      restartIntoUpdate: async () => {
+        await attempt(api.restartIntoUpdate);
+        await waitForRestart();
+        // Back on the new version, or on the old one with the reason in status.update.message.
+        await loadStartup();
+      },
+      shutDown: async () => {
+        await attempt(api.shutDown);
+        setPoweredOff(true);
+      },
+      saveHostname: async (hostname) => {
+        const name = hostname.trim().toLowerCase();
+        const oldName = latest.current.status.data?.device.hostname;
+        await attempt(() => api.saveHostname(name), sameNames('hostname'));
+        if (oldName && oldName !== 'rasbeacon.lan' && window.location.hostname === oldName) {
+          // The old name stops working with the restart: wait it out, then open the new one.
+          await sleep(90_000);
+          window.location.host = window.location.host.replace(oldName, `${name}.lan`);
+          return;
+        }
+        await waitForRestart();
+        await loadStartup();
+      },
       previewPluginFile: (file) => attempt(() => api.uploadPlugin(file), sameNames('file')),
       pluginCatalog: (refresh) => attempt(() => api.getPluginCatalog(refresh)),
       previewCatalogPlugin: (source, file) => attempt(() => api.downloadCatalogPlugin(source, file), sameNames('file')),
       previewPluginUpdate: (id) => attempt(() => api.downloadPluginUpdate(id), sameNames('id')),
-      installPlugin: async (stagingId, choices) => {
-        await attempt(() => api.installPlugin(stagingId, choices), pluginFields(choices));
+      installPlugin: async (stagingId, choices, useKeptData = false) => {
+        await attempt(() => api.installPlugin(stagingId, choices, useKeptData), pluginFields(choices));
         await load('plugins');
       },
       cancelPluginInstall: async (stagingId) => {
@@ -626,17 +697,25 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
         store('plugins', await attempt(() => api.putPluginSources(sources)));
       },
 
-      backUp: async (adminPassword, backupPassword, includePlugins) => {
-        const fields = { password: 'adminPassword', backupPassword: 'backupPassword' };
-        const ticket = await attempt(() => api.prepareBackup(adminPassword, backupPassword, includePlugins), fields);
+      backUp: async (backupPassword, plugins) => {
+        const ticket = await attempt(() => api.prepareBackup(backupPassword, plugins), sameNames('backupPassword'));
         downloadFile(api.backupDownloadUrl(ticket.token), ticket.fileName);
       },
-      restore: async (file, adminPassword, backupPassword) => {
-        const fields = { file: 'file', password: 'adminPassword', backupPassword: 'backupPassword' };
+      restore: async (file, backupPassword) => {
+        const fields = sameNames('file', 'backupPassword');
         await attempt(() => api.uploadBackup(file), fields);
-        await attempt(() => api.restoreBackup(adminPassword, backupPassword), fields);
+        await attempt(() => api.restoreBackup(backupPassword), fields);
       },
 
+      changeAdminPassword: async (form) => {
+        const problems = checkAdminPasswordForm(form);
+        if (Object.keys(problems).length > 0) throw new FieldErrors(problems);
+        // rbd names the wrong current password "password".
+        await attempt(() => api.changeAdminPassword(form.currentPassword, form.newPassword), {
+          ...sameNames('currentPassword', 'newPassword'),
+          password: 'currentPassword',
+        });
+      },
       factoryReset: async (adminPassword) => {
         await attempt(() => api.factoryReset(adminPassword));
         setData(NO_DATA);

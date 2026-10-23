@@ -20,7 +20,8 @@ export function TabBar() {
       aria-label="Main navigation"
       className="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-4 pb-[max(env(safe-area-inset-bottom),0.75rem)]"
     >
-      <div className="glass pointer-events-auto relative mx-auto max-w-[27rem] rounded-full p-1">
+      {/* A container, so the labels can give way when large text leaves them no room (below). */}
+      <div className="glass pointer-events-auto relative @container mx-auto max-w-[27rem] rounded-full p-1">
         <ul className="grid" style={{ gridTemplateColumns: `repeat(${count}, minmax(0, 1fr))` }}>
           {TAB_ITEMS.map((item, index) => (
             <li key={item.path} className="flex">
@@ -59,7 +60,14 @@ function Tab({ item, selected = false }: { item: NavItem; selected?: boolean }) 
   return (
     <>
       <Icon name={item.icon} filled={selected} size={24} />
-      <span className="text-[0.6875rem] leading-[0.875rem] font-semibold tracking-[0.005em]">{item.label}</span>
+      {/*
+       * With large text the five labels no longer fit and would run into each other: then only
+       * the symbols show, as iOS does, and the label stays for screen readers. In rem, so the
+       * point moves with the text size.
+       */}
+      <span className="text-[0.6875rem] leading-[0.875rem] font-semibold tracking-[0.005em] @max-[15.5rem]:sr-only">
+        {item.label}
+      </span>
     </>
   );
 }

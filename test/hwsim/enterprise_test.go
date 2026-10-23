@@ -42,6 +42,7 @@ import (
 	"rasbeacon/internal/config"
 	"rasbeacon/internal/render"
 	"rasbeacon/internal/uplink"
+	"rasbeacon/internal/wpaevents"
 )
 
 // The campus network's login details.
@@ -226,6 +227,8 @@ type loginResult struct {
 	// paused is true if wpa_supplicant paused the network after a failure,
 	// which is what RasBeacon shows as "the network rejected the login".
 	paused bool
+	// log is wpa_supplicant's output, with its events.
+	log string
 }
 
 // login runs wpa_supplicant with RasBeacon's configuration for one
@@ -265,6 +268,7 @@ func (c campus) login(t *testing.T, network render.WPANetwork, wait time.Duratio
 
 	data, _ := os.ReadFile(logFile)
 	logText := string(data)
+	result.log = logText
 	result.attempted = strings.Contains(logText, "CTRL-EVENT-EAP-SUCCESS") || strings.Contains(logText, "CTRL-EVENT-EAP-FAILURE")
 	if !result.status.Connected() {
 		t.Logf("wpa_supplicant log (last lines):\n%s", tail(logText, 25))
@@ -306,7 +310,7 @@ func (c campus) network(method config.EAPMethod, password string) render.WPANetw
 			Method: method, Identity: userIdentity, AnonymousIdentity: "anonymous@campus.test",
 			// The owner typed "*.campus.test", as institutions publish it.
 			ServerDomain: config.EnterpriseConfig{ServerName: "*.campus.test"}.ServerDomain(),
-			CACertFile:   c.caFile,
+			CACert:       c.caFile,
 		},
 	}
 	if method == config.EAPTLS {
@@ -355,10 +359,53 @@ func TestEnterpriseLogin(t *testing.T) {
 	})
 	t.Run("server signed by another CA is refused", func(t *testing.T) {
 		n := c.network(config.EAPTTLSPAP, userPassword)
-		n.Enterprise.CACertFile = c.rogueCAFile
+		n.Enterprise.CACert = c.rogueCAFile
 		expectRefused(t, c.login(t, n, refuseWait))
 	})
 	t.Run("wrong password is refused", func(t *testing.T) {
 		expectRefused(t, c.login(t, c.network(config.EAPPEAP, "wrong-password"), refuseWait))
 	})
+}
+
+// TestEnterpriseTrustOnFirstConnect checks what RasBeacon does for a
+// network saved without a CA certificate or server name: the first
+// connection only fetches the server's certificate (and never logs in),
+// then only that certificate is accepted.
+func TestEnterpriseTrustOnFirstConnect(t *testing.T) {
+	ap, sta := requireHwsim(t)
+	c := startCampus(t, ap, sta)
+
+	probe := c.network(config.EAPTTLSPAP, userPassword)
+	probe.Enterprise.ServerDomain = ""
+	probe.Enterprise.CACert, probe.Enterprise.Probe = render.ProbeServerCert, true
+	first := c.login(t, probe, refuseWait)
+	if first.status.Connected() || strings.Contains(first.log, "CTRL-EVENT-EAP-SUCCESS") {
+		t.Fatal("the first connection must only fetch the certificate, not log in")
+	}
+	hash := ""
+	for _, line := range strings.Split(first.log, "\n") {
+		if _, event, ok := strings.Cut(line, "CTRL-EVENT-EAP-PEER-CERT"); ok {
+			if h, ok := wpaevents.ServerCertHash("CTRL-EVENT-EAP-PEER-CERT" + event); ok {
+				hash = h
+			}
+		}
+	}
+	if hash == "" {
+		t.Fatalf("no server certificate hash in the events:\n%s", tail(first.log, 25))
+	}
+
+	trusted := probe
+	enterprise := *probe.Enterprise
+	enterprise.CACert, enterprise.Probe = render.TrustedServerCert(hash), false
+	trusted.Enterprise = &enterprise
+	if r := c.login(t, trusted, connectTimeout); !r.status.Connected() {
+		t.Errorf("the trusted certificate should log in, final state %+v", r.status)
+	}
+
+	other := enterprise
+	other.CACert = render.TrustedServerCert(strings.Repeat("00", 32))
+	trusted.Enterprise = &other
+	if r := c.login(t, trusted, refuseWait); r.status.Connected() || strings.Contains(r.log, "CTRL-EVENT-EAP-SUCCESS") {
+		t.Error("a server with another certificate must be refused")
+	}
 }

@@ -10,7 +10,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/http/httptest"
 	"time"
 )
 
@@ -37,13 +36,6 @@ func NewRBDClient(socketPath string) *RBDClient {
 		stream:  &http.Client{Transport: transport},
 		baseURL: "http://rbd",
 	}
-}
-
-// NewRBDClientForHandler sends requests straight to an http.Handler instead
-// of a socket. Tests use it to run rbweb against a real agent in memory.
-func NewRBDClientForHandler(handler http.Handler) *RBDClient {
-	client := &http.Client{Transport: handlerTransport{handler}}
-	return &RBDClient{http: client, stream: client, baseURL: "http://rbd"}
 }
 
 // Stream sends a large request body to rbd as it arrives (without reading
@@ -122,15 +114,4 @@ func (c *RBDClient) GetJSON(path string, target any) error {
 		return fmt.Errorf("rbd %s returned %d: %s", path, status, body)
 	}
 	return json.Unmarshal(body, target)
-}
-
-// handlerTransport is an http.RoundTripper that calls a handler directly,
-// recording the response with the standard library's httptest recorder.
-type handlerTransport struct{ handler http.Handler }
-
-// RoundTrip answers a request by calling the handler directly.
-func (t handlerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	recorder := httptest.NewRecorder()
-	t.handler.ServeHTTP(recorder, req)
-	return recorder.Result(), nil
 }

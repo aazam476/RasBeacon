@@ -186,6 +186,17 @@ func TestVPN_TurningOffRemovesTheTunnel(t *testing.T) {
 	if !e.runner.ran("ip link delete dev wg0") {
 		t.Error("wg0 should be removed")
 	}
+	// The kill switch is still on: nothing may leave without the VPN.
+	if fw := e.readFile(e.paths.FirewallRules()); strings.Contains(fw, "set egress") {
+		t.Errorf("with the kill switch on and the VPN off, nothing may be forwarded:\n%s", fw)
+	}
+	if s := e.agent.Status(); s.VPN.State != api.VPNBlocked || !strings.Contains(strings.Join(s.Warnings, " "), "kill switch is on and the VPN is off") {
+		t.Errorf("state %q, warnings %q", s.VPN.State, s.Warnings)
+	}
+	// Kill switch off too: devices use the uplink directly.
+	if err := e.agent.SetVPNSwitches(api.VPNSwitches{Enabled: false, KillSwitch: false}); err != nil {
+		t.Fatal(err)
+	}
 	if got := e.firewallEgress(); got != `elements = { "wlan0" }` {
 		t.Errorf("egress = %s, want the uplink", got)
 	}
@@ -385,7 +396,109 @@ func TestVPN_Version2SettingsBecomeAProfile(t *testing.T) {
 	if text := e.readFile(e.paths.SecretsFile()); strings.Contains(text, "wireguardPrivateKey") || !strings.Contains(text, `"wireguard.conf"`) {
 		t.Errorf("the key should have moved to the profile:\n%s", text)
 	}
-	if !strings.Contains(e.readFile(e.paths.ConfigFile()), `"version": 3`) {
+	if !strings.Contains(e.readFile(e.paths.ConfigFile()), `"version": 4`) {
 		t.Error("the upgraded settings should be saved")
+	}
+}
+
+func TestVPN_KillSwitchNeedsAProfile(t *testing.T) {
+	e := newClaimedEnv(t, false)
+	// New devices start with the kill switch on (it only acts once a profile
+	// exists); once turned off, it can't be turned on without one.
+	if err := e.agent.SetVPNSwitches(api.VPNSwitches{KillSwitch: false}); err != nil {
+		t.Fatal(err)
+	}
+	err := e.agent.SetVPNSwitches(api.VPNSwitches{KillSwitch: true})
+	var verr *config.ValidationError
+	if !errors.As(err, &verr) || verr.Field != "killSwitch" {
+		t.Errorf("got %v, want a refusal: without a profile the kill switch would only cut the internet", err)
+	}
+}
+
+func TestVPN_RenameKeepsKeysAndTheProfileInUse(t *testing.T) {
+	e, _ := newVPNEnv(t, true)
+	before := e.agent.VPNSettings().Profiles[0].PublicKey
+	if err := e.agent.RenameVPNProfile("home.conf", "  Home router  "); err != nil {
+		t.Fatal(err)
+	}
+	s := e.agent.VPNSettings()
+	if s.ActiveProfile != "Home router" || s.Profiles[0].Name != "Home router" || s.Profiles[0].PublicKey != before {
+		t.Errorf("after renaming: %+v", s)
+	}
+	var verr *config.ValidationError
+	if err := e.agent.RenameVPNProfile("Home router", " "); !errors.As(err, &verr) || verr.Field != "newName" {
+		t.Errorf("a blank name: got %v", err)
+	}
+	if err := e.agent.RenameVPNProfile("nope.conf", "x"); err == nil {
+		t.Error("renaming a profile that doesn't exist must fail")
+	}
+}
+
+// Looking up the VPN server's name can hang on a network that drops DNS,
+// so it runs in the background, never while rbd's lock is held (the
+// settings pages would wait for it).
+func TestVPN_ServerLookupRunsOutsideTheLock(t *testing.T) {
+	e, c := newVPNEnv(t, true)
+	e.runBackground()
+	lookups := func() int {
+		n := 0
+		for _, cmd := range e.runner.commands {
+			if strings.HasPrefix(cmd, "wg set wg0 peer") && strings.Contains(cmd, " endpoint ") {
+				n++
+			}
+		}
+		return n
+	}
+	before := lookups()
+
+	// The tunnel is still down a minute later: time to look again.
+	c.advance(2 * time.Minute)
+	e.agent.mu.Lock()
+	if err := e.agent.updateTunnel(); err != nil {
+		e.agent.mu.Unlock()
+		t.Fatal(err)
+	}
+	ranUnderLock := lookups() - before
+	e.agent.mu.Unlock()
+	if ranUnderLock != 0 {
+		t.Fatalf("the lookup ran while rbd's lock was held")
+	}
+	e.runBackground()
+	if lookups() != before+1 {
+		t.Errorf("lookups = %d, want one more in the background", lookups()-before)
+	}
+}
+
+// The lookup takes a while, and the owner may save another server
+// meanwhile: the old server's address must not replace the new one.
+func TestVPN_ServerLookupDoesntUndoANewerSave(t *testing.T) {
+	e, c := newVPNEnv(t, true)
+	e.runBackground()
+	c.advance(2 * time.Minute)
+	e.agent.mu.Lock()
+	if err := e.agent.updateTunnel(); err != nil {
+		e.agent.mu.Unlock()
+		t.Fatal(err)
+	}
+	// The lookup is queued; before it runs, the server moves.
+	p, _ := e.agent.activeProfile()
+	e.agent.cfg.VPN.Profiles[0].Peer.Endpoint = "new.example.com:51820"
+	e.agent.mu.Unlock()
+	e.runner.commands = nil
+	e.runBackground()
+	for _, cmd := range e.runner.commands {
+		if strings.HasPrefix(cmd, "wg set wg0 peer "+p.Peer.PublicKey+" endpoint") {
+			t.Errorf("the old server's address was set after the save: %q", cmd)
+		}
+	}
+
+	// Without a change in between, the looked-up address is set.
+	c.advance(2 * time.Minute)
+	e.agent.mu.Lock()
+	_ = e.agent.updateTunnel()
+	e.agent.mu.Unlock()
+	e.runBackground()
+	if !e.runner.ran("wg set wg0 peer " + p.Peer.PublicKey + " endpoint 203.0.113.7:51820") {
+		t.Errorf("commands: %q", e.runner.commands)
 	}
 }

@@ -116,9 +116,19 @@ func (a *Agent) wpaEnterprise(n config.SavedNetwork) *render.WPAEnterprise {
 		Identity:          e.Identity,
 		AnonymousIdentity: e.AnonymousIdentity,
 	}
-	if !e.AllowNoCertificateCheck {
-		w.CACertFile = a.paths.CACertFile(n.ID)
-		w.ServerDomain = e.ServerDomain()
+	switch {
+	case e.AllowNoCertificateCheck:
+		// The owner turned the check off.
+	case fileExists(a.paths.CACertFile(n.ID)):
+		w.CACert, w.ServerDomain = a.paths.CACertFile(n.ID), e.ServerDomain()
+	case e.ServerName != "":
+		// Only a name: the server's certificate must be from a CA the
+		// system trusts, and carry that name.
+		w.CACert, w.ServerDomain = render.SystemCAFile, e.ServerDomain()
+	case e.ServerCertHash != "":
+		w.CACert = render.TrustedServerCert(e.ServerCertHash)
+	default:
+		w.CACert, w.Probe = render.ProbeServerCert, true
 	}
 	if e.Method == config.EAPTLS {
 		w.ClientCertFile = a.paths.ClientCertFile(n.ID)
@@ -140,6 +150,7 @@ func (a *Agent) enterpriseSettings(n config.SavedNetwork) *api.EnterpriseSetting
 		AnonymousIdentity:       e.AnonymousIdentity,
 		ServerName:              e.ServerName,
 		AllowNoCertificateCheck: e.AllowNoCertificateCheck,
+		ServerCertHash:          e.ServerCertHash,
 		CACertSummary:           a.certSummary(a.paths.CACertFile(n.ID)),
 		ClientCertSummary:       a.certSummary(a.paths.ClientCertFile(n.ID)),
 		HasClientKey:            fileExists(a.paths.ClientKeyFile(n.ID)),
@@ -174,7 +185,7 @@ func (a *Agent) enterpriseWarnings() []string {
 }
 
 // MaskIdentity hides most of a username for logs and diagnostics:
-// "NetID@rutgers.edu" becomes "N***@rutgers.edu".
+// "user@example.com" becomes "u***@example.com".
 func MaskIdentity(identity string) string {
 	user, realm, hasRealm := strings.Cut(identity, "@")
 	masked := "***"

@@ -2,10 +2,12 @@ import { useDevice } from '@/data/device';
 import type { Status } from '@/data/types';
 import { formatDuration } from '@/lib/format';
 import { Loaded } from '@/shell/Loaded';
-import { Badge, Icon, Meter, Row, Section, type Tone } from '@/ui';
+import { useState } from 'react';
+import { Badge, EditButton, Icon, Meter, RenameSheet, Row, Section, type Tone } from '@/ui';
 import { getResourceMetrics } from '../common/resourceMetrics';
+import { AdminPasswordSection } from './AdminPasswordSection';
 import { BackupSection } from './BackupSection';
-import { FactoryResetSection, RebootSection } from './RestartSections';
+import { FactoryResetSection, RebootSection, ShutdownSection } from './RestartSections';
 import { SoftwareSection } from './SoftwareSection';
 import { StorageSection } from './StorageSection';
 import { SwapSection } from './SwapSection';
@@ -25,8 +27,10 @@ export function SystemScreen() {
           <AboutSection status={status} />
           <RadiosSection status={status} />
           <DiagnosticsSection />
+          <AdminPasswordSection />
           <BackupSection />
           <RebootSection />
+          <ShutdownSection />
           <FactoryResetSection />
         </>
       )}
@@ -38,10 +42,7 @@ function HardwareSection({ status }: { status: Status }) {
   const { system } = status;
 
   return (
-    <Section
-      title="Hardware"
-      footer={`Cooling: ${system.cooling}. Sensor: ${system.sensorStatus}. Slowed down for heat: ${system.throttling}.`}
-    >
+    <Section title="Hardware">
       {Object.values(getResourceMetrics(system)).map((metric) => (
         <Row
           key={metric.label}
@@ -58,18 +59,40 @@ function HardwareSection({ status }: { status: Status }) {
 }
 
 function AboutSection({ status }: { status: Status }) {
+  const { saveHostname } = useDevice();
   const { device } = status;
+  const [renaming, setRenaming] = useState(false);
 
   return (
     <Section title="About">
-      <Row title="Name" value={device.hostname} />
-      <Row title="RasBeacon version" value={status.version} />
+      <Row
+        className="group"
+        title="Name"
+        value={device.hostname}
+        trailing={<EditButton label="Rename RasBeacon" onClick={() => setRenaming(true)} className="-my-1.5" />}
+      />
       <Row title="Board" value={status.boardModel} />
       <Row title="Model" value={device.modelSpec} />
       <Row title="Device ID" value={status.deviceId} />
       <Row title="Kernel" value={device.kernel} />
       <Row title="Starts from" value={device.bootDevice} />
       <Row title="Up for" value={formatDuration(status.uptimeSeconds)} />
+      {renaming && (
+        <RenameSheet
+          title="Rename RasBeacon"
+          label="Name"
+          initial={device.hostname.replace(/\.lan$/, '')}
+          placeholder="rasbeacon"
+          maxLength={63}
+          errorKey="hostname"
+          busyLabel="Restarting…"
+          plain
+          check={checkHostname}
+          footer="Devices reach RasBeacon at this name followed by .lan. RasBeacon restarts to use it, so devices disconnect for about a minute."
+          onSave={saveHostname}
+          onClose={() => setRenaming(false)}
+        />
+      )}
     </Section>
   );
 }
@@ -89,9 +112,13 @@ function RadiosSection({ status }: { status: Status }) {
           key={radio.interface}
           leading={{ icon: 'wifi' }}
           title={<span className="font-mono">{radio.interface}</span>}
-          subtitle={`${radio.driver} · ${radio.isUsb ? `USB ${radio.usbId}` : 'built-in'} · ${
-            radio.maxAps > 1 ? `can broadcast ${radio.maxAps} networks` : 'one network at a time'
-          }`}
+          subtitle={[
+            radio.driver,
+            radio.isUsb ? `USB ${radio.usbId}` : 'built-in',
+            radio.maxAps > 1 && `can broadcast ${radio.maxAps} networks`,
+          ]
+            .filter(Boolean)
+            .join(' · ')}
           trailing={<Badge tone={ROLES[radio.role].tone}>{ROLES[radio.role].label}</Badge>}
         />
       ))}
@@ -99,12 +126,12 @@ function RadiosSection({ status }: { status: Status }) {
   );
 }
 
-/** A text report to attach when asking for help: a plain file download. */
+/** A text report to attach to a GitHub issue: a plain file download. */
 function DiagnosticsSection() {
   const { diagnosticsUrl } = useDevice();
 
   return (
-    <Section footer="A text report to attach when asking for help. Passwords are removed and device addresses are partly hidden.">
+    <Section footer="Attach this report when you open an issue on GitHub. Passwords are removed and device addresses are partly hidden.">
       <a
         href={diagnosticsUrl}
         download="rasbeacon-diagnostics.txt"
@@ -117,4 +144,13 @@ function DiagnosticsSection() {
       </a>
     </Section>
   );
+}
+
+/** RasBeacon's rules for its name (internal/config ValidateHostname), checked while typing. */
+function checkHostname(name: string): string | undefined {
+  const lower = name.toLowerCase();
+  if (lower.length > 63) return 'Use at most 63 characters.';
+  if (!/^[a-z0-9-]+$/.test(lower)) return 'Use only lowercase letters, digits and hyphens.';
+  if (lower.startsWith('-') || lower.endsWith('-')) return "The name can't start or end with a hyphen.";
+  return undefined;
 }

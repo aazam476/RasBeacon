@@ -60,7 +60,7 @@ export function ImportProfileSection() {
         pending={importing.pending}
         disabled={text.trim() === ''}
         error={importing.error}
-        success={imported && 'WireGuard file imported. Turn on "Use the VPN" if it isn\'t already.'}
+        success={imported && 'WireGuard file imported.'}
       />
     </form>
   );

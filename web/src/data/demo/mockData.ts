@@ -1,17 +1,20 @@
 import type {
-  DNSSettings,
-  SwapSettings,
+  AccessSettings,
   Client,
+  DNSSettings,
   GuestSettings,
   HotspotSettings,
   HTTPSSettings,
   NearbyNetwork,
+  PluginKeptData,
+  PluginsState,
   SetupState,
   SSHSettings,
   Status,
+  SwapSettings,
+  UpdateSettings,
   UplinkSettings,
   UsageSettings,
-  PluginsState,
   VPNSettings,
 } from '../types';
 import { createMockPlugins } from './plugins';
@@ -30,8 +33,12 @@ export interface MockRouter {
   sshSettings: SSHSettings;
   dnsSettings: DNSSettings;
   swapSettings: SwapSettings;
+  updateSettings: UpdateSettings;
+  accessSettings: AccessSettings;
   usageSettings: UsageSettings;
   plugins: PluginsState;
+  /** Data kept when a plugin was removed, by plugin ID, that its next install asks about. */
+  keptPluginData: Record<string, PluginKeptData>;
   httpsSettings: HTTPSSettings;
   nearbyNetworks: NearbyNetwork[];
   /** What "Show password" reveals. */
@@ -221,7 +228,7 @@ export function createMockRouter(): MockRouter {
         canInstall: true,
         installing: false,
         canCheckOnline: true,
-        checkOnline: false,
+        checkHours: 0,
       },
       radios: [
         {
@@ -271,7 +278,7 @@ export function createMockRouter(): MockRouter {
         throttling: 'None',
       },
       device: {
-        hostname: 'rasbeacon.local',
+        hostname: 'rasbeacon.lan',
         modelSpec: 'CM4-1GB-Lite',
         kernel: 'Linux 6.1.21-v8+ aarch64',
         kernelRelease: '6.1.21-v8+',
@@ -289,6 +296,7 @@ export function createMockRouter(): MockRouter {
       lan: { maxClients: 16, subnet: '192.168.8.0/24', dhcpRange: '192.168.8.100 - 192.168.8.250' },
       speedtest: {
         provider: 'Cloudflare',
+        running: false,
         last: {
           server: 'San Jose, CA (SJC)',
           ageSeconds: 120,
@@ -326,9 +334,9 @@ export function createMockRouter(): MockRouter {
           hasPassword: true,
           enterprise: {
             method: 'ttls-pap',
-            identity: 'netid@rutgers.edu',
-            anonymousIdentity: 'anonymous@rutgers.edu',
-            serverName: '*.ruw.rutgers.edu',
+            identity: 'user@example.edu',
+            anonymousIdentity: 'anonymous@example.edu',
+            serverName: 'radius.example.edu',
             allowNoCertificateCheck: false,
             caCertSummary: 'USERTrust RSA Certification Authority (valid until 2038-01-18)',
             clientCertSummary: '',
@@ -415,8 +423,11 @@ export function createMockRouter(): MockRouter {
 
     dnsSettings: { servers: [], withVpn: false },
     swapSettings: { sizeGb: 2, maxGb: 26 },
+    updateSettings: { checkHours: 0, notifyUrl: '' },
+    accessSettings: { allowListOn: false, allowed: [], maxDevices: 0 },
     plugins: createMockPlugins(),
-    usageSettings: { limitMb: 0, since: '2026-10-01T08:00:00Z', metered: false, devicesPaused: 0 },
+    keptPluginData: {},
+    usageSettings: { limitMb: 0, since: '2026-10-01T08:00:00Z', devicesPaused: 0 },
 
     sshSettings: {
       enabled: true,
@@ -426,7 +437,7 @@ export function createMockRouter(): MockRouter {
     httpsSettings: {
       enabled: true,
       uploaded: false,
-      subject: 'CN=rasbeacon.local',
+      subject: 'CN=RasBeacon 7162',
       fingerprint: '3F:9A:12:C4:7E:01:55:B2:9D:4C:10:E8:77:AB:02:6C:91:3E:D5:48:0F:22:A7:6B:C3:19:E0:84:5D:2A:F1:66',
       validUntil: '2036-10-01',
     },

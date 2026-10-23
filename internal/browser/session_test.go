@@ -63,6 +63,13 @@ func loginSite(t *testing.T) *httptest.Server {
 	mux.HandleFunc("/terms", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, "<title>Terms</title>Be nice.")
 	})
+	// A long page whose address says when it was scrolled (an address
+	// change is reported, a title set by a script isn't).
+	mux.HandleFunc("/long", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `<!doctype html><title>Long page</title>
+<div style="height:5000px">Terms and conditions</div>
+<script>addEventListener("scroll", () => { location.hash = "scrolled" })</script>`)
+	})
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
 	return server
@@ -135,6 +142,24 @@ func TestSession_LogInThroughThePictures(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitFor(t, s, "the terms (from a new-window link)", func(f Frame) bool { return f.Title == "Terms" })
+
+	// A swipe scrolls the page; Reload loads a page again.
+	if err := s.Navigate(site.URL + "/long"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, s, "the long page", func(f Frame) bool { return f.Title == "Long page" })
+	if err := s.Scroll(100, 300, 600); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, s, "the page scrolled", func(f Frame) bool { return strings.HasSuffix(f.URL, "#scrolled") })
+	if err := s.Navigate(site.URL + "/terms"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, s, "the terms", func(f Frame) bool { return f.Title == "Terms" })
+	if err := s.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, s, "the terms again", func(f Frame) bool { return f.Title == "Terms" })
 
 	// Only web addresses.
 	for _, address := range []string{"file:///etc/passwd", "chrome://settings", "javascript:alert(1)"} {

@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"errors"
 	"strings"
 	"testing"
 
@@ -20,12 +19,10 @@ func TestWiFiQRText(t *testing.T) {
 	}
 }
 
-func TestWiFiQR_HotspotNeedsTheAdminPassword(t *testing.T) {
+func TestWiFiQR_Hotspot(t *testing.T) {
+	// Being logged in is enough (no admin password asked again).
 	e := newClaimedEnv(t, false)
-	if _, err := e.agent.WiFiQR(api.WiFiQRRequest{Network: "hotspot", AdminPassword: "wrong"}); !errors.Is(err, ErrWrongPassword) {
-		t.Errorf("got %v", err)
-	}
-	code, err := e.agent.WiFiQR(api.WiFiQRRequest{Network: "hotspot", AdminPassword: validClaim.AdminPassword})
+	code, err := e.agent.WiFiQR(api.WiFiQRRequest{Network: "hotspot"})
 	if err != nil {
 		t.Fatal(err)
 	}

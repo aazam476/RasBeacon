@@ -70,6 +70,20 @@ func TestHostapd_WPA2WPA3On2GHz(t *testing.T) {
 	checkGolden(t, "hostapd_wpa2wpa3_2ghz", got)
 }
 
+func TestHostapd_WPA3Only(t *testing.T) {
+	got, err := Hostapd(HotspotInput{
+		Interface: "ap0", SSID: "RasBeacon-4F2A", Band: config.Band2GHz,
+		Country: "US", Security: config.SecurityWPA3, Password: "kq7m-2xvd-h8pt-rn4w",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkGolden(t, "hostapd_wpa3_2ghz", got)
+	if !strings.Contains(got, "wpa_key_mgmt=SAE\nieee80211w=2") || strings.Contains(got, "WPA-PSK") {
+		t.Error("WPA3 only: SAE alone, protected management frames required")
+	}
+}
+
 func TestHostapd_WPA2OnlyOn5GHzChannel149(t *testing.T) {
 	got, err := Hostapd(HotspotInput{
 		Interface: "ap0", SSID: `Ali's "Travel" Wi-Fi ☕`, Band: config.Band5GHz, Channel: 149,
@@ -418,7 +432,9 @@ func TestFirewall_LoginBrowserOnlyReachesUplinks(t *testing.T) {
 }
 
 func TestFirewall_PausedDevicesAreNotForwarded(t *testing.T) {
-	got, err := Firewall(FirewallInput{Egress: []string{"wlan0"}, PausedMACs: []string{"3A:1F:22:AA:BB:CC", "8e:00:11:22:33:44"}})
+	got, err := Firewall(FirewallInput{Egress: []string{"wlan0"}, PausedMACs: []string{"3A:1F:22:AA:BB:CC", "8e:00:11:22:33:44"},
+		PausedIPv4: []netip.Addr{netip.MustParseAddr("10.87.0.23")},
+		PausedIPv6: []netip.Addr{netip.MustParseAddr("fd12:3456:789a:1::23")}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -428,6 +444,10 @@ func TestFirewall_PausedDevicesAreNotForwarded(t *testing.T) {
 	at := strings.Index(forward, rule)
 	if at < 0 || at > strings.Index(forward, "ct state established,related accept") {
 		t.Errorf("paused devices must be refused before established connections are let through:\n%s", forward)
+	}
+	drop := strings.Index(forward, `oifname @lans ip daddr { 10.87.0.23 } drop`)
+	if drop < 0 || drop > strings.Index(forward, "ct state established,related accept") {
+		t.Errorf("nothing may reach a paused device, not even answers:\n%s", forward)
 	}
 	if _, err := Firewall(FirewallInput{PausedMACs: []string{"3a:1f:22:aa:bb:cc } accept #"}}); err == nil {
 		t.Error("a bad MAC address must be refused")
@@ -492,19 +512,28 @@ func TestWPASupplicant_EnterpriseMethods(t *testing.T) {
 		Country: "US",
 		Networks: []WPANetwork{
 			{SSID: "eduroam", Security: config.UplinkEnterprise, Password: `p"w`, Enterprise: &WPAEnterprise{
-				Method: config.EAPTTLSPAP, Identity: "NetID@rutgers.edu", AnonymousIdentity: "anonymous@rutgers.edu",
-				ServerDomain: "ruw.rutgers.edu", CACertFile: "/persistent/rasbeacon/certs/a1-ca.pem",
+				Method: config.EAPTTLSPAP, Identity: "me@example.edu", AnonymousIdentity: "anonymous@example.edu",
+				ServerDomain: "login.example.edu", CACert: "/persistent/rasbeacon/certs/a1-ca.pem",
 			}},
 			{SSID: "CorpNet", Security: config.UplinkEnterprise, Password: "secret", Enterprise: &WPAEnterprise{
 				Method: config.EAPPEAP, Identity: "alice", ServerDomain: "radius.corp.example",
-				CACertFile: "/persistent/rasbeacon/certs/b2-ca.pem",
+				CACert: "/persistent/rasbeacon/certs/b2-ca.pem",
 			}},
 			{SSID: "LabNet", Security: config.UplinkEnterprise, Password: "key-passphrase", Enterprise: &WPAEnterprise{
 				Method: config.EAPTLS, Identity: "bob", ServerDomain: "lab.example",
-				CACertFile: "/c/ca.pem", ClientCertFile: "/c/client.pem", ClientKeyFile: "/c/key.pem",
+				CACert: "/c/ca.pem", ClientCertFile: "/c/client.pem", ClientKeyFile: "/c/key.pem",
 			}},
 			{SSID: "NoCheck", Security: config.UplinkEnterprise, Password: "pw", Enterprise: &WPAEnterprise{
 				Method: config.EAPPEAP, Identity: "carol",
+			}},
+			{SSID: "NameOnly", Security: config.UplinkEnterprise, Password: "pw", Enterprise: &WPAEnterprise{
+				Method: config.EAPPEAP, Identity: "dave", ServerDomain: "radius.example.com", CACert: SystemCAFile,
+			}},
+			{SSID: "FirstTime", Security: config.UplinkEnterprise, Password: "pw", Enterprise: &WPAEnterprise{
+				Method: config.EAPPEAP, Identity: "erin", CACert: ProbeServerCert, Probe: true,
+			}},
+			{SSID: "Trusted", Security: config.UplinkEnterprise, Password: "pw", Enterprise: &WPAEnterprise{
+				Method: config.EAPPEAP, Identity: "frank", CACert: TrustedServerCert(strings.Repeat("ab", 32)),
 			}},
 		},
 	})
@@ -513,10 +542,10 @@ func TestWPASupplicant_EnterpriseMethods(t *testing.T) {
 	}
 	checkGolden(t, "wpa_supplicant_enterprise", got)
 	for _, want := range []string{
-		"eap=TTLS", `phase2="auth=PAP"`, `domain_suffix_match="ruw.rutgers.edu"`,
+		"eap=TTLS", `phase2="auth=PAP"`, `domain_suffix_match="login.example.edu"`,
 		"eap=PEAP", `phase2="auth=MSCHAPV2"`,
 		"eap=TLS", `private_key="/c/key.pem"`, "private_key_passwd=6b65792d70617373706872617365",
-		"identity=4e6574494440727574676572732e656475",
+		"identity=6d65406578616d706c652e656475",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q", want)
@@ -527,7 +556,7 @@ func TestWPASupplicant_EnterpriseMethods(t *testing.T) {
 func TestWPASupplicant_EnterpriseRejectsUnsafeValues(t *testing.T) {
 	_, err := WPASupplicant(WPAInput{Country: "US", Networks: []WPANetwork{
 		{SSID: "x", Security: config.UplinkEnterprise, Password: "pw", Enterprise: &WPAEnterprise{
-			Method: config.EAPPEAP, Identity: "a", ServerDomain: "evil\"\nca_cert=\"/x", CACertFile: "/c/ca.pem",
+			Method: config.EAPPEAP, Identity: "a", ServerDomain: "evil\"\nca_cert=\"/x", CACert: "/c/ca.pem",
 		}},
 	}})
 	if err == nil {
@@ -594,6 +623,11 @@ func TestLAN_Helpers(t *testing.T) {
 	}
 	if DefaultLAN.Netmask() != "255.255.255.0" {
 		t.Errorf("Netmask = %s", DefaultLAN.Netmask())
+	}
+	for bits, want := range map[int]string{0: "0.0.0.0", 20: "255.255.240.0", 32: "255.255.255.255"} {
+		if got := Netmask(bits); got != want {
+			t.Errorf("Netmask(%d) = %s, want %s", bits, got, want)
+		}
 	}
 	if DefaultLAN.hostAddress(20) != "10.87.0.20" {
 		t.Errorf("hostAddress(20) = %s", DefaultLAN.hostAddress(20))
@@ -711,5 +745,48 @@ func TestDnsmasq_AnswersPlugins(t *testing.T) {
 	}
 	if !strings.Contains(got, "interface=rbplug0\nno-dhcp-interface=rbplug0\n") {
 		t.Errorf("dnsmasq must answer plugins' DNS, without DHCP:\n%s", got)
+	}
+}
+
+func TestDnsmasq_Hostname(t *testing.T) {
+	got, err := Dnsmasq(DnsmasqInput{LAN: DefaultLAN, LeaseFile: "x", Hostname: "travel-pi"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"address=/rasbeacon.lan/10.87.0.1", "address=/travel-pi.lan/10.87.0.1"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	if _, err := Dnsmasq(DnsmasqInput{LAN: DefaultLAN, LeaseFile: "x", Hostname: "a/b"}); err == nil {
+		t.Error("a name with a slash was accepted")
+	}
+}
+
+func TestHostapd_AllowListAndDeviceLimit(t *testing.T) {
+	in := HotspotInput{
+		Interface: "ap0", SSID: "RasBeacon-4F2A", Band: config.Band2GHz,
+		Country: "US", Security: config.SecurityWPA2WPA3, Password: "kq7m-2xvd-h8pt-rn4w",
+		AcceptMACFile: "/run/rbd/hostapd.accept", MaxDevices: 12,
+		Guest: &GuestNetwork{SSID: "RasBeacon-4F2A-Guest", Password: "visitors-welcome", BSSID: "52:3e:aa:12:34:56"},
+	}
+	got, err := Hostapd(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkGolden(t, "hostapd_access", got)
+	main, guest, _ := strings.Cut(got, "bss=guest0")
+	for _, want := range []string{"macaddr_acl=1", "accept_mac_file=/run/rbd/hostapd.accept", "max_num_sta=12"} {
+		if !strings.Contains(main, want) {
+			t.Errorf("main section lacks %q", want)
+		}
+	}
+	if strings.Contains(guest, "macaddr_acl") || !strings.Contains(guest, "max_num_sta=12") {
+		t.Errorf("guest section: the allow list must not apply, the limit must:\n%s", guest)
+	}
+
+	in.MaxDevices = config.MaxDevicesLimit + 1
+	if _, err := Hostapd(in); err == nil {
+		t.Error("a limit above the DHCP range was accepted")
 	}
 }

@@ -1,11 +1,14 @@
 package webserver
 
 import (
+	"net/http"
 	"os"
 	"regexp"
 	"slices"
 	"strings"
 	"testing"
+
+	"rasbeacon/internal/api"
 )
 
 // rbdOnlyRoutes are rbd's routes that rbweb reaches some other way (its own
@@ -13,7 +16,7 @@ import (
 var rbdOnlyRoutes = []string{
 	"GET /state", "POST /claim", "POST /verify-password",
 	"POST /remembered-logins", "POST /remembered-logins/check", "POST /remembered-logins/forget",
-	"GET /status", "POST /speedtest", "POST /system/update", "POST /system/factory-reset",
+	"GET /status", "POST /speedtest", "POST /system/update", "POST /system/factory-reset", "POST /system/admin-password",
 	"GET /portal", "GET /portal/browser/frame", "POST /portal/browser/input",
 	"POST /portal/browser/start", "POST /portal/browser/stop",
 	"POST /portal/start", "POST /portal/stop", "POST /portal/extend", "POST /portal/check",
@@ -45,6 +48,54 @@ func TestEveryRbdRouteIsForwarded(t *testing.T) {
 		}
 		if !forwarded[route] {
 			t.Errorf("rbd route %q is not forwarded by rbweb (add it to forwardedRoutes, or to rbdOnlyRoutes if rbweb handles it itself)", route)
+		}
+	}
+}
+
+// documentedRoutes reads every route docs/api.md lists, like
+// "POST /api/v1/system/hostname". The web UI's request tests check their
+// requests against the same list (web/test/requests/helpers.ts), so the
+// document is the contract between the two.
+func documentedRoutes(t *testing.T) []string {
+	t.Helper()
+	doc, err := os.ReadFile("../../docs/api.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pattern := regexp.MustCompile("`((?:GET|PUT|POST|DELETE) /api/v1/[^`\\s]*)`")
+	var routes []string
+	for _, m := range pattern.FindAllStringSubmatch(string(doc), -1) {
+		route, _, _ := strings.Cut(m[1], "?") // "?after=<seq>" describes a parameter
+		if !slices.Contains(routes, route) {
+			routes = append(routes, route)
+		}
+	}
+	if len(routes) < 50 {
+		t.Fatalf("found only %d routes in docs/api.md; did its format change?", len(routes))
+	}
+	return routes
+}
+
+// Every documented route must exist in rbweb: answered by a handler (perhaps
+// "log in first"), never "no such API route" or "method not allowed".
+func TestEveryDocumentedRouteExists(t *testing.T) {
+	s, _ := newTestServer(api.ModeNormal)
+	for _, route := range documentedRoutes(t) {
+		method, path, _ := strings.Cut(route, " ")
+		path = strings.ReplaceAll(path, "{token}", "abc")
+		rec := request(s, method, "http://10.87.0.1"+path, "{}", map[string]string{"Content-Type": "application/json"}, nil)
+		if rec.Code == http.StatusMethodNotAllowed || strings.Contains(rec.Body.String(), "no such API route") {
+			t.Errorf("%s is in docs/api.md but rbweb doesn't serve it (%d)", route, rec.Code)
+		}
+	}
+}
+
+// Every route rbweb forwards to rbd must be documented.
+func TestEveryForwardedRouteIsDocumented(t *testing.T) {
+	documented := documentedRoutes(t)
+	for route := range forwardedRoutes {
+		if !slices.Contains(documented, route) {
+			t.Errorf("%s is served by rbweb but missing from docs/api.md", route)
 		}
 	}
 }

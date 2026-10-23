@@ -52,5 +52,15 @@ signed and checked).
 How RasBeacon protects things is described in
 [docs/design.md](docs/design.md) (sections 3 to 5) and
 [docs/architecture.md](docs/architecture.md). The tests that check the
-promises above are in `test/netns/` (firewall, VPN leaks, login mode) and
-`test/hwsim/` (WPA-Enterprise server checks).
+promises above are in `test/netns/` (firewall, VPN leaks, login mode,
+plugins), `test/hwsim/` (WPA-Enterprise server checks), and next to the
+code. Some of them, for problems found in reviews:
+
+| Promise | Problem it guards against | Tests |
+|---|---|---|
+| No reading secrets without the admin password | A hotel network's redirect to a `javascript:` address ran as code in the settings page | `internal/portal` `TestProbe` ("script in the Location"), `internal/webserver` `TestSecurityHeaders_AreOnEveryAnswer` (no inline scripts, no framing), `web/test/logic` `loginPageAddress` |
+| A plugin does only what its permissions allow | A plugin's `image.tar` naming another plugin's image took it over | `internal/plugin` `TestCheckImageNames_RefusesAnotherPluginsName`, `internal/agent` `TestPlugins_AnImageCarryingAnotherPluginsNameIsRefused` |
+| A plugin does only what its permissions allow | Plugins reached each other directly on their shared bridge | `test/netns` `TestPlugins_CantReachEachOther` |
+| A plugin does only what its permissions allow | A template that never finishes stopped the other plugins and backups | `internal/plugin` `TestCheckTemplate`, `internal/agent` `TestFillTemplate_RefusesLoops` |
+| A plugin does only what its permissions allow | Data kept from a removed plugin went to another author's plugin with the same ID | `internal/agent` `TestPlugins_SigningKeyIsPinnedOnFirstSignedInstall`, `TestPlugins_UnsignedKeptDataComesBackOnlyWhenChosen` |
+| No secrets in logs or the diagnostics report | Plugin passwords on podman's command line, so in error messages and the journal | `internal/agent` `TestPlugins_InstallFromAFileStartsItWithItsOwnAddressPortsAndData` (no command holds the password), `TestDiagnostics_HidesPluginPasswords`, `internal/plugin` `TestEnvFileContents` |

@@ -28,7 +28,15 @@ The reasons behind the big decisions are in [design.md](design.md) and
 - **rbweb** (`cmd/rbweb`, logic in `internal/webserver`) serves the web UI
   and the `/api/v1/` API. It runs as the unprivileged `rbweb` user and cannot
   read the settings files. It checks logins, then forwards requests to rbd.
-- **hostapd** turns the USB Wi-Fi adapter into an *access point*.
+- **hostapd** turns the USB Wi-Fi adapter into an *access point*. It puts
+  the hotspot's interface (`ap0`) into the `br-lan` bridge. Every minute rbd
+  checks that it is still there and that hostapd still runs, and repairs
+  either (`internal/agent/hotspotcheck.go`); the diagnostics report lists
+  each repair. The group key isn't changed daily, because some adapters
+  and phones miss the change and stop receiving broadcasts (ARP), which
+  cuts Wi-Fi devices off while Ethernet ones keep working. The owner's
+  allow list and device limit (`internal/agent/access.go`) become
+  hostapd's `accept_mac_file` and `max_num_sta`; they only apply to Wi-Fi.
 - **dnsmasq** hands out addresses (*DHCP*) and answers name lookups (*DNS*)
   for devices on the hotspot.
 - **rbdoh** (`cmd/rbdoh`, logic in `internal/doh`) is the
@@ -111,11 +119,16 @@ seconds later, so the phone receives the "success" page first.
      next restart;
   4. tells devices whether IPv6 internet is available, through dnsmasq's
      *router advertisements*.
-- **WPA-Enterprise (eduroam):** the username, password and uploaded
-  certificates go into `wpa_supplicant.conf` (`internal/agent/enterprise.go`).
-  RasBeacon only accepts a login server whose certificate is signed by the
-  uploaded CA *and* carries the configured server name. See
-  [eduroam.md](eduroam.md).
+- **WPA-Enterprise (such as eduroam):** the username, password and
+  uploaded certificates go into `wpa_supplicant.conf`
+  (`internal/agent/enterprise.go`). With an uploaded CA, RasBeacon only
+  accepts a login server whose certificate it signed, carrying the server
+  name if one is given; with a server name alone, one signed by a CA in the
+  system's list. With neither, it trusts the server's certificate at the
+  first connection: wpa_supplicant reports its SHA-256 on the control
+  socket (`internal/wpaevents`), rbd saves it (`servercert.go`), and from
+  then on only that certificate is accepted (`hash://server/sha256/...`).
+  See [wpa-enterprise.md](wpa-enterprise.md).
 - **IPv6:** devices always get a private IPv6 address on the hotspot. They
   only get an IPv6 route to the internet when the uplink has IPv6; then
   their traffic is translated like IPv4 (*NAT66*).
@@ -139,12 +152,15 @@ tunnel. `test/netns/vpn_test.go` checks this against a real WireGuard
 server, including deleting `wg0` while devices are using it.
 
 The VPN keeps several WireGuard profiles (imported files) and uses one;
-switching rebuilds `wg0` while the firewall keeps traffic in it.
+switching rebuilds `wg0` while the firewall keeps traffic in it. With the
+kill switch on and the VPN turned off, the firewall forwards nothing at
+all (the state is *blocked*, with a warning on the VPN and Status pages):
+the kill switch means devices never use the internet outside the VPN.
 
 The clock matters for WireGuard and certificates, and the Pi has no clock
 battery: `internal/agent/clock.go` saves the time regularly, never lets it
-go backwards across a reboot, and falls back to web servers' `Date`
-headers when NTP is blocked.
+go backwards across a reboot, and falls back to HTTPS servers' `Date`
+headers when NTP is blocked (`internal/clock`).
 
 ## Hotel login pages (captive portals)
 
@@ -203,16 +219,43 @@ Updates use the two copies ("slots", A and B) of the system on the SD card
 2. rbd streams the new boot and system partitions into the slot that isn't
    running, then checks the SHA-256 of everything against the signed one.
 3. The device restarts into the new slot **on trial** (the bootloader's
-   "tryboot"). If rbd runs normally for a minute, the new slot becomes the
-   default; otherwise, the next start (forced after 5 minutes) is the old
+   "tryboot"). If rbd runs normally for a minute, with the web UI (rbweb)
+   and the hotspot (hostapd) running, the new slot becomes the default; otherwise, the next start (forced after 5 minutes) is the old
    slot again.
 
 Settings live on the shared `/persistent` partition, so they carry over.
 
-The optional online check reads the latest release from GitHub, and its
-small `<name>-<version>.update.json` file (version and `minFromVersion`),
-so the System page can say a new version needs a fresh install before
-anyone downloads it. Installing still needs the signed `.rbupdate` file.
+The optional online check (every 1, 6, 24 or 168 hours, or on *Check
+now*) reads the newest 30 releases from GitHub (drafts and pre-releases
+left out) and the small `<name>-<version>.update.json` file (version and
+`minFromVersion`) of those newer than the running version. It offers the
+newest release that can be installed over the running version: when the
+newest one needs a newer starting version (a new signing key, say), the
+device moves up one step at a time, and the System page names the version
+that comes after the step. Only when no step exists does it say the new
+version needs a fresh install, before anyone downloads it. Installing still needs the signed `.rbupdate` file. A new
+version is announced once to the owner's ntfy topic or webhook
+(`internal/notify`).
+
+## Backups
+
+A backup (`internal/agent/backup.go`, `internal/backup`) is a tar archive,
+compressed with zstd (the image's `zstd` program, every core) and
+encrypted with AES-256-GCM under an Argon2id key from the owner's
+password. It always holds the settings, secrets, certificates and the
+plugins' settings and files; the owner chooses whether it holds the
+plugins' data and their images. A restore replaces the settings and the
+plugins, then restarts. A plugin whose image wasn't in the backup gets it
+when it starts (`internal/agent/pluginsfetch.go`): its `.rba` from the
+catalog, signed with the plugin's pinned key, or its published image by
+digest. A backup from a newer RasBeacon is refused.
+
+## RasBeacon's name
+
+The host name is a setting (`internal/agent/hostname.go`), because the
+system partition is read-only: rbd sets it at every start. dnsmasq answers
+`<name>.lan` and `rasbeacon.lan`, rbweb treats both as RasBeacon's own
+address, and the certificate RasBeacon makes for HTTPS names both.
 
 ## HTTPS and the reset button
 
@@ -220,7 +263,11 @@ anyone downloads it. Installing still needs the signed `.rbupdate` file.
   checks the certificate and gives rbweb a readable copy; rbweb serves
   port 443 when the copy exists. The setup wizard and the login-page notice
   stay on plain HTTP, because phones' login sheets refuse self-signed
-  certificates.
+  certificates. A certificate RasBeacon makes is valid for 820 days (Apple's
+  devices refuse server certificates valid for more than 825), and rbd
+  makes a new one 30 days before it runs out, or at the next start for
+  0.1's ten-year ones. Browsers then show their warning once more, with
+  the new fingerprint. An uploaded certificate is never replaced.
 - **Reset button** (`internal/button`): a button on GPIO 17 appears to
   Linux as a key (via the `gpio-key` overlay in `config.txt`); holding it
   10 seconds erases all settings, like the `factory-reset` file.

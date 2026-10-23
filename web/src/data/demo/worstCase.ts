@@ -16,8 +16,20 @@ export function applyWorstCase(demo: DemoState) {
   const guestSsid = '🏖️ Gäste-WLAN Strandhaus';
   const uplinkSsid = 'AirportFreeWiFi_Terminal2_GateB';
 
-  status.hotspot = { ...status.hotspot, ssid: hotspotSsid, metered: true };
-  router.hotspotSettings = { ...router.hotspotSettings, ssid: hotspotSsid, country: 'DE', metered: true };
+  status.hotspot = { ...status.hotspot, ssid: hotspotSsid, metered: true, security: 'wpa3' };
+  router.hotspotSettings = {
+    ...router.hotspotSettings,
+    ssid: hotspotSsid,
+    country: 'DE',
+    metered: true,
+    security: 'wpa3',
+  };
+  // A long allow list.
+  router.accessSettings = {
+    allowListOn: true,
+    allowed: Array.from({ length: 40 }, (_, i) => `3a:1f:22:${i.toString(16).padStart(2, '0')}:bb:cc`),
+    maxDevices: 231,
+  };
   status.uplink.wifi = { ...status.uplink.wifi, ssid: uplinkSsid, signalDbm: -91 };
   status.uplink.address = '100.127.254.253';
   status.uplink.gateway = '100.127.240.1';
@@ -187,7 +199,8 @@ export function applyWorstCase(demo: DemoState) {
   };
   status.device = {
     ...status.device,
-    hostname: 'rasbeacon-7f3a9c2e4b1d7162.travel.example.org',
+    // Nearly the longest name RasBeacon takes (63 characters), with no spaces to wrap at.
+    hostname: 'travel-router-of-konstantin-oberhauser-wettstein-office-sweden.lan',
     kernel: 'Linux 6.6.31+rpt-rpi-v8 #1 SMP PREEMPT Debian 1:6.6.31-1+rpt1 (2024-05-29) aarch64',
   };
   status.storage = {
@@ -290,6 +303,11 @@ export function applyWorstCase(demo: DemoState) {
     ],
     withVpn: true,
   };
+  // Data kept from an earlier Trip Notes of another author, with a long name.
+  router.keptPluginData['trip-notes'] = {
+    name: 'Trip Notes & Shared Itinerary Planner for Families',
+    keyId: 'E4C1 0A77 93BD 2F05',
+  };
   // Plugins in every state, with the longest names and messages.
   const base = router.plugins.plugins[0];
   router.plugins.plugins = [
@@ -347,8 +365,8 @@ export function applyWorstCase(demo: DemoState) {
     },
   ];
 
-  // The largest data limit, on a metered connection, with two devices over it.
-  router.usageSettings = { limitMb: 1_000_000, since: '2024-02-29T23:59:59Z', metered: true, devicesPaused: 2 };
+  // The largest data limit, with two devices over it.
+  router.usageSettings = { limitMb: 1_000_000, since: '2024-02-29T23:59:59Z', devicesPaused: 2 };
   // A 2 TB SSD instead of an SD card: nearly 1,900 sizes to choose from.
   router.swapSettings = { sizeGb: 0, maxGb: 1_862 };
   router.httpsSettings = {
@@ -382,5 +400,5 @@ export function applyOneOfEach(demo: DemoState) {
   demo.nearbyNetworks = (demo.nearbyNetworks ?? []).slice(0, 1);
   demo.router.swapSettings = { sizeGb: 1, maxGb: 1 };
   demo.router.dnsSettings = { servers: ['1.1.1.1'], withVpn: false };
-  demo.router.usageSettings = { limitMb: 1, since: new Date().toISOString(), metered: true, devicesPaused: 1 };
+  demo.router.usageSettings = { limitMb: 1, since: new Date().toISOString(), devicesPaused: 1 };
 }

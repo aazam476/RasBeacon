@@ -96,6 +96,29 @@ func TestHotspotValidate_RejectsLowercaseCountry(t *testing.T) {
 	}
 }
 
+// Only real ISO codes: the radio doesn't know any other, and hostapd won't
+// start with one.
+func TestHotspotValidate_CountryCodes(t *testing.T) {
+	for code, want := range map[string]string{
+		"GB":  "",
+		"DE":  "",
+		"UK":  "Use GB for the United Kingdom.",
+		"XX":  "Must be a two-letter country code such as US.",
+		"USA": "Must be a two-letter country code such as US.",
+	} {
+		h := DefaultConfig(Identity{ShortID: "AAAA"}).Hotspot
+		h.Country = code
+		err := h.Validate()
+		var got string
+		if err != nil {
+			got = err.(*ValidationError).Message
+		}
+		if got != want {
+			t.Errorf("country %q: %q, want %q", code, got, want)
+		}
+	}
+}
+
 func TestWriteJSON_ThenReadJSON_RoundTrips(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sub", "config.json")
 	want := DefaultConfig(Identity{ShortID: "BEEF"})
@@ -200,8 +223,8 @@ func TestUplinkConfig_Validate(t *testing.T) {
 func TestUplinkConfig_ValidateEnterprise(t *testing.T) {
 	eduroam := func(change func(*EnterpriseConfig)) SavedNetwork {
 		e := &EnterpriseConfig{
-			Method: EAPTTLSPAP, Identity: "NetID@rutgers.edu", AnonymousIdentity: "anonymous@rutgers.edu",
-			ServerName: "*.ruw.rutgers.edu",
+			Method: EAPTTLSPAP, Identity: "me@example.edu", AnonymousIdentity: "anonymous@example.edu",
+			ServerName: "*.login.example.edu",
 		}
 		if change != nil {
 			change(e)
@@ -217,9 +240,13 @@ func TestUplinkConfig_ValidateEnterprise(t *testing.T) {
 		wantField string
 	}{
 		{"complete TTLS", eduroam(nil), withCA, ""},
-		{"no CA certificate", eduroam(nil), NetworkCredentials{Password: "pw"}, "networks.0.enterprise.caCert"},
-		{"no server name", eduroam(func(e *EnterpriseConfig) { e.ServerName = "" }), withCA, "networks.0.enterprise.serverName"},
-		{"bad server name", eduroam(func(e *EnterpriseConfig) { e.ServerName = "ruw rutgers" }), withCA, "networks.0.enterprise.serverName"},
+		// Without a CA certificate, the server name is checked against the
+		// system's CAs; with neither, the first connection's certificate is
+		// trusted from then on.
+		{"no CA certificate", eduroam(nil), NetworkCredentials{Password: "pw"}, ""},
+		{"no server name", eduroam(func(e *EnterpriseConfig) { e.ServerName = "" }), withCA, ""},
+		{"neither", eduroam(func(e *EnterpriseConfig) { e.ServerName = "" }), NetworkCredentials{Password: "pw"}, ""},
+		{"bad server name", eduroam(func(e *EnterpriseConfig) { e.ServerName = "login example" }), withCA, "networks.0.enterprise.serverName"},
 		{"check turned off on purpose", eduroam(func(e *EnterpriseConfig) { e.AllowNoCertificateCheck = true; e.ServerName = "" }),
 			NetworkCredentials{Password: "pw"}, ""},
 		{"no password", eduroam(nil), NetworkCredentials{HasCACert: true}, "networks.0.password"},
@@ -251,7 +278,7 @@ func TestUplinkConfig_ValidateEnterprise(t *testing.T) {
 
 func TestServerDomain(t *testing.T) {
 	for in, want := range map[string]string{
-		"*.ruw.rutgers.edu":    "ruw.rutgers.edu",
+		"*.login.example.edu":  "login.example.edu",
 		"radius.example.edu":   "radius.example.edu",
 		" RADIUS.Example.EDU ": "radius.example.edu",
 	} {
@@ -270,8 +297,24 @@ func TestClone_CopiesEnterpriseSettings(t *testing.T) {
 	}
 }
 
+func TestFillDefaults_KillSwitchOffWhereTheVPNWasOff(t *testing.T) {
+	// Before v0.2.0 the kill switch did nothing with the VPN off; now it
+	// would block devices, so it is turned off there.
+	cfg := Config{Version: 3, VPN: VPNConfig{KillSwitch: true}}
+	cfg.FillDefaults()
+	if cfg.VPN.KillSwitch {
+		t.Error("devices with the VPN off must keep their internet after the upgrade")
+	}
+	on := Config{Version: 3, VPN: VPNConfig{Enabled: true, KillSwitch: true}}
+	on.FillDefaults()
+	if !on.VPN.KillSwitch {
+		t.Error("with the VPN on, the kill switch stays on")
+	}
+}
+
 func TestFillDefaults_OldConfigGetsKillSwitchOn(t *testing.T) {
-	cfg := Config{Version: 1}
+	// A version 1 config with the VPN on gets the kill switch on.
+	cfg := Config{Version: 1, VPN: VPNConfig{Enabled: true}}
 	cfg.FillDefaults()
 	if !cfg.VPN.KillSwitch || cfg.Version != CurrentVersion {
 		t.Errorf("got %+v", cfg)
@@ -340,5 +383,13 @@ func TestDNSConfig_CountsDoHServersTowardTheLimit(t *testing.T) {
 	}
 	if err := (DNSConfig{DoH: []string{"dns.google"}}).Validate(); err == nil {
 		t.Error("DoH servers are saved in full")
+	}
+}
+
+func TestFillDefaults_CheckOnlineBecomesASchedule(t *testing.T) {
+	cfg := Config{Version: 3, Updates: UpdatesConfig{CheckOnline: true}}
+	cfg.FillDefaults()
+	if cfg.Updates.CheckHours != 6 || cfg.Updates.CheckOnline {
+		t.Errorf("updates = %+v, want every 6 hours as before", cfg.Updates)
 	}
 }

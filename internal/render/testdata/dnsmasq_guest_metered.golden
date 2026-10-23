@@ -46,4 +46,7 @@ address=/rasbeacon.lan/10.87.0.1
 # Questions about any other name are passed on to these servers.
 # 127.0.0.53 is RasBeacon's own resolver (systemd-resolved), which asks the
 # DNS servers the current uplink (hotel, café, ...) handed out.
+# strict-order: always ask the first server, and the next only when it
+# doesn't answer (the order the owner listed them in).
+strict-order
 server=127.0.0.53

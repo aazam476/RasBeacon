@@ -42,6 +42,13 @@ rig="${RPI_IMAGE_GEN:-$repo_root/../rpi-image-gen}"
 stage="$repo_root/build/image-src"
 out="$repo_root/build/image"
 
+# 0. Keep the update signing key away from everything but rbsign. Every
+#    program this script starts inherits its environment, including npm and
+#    the install scripts of every web dependency, so the key moves into a
+#    plain (not exported) shell variable and is handed to rbsign alone.
+signing_key="${RASBEACON_UPDATE_SIGNING_KEY:-}"
+unset RASBEACON_UPDATE_SIGNING_KEY
+
 # 1. Build the web UI and the programs for 64-bit ARM.
 make -C "$repo_root" pi VERSION="$version" REPOSITORY="${GITHUB_REPOSITORY:-}"
 
@@ -98,12 +105,12 @@ xz -T0 -6 -c "$built" > "$final"
 #    a fork), no update file is made; the image itself is unaffected.
 bundle="$(sudo find "$repo_root/build/rig-$board/image-$name" -maxdepth 1 -name '*.update.tar.zst' | head -n 1)"
 # The Pi 3/Zero 2 W image has one system copy and no update bundle.
-if [ "$board" = rpi64 ] && [ -n "${RASBEACON_UPDATE_SIGNING_KEY:-}" ] && [ -n "$bundle" ]; then
+if [ "$board" = rpi64 ] && [ -n "$signing_key" ] && [ -n "$bundle" ]; then
   sudo cat "$bundle" > "$out/bundle.tmp"
   # The oldest version that can install this update: image/update-from,
   # without its comment lines (empty: any version).
   min_from="$( { grep -v '^#' "$repo_root/image/update-from" || true; } | tr -d '[:space:]')"
-  go run "$repo_root/cmd/rbsign" pack -board "$board" -version "$version" -min-from "$min_from" \
+  RASBEACON_UPDATE_SIGNING_KEY="$signing_key" go run "$repo_root/cmd/rbsign" pack -board "$board" -version "$version" -min-from "$min_from" \
     -bundle "$out/bundle.tmp" -out "$out/$name-$version.rbupdate" -info "$out/$name-$version.update.json"
   rm -f "$out/bundle.tmp"
 else

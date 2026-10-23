@@ -19,7 +19,7 @@ skip them freely. The report template at the end has one line per section.
 | Most sections | A phone (A), a second phone or tablet (B), a laptop. Your home router, an Ethernet cable, your home Wi-Fi password. |
 | Section 8 | A WireGuard `.conf` for RasBeacon ([server guide](../wireguard-server.md)); a second one for profiles if you can. |
 | Section 10 | A network with a login page (hotel, café, library, campus guest). |
-| Section 4.6 | Being on campus, with eduroam's certificates ([guide](../eduroam.md)). |
+| Section 4.6 | Being near a WPA-Enterprise network you can log in to, such as eduroam ([guide](../wpa-enterprise.md)). |
 | Section 13 | A USB stick (exFAT) for Samba; an Argon ONE V2 case for a Pi 4, if you have one. |
 | Section 14 (Pi 4/5 only) | The `.rbupdate` file from a build **newer** than the image you flashed (same Artifacts download). |
 | Optional | A USB power meter, `iperf3` on two computers, a push button and two jumper wires. |
@@ -101,19 +101,20 @@ first if you want them; everything else works from the web pages alone.
    *Connected to Wi-Fi "…"* with signal and band; websites load.
 5. Plug Ethernet back in. **Expect:** it switches back to Ethernet. Unplug
    it again for the next sections.
-6. **eduroam (if you can, on campus):** connect RasBeacon to any network
-   once first, so its clock is set. Then tap **eduroam** in the nearby
-   networks list (or **Add manually**: name `eduroam`, security *Username
-   and password*): login method
-   *EAP-TTLS with PAP* (try PEAP if it doesn't connect), username
-   `NetID@rutgers.edu`, anonymous username `anonymous@rutgers.edu`, your
-   password, **both** CA certificate files and the login server name
-   `*.ruw.rutgers.edu` (see the [eduroam guide](../eduroam.md#example-rutgers-university)),
-   **Add to list**, **Save**, and move eduroam to the top if other networks
-   are saved. **Expect:** connected within 30 s, websites load. *SSH* or
-   diagnostics: the `key_mgmt=` line tells WPA2- from WPA3-Enterprise.
-   A wrong server name or wrong password: **expect** *The network rejected
-   the login* and no connection.
+6. **WPA-Enterprise (if you can, e.g. eduroam):** connect RasBeacon to any
+   network once first, so its clock is set. Then tap the network in the
+   nearby networks list (or **Add manually**, security *Username and
+   password*): login method *EAP-TTLS with PAP* (try PEAP if it doesn't
+   connect), your username, anonymous identity and password, and leave
+   **Advanced** closed. **Add to list**, **Save**, and move the network to
+   the top if others are saved. **Expect:** connected within 30 s, websites
+   load, and the saved network shows *Login server: Trusted since the first
+   connection (…)*. *SSH:* `grep ca_cert /run/rbd/wpa_supplicant.conf` shows
+   `hash://server/sha256/…`. Then remove it and add it again with the CA
+   certificate(s) and server name under **Advanced** (see the
+   [guide](../wpa-enterprise.md#finding-the-ca-certificate-and-server-name)):
+   **expect** it connects too. A wrong server name or wrong password:
+   **expect** *The network rejected the login* and no connection.
 7. **Hotspot moves on large networks (fixed this round, campus/eduroam):**
    if the network you join uses RasBeacon's own address range (10.87.x.x),
    **expect** the hotspot to restart within a minute on another range
@@ -136,10 +137,10 @@ first if you want them; everything else works from the web pages alone.
 
 The VPN stays **off** for this section.
 
-1. Internet → **DNS servers** row. **Expect:** it says *The network's own*.
-2. Tap it, type `dns.google`, **Save**. **Expect:** *Saved.*; the box now
-   shows `https://dns.google/dns-query`; the row says *dns.google
-   (encrypted)*.
+1. Internet → **DNS servers** row. **Expect:** the row lists no servers;
+   opening it shows an empty box.
+2. Type `dns.google`, **Save**. **Expect:** *Saved.*; the box now shows
+   `https://dns.google/dns-query`.
 3. On phone A, open <https://dnsleaktest.com> (standard test) or
    <https://one.one.one.one/help>. **Expect:** Google's DNS, not your
    provider's or the network's.
@@ -148,12 +149,17 @@ The VPN stays **off** for this section.
    `cat /run/rbd/doh.env` lists the server and `127.0.0.53`;
    `journalctl -u rasbeacon-doh -b` shows no errors.
 6. Type `https://cloudflare-dns.com/dns-query` and `1.1.1.1` on two lines,
-   **Save**. **Expect:** the leak test now shows Cloudflare.
+   in that order, **Save**. **Expect:** after reloading the page the box
+   keeps that order; the leak test shows Cloudflare; *SSH:*
+   `grep -A3 strict-order /run/rbd/dnsmasq.conf` lists `127.0.0.1#5053`
+   before `1.1.1.1`, and `/run/rbd/doh.env` has
+   `RBDOH_BOOTSTRAP=1.1.1.1 127.0.0.53`.
 7. Type `not a server`, **Save**. **Expect:** an error under the box, and
    nothing changes.
 8. Plain DNS only: `9.9.9.9`, **Save**. **Expect:** the leak test shows
    Quad9; *SSH:* `systemctl status rasbeacon-doh` is *inactive*.
-9. Empty the box, **Save**. **Expect:** *The network's own* again.
+9. Empty the box, **Save**. **Expect:** *Saved.*, and the network's DNS is
+   used again.
 10. On the laptop: `nslookup example.com 8.8.8.8`. **Expect:** an answer
     (RasBeacon answers every DNS question itself).
 
@@ -172,20 +178,21 @@ The VPN stays **off** for this section.
    rejoins within a minute.
 5. **Flush lease** on phone B. **Expect:** no error; it gets an address
    again when it next joins.
-6. **Rename (new):** **Rename** on phone B, type `Test phone`, **Save**.
+6. **Rename:** the pencil next to phone B's name (always shown on a phone,
+   on hover with a mouse), type `Test phone`, **Save** (gray while the name
+   is blank).
    **Expect:** the card and Status show *Test phone*, and *Calls itself*
    shows its own name. Disconnect it and let it rejoin: the name stays.
    Rename it to nothing: its own name is back.
 7. **Data used (new):** after the download in step 2, phone B's card shows
    *Data used* close to what phone B says it downloaded. Reboot: the
    counts are kept (within the last 10 minutes of use).
-8. **Data limit (new):** Hotspot → tick **Metered connection**, **Save**.
-   Clients → *Data use* → **Limit per device** *500 MB* → **Save**, then
-   download more than 500 MB on phone B. **Expect:** phone B is paused
-   with *Data limit reached* and its switch can't be turned on; the
-   footer says one device is paused. **Reset counts** → **Reset**: phone B
-   has internet again, and every count is 0. Set *No limit* and untick
-   **Metered connection** again.
+8. **Data limit:** Clients → *Data use* → **Limit per device** *500 MB* →
+   **Save** (no metered connection needed), then download more than 500 MB
+   on phone B. **Expect:** phone B's traffic is blocked both ways, with
+   *Data limit reached*, and its switch can't be turned on; the footer
+   says one device has used up its data. **Reset counts** → **Reset**:
+   phone B has internet again, and every count is 0. Set *No limit* again.
 
 ## 7. The Ethernet port as a client port
 
@@ -206,16 +213,17 @@ The VPN stays **off** for this section.
 
 ## 8. VPN and kill switch
 
-1. VPN → choose your `.conf` → **Import**. **Expect:** "WireGuard file
-   imported", the profile `….conf` is picked.
-2. Turn on **Use the VPN** (kill switch on). **Expect:** within about 10 s
-   Status says *Connected: your devices' traffic goes through the VPN*.
+1. VPN → the **Kill switch** is gray until a profile is imported. Choose
+   your `.conf` → **Import**. **Expect:** "WireGuard file imported.", the
+   profile `….conf` is picked, and **Use the VPN** turns on by itself.
+2. **Expect:** within about 10 s (kill switch on) Status says *Connected:
+   your devices' traffic goes through the VPN*.
    <https://ifconfig.me> on phone A shows the VPN server's address.
 3. **DNS:** the leak test shows your VPN's DNS. Set your own DNS servers
    (section 5) to `dns.google` while the VPN is on: **expect** the leak
    test still shows the VPN's DNS (the VPN's DNS wins), and *SSH:*
    `rasbeacon-doh` is inactive.
-   **Also use while the VPN is on (new):** turn the switch on under the
+   **Use these servers while the VPN is on:** turn the switch on under the
    DNS box, **Save**. **Expect:** the leak test shows Google's DNS, reached
    from the VPN server's address (not your home address); *SSH:*
    `rasbeacon-doh` is active and `ip rule` lists a `uidrange` rule for the
@@ -228,21 +236,26 @@ The VPN stays **off** for this section.
    minutes, **expect** *Not connected. The kill switch is on…*, and no
    website loads on phone A. Fix it: **expect** websites back within a
    minute or two.
-5. **Kill switch off:** untick it, break the tunnel again. **Expect** after
+5. **Kill switch on, VPN off:** turn off **Use the VPN**. **Expect:** VPN and
+   Status warn that devices have no internet because the kill switch is
+   on and the VPN is off, and no website loads on phone A (Ethernet devices
+   either). Turn the VPN on again.
+6. **Kill switch off:** untick it, break the tunnel again. **Expect** after
    about 4 minutes *using the internet WITHOUT the VPN* and websites load
    from your home address. Fix it: back to *Connected*. Tick the kill switch
    again.
-6. **Boot with the VPN broken:** break the tunnel, pull the power, plug it
+7. **Boot with the VPN broken:** break the tunnel, pull the power, plug it
    back in, and try websites on phone A for 2 minutes. **Expect:** nothing
    loads. Fix the tunnel: phone A gets online.
-7. **Server details:** type `big` as the MTU, **Save**: **expect** "Must be
+8. **Server details:** type `big` as the MTU, **Save**: **expect** "Must be
    a number, or empty for the default." Type `1420`, **Save**: *Saved.*
-8. **Profiles (if you have a second file):** import it, pick it. **Expect**
+9. **Profiles (if you have a second file):** import it, rename it with the
+   pencil next to its name (a name another profile has is refused), pick it. **Expect**
    Status connected again within about 30 s and ifconfig.me showing the
    second server. While switching, a `ping 1.1.1.1` on the laptop may pause
    but must never show your home address. Remove the second profile:
    **expect** it falls back to the first.
-9. **Clock:** unplug the Pi for 10+ minutes, plug it in. **Expect** the VPN
+10. **Clock:** unplug the Pi for 10+ minutes, plug it in. **Expect** the VPN
    reconnects by itself within a couple of minutes.
 
 ## 9. Speed test
@@ -304,13 +317,40 @@ Keep the VPN on with the kill switch.
    characters long." Leave it empty and set band **5 GHz** → **Save**:
    *Saved.*, the hotspot comes back on 5 GHz, devices rejoin. Switch back to
    2.4 GHz if you like.
-2. **Show password and QR code** with the admin password: shows the current
-   one and a QR code. Scan it with a phone's camera: the phone offers to
-   join the hotspot and joins it.
-3. **Metered:** tick it, **Save**: devices do **not** disconnect; Status
+   **Country `UK` with 5 GHz (review check):** Band **5 GHz**, Country `UK`.
+   **Expect** *Use GB for the United Kingdom.* under Country as soon as both
+   letters are typed, and **Save** refused with the same message; the
+   hotspot keeps running on its old settings. With `GB` it saves.
+   **Channels by country (new):** Country `JP`, Band 5 GHz: the Channel list
+   ends at 48 (Japan has no 149 to 165); with `US` it goes up to 165.
+   On a radio without 5 GHz (the built-in Wi-Fi of a Zero 2 W or 3B, no
+   USB adapter): the Band list offers only 2.4 GHz, in setup too.
+   **Settings hostapd refuses (new):** set a channel the radio can't use
+   (*SSH:* `iw phy` lists its channels; one marked *no IR*) → **Save**:
+   after about 5 s, *The Wi-Fi adapter couldn't run the hotspot with these
+   settings, so the previous settings were put back.* and the hotspot is
+   back on the old settings.
+2. **Show password and QR code** (no admin password asked): shows the
+   current one and a QR code. Scan it with a phone's camera: the phone
+   offers to join the hotspot and joins it.
+3. **WPA3 only (new):** Security → *WPA3 only*, **Save**. **Expect:** the
+   footer warns about older devices; a phone from 2019 or later rejoins,
+   an older laptop or adapter can't. Switch back to *WPA2/WPA3*.
+4. **Allowed devices (new):** *Who can join* → *Allowed devices* → turn on
+   **Only allow these devices**. **Expect:** a warning that the device
+   you're using isn't on the list, with **Add this device**; **Save**
+   without it asks *Lock out this device?*. Add this device with the
+   button, **Save**: the hotspot restarts and this device rejoins; phone B
+   (not listed) can't join with the right password, while a laptop on the
+   Ethernet client port still can. Turn it off again. (Phones use a private
+   MAC address per network: the one in their Wi-Fi settings for this
+   network is the one to list.)
+5. **Device limit (new):** *Device limit* → *2 devices* → **Save**. **Expect:**
+   a third Wi-Fi device can't join until one leaves. Set *No limit*.
+6. **Metered:** tick it, **Save**: devices do **not** disconnect; Status
    shows *Metered connection On*; Android (after Wi-Fi off/on) treats the
    network as metered. Untick it.
-4. **Guest network:** if the Guests page says the adapter can only
+7. **Guest network:** if the Guests page says the adapter can only
    broadcast one network, note it and skip. Otherwise turn it on with a
    name and password (without a password: "Choose a password for the guest
    network."). **Expect:** *Saved. The hotspot has restarted.*; phone B on
@@ -319,7 +359,12 @@ Keep the VPN on with the kill switch.
    Status shows the guest network running with 1 guest.
    **Show QR code** (new) under *Now*: scanning it with a phone's camera
    offers to join the guest network, and joins it.
-5. **Public IPv6 (if your WireGuard server routes a /64 to RasBeacon, and
+   **rbd restarting with the guest network on (review check):** *SSH:*
+   `sudo systemctl restart rbd`. **Expect** within a minute: the Status page
+   shows the same uplink as before (the built-in Wi-Fi or Ethernet, never
+   `guest0`), phones on both networks have internet again, and
+   `journalctl -u rbd -b | grep -i uplink` names no `guest0`.
+8. **Public IPv6 (if your WireGuard server routes a /64 to RasBeacon, and
    its `.conf` gives RasBeacon an IPv6 address and `::/0`):** VPN →
    *Server details* → *Public IPv6 network* → the /64 (like
    `2001:db8:1234:5678::/64`) → **Save**. **Expect:** on a phone,
@@ -327,9 +372,12 @@ Keep the VPN on with the kill switch.
    *Public addresses through the VPN*. Without such a server, just check
    <https://test-ipv6.com> loads quickly and Status shows whether devices get
    IPv6.
-6. **HTTPS:** turn on **Use HTTPS for these settings pages**. Open
+9. **HTTPS:** turn on **Use HTTPS for these settings pages**. Open
    `https://10.87.0.1`: the fingerprint in the browser's warning matches
    the page's *SHA-256 fingerprint*; `http://` redirects to `https://`.
+   **On an iPhone and a Mac (new):** Safari offers to continue past the
+   warning (the certificate is valid for 820 days, under Apple's 825-day
+   limit), and *Valid until* is about 27 months away.
    Turn it off again if you prefer.
 
 ## 13. Plugins (new)
@@ -352,8 +400,8 @@ Pi 4 in an Argon ONE V2 case, test that plugin too.
 4. **VPN + kill switch:** break the tunnel (see section 8) and install Samba:
    **expect** *Waiting for the VPN*, and the install continuing once the VPN
    is back. Fix the tunnel.
-5. **DNS:** do what *Next steps* says (DNS servers = its address, **Also use
-   while the VPN is on**). **Expect** ads blocked on phone A
+5. **DNS:** do what *Next steps* says (DNS servers = its address, **Use
+   these servers while the VPN is on**). **Expect** ads blocked on phone A
    (<https://d3ward.github.io/toolz/adblock>), and AdGuard's *Queries today*
    growing. Guests' lookups are filtered too, but on a guest phone
    `http://10.87.0.1:3000` doesn't load.
@@ -383,7 +431,26 @@ Pi 4 in an Argon ONE V2 case, test that plugin too.
 14. **Remove** Samba with **Keep its data**, install it again: its settings
     are new, its data is back. Remove AdGuard Home without keeping data.
 15. *SSH:* `podman ps` shows only plugins RasBeacon runs; `nft list ruleset`
-    has the `plugin_ports` chain.
+    has the `plugin_ports` chain, and a `table bridge rasbeacon` that drops
+    what `rbport*` ports send each other; `ip link` shows each plugin's port
+    as `rbport<n>` in `rbplug0`.
+16. **A plugin whose image carries another plugin's name (review check):**
+    with AdGuard Home installed (say version 0.107.79-2), on a computer
+    with Podman or Docker:
+    `podman pull docker.io/library/alpine:3.20`,
+    `podman tag docker.io/library/alpine:3.20 localhost/rasbeacon-plugin/adguard-home:0.107.79-2`,
+    `podman save -o image.tar docker.io/library/alpine:3.20 localhost/rasbeacon-plugin/adguard-home:0.107.79-2`,
+    then zip it with any plugin's `manifest.json` (another `id`, such as
+    `evil-test`, and no `image.ref`), `icon.png` and `README.md` into
+    `evil-test.rba` (docs/plugins.md, "The file"). **Install from a file.**
+    **Expect** it refused, naming the other plugin's image, and AdGuard Home
+    still running its own image after a restart (*SSH:*
+    `podman image inspect localhost/rasbeacon-plugin/adguard-home:0.107.79-2`
+    shows the same ID as before).
+17. **Kept data of another author (new):** remove Trip Notes or any
+    unsigned plugin with **Keep its data**, then install it again: the
+    sheet shows *Use the data kept from the earlier … install*, off; with
+    it off the plugin starts empty. Repeat with it on: the data is back.
 
 ## 14. Updates (Pi 4/5 only)
 
@@ -404,12 +471,24 @@ install updates (on the Pi 3/Zero 2 W image, check instead that System says
    **Install update**, confirm. Keep the page open: uploading takes a minute
    or two, then RasBeacon restarts (the hotspot is gone for about 2
    minutes). **Expect:** *Updated to <new version>*, and every setting kept
-   (hotspot, networks, VPN, DNS, swap). Note how long it took.
+   (hotspot, networks, VPN, DNS, swap). Note how long it took. If RasBeacon
+   doesn't restart by itself, System shows *Restart to finish the update*
+   with the reason: note the reason (it's a bug), then press **Restart**.
+   Updating from v0.1.0 stops before the restart without that notice,
+   because v0.1.0's restart command fails on systemd 257: after installing,
+   run `systemctl reboot --reboot-argument="0 tryboot"` over SSH.
 4. **Rollback (if you can):** start another update (the same file again
    works), and as soon as the hotspot disappears for the restart, pull the
    power, wait 5 s, plug it back in. **Expect:** RasBeacon comes back on the
    **old** version and System says *The update to … didn't start correctly, so RasBeacon went back to …*.
-5. **Versions (released images only):** test builds are called `dev-…` and
+5. **Looking for updates (new):** System → *Check for new versions* → *Every
+   day*; **Check now**. **Expect:** the footer says when it last checked
+   (or why it couldn't). *Update notifications* → *Address*: an ntfy topic (install the ntfy
+   app, subscribe to a topic, enter `https://ntfy.sh/<topic>`) →
+   **Send a test**: the phone shows RasBeacon's test message. **Save**.
+   On a device running an older release, **Check now** sends one
+   notification about the new version, and only once.
+6. **Versions (released images only):** test builds are called `dev-…` and
    skip the version checks, so do this on a device flashed with a release
    (like `v0.1.0`). Install an **older** release's `.rbupdate`. **Expect:**
    refused (*older than the … running*), no restart. To see the fresh-install
@@ -422,48 +501,73 @@ install updates (on the Pi 3/Zero 2 W image, check instead that System says
 1. **Power cuts:** three times, pull the power while running, wait 5 s,
    plug back in. **Expect** each time: same hotspot, same settings, the
    uplink (and VPN) back within about a minute, still logged in.
-2. **Reboot:** System → **Reboot** asks first (**Cancel** does nothing);
-   confirming restarts.
-3. **Long run:** connect as many devices as you can (the goal for marking
+2. **Reboot and shut down:** System → **Reboot** asks first (**Cancel** does
+   nothing); confirming restarts. **Shut down** asks first; confirming turns
+   it off (the page says how to turn it on); unplug and replug the power:
+   it starts as usual.
+3. **Rename (new):** System → *About* → pencil next to *Name* → `travel-pi`
+   → **Save**. **Expect:** RasBeacon restarts; afterwards
+   `http://travel-pi.lan` and `http://rasbeacon.lan` both open it, and
+   About shows `travel-pi.lan`. A name a device on the hotspot uses (its
+   own name, shown under *Calls itself* on Clients) is refused. Rename it
+   back to `rasbeacon`.
+4. **Long run:** connect as many devices as you can (the goal for marking
    an adapter *Tested* is **10 devices for 30 minutes**) and keep them in use
    for at least 30 minutes. Phones drop idle Wi-Fi to save power; that's
    not a failure. **Expect:** the hotspot stays up, no "incorrect password",
    and devices rejoin. Afterwards download the diagnostics and look for
    `beacon`, `flush`, `rtw88`, `timed out` or hostapd errors.
-4. **Memory (on a 1 GB board, and a Zero 2 W with 512 MB, if you have
+5. **Memory (on a 1 GB board, and a Zero 2 W with 512 MB, if you have
    them):** open the zero-leak login (section 10) or run the speed test,
    then *SSH:* `free -m`. **Expect:** it works (slower on the Zero 2 W);
    RasBeacon's pages keep responding.
-5. **Diagnostics:** System → **Download diagnostics**. Search it for your
+6. **Diagnostics:** System → **Download diagnostics**. Search it for your
    hotspot password, Wi-Fi passwords, the VPN's `PrivateKey`, your eduroam
    username. **Expect:** none appear (usernames only masked, like
    `N***@…`).
 
 ## 16. Erasing (do these last)
 
-0. **Backup (new):** System → **Back up settings** with a password (with
-   **Include plugins** if any are installed). **Expect** the sheet to close
-   after a second and the browser to download a `.rbbackup` file with its own
-   progress (opening it in a text editor shows nothing readable). With
-   AdGuard Home as the DNS server, phone A keeps loading pages during the
-   download (AdGuard pauses only for the few seconds its data is copied). Change the hotspot's
-   name and remove a plugin, then **Restore from a backup** with that file:
-   a wrong password says so; the right one restarts RasBeacon with the old
-   name and the plugin back (its data too). After the factory reset below,
-   set RasBeacon up and restore the backup again: everything comes back.
+0. **Backup:** System → **Back up settings** with a password (no admin
+   password asked). With plugins installed, choose **Plugin data**.
+   **Expect** the sheet to close after a second and the browser to download
+   a `.rbbackup` file with its own progress (opening it in a text editor
+   shows nothing readable). With AdGuard Home as the DNS server, phone A
+   keeps loading pages during the download (AdGuard pauses only for the few
+   seconds its data is copied). Change the hotspot's name, remove a plugin
+   and install another, then **Restore from a backup** with that file: a
+   wrong password says so; the right one restarts RasBeacon with the old
+   name, the installed plugin gone, and the backup's plugin downloading its
+   app again (*Downloading its app again…*), then running with its data.
+   Repeat with **Everything** and the uplink unplugged: the plugin starts
+   without the internet. After the factory reset below, set RasBeacon up
+   and restore the backup again: everything comes back.
+   **A cut-off backup (new):** start an **Everything** backup with a plugin's
+   data and cancel the download in the browser halfway. Restore the partial
+   file: **expect** *This backup is incomplete: it was cut off while it was
+   being saved…*, not "the password is wrong". A large backup (several GB)
+   over a slow connection downloads to the end, however long it takes.
 
-1. **Factory reset:** System → *Factory reset* → **Erase everything** with
+1. **Admin password:** log in on a second device too, then on the first
+   System → **Change admin password**. A wrong current password says
+   *Wrong password.*; a new one under 10 characters, or typed differently
+   the second time, is refused next to its field. The right one says
+   *Admin password changed.* **Expect:** the first device stays logged in;
+   the second is sent to the login page, where the old password is
+   refused and the new one works. "Stay logged in" ends on both.
+   Change it back if you like.
+2. **Factory reset:** System → *Factory reset* → **Erase everything** with
    the admin password. **Expect:** it restarts into `RasBeacon-Setup-XXXX`.
-2. **setup.txt:** power off, create `setup.txt` on the card's `BOOTCONFIG`
+3. **setup.txt:** power off, create `setup.txt` on the card's `BOOTCONFIG`
    drive (`BOOT` on the Pi 3/Zero 2 W image) with `setup_password=testing-1234`, boot. **Expect:** the setup
    network asks for that password. Then change it to
    `setup_password=short`, boot: **expect** no setup network and the green
    LED blinking 3 short, 1 long. Delete the file, boot, finish setup:
    `setup.txt` is gone from the card afterwards.
-3. **factory-reset file:** power off, create an empty file
+4. **factory-reset file:** power off, create an empty file
    `factory-reset` (no extension) on `BOOTCONFIG` (or `BOOT`), boot. **Expect:** the
    setup network, and the file gone afterwards.
-4. **Reset button (if you can):** button between pin 11 (GPIO 17) and pin 9
+5. **Reset button (if you can):** button between pin 11 (GPIO 17) and pin 9
    (ground). A short press does nothing; holding 10 s erases everything
    like step 1.
 
@@ -511,16 +615,17 @@ Board (Pi 4/5/3B/3B+/Zero 2 W) / RAM:     Adapter:          Card size:          
 3  Storage shows full card (__ GB): / swap row 2 GB: / 4 GB, Off, 2 GB save: / SSH swapon+swappiness:
 4  Ethernet: / scan lists networks: / Wi-Fi uplink + switch: / eduroam: / hotspot move kept working 15 min: / renew, disconnect:
 5  dns.google saved as full address: / leak test shows Google: / rbdoh running: / Cloudflare+1.1.1.1: / bad entry refused: / plain only, rbdoh stopped: / back to network's:
-6  Count + this device: / traffic rates: / pause + reboot-proof: / disconnect: / flush lease:
+6  Count + this device: / traffic rates: / pause + reboot-proof: / disconnect: / flush lease: / rename pencil: / data limit without metered:
 7  Laptop on client port gets address+internet: / listed with cable icon, no Disconnect: / leaves list: / safety warning:
-8  Import + connect (IP = VPN): / DNS = VPN's even with own DNS set: / kill switch on no leak: / off falls back: / boot no leak: / MTU check: / profiles: / clock:
+8  Import turns VPN on + connect (IP = VPN): / kill switch + VPN off blocks, warns: / rename profile: / DNS = VPN's even with own DNS set: / kill switch on no leak: / off falls back: / boot no leak: / MTU check: / profiles: / clock:
 9  Speed test: down __ up __ ping __ location __, took __ s / speed.cloudflare.com: down __ up __
 10 Login page notice: / zero-leak login worked, tap delay __ s: / no leak: / login mode:
 11 SSH: / pages OK phone+laptop+dark: / rounded focus outline: / readings: / stay logged in: / unsaved bar:
-12 Hotspot password check + 5 GHz: / show password: / metered: / guests isolated: / IPv6: / HTTPS fingerprint + redirect:
-13 Version before __ / renamed image refused: / changed byte refused: / update installed, settings kept, took __ min: / rollback:
-14 Power cuts x3: / reboot dialog: / long run __ devices __ min, drops: / memory: / diagnostics clean:
-15 Factory reset: / setup.txt password + broken-file LED + deleted: / factory-reset file: / button:
-16 Power idle __ W, load __ W / iperf3:
+12 Hotspot password check + 5 GHz: / UK refused, GB saves: / JP channels end at 48: / show password (no admin password): / WPA3 only: / allowed devices + lockout warning: / device limit: / metered: / guests isolated: / rbd restart with guests, uplink not guest0: / IPv6: / HTTPS fingerprint + redirect: / iPhone Safari accepts the certificate:
+13 Plugins: catalog install AdGuard: / isolation: / ports: / Samba: / crash stop: / changed byte refused: / image with another plugin's name refused, AdGuard unchanged: / kept data asked about: / rbport + bridge table:
+14 Version before __ / renamed image refused: / changed byte refused: / update installed, settings kept, took __ min: / rollback: / check schedule + Check now: / ntfy test + new-version notice:
+15 Power cuts x3: / reboot dialog: / shut down + power on: / rename to travel-pi.lan: / long run __ devices __ min, drops: / memory: / diagnostics clean:
+16 Backup Plugin data restored, app downloaded again: / cut-off backup says incomplete: / Everything restored offline: / Admin password changed, other device logged out: / Factory reset: / setup.txt password + broken-file LED + deleted: / factory-reset file: / button:
+17 Power idle __ W, load __ W / iperf3:
 Anything else odd:
 ```

@@ -16,6 +16,7 @@ import (
 
 	"rasbeacon/internal/clock"
 	"rasbeacon/internal/config"
+	"rasbeacon/internal/portal"
 )
 
 const (
@@ -81,39 +82,54 @@ func (a *Agent) ntpSynchronized() bool {
 // on the current network, sets the clock from web servers' "Date" headers.
 // cmd/rbd starts it in the background (not on the simulated device).
 func (a *Agent) RunClockMonitor() {
-	lastSaved := time.Time{}
-	lastSet := time.Time{}
-	client := &http.Client{Timeout: 5 * time.Second}
+	client := clock.Client(nil)
+	watch := &clockWatch{fetch: func() []time.Time { return fetchDates(client) }}
 	for {
 		time.Sleep(clockCheckInterval)
-		now := time.Now()
-		if now.Sub(lastSaved) >= clockSaveInterval {
-			a.SaveClock()
-			lastSaved = now
-		}
+		a.checkClock(watch, time.Now())
+	}
+}
 
-		// Only fall back to web servers when NTP hasn't worked, the uplink
-		// has been connected for a while, and we haven't just done it.
-		a.mu.Lock()
-		connected := a.uplink.status.Connected
-		connectedFor := a.now().Sub(a.uplink.connectedSince)
-		a.mu.Unlock()
-		if !connected || connectedFor < ntpGrace || now.Sub(lastSet) < time.Hour || a.ntpSynchronized() {
-			continue
-		}
+// clockWatch is what the clock monitor remembers from one round to the
+// next.
+type clockWatch struct {
+	// lastSaved and lastSet are when it last saved the time floor and
+	// last set the clock from web servers.
+	lastSaved, lastSet time.Time
+	// fetch asks web servers for the time (fetchDates on the device).
+	fetch func() []time.Time
+}
 
-		samples := fetchDates(client)
-		agreed, ok := clock.AgreedTime(samples, a.timeFloor())
-		if !ok {
-			slog.Warn("NTP is not working and web servers did not agree on the time")
-			continue
-		}
-		lastSet = now
-		if difference := time.Until(agreed); difference > 30*time.Second || difference < -30*time.Second {
-			slog.Warn("NTP is not working; setting the clock from web servers", "time", agreed.UTC(), "change", difference)
-			a.setClock(agreed)
-			a.SaveClock()
-		}
+// checkClock is one round of the clock monitor, at now.
+func (a *Agent) checkClock(w *clockWatch, now time.Time) {
+	if now.Sub(w.lastSaved) >= clockSaveInterval {
+		a.SaveClock()
+		w.lastSaved = now
+	}
+
+	// Only fall back to web servers when NTP hasn't worked, the uplink has
+	// been connected for a while, and we haven't just done it.
+	// Not while a login page is in the way either: the network answers
+	// in the servers' place then, so there is no time to get.
+	a.mu.Lock()
+	connected := a.uplink.status.Connected
+	connectedFor := a.now().Sub(a.uplink.connectedSince)
+	open := a.portal.result.State == portal.Open
+	a.mu.Unlock()
+	if !connected || !open || connectedFor < ntpGrace || now.Sub(w.lastSet) < time.Hour || a.ntpSynchronized() {
+		return
+	}
+
+	agreed, ok := clock.AgreedTime(w.fetch(), a.timeFloor())
+	if !ok {
+		slog.Warn("NTP is not working and web servers did not agree on the time")
+		return
+	}
+	w.lastSet = now
+	if difference := agreed.Sub(now); difference > 30*time.Second || difference < -30*time.Second {
+		slog.Warn("NTP is not working; setting the clock from web servers", "time", agreed.UTC(), "change", difference)
+		a.setClock(agreed)
+		a.SaveClock()
 	}
 }
 

@@ -40,6 +40,18 @@ type stagedPlugin struct {
 	created time.Time
 	// downloadSize is what installing still downloads (-1: unknown).
 	downloadSize int64
+	// useKeptData is the owner's choice in the install sheet: use data
+	// kept from an earlier install of another author (see pluginskept.go).
+	useKeptData bool
+}
+
+// publicKey is the key the plugin file is signed with (base64), as the
+// settings keep it; "" when it isn't signed.
+func (s *stagedPlugin) publicKey() string {
+	if s.archive.PublicKey == nil {
+		return ""
+	}
+	return base64.StdEncoding.EncodeToString(s.archive.PublicKey)
 }
 
 // stagingLifetime is how long a file waits in the install sheet.
@@ -221,10 +233,7 @@ func (a *Agent) preview(s *stagedPlugin) (api.PluginPreview, error) {
 	// An update must come from the same author: once a version was signed,
 	// every later one must be signed with the same key (like Android apps).
 	installed, update := a.cfg.Plugins.Installed[m.ID]
-	var key string
-	if s.archive.PublicKey != nil {
-		key = base64.StdEncoding.EncodeToString(s.archive.PublicKey)
-	}
+	key := s.publicKey()
 	if update {
 		switch {
 		case installed.PublicKey != "" && key == "":
@@ -269,6 +278,9 @@ func (a *Agent) preview(s *stagedPlugin) (api.PluginPreview, error) {
 				}
 			}
 		}
+	}
+	if !update {
+		preview.KeptData = a.keptDataQuestion(m.ID, key)
 	}
 	if board == "zero2w" || board == "pi3" || (memory > 0 && memory < 1024) {
 		preview.Warnings = append(preview.Warnings, fmt.Sprintf(
@@ -345,7 +357,7 @@ func (a *Agent) InstallPlugin(req api.PluginInstallRequest) (api.Plugin, error) 
 		Ports: ports, Settings: values, Drive: req.Drive, Running: true,
 	}
 	if preview.Signed {
-		record.PublicKey = base64.StdEncoding.EncodeToString(s.archive.PublicKey)
+		record.PublicKey = s.publicKey()
 	}
 	if !update {
 		if record.Address, err = a.nextPluginAddress(); err != nil {
@@ -365,6 +377,7 @@ func (a *Agent) InstallPlugin(req api.PluginInstallRequest) (api.Plugin, error) 
 	}
 	a.cfg = newCfg
 	delete(a.plugins.staged, req.StagingID)
+	s.useKeptData = req.UseKeptData
 
 	// Until it is installed, its page shows the new version's details.
 	live.manifest, live.busy, live.crashes = m, true, 0
@@ -455,41 +468,15 @@ func (a *Agent) installPluginSteps(id string, s *stagedPlugin, oldImage string) 
 		if err := s.archive.ExtractImage(tarFile); err != nil {
 			return "", err
 		}
-		out, err := a.plugins.runner.Run("podman", "load", "--quiet", "--input", tarFile)
-		if err != nil {
-			return "", fmt.Errorf("its image can't be loaded: %w", err)
-		}
-		loaded := loadedImage(out)
-		if loaded == "" {
-			return "", errors.New("its image can't be loaded: podman named no image")
-		}
-		// Give the image RasBeacon's own name for it, whatever the author
-		// called it.
-		if _, err := a.plugins.runner.Run("podman", "tag", loaded, image); err != nil {
+		if err := a.loadPluginImage(tarFile, image); err != nil {
 			return "", err
-		}
-		if loaded != image {
-			_, _ = a.plugins.runner.Run("podman", "untag", loaded)
 		}
 	} else {
 		if err := a.waitForPluginPath(id); err != nil {
 			return "", err
 		}
 		progress("Downloading its image…")
-		proxy, err := a.downloadProxy()
-		if err != nil {
-			return "", err
-		}
-		ref := m.Image.Ref
-		if i := strings.LastIndex(ref, ":"); i > strings.LastIndex(ref, "/") {
-			ref = ref[:i] // the digest pins it, not the tag
-		}
-		ref += "@" + m.Image.Digest
-		if _, err := a.plugins.runner.Run("env", "HTTPS_PROXY=http://"+proxy, "HTTP_PROXY=http://"+proxy,
-			"podman", "pull", "--quiet", "--arch", "arm64", ref); err != nil {
-			return "", fmt.Errorf("its image can't be downloaded: %w", err)
-		}
-		if _, err := a.plugins.runner.Run("podman", "tag", ref, image); err != nil {
+		if err := a.pullPluginImage(pinnedRef(*m.Image), image); err != nil {
 			return "", err
 		}
 	}
@@ -511,16 +498,9 @@ func (a *Agent) installPluginSteps(id string, s *stagedPlugin, oldImage string) 
 	if oldImage != "" && oldImage != image {
 		_, _ = a.plugins.runner.Run("podman", "rmi", "--ignore", oldImage)
 	}
-	// Data kept from an earlier install comes back.
-	kept := filepath.Join(a.paths.PluginKeptDir(), id+".img")
-	data := filepath.Join(a.paths.PluginDir(id), pluginDataImage)
-	if _, err := os.Stat(data); errors.Is(err, os.ErrNotExist) {
-		if _, err := os.Stat(kept); err == nil {
-			if err := os.Rename(kept, data); err == nil {
-				slog.Info("plugin's kept data restored", "plugin", id)
-			}
-		}
-	}
+	// Data kept from an earlier install comes back if it is the same
+	// author's, or if the owner chose to use it (pluginskept.go).
+	a.restoreKeptData(id, s.publicKey(), s.useKeptData)
 	return image, nil
 }
 

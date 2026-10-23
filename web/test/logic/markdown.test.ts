@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseInline, parseMarkdown } from './markdown';
+import { parseInline, parseMarkdown } from '@/lib/markdown';
 
 describe('parseMarkdown', () => {
   it('joins wrapped lines and splits paragraphs at blank lines', () => {
@@ -56,5 +56,26 @@ describe('parseInline', () => {
       { kind: 'text', text: '<b>hi</b> & snake_case_name, 2 * 3 * 4' },
     ]);
     expect(parseInline('\\*not italic\\*')).toEqual([{ kind: 'text', text: '*not italic*' }]);
+  });
+
+  // A 64 KB README of marks that are never closed: one pass over the line, not one per mark
+  // (that took seconds and froze the plugin page).
+  it.each(['[', '`', '**', '*a ', '_a ', '[a]('])('reads a line full of unclosed "%s" quickly', (mark) => {
+    const line = mark.repeat(Math.ceil(64_000 / mark.length));
+    const start = performance.now();
+    const parsed = parseInline(line);
+    expect(performance.now() - start).toBeLessThan(500);
+    expect(parsed.map((part) => (part.kind === 'text' ? part.text : '')).join('')).toBe(line);
+  });
+
+  it('still finds marks that are closed later in the line', () => {
+    expect(parseInline('`b` [a](https://x.example) *c* [ `')).toEqual([
+      { kind: 'code', text: 'b' },
+      { kind: 'text', text: ' ' },
+      { kind: 'link', href: 'https://x.example', children: [{ kind: 'text', text: 'a' }] },
+      { kind: 'text', text: ' ' },
+      { kind: 'em', children: [{ kind: 'text', text: 'c' }] },
+      { kind: 'text', text: ' [ `' },
+    ]);
   });
 });

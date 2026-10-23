@@ -203,3 +203,36 @@ func ParseBridgeFDB(out string) ([]string, error) {
 	}
 	return macs, nil
 }
+
+// Neighbor is one entry of the kernel's neighbor table: an address a
+// device on a local network uses, and the device's MAC address.
+type Neighbor struct {
+	IP  string
+	MAC string
+}
+
+// ParseNeighbors reads `ip -json neigh show`: which device uses which
+// address. Entries without a MAC address (lookups that failed) are left
+// out. For IPv6 this is the only list of a device's addresses, since
+// devices choose their own (there is no DHCP lease to read).
+func ParseNeighbors(out string) ([]Neighbor, error) {
+	var entries []struct {
+		Dst    string `json:"dst"`
+		LLAddr string `json:"lladdr"`
+	}
+	if strings.TrimSpace(out) == "" {
+		return nil, nil
+	}
+	if err := json.Unmarshal([]byte(out), &entries); err != nil {
+		return nil, fmt.Errorf("reading the neighbor table: %w", err)
+	}
+	var neighbors []Neighbor
+	for _, e := range entries {
+		hw, err := net.ParseMAC(e.LLAddr)
+		if err != nil || len(hw) != 6 || e.Dst == "" {
+			continue
+		}
+		neighbors = append(neighbors, Neighbor{IP: e.Dst, MAC: hw.String()})
+	}
+	return neighbors, nil
+}

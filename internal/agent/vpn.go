@@ -26,8 +26,10 @@ package agent
 // for a while ("direct") are they all switched to the uplink.
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/netip"
 	"slices"
 	"strconv"
@@ -114,6 +116,14 @@ func (a *Agent) vpnActive() bool {
 // web and DNS by the firewall.
 func (a *Agent) clientsThroughTunnel() bool {
 	return a.vpnActive() && a.vpn.machine.State() != tunnel.Direct && !a.portal.loginMode
+}
+
+// killSwitchBlocks reports whether the kill switch keeps devices off the
+// internet although the VPN is off: the owner turned the VPN off but left
+// the kill switch on, so nothing may leave without a VPN. It only counts
+// once a WireGuard profile exists (before that the switch can't be used).
+func (a *Agent) killSwitchBlocks() bool {
+	return a.cfg.VPN.KillSwitch && !a.cfg.VPN.Enabled && len(a.cfg.VPN.Profiles) > 0
 }
 
 // applyVPNConfig sets up the tunnel for the current settings, or removes it
@@ -243,13 +253,14 @@ func (a *Agent) updateTunnel() error {
 
 	// While the tunnel isn't working, look up the server's address again
 	// now and then (it may have changed, or the uplink's DNS works now).
+	// The lookup can take as long as the command's time limit on a network
+	// that drops DNS, so it runs in the background, not under a.mu: the
+	// settings pages keep answering meanwhile.
 	if active && state != tunnel.Up && a.now().Sub(a.vpn.lastRefresh) >= endpointRefreshInterval {
 		a.vpn.lastRefresh = a.now()
 		p, _ := a.activeProfile()
-		cmd := routing.SetEndpoint(p.Peer.PublicKey, p.Peer.Endpoint)
-		if _, err := a.runner.Run(cmd[0], cmd[1:]...); err != nil {
-			slog.Warn("could not look up the VPN server", "endpoint", p.Peer.Endpoint, "error", err)
-		}
+		key, endpoint := p.Peer.PublicKey, p.Peer.Endpoint
+		a.background(func() { a.refreshEndpoint(key, endpoint) })
 	}
 
 	if state == a.vpn.applied {
@@ -258,6 +269,39 @@ func (a *Agent) updateTunnel() error {
 	slog.Info("VPN state changed", "from", a.vpn.applied, "to", state, "killSwitch", a.cfg.VPN.KillSwitch)
 	a.vpn.applied = state
 	return a.applyClientPath()
+}
+
+// endpointLookupTime is the most a lookup of the VPN server's name may take.
+const endpointLookupTime = 15 * time.Second
+
+// refreshEndpoint looks up the VPN server's name in endpoint ("host:port")
+// again and gives WireGuard the address it has now. Called without a.mu:
+// the lookup may take endpointLookupTime. The owner may have saved another
+// server meanwhile, so the address is only set if peerKey and endpoint are
+// still the saved ones; otherwise an old server would replace the new one.
+func (a *Agent) refreshEndpoint(peerKey, endpoint string) {
+	host, port, err := net.SplitHostPort(endpoint)
+	if err != nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), endpointLookupTime)
+	defer cancel()
+	addresses, err := a.lookupIP(ctx, host)
+	if err != nil || len(addresses) == 0 {
+		slog.Warn("could not look up the VPN server", "endpoint", endpoint, "error", err)
+		return
+	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if p, ok := a.activeProfile(); !ok || !a.vpnActive() || p.Peer.PublicKey != peerKey || p.Peer.Endpoint != endpoint {
+		return // the settings changed while looking: they set the endpoint themselves
+	}
+	address := net.JoinHostPort(addresses[0].Unmap().String(), port)
+	cmd := routing.SetEndpoint(peerKey, address)
+	if _, err := a.runner.Run(cmd[0], cmd[1:]...); err != nil {
+		slog.Warn("could not set the VPN server's address", "endpoint", endpoint, "address", address, "error", err)
+	}
 }
 
 // applyClientPath makes the firewall, routing and DNS match where devices'
@@ -303,6 +347,10 @@ func (a *Agent) egressInterfaces() []string {
 		return nil // nothing is forwarded before setup is finished
 	case a.clientsThroughTunnel():
 		return []string{routing.TunnelInterface}
+	case a.killSwitchBlocks() && !a.portal.loginMode:
+		// Kill switch on, VPN off: nowhere (hotel login pages still work
+		// in login mode, which only allows web and DNS).
+		return nil
 	default:
 		return a.uplinkInterfaces()
 	}
@@ -311,9 +359,16 @@ func (a *Agent) egressInterfaces() []string {
 // upstreamDNS returns the DNS servers dnsmasq passes devices' questions to.
 func (a *Agent) upstreamDNS() []string {
 	if a.ownDNSInUse() {
-		servers := addrStrings(a.cfg.DNS.Servers)
-		if len(a.cfg.DNS.DoH) > 0 {
-			servers = append(servers, dohForwarder)
+		// In the owner's order. The DoH servers are all asked through the
+		// one forwarder, which takes the place of the first of them (it
+		// asks them in the same order).
+		var servers []string
+		for _, s := range a.cfg.DNS.Ordered() {
+			if _, err := netip.ParseAddr(s); err == nil {
+				servers = append(servers, s)
+			} else if !slices.Contains(servers, dohForwarder) {
+				servers = append(servers, dohForwarder)
+			}
 		}
 		return servers
 	}
@@ -359,6 +414,9 @@ func (a *Agent) vpnStatus() api.VPNStatus {
 		ReceivedBytes:       a.vpn.peer.ReceivedBytes,
 		SentBytes:           a.vpn.peer.SentBytes,
 	}
+	if a.killSwitchBlocks() {
+		s.State = api.VPNBlocked
+	}
 	if a.routedIPv6.IsValid() {
 		s.RoutedIPv6Prefix = a.routedIPv6.String()
 	}
@@ -370,6 +428,9 @@ func (a *Agent) vpnStatus() api.VPNStatus {
 
 // vpnWarnings explains VPN problems on the status page.
 func (a *Agent) vpnWarnings() []string {
+	if a.killSwitchBlocks() {
+		return []string{"Your devices have no internet: the kill switch is on and the VPN is off. Turn on the VPN, or turn off the kill switch."}
+	}
 	if !a.vpnActive() {
 		if a.cfg.VPN.Enabled {
 			return []string{"The VPN is turned on but its profile isn't complete: import a WireGuard file on the VPN page, or finish the profile's server details."}
@@ -430,6 +491,9 @@ func (a *Agent) SetVPNSwitches(req api.VPNSwitches) error {
 	defer a.mu.Unlock()
 	if a.mode != api.ModeNormal {
 		return ErrWrongMode
+	}
+	if req.KillSwitch && !a.cfg.VPN.KillSwitch && len(a.cfg.VPN.Profiles) == 0 {
+		return &config.ValidationError{Field: "killSwitch", Message: "Import a WireGuard profile first."}
 	}
 	newCfg := a.cfg.Clone()
 	newCfg.VPN.Enabled, newCfg.VPN.KillSwitch = req.Enabled, req.KillSwitch
@@ -539,6 +603,11 @@ func (a *Agent) ImportVPNProfile(conf, name string) error {
 	if newCfg.VPN.Active == "" {
 		newCfg.VPN.Active = name
 	}
+	if len(newCfg.VPN.Profiles) == 1 {
+		// The first profile: importing it means using it. (With the kill
+		// switch on and the VPN left off, devices would have no internet.)
+		newCfg.VPN.Enabled = true
+	}
 	newSecrets.WireGuardKeys = withKeys(newSecrets.WireGuardKeys, name, config.WireGuardKeys{
 		PrivateKey:   wg.PrivateKey.String(),
 		PresharedKey: presharedKeyText(wg.Peer),
@@ -610,6 +679,42 @@ func (a *Agent) RemoveVPNProfile(name string) error {
 		newCfg.VPN.Enabled = false
 	}
 	slog.Info("VPN profile removed", "profile", name, "active", newCfg.VPN.Active)
+	return a.saveVPN(newCfg, newSecrets, "")
+}
+
+// RenameVPNProfile gives a profile another name. Its keys and whether it is
+// the profile in use stay as they were.
+func (a *Agent) RenameVPNProfile(name, newName string) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.mode != api.ModeNormal {
+		return ErrWrongMode
+	}
+	i, err := profileIndex(a.cfg.VPN, name)
+	if err != nil {
+		return err
+	}
+	newName = strings.TrimSpace(newName)
+	if newName == name {
+		return nil
+	}
+	if err := config.ValidateProfileName(newName); err != nil {
+		return &config.ValidationError{Field: "newName", Message: err.(*config.ValidationError).Message}
+	}
+	if _, taken := a.cfg.VPN.Profile(newName); taken {
+		return &config.ValidationError{Field: "newName", Message: "Another profile already has this name."}
+	}
+	newCfg := a.cfg.Clone()
+	newSecrets := a.secrets.Clone()
+	newCfg.VPN.Profiles[i].Name = newName
+	if newCfg.VPN.Active == name {
+		newCfg.VPN.Active = newName
+	}
+	if keys, ok := newSecrets.WireGuardKeys[name]; ok {
+		delete(newSecrets.WireGuardKeys, name)
+		newSecrets.WireGuardKeys[newName] = keys
+	}
+	slog.Info("VPN profile renamed", "from", name, "to", newName)
 	return a.saveVPN(newCfg, newSecrets, "")
 }
 

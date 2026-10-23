@@ -137,6 +137,51 @@ func (a *Agent) UpdateHTTPSSettings(req api.HTTPSSettings) error {
 	return nil
 }
 
+// certCheckEvery is how often the uplink monitor looks whether the
+// generated certificate needs renewing.
+const certCheckEvery = time.Hour
+
+// certificateDue reports whether HTTPS is on with a certificate RasBeacon
+// made itself that should be replaced now (tlscert.Info.NeedsRenewal). An
+// uploaded certificate is the owner's to replace.
+func (a *Agent) certificateDue() bool {
+	if !a.cfg.HTTPS.Enabled || a.cfg.HTTPS.Uploaded {
+		return false
+	}
+	data, err := os.ReadFile(a.tlsCertFile())
+	if err != nil {
+		return false
+	}
+	info, err := tlscert.Describe(string(data))
+	return err == nil && info.NeedsRenewal(a.now())
+}
+
+// renewCertificateIfDue makes a new certificate when the old one runs out
+// soon, at most every certCheckEvery, and restarts rbweb with it. Browsers
+// then show their warning once more, with the new fingerprint. Called by
+// the uplink monitor; the caller holds a.mu.
+func (a *Agent) renewCertificateIfDue() {
+	if a.now().Sub(a.lastCertCheck) < certCheckEvery {
+		return
+	}
+	a.lastCertCheck = a.now()
+	if !a.certificateDue() {
+		return
+	}
+	slog.Info("making a new HTTPS certificate: the old one runs out soon")
+	if err := a.generateCertificate(); err != nil {
+		slog.Error("could not make a new HTTPS certificate", "error", err)
+		return
+	}
+	if _, err := a.applyHTTPS(); err != nil {
+		slog.Error("could not use the new HTTPS certificate", "error", err)
+		return
+	}
+	if err := system.ServiceRestart(a.runner, rbwebService); err != nil {
+		slog.Error("could not restart the web server", "error", err)
+	}
+}
+
 // generateCertificate makes a new self-signed certificate.
 func (a *Agent) generateCertificate() error {
 	var addresses []net.IP
@@ -146,7 +191,7 @@ func (a *Agent) generateCertificate() error {
 	if a.lan.IPv6Prefix.IsValid() {
 		addresses = append(addresses, net.IP(a.lan.IPv6Prefix.Addr().AsSlice()))
 	}
-	cert, key, err := tlscert.Generate("RasBeacon "+a.identity.ShortID, addresses, a.now())
+	cert, key, err := tlscert.Generate("RasBeacon "+a.identity.ShortID, []string{a.cfg.Name() + ".lan"}, addresses, a.now())
 	if err != nil {
 		return err
 	}

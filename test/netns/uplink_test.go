@@ -230,9 +230,12 @@ func probeInNamespace(t *testing.T, ns, iface string) string {
 	t.Helper()
 	cmd := exec.Command("ip", "netns", "exec", ns, os.Args[0])
 	cmd.Env = append(os.Environ(), "RB_PROBE_INTERFACE="+iface)
-	out, err := cmd.CombinedOutput()
+	// Only what it prints: under go test -cover, the test binary also warns on stderr.
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
 	if err != nil {
-		t.Fatalf("probe failed: %v\n%s", err, out)
+		t.Fatalf("probe failed: %v\n%s%s", err, out, stderr.String())
 	}
 	return strings.TrimSpace(string(out))
 }

@@ -5,28 +5,31 @@
  */
 
 import type {
+  AccessSettings,
   ClaimResponse,
   DNSSettings,
   GuestSettings,
+  HotspotChannelsResponse,
   HotspotSettings,
   HTTPSSettings,
   NearbyNetwork,
-  PortalStatus,
-  SetupState,
-  Speedtest,
-  SSHSettings,
-  SwapSettings,
-  Status,
-  UpdateStatus,
-  UplinkSettings,
-  UsageSettings,
+  Plugin,
   PluginCatalog,
   PluginChoices,
   PluginDrive,
   PluginLogsResponse,
-  Plugin,
   PluginPreview,
   PluginsState,
+  PortalStatus,
+  SetupState,
+  Speedtest,
+  SSHSettings,
+  Status,
+  SwapSettings,
+  UpdateSettings,
+  UpdateStatus,
+  UplinkSettings,
+  UsageSettings,
   VPNProfile,
   VPNSettings,
   WiFiQR,
@@ -206,13 +209,12 @@ export const getStatus = () => request<Status>('GET', '/status');
 export const getHotspotSettings = () => request<HotspotSettings>('GET', '/settings/hotspot');
 export const putHotspotSettings = (settings: HotspotSettings) =>
   request<HotspotSettings>('PUT', '/settings/hotspot', { body: settings, timeoutMs: 45_000 });
-export const revealHotspotPassword = (adminPassword: string) =>
-  request<{ hotspotPassword: string }>('POST', '/settings/hotspot/reveal-password', {
-    body: { password: adminPassword },
-  });
-/** A QR code to join the hotspot (needs the admin password) or the guest network. */
-export const wifiQr = (network: 'hotspot' | 'guest', adminPassword?: string) =>
-  request<WiFiQR>('POST', '/wifi-qr', { body: { network, adminPassword } });
+export const revealHotspotPassword = () =>
+  request<{ hotspotPassword: string }>('POST', '/settings/hotspot/reveal-password', { body: {} });
+/** A QR code to join the hotspot or the guest network. */
+export const getHotspotChannels = (country: string) =>
+  request<HotspotChannelsResponse>('POST', '/settings/hotspot/channels', { body: { country } });
+export const wifiQr = (network: 'hotspot' | 'guest') => request<WiFiQR>('POST', '/wifi-qr', { body: { network } });
 
 export const getGuestSettings = () => request<GuestSettings>('GET', '/settings/guest');
 export const putGuestSettings = (settings: GuestSettings) =>
@@ -252,6 +254,9 @@ export const saveVPNProfile = (details: VPNProfileDetails) =>
 export const vpnProfileAction = (action: 'activate' | 'remove' | 'generate-key', name: string) =>
   request<VPNSettings>('POST', `/settings/vpn/profile/${action}`, { body: { name }, timeoutMs: 30_000 });
 
+export const renameVPNProfile = (name: string, newName: string) =>
+  request<VPNSettings>('POST', '/settings/vpn/profile/rename', { body: { name, newName } });
+
 export const clientAction = (action: 'disconnect' | 'flush-lease', mac: string) =>
   request<void>('POST', `/clients/${action}`, { body: { mac } });
 export const setClientInternetAccess = (mac: string, allowed: boolean) =>
@@ -273,9 +278,21 @@ export const putHTTPSSettings = (
 /** Uploads and installs an update file; takes minutes on slow Wi-Fi. */
 export const installUpdate = (file: File) =>
   request<UpdateStatus>('POST', '/system/update', { file, timeoutMs: 30 * 60_000 });
-export const setCheckOnline = (checkOnline: boolean) =>
-  request<UpdateStatus>('PUT', '/settings/updates', { body: { checkOnline } });
+export const getAccessSettings = () => request<AccessSettings>('GET', '/settings/access');
+export const putAccessSettings = (settings: AccessSettings) =>
+  request<AccessSettings>('PUT', '/settings/access', { body: settings });
+export const getUpdateSettings = () => request<UpdateSettings>('GET', '/settings/updates');
+export const putUpdateSettings = (settings: UpdateSettings) =>
+  request<UpdateStatus>('PUT', '/settings/updates', { body: settings });
+export const checkForUpdates = () => request<UpdateStatus>('POST', '/system/update/check', { timeoutMs: 60_000 });
+export const testUpdateNotification = (url: string) =>
+  request<void>('POST', '/settings/updates/test', { body: { url }, timeoutMs: 30_000 });
 export const reboot = () => request<void>('POST', '/system/reboot');
+export const restartIntoUpdate = () => request<void>('POST', '/system/update/restart');
+export const shutDown = () => request<void>('POST', '/system/shutdown');
+export const saveHostname = (hostname: string) => request<void>('POST', '/system/hostname', { body: { hostname } });
+export const changeAdminPassword = (currentPassword: string, newPassword: string) =>
+  request<void>('POST', '/system/admin-password', { body: { currentPassword, newPassword } });
 export const factoryReset = (adminPassword: string) =>
   request<void>('POST', '/system/factory-reset', { body: { password: adminPassword } });
 
@@ -294,8 +311,8 @@ export const downloadCatalogPlugin = (source: string, file: string) =>
   request<PluginPreview>('POST', '/plugins/catalog/download', { body: { source, file }, timeoutMs: 30 * 60_000 });
 export const downloadPluginUpdate = (id: string) =>
   request<PluginPreview>('POST', '/plugins/update', { body: { id }, timeoutMs: 30 * 60_000 });
-export const installPlugin = (stagingId: string, choices: PluginChoices) =>
-  request<Plugin>('POST', '/plugins/install', { body: { stagingId, ...choices } });
+export const installPlugin = (stagingId: string, choices: PluginChoices, useKeptData = false) =>
+  request<Plugin>('POST', '/plugins/install', { body: { stagingId, ...choices, useKeptData } });
 export const cancelPluginInstall = (stagingId: string) =>
   request<void>('POST', '/plugins/cancel', { body: { stagingId } });
 export const putPluginSettings = (id: string, choices: PluginChoices) =>
@@ -315,16 +332,14 @@ export const putPluginSources = (sources: string[]) =>
  * Asks for a backup. The answer is a one-time link to it: the browser saves the file as it
  * arrives (with its own progress), instead of holding a large backup in memory first.
  */
-export const prepareBackup = (adminPassword: string, password: string, includePlugins: boolean) =>
-  request<{ token: string; fileName: string }>('POST', '/system/backup', {
-    body: { adminPassword, password, includePlugins },
-  });
+export const prepareBackup = (password: string, plugins: string) =>
+  request<{ token: string; fileName: string }>('POST', '/system/backup', { body: { password, plugins } });
 /** Where the browser downloads a backup asked for with `prepareBackup`. */
 export const backupDownloadUrl = (token: string) => `/api/v1/system/backup/${encodeURIComponent(token)}`;
 export const uploadBackup = (file: File) =>
   request<void>('POST', '/system/restore/upload', { file, timeoutMs: 30 * 60_000 });
-export const restoreBackup = (adminPassword: string, password: string) =>
+export const restoreBackup = (password: string) =>
   request<{ version: string; created: string; plugins: boolean }>('POST', '/system/restore', {
-    body: { adminPassword, password },
+    body: { password },
     timeoutMs: 30 * 60_000,
   });

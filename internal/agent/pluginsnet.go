@@ -268,6 +268,7 @@ func (a *Agent) PluginCatalog(req api.PluginCatalogRequest) api.PluginCatalog {
 		}
 		if p, ok := a.cfg.Plugins.Installed[e.ID]; ok && e.ID != "" {
 			entry.InstalledVersion = p.Version
+			entry.UpdateAvailable = plugin.NewerVersion(e.Version, p.Version)
 		}
 		result.Entries = append(result.Entries, entry)
 	}
@@ -283,7 +284,10 @@ func (a *Agent) refreshCatalog() {
 		a.mu.Unlock()
 		return
 	}
-	sources := []string{plugin.BuiltInSource}
+	var sources []string
+	if !a.cfg.Plugins.NoBuiltInSource {
+		sources = append(sources, plugin.BuiltInSource)
+	}
 	sources = append(sources, a.cfg.Plugins.Sources...)
 	a.mu.Unlock()
 
@@ -327,18 +331,24 @@ func (a *Agent) refreshCatalog() {
 // from the catalog is installed (GitHub is otherwise only asked when the
 // owner opens the catalog). Updates are never installed by themselves.
 func (a *Agent) dailyCatalogCheck() {
-	a.mu.Lock()
-	a.loadCatalog()
-	due := a.now().Sub(a.plugins.catalog.CheckedAt) > 24*time.Hour
-	fromCatalog := false
-	for _, p := range a.cfg.Plugins.Installed {
-		if p.Source != "file" {
-			fromCatalog = true
-		}
-	}
-	a.mu.Unlock()
-	if due && fromCatalog {
+	if a.catalogCheckDue() {
 		slog.Info("checking the plugin catalog for updates")
 		a.refreshCatalog()
 	}
+}
+
+// catalogCheckDue reports whether the daily catalog check should ask
+// GitHub: a plugin from the catalog is installed, and the last check is
+// more than a day ago.
+func (a *Agent) catalogCheckDue() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.loadCatalog()
+	due := a.now().Sub(a.plugins.catalog.CheckedAt) > 24*time.Hour
+	for _, p := range a.cfg.Plugins.Installed {
+		if p.Source != "file" {
+			return due
+		}
+	}
+	return false
 }

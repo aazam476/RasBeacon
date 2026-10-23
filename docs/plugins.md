@@ -52,7 +52,7 @@ What plugins can't do, whatever they ask for:
 
 **After installing:** a plugin may tell you what to do next, for example
 AdGuard Home asks you to set the DNS servers (Internet → DNS servers) to its
-address and turn on **Also use while the VPN is on**. RasBeacon never makes
+address and turn on **Use these servers while the VPN is on**. RasBeacon never makes
 such changes for a plugin.
 
 **Crashes:** a plugin that stops by itself is started again. After 5 crashes
@@ -63,7 +63,12 @@ installed, RasBeacon checks the catalog once a day, and the plugin's page
 offers **Update to …**. Updates keep the plugin's settings and data.
 
 **Removing** deletes the plugin and its image. **Keep its data** saves its
-data, for installing it again later. A factory reset removes all plugins.
+data, for installing it again later. Anyone can give a plugin the same ID,
+so the data only comes back by itself to a plugin signed with the same key.
+For any other (another key, or either of them unsigned), the install sheet
+asks, with a switch that is off: *Use the data kept from the earlier …
+install*, naming the earlier plugin and its key. A factory reset removes
+all plugins.
 A backup (System → Back up settings) can include the plugins with their
 images and data.
 
@@ -97,7 +102,11 @@ image.tar       its container image (`docker save` / `podman save`, arm64), or
 signature       optional: made by `rbsign plugin-sign`
 ```
 
-Nothing else may be in the file. The image must be for `linux/arm64`.
+Nothing else may be in the file. The image must be for `linux/arm64`, and
+`image.tar` must not be compressed (RasBeacon reads the image names in it
+first). RasBeacon gives the image its own name; a tar that carries the name
+of another plugin's image (`rasbeacon-plugin/…`) is refused, because
+loading it would replace that plugin's program.
 
 Build the image, save it and zip it up:
 
@@ -165,8 +174,8 @@ Or name a published image in the manifest (pinned by digest) and leave
 | `volumes` | Folders of its data: `name` and `path` in the container (each path once). They survive updates. |
 | `usbDrive` | `path` where the chosen drive appears, `optional`. With the `usb-drive` permission. A chosen drive replaces a volume at the same path. |
 | `env`, `command` | Fixed environment variables (one line each), and a command replacing the image's. |
-| `settings` | The form RasBeacon draws: `key`, `label`, `type` (`text`, `password`, `number`, `switch`, `select`), `help`, `default`, `required`, `options` (`value`, `label`), `min`, `max`, `unit`, `env` (the environment variable that gets the value). Labels are at most 40 characters, help 300, units 20, option labels 60; option values are distinct. Passwords are kept with RasBeacon's secrets, exactly as typed, and never shown again. Values are one line, at most 1000 characters. |
-| `templates` | Files in `templates/` written into a volume before each start (`path` names a file inside a volume), filled in with Go's `text/template`: `{{.Settings.key}}`, `{{.Address}}`, `{{.Host}}`, `{{port 3000}}`, `{{bcrypt .Settings.password}}` (at most 10 times), `{{json .Settings.key}}`, `{{html .Settings.key}}`. A filled-in file is at most 4 MB. `once` writes it only the first time, so changes the plugin makes are kept. RasBeacon stops the plugin before writing, and never writes through a symbolic link the plugin made: if a folder on the path is a link, the plugin doesn't start. |
+| `settings` | The form RasBeacon draws: `key`, `label`, `type` (`text`, `password`, `number`, `switch`, `select`), `help`, `default`, `required`, `options` (`value`, `label`), `min`, `max`, `unit`, `env` (the environment variable that gets the value). Labels are at most 40 characters, help 300, units 20, option labels 60; option values are distinct. Passwords are kept with RasBeacon's secrets, exactly as typed, and never shown again. Values are one line, at most 1000 characters. The environment reaches Podman in a file only root can read (`--env-file`, deleted once the container started), never on its command line, so error messages and logs don't show it. |
+| `templates` | Files in `templates/` written into a volume before each start (`path` names a file inside a volume), filled in with Go's `text/template`: `{{.Settings.key}}`, `{{.Address}}`, `{{.Host}}`, `{{port 3000}}`, `{{bcrypt .Settings.password}}` (at most 10 times), `{{json .Settings.key}}`, `{{html .Settings.key}}`, `{{if}}` and `{{with}}`. `range`, `define`, `template` and `block` are refused when the plugin is opened, because they can make filling in a template take hours. A filled-in file is at most 4 MB. `once` writes it only the first time, so changes the plugin makes are kept. RasBeacon stops the plugin before writing, and never writes through a symbolic link the plugin made: if a folder on the path is a link, the plugin doesn't start. |
 | `afterInstall` | What the owner should do next, shown after installing and on its page. |
 | `metrics` | Up to 4 numbers on its page, read every 30 s from its own HTTP API: `label` (at most 30 characters), `url`, `path` in the JSON answer (`a.b.0`), `divideBy` (another path), `format` (`number`, `percent` for 0 to 1, `bytes`, `ms`, `seconds`, `text`), `scale`, and `username`/`password` for Basic authentication. |
 | `health` | A `url` that answers below 500 when it works. |
@@ -271,7 +280,12 @@ catalogs; `internal/agent/plugins*.go` installs and runs them.
   from the hotspot and only to RasBeacon's address (`dnat`), lets plugins with
   `internet` out like devices (into `wg0` when the VPN is in use; the routing
   rules 102/103 send their traffic to the tunnel table), and lets nothing from
-  the uplink in.
+  the uplink in. Each container's port on the bridge is named after its
+  address (`rbport2` for `10.89.0.2`, Podman's `host_interface_name`), and a
+  `bridge` table drops every packet one plugin's port passes to another's:
+  the bridge passes those itself, so the `inet` rules never see them.
+  (Matching the bridge's name instead, `meta ibrname`, needs
+  `CONFIG_NFT_BRIDGE_META`, which Raspberry Pi kernels don't have.)
 - **Downloads** (catalog, `.rba`, images) carry the firewall mark `0x5242`,
   which rule 111 sends into the tunnel; names are looked up with dnsmasq, which
   asks the VPN's DNS. Podman downloads through a proxy in rbd that makes such

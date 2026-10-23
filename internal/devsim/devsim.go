@@ -117,9 +117,11 @@ func Setup(root string) (paths.Paths, error) {
 // Runner pretends to run commands: it logs them and returns canned output.
 type Runner struct{}
 
-// The simulated adapter can broadcast two networks (for the guest network).
+// The simulated adapter can broadcast two networks (for the guest network),
+// on 2.4 and 5 GHz ("Band 2" is 5 GHz).
 const iwPhyInfo = "Wiphy phy1\n\tSupported interface modes:\n\t\t * managed\n\t\t * AP\n\t\t * monitor\n" +
-	"\tvalid interface combinations:\n\t\t * #{ managed } <= 1, #{ AP } <= 2,\n\t\t   total <= 2, #channels <= 1\n"
+	"\tvalid interface combinations:\n\t\t * #{ managed } <= 1, #{ AP } <= 2,\n\t\t   total <= 2, #channels <= 1\n" +
+	"\tBand 1:\n\tBand 2:\n"
 
 const stationDump = `Station 3a:1f:22:aa:bb:cc (on ap0)
 	signal:  	-48 [-50, -52] dBm

@@ -47,7 +47,7 @@ func TestClients_NamesAreKeptByAddress(t *testing.T) {
 	}
 }
 
-func TestClients_DataUseIsCountedAndTheLimitPausesOnMeteredConnections(t *testing.T) {
+func TestClients_DataUseIsCountedAndTheLimitBlocksADevice(t *testing.T) {
 	e := newClaimedEnv(t, false)
 	c := &fakeClock{now: time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)}
 	e.agent.now = func() time.Time { return c.now }
@@ -76,15 +76,14 @@ func TestClients_DataUseIsCountedAndTheLimitPausesOnMeteredConnections(t *testin
 		t.Errorf("data use = %v", got)
 	}
 
-	// A 1 MB limit only applies on a metered connection.
+	// A 1 MB limit, on a connection that isn't metered: it applies anyway.
 	if _, err := e.agent.UpdateUsageSettings(api.UsageSettings{LimitMB: 1}); err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(e.readFile(e.paths.FirewallRules()), "ether saddr") {
-		t.Error("nothing is paused while the connection isn't metered")
+		t.Error("nobody is over the limit yet")
 	}
 	e.agent.mu.Lock()
-	e.agent.cfg.Hotspot.Metered = true
 	e.agent.usage.file.Devices[laptop] = [2]uint64{900_000, 200_000}
 	e.agent.mu.Unlock()
 	sample(stationWithBytes(phone, 50, 400) + stationWithBytes(laptop, 2_000, 30_000))
@@ -96,7 +95,7 @@ func TestClients_DataUseIsCountedAndTheLimitPausesOnMeteredConnections(t *testin
 			t.Errorf("laptop = %+v", cl)
 		}
 	}
-	if s := e.agent.UsageSettings(); s.DevicesPaused != 1 || !s.Metered || s.LimitMB != 1 {
+	if s := e.agent.UsageSettings(); s.DevicesPaused != 1 || s.LimitMB != 1 {
 		t.Errorf("settings = %+v", s)
 	}
 

@@ -3,7 +3,17 @@
  * follow the original UI's shared/validation.ts and the checks in its hooks; the real provider
  * should use those (and the router re-checks everything anyway).
  */
-import type { GuestSettings, HotspotSettings, NewNetworkForm, SavedNetwork, SetupForm } from '../types';
+import { HOTSPOT_CHANNELS } from '../constants';
+import { FieldErrors } from '../errors';
+import type {
+  AdminPasswordForm,
+  ChannelsByBand,
+  GuestSettings,
+  HotspotSettings,
+  NewNetworkForm,
+  SavedNetwork,
+  SetupForm,
+} from '../types';
 
 type Errors = Record<string, string>;
 
@@ -21,6 +31,17 @@ export function checkWifiPassword(password: string): string | null {
     return 'May only contain printable ASCII characters (no emoji or accented letters).';
   }
   return null;
+}
+
+/** A new admin password, as the router checks it (and the two must match). */
+export function checkNewAdminPassword(form: AdminPasswordForm): Errors {
+  const errors: Errors = {};
+  if (form.currentPassword === '') errors.currentPassword = 'Enter the current password.';
+  if ([...form.newPassword].length < 10) errors.newPassword = 'Must be at least 10 characters long.';
+  else if (form.newPassword.toLowerCase().includes('rasbeacon'))
+    errors.newPassword = 'Must not contain the device name.';
+  if (form.newPassword !== form.newPasswordConfirm) errors.newPasswordConfirm = "The two passwords don't match.";
+  return errors;
 }
 
 export function checkSetupForm(form: SetupForm): Errors {
@@ -47,7 +68,9 @@ export function checkHotspotSettings(settings: HotspotSettings): Errors {
     const password = checkWifiPassword(settings.password);
     if (password) errors.password = password;
   }
-  if (!/^[A-Z]{2}$/.test(settings.country)) errors.country = 'Enter a two-letter country code, e.g. US or DE.';
+  // As the router says it: "UK" isn't a country code, the United Kingdom's is GB.
+  if (settings.country === 'UK') errors.country = 'Use GB for the United Kingdom.';
+  else if (!/^[A-Z]{2}$/.test(settings.country)) errors.country = 'Must be a two-letter country code such as US.';
   return errors;
 }
 
@@ -110,4 +133,22 @@ export function checkWireGuardFile(text: string): string | null {
     return 'This is not a WireGuard file: it needs an [Interface] and a [Peer] section.';
   }
   return null;
+}
+
+/**
+ * Like the router's regulatory database, for the countries the demo knows well: Japan has no
+ * channels from 149 up, and a code that isn't a country is refused as the router refuses it.
+ */
+export function demoHotspotChannels(country: string): ChannelsByBand {
+  const problem = checkHotspotSettings({
+    ssid: 'x',
+    band: '2.4GHz',
+    channel: 0,
+    security: 'wpa2-wpa3',
+    country,
+    metered: false,
+  });
+  if (problem.country) throw new FieldErrors({ country: problem.country });
+  const fiveGHz = HOTSPOT_CHANNELS['5GHz'].filter((channel) => country !== 'JP' || channel < 149);
+  return { '2.4GHz': [...HOTSPOT_CHANNELS['2.4GHz']], '5GHz': fiveGHz };
 }

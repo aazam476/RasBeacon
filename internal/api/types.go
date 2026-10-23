@@ -54,6 +54,8 @@ type SetupState struct {
 	DeviceShortID       string `json:"deviceShortId"`
 	// LANAddress is RasBeacon's address on the hotspot, e.g. 10.87.0.1.
 	LANAddress string `json:"lanAddress"`
+	// Hostname is RasBeacon's name on the hotspot, e.g. rasbeacon.lan.
+	Hostname string `json:"hostname,omitempty"`
 	// Suggestions pre-fill the setup wizard. Only sent while unclaimed.
 	SuggestedHotspotSSID     string `json:"suggestedHotspotSsid,omitempty"`
 	SuggestedHotspotPassword string `json:"suggestedHotspotPassword,omitempty"`
@@ -63,6 +65,9 @@ type SetupState struct {
 	// a login" notice (see PortalStatus). rbweb then sends phones'
 	// connectivity checks to the notice page.
 	PortalNotice bool `json:"portalNotice,omitempty"`
+	// No5GHz is true when the hotspot's radio can't use 5 GHz, so setup
+	// offers only 2.4 GHz.
+	No5GHz bool `json:"no5GHz,omitempty"`
 }
 
 // ClaimRequest finishes first-time setup.
@@ -87,6 +92,13 @@ type ClaimResponse struct {
 // that ask for it again (reveal hotspot password, factory reset).
 type PasswordRequest struct {
 	Password string `json:"password"`
+}
+
+// AdminPasswordRequest changes the admin password (POST
+// /system/admin-password): the current one, then the new one.
+type AdminPasswordRequest struct {
+	CurrentPassword string `json:"currentPassword"`
+	NewPassword     string `json:"newPassword"`
 }
 
 // VerifyPasswordResponse is rbd's answer to a password check.
@@ -206,6 +218,9 @@ type LANInfo struct {
 // the owner asks; see internal/speedtest).
 type Speedtest struct {
 	Provider string `json:"provider"`
+	// Running is true while a test runs, whoever started it, so every
+	// page that shows the button says so until it finishes.
+	Running bool `json:"running"`
 	// Last is null until a test has run since rbd started.
 	Last *SpeedtestResult `json:"last"`
 }
@@ -343,16 +358,30 @@ type UpdateStatus struct {
 	// Message describes the last update, e.g. "Updated to v1.2.0." or why
 	// it failed.
 	Message string `json:"message,omitempty"`
-	// The optional online check (see UpdateSettings).
+	// The optional online check (see UpdateSettings). CheckHours is how
+	// often it runs (0: only with "Check now"); LastChecked is when it last
+	// asked (RFC 3339, "" if never), and CheckError why that failed.
 	CanCheckOnline bool   `json:"canCheckOnline"`
-	CheckOnline    bool   `json:"checkOnline"`
-	LatestVersion  string `json:"latestVersion,omitempty"`
-	LatestURL      string `json:"latestUrl,omitempty"`
+	CheckHours     int    `json:"checkHours"`
+	LastChecked    string `json:"lastChecked,omitempty"`
+	CheckError     string `json:"checkError,omitempty"`
+	// LatestVersion is the newest release this RasBeacon can install, and
+	// LatestURL its release page. NewerVersion is set when an even newer
+	// release exists that can only be installed over LatestVersion (or a
+	// later one): it is offered once LatestVersion runs.
+	LatestVersion string `json:"latestVersion,omitempty"`
+	LatestURL     string `json:"latestUrl,omitempty"`
+	NewerVersion  string `json:"newerVersion,omitempty"`
 	// Reflash is set when a newer version can't be installed over this one
 	// (the online check found one, or its update file was refused): the
 	// owner backs up the settings, flashes the new image and restores the
 	// backup.
 	Reflash *UpdateReflash `json:"reflash,omitempty"`
+	// RestartPending is true when an update is installed but RasBeacon
+	// hasn't restarted into it yet (the restart failed, or the power went
+	// off first). POST /system/update/restart finishes it; Message says
+	// why it waits.
+	RestartPending bool `json:"restartPending,omitempty"`
 }
 
 // UpdateReflash describes a new version that needs a fresh install.
@@ -364,9 +393,21 @@ type UpdateReflash struct {
 	URL string `json:"url,omitempty"`
 }
 
-// UpdateSettings is written by the System page.
+// UpdateSettings is read and written by the System page
+// (GET and PUT /settings/updates).
 type UpdateSettings struct {
-	CheckOnline bool `json:"checkOnline"`
+	// CheckHours is how often to ask GitHub for a new version: 0 (only
+	// with "Check now"), 1, 6, 24 or 168.
+	CheckHours int `json:"checkHours"`
+	// NotifyURL is where to announce a new version: an ntfy topic or a
+	// webhook ("" for none).
+	NotifyURL string `json:"notifyUrl"`
+}
+
+// NotifyTestRequest sends a test message (POST /settings/updates/test) to
+// URL, or to the saved address when URL is empty.
+type NotifyTestRequest struct {
+	URL string `json:"url"`
 }
 
 // PortalStatus describes captive portals (login pages of hotel networks).
@@ -434,8 +475,10 @@ type VPNStatus struct {
 	Enabled    bool `json:"enabled"`
 	KillSwitch bool `json:"killSwitch"`
 	// State is "off", "connecting", "up", "down" or "direct" (see
-	// internal/tunnel). In "connecting" and "down" with the kill switch on,
-	// devices have no internet; in "direct" they use the uplink directly.
+	// internal/tunnel), or "blocked". In "connecting" and "down" with the
+	// kill switch on, devices have no internet; in "direct" they use the
+	// uplink directly; "blocked" means the VPN is off but the kill switch is
+	// on, so devices have no internet.
 	State string `json:"state"`
 	// HandshakeAgeSeconds is the time since the last handshake with the
 	// server, or -1 if there has been none.
@@ -447,6 +490,10 @@ type VPNStatus struct {
 	// from, while it is in use (see VPNSettings).
 	RoutedIPv6Prefix string `json:"routedIpv6Prefix,omitempty"`
 }
+
+// VPNBlocked is VPNStatus.State while the kill switch blocks devices
+// because the VPN is off.
+const VPNBlocked = "blocked"
 
 // VPNSettings is read by the VPN page: the switches and the WireGuard
 // profiles (GET /settings/vpn). Each change has its own route, and each
@@ -510,6 +557,18 @@ type VPNProfileRequest struct {
 	Name string `json:"name"`
 }
 
+// HostnameRequest renames RasBeacon (POST /system/hostname). RasBeacon
+// restarts afterwards.
+type HostnameRequest struct {
+	Hostname string `json:"hostname"`
+}
+
+// VPNRenameRequest renames a profile (POST /settings/vpn/profile/rename).
+type VPNRenameRequest struct {
+	Name    string `json:"name"`
+	NewName string `json:"newName"`
+}
+
 // HTTPSSettings is read and written by the HTTPS page.
 type HTTPSSettings struct {
 	Enabled bool `json:"enabled"`
@@ -571,6 +630,10 @@ type EnterpriseSettings struct {
 	AnonymousIdentity       string           `json:"anonymousIdentity"`
 	ServerName              string           `json:"serverName"`
 	AllowNoCertificateCheck bool             `json:"allowNoCertificateCheck"`
+	// ServerCertHash is the SHA-256 of the login server's certificate,
+	// trusted at the first connection (read only; empty until then, and
+	// when a CA certificate or server name is given).
+	ServerCertHash string `json:"serverCertHash,omitempty"`
 
 	CACert            string `json:"caCert,omitempty"`
 	CACertSummary     string `json:"caCertSummary"`
@@ -598,6 +661,35 @@ type HotspotSettings struct {
 	// reads it automatically; see docs/api.md).
 	Metered  bool   `json:"metered"`
 	Password string `json:"password,omitempty"`
+	// No5GHz is true when the hotspot's radio can't use 5 GHz, so the page
+	// offers only 2.4 GHz. Read-only: ignored when saving.
+	No5GHz bool `json:"no5GHz,omitempty"`
+}
+
+// HotspotChannelsRequest asks which channels a country allows (POST
+// /settings/hotspot/channels).
+type HotspotChannelsRequest struct {
+	Country string `json:"country"`
+}
+
+// HotspotChannels lists, by band, the channels the Hotspot page may offer
+// for a country: those RasBeacon offers that the country allows a hotspot
+// on. A band the radio or the country doesn't allow has none.
+type HotspotChannels struct {
+	Channels map[config.Band][]int `json:"channels"`
+}
+
+// AccessSettings says which and how many devices may join the hotspot over
+// Wi-Fi (GET and PUT /settings/access). Devices on Ethernet always can.
+type AccessSettings struct {
+	// AllowListOn lets only the devices in Allowed join your network. The
+	// guest network isn't affected.
+	AllowListOn bool `json:"allowListOn"`
+	// Allowed are MAC addresses such as "3a:1f:22:aa:bb:cc".
+	Allowed []string `json:"allowed"`
+	// MaxDevices is the most devices on each network at once; 0 is no
+	// limit (up to 231, the addresses DHCP hands out).
+	MaxDevices int `json:"maxDevices"`
 }
 
 // RevealPasswordResponse returns the hotspot password after the admin
@@ -637,8 +729,7 @@ type ClientNameRequest struct {
 // WiFiQRRequest asks for a QR code to join a network (POST /wifi-qr):
 // "hotspot" (needs the admin password) or "guest".
 type WiFiQRRequest struct {
-	Network       string `json:"network"`
-	AdminPassword string `json:"adminPassword,omitempty"`
+	Network string `json:"network"`
 }
 
 // WiFiQR is a QR code phones scan to join a network: an SVG image.
@@ -650,13 +741,10 @@ type WiFiQR struct {
 // UsageSettings is the data limit (GET/PUT /settings/usage).
 type UsageSettings struct {
 	// LimitMB pauses a device after it used this much (down and up) since
-	// Since, while the connection is marked metered. 0: no limit.
+	// Since, metered connection or not. 0: no limit.
 	LimitMB int `json:"limitMb"`
 	// Since is when counting started (RFC 3339); read-only.
 	Since string `json:"since,omitempty"`
-	// Metered says whether the limit applies now (the hotspot's metered
-	// setting); read-only.
-	Metered bool `json:"metered"`
 	// DevicesPaused is how many devices the limit pauses now; read-only.
 	DevicesPaused int `json:"devicesPaused"`
 }
@@ -865,6 +953,10 @@ type PluginPreview struct {
 	StorageMB    int     `json:"storageMb"`
 	// Warnings are shown above the Install button (e.g. little memory).
 	Warnings []string `json:"warnings,omitempty"`
+	// KeptData is set when data kept from an earlier install with this ID
+	// waits, signed by another key or not signed: the sheet asks whether
+	// to use it (PluginInstallRequest.UseKeptData).
+	KeptData *PluginKeptData `json:"keptData,omitempty"`
 }
 
 // PluginInstallRequest installs a previewed plugin (POST /plugins/install):
@@ -875,6 +967,19 @@ type PluginInstallRequest struct {
 	Ports     map[string]int    `json:"ports"`
 	Settings  map[string]string `json:"settings"`
 	Drive     string            `json:"drive"`
+	// UseKeptData gives the new install the data kept from an earlier one
+	// of the same ID that wasn't signed with the same key (the preview's
+	// KeptData). Data of the same author comes back without it.
+	UseKeptData bool `json:"useKeptData,omitempty"`
+}
+
+// PluginKeptData describes data kept from an earlier install with the same
+// ID that doesn't come back by itself: the install sheet offers to use it.
+type PluginKeptData struct {
+	// Name is what the earlier plugin was called ("" if not known).
+	Name string `json:"name,omitempty"`
+	// KeyID is the earlier plugin's signing key ("" if it wasn't signed).
+	KeyID string `json:"keyId,omitempty"`
 }
 
 // PluginSettingsRequest changes an installed plugin's settings (PUT
@@ -916,9 +1021,11 @@ type PluginCatalogEntry struct {
 	Size         int64    `json:"size"`
 	DownloadSize int64    `json:"downloadSize,omitempty"`
 	Icon         string   `json:"icon,omitempty"`
-	// InstalledVersion is set when it is installed; RunsHere is false for
+	// InstalledVersion is set when it is installed, and UpdateAvailable
+	// when this version is newer than that one. RunsHere is false for
 	// plugins made for other boards.
 	InstalledVersion string `json:"installedVersion,omitempty"`
+	UpdateAvailable  bool   `json:"updateAvailable,omitempty"`
 	RunsHere         bool   `json:"runsHere"`
 	// NeedsRasBeacon is set when this RasBeacon is too old for it: the
 	// version it needs ("0.2.0").
@@ -941,7 +1048,15 @@ type PluginDownloadRequest struct {
 
 // PluginLogs are a plugin's last lines of output.
 type PluginLogs struct {
-	Lines []string `json:"lines"`
+	Lines []PluginLogLine `json:"lines"`
+}
+
+// PluginLogLine is one line a plugin wrote: Time is when (RFC 3339, in UTC;
+// the page shows it in the viewer's own time), left out for a line whose
+// time isn't known.
+type PluginLogLine struct {
+	Time string `json:"time,omitempty"`
+	Text string `json:"text"`
 }
 
 // PluginSourcesRequest sets the extra catalog sources.
@@ -969,13 +1084,17 @@ type PluginPowerRequest struct {
 	Action string `json:"action"`
 }
 
-// BackupRequest asks for a backup (POST /system/backup): the admin password
-// again, the password that encrypts the file, and whether the plugins
-// (their images and data) are in it.
+// BackupRequest asks for a backup (POST /system/backup): the password that
+// encrypts the file (being logged in is enough to ask), and how much of the
+// plugins is in it.
 type BackupRequest struct {
-	AdminPassword  string `json:"adminPassword"`
-	Password       string `json:"password"`
-	IncludePlugins bool   `json:"includePlugins"`
+	// Password encrypts the backup; a restore needs it again.
+	Password string `json:"password"`
+	// Plugins is how much of the plugins goes in: "settings" (the
+	// default), "data" (also their data) or "everything" (also their
+	// images, so a restore works offline). Plugins' images left out are
+	// downloaded again on restore.
+	Plugins string `json:"plugins"`
 }
 
 // BackupTicket is the answer to a BackupRequest: the browser downloads the
@@ -988,13 +1107,15 @@ type BackupTicket struct {
 
 // RestoreRequest restores the uploaded backup (POST /system/restore).
 type RestoreRequest struct {
-	AdminPassword string `json:"adminPassword"`
-	Password      string `json:"password"`
+	Password string `json:"password"`
 }
 
 // RestoreResult describes the restored backup; RasBeacon restarts.
 type RestoreResult struct {
 	Version string `json:"version"`
 	Created string `json:"created"`
-	Plugins bool   `json:"plugins"`
+	// Plugins is true when the backup's plugins replaced the installed
+	// ones (always, except for backups made before RasBeacon 0.2 without
+	// plugins).
+	Plugins bool `json:"plugins"`
 }

@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { useDevice } from '@/data/device';
-import { AlertDialog, ButtonRow, FileField, FormSwitchRow, PasswordField, Section, Sheet } from '@/ui';
+import { useDevice, type BackupPlugins } from '@/data/device';
+import { AlertDialog, ButtonRow, Choice, ChoiceList, FileField, PasswordField, Section, Sheet } from '@/ui';
 
 /**
- * Backups: all settings (and, if wanted, the plugins with their data) in one file encrypted
- * with a password, to restore on this RasBeacon or move to another one.
+ * Backups: all settings and the plugins (with their data and apps, if wanted) in one file
+ * encrypted with a password, to restore on this RasBeacon or move to another one. Being logged
+ * in is enough to make or restore one.
  */
 export function BackupSection() {
   const { status } = useDevice();
@@ -54,32 +55,22 @@ export function BackupSection() {
 /** The sheet that makes a backup file. The software section opens it too, before a fresh install. */
 export function BackupSheet({ hasPlugins, onClose }: { hasPlugins: boolean; onClose: () => void }) {
   const { backUp } = useDevice();
-  const [adminPassword, setAdminPassword] = useState('');
   const [password, setPassword] = useState('');
-  const [includePlugins, setIncludePlugins] = useState(false);
+  const [plugins, setPlugins] = useState<BackupPlugins>('settings');
 
   return (
     <Sheet
       title="Back up settings"
       confirmLabel="Back up"
       busyLabel="Checking…"
-      onConfirm={() => backUp(adminPassword, password, includePlugins)}
+      onConfirm={() => backUp(password, plugins)}
       onClose={onClose}
     >
       {(errors) => (
         <>
-          <Section level={3} footer="The backup holds your passwords, so RasBeacon asks for its admin password again.">
-            <PasswordField
-              label="Admin password"
-              autoComplete="current-password"
-              value={adminPassword}
-              onChange={setAdminPassword}
-              error={errors.adminPassword}
-            />
-          </Section>
           <Section
             level={3}
-            footer="At least 8 characters. Without it the backup can't be opened, by anyone: keep it somewhere safe."
+            footer="At least 8 characters. Nobody can restore the backup without it, so keep it somewhere safe."
           >
             <PasswordField
               label="Password for the backup"
@@ -93,9 +84,26 @@ export function BackupSheet({ hasPlugins, onClose }: { hasPlugins: boolean; onCl
           {hasPlugins && (
             <Section
               level={3}
-              footer="Their images and data make the backup much larger. Running plugins pause for a moment while their data is copied."
+              title="Plugins"
+              footer="Apps installed from a file are always in the backup, since they can't be downloaded again. Running plugins pause for a moment while their data is copied."
             >
-              <FormSwitchRow label="Include plugins" checked={includePlugins} onChange={setIncludePlugins} />
+              <ChoiceList ariaLabel="Plugins" value={plugins} onChange={setPlugins}>
+                <Choice
+                  value="settings"
+                  title="Settings only"
+                  description="Plugins come back with their settings. Their apps are downloaded again, and their data starts empty."
+                />
+                <Choice
+                  value="data"
+                  title="Plugin data"
+                  description="Also their data. Their apps are downloaded again."
+                />
+                <Choice
+                  value="everything"
+                  title="Everything"
+                  description="Also their apps, so restoring works offline. The largest backup."
+                />
+              </ChoiceList>
             </Section>
           )}
         </>
@@ -107,7 +115,6 @@ export function BackupSheet({ hasPlugins, onClose }: { hasPlugins: boolean; onCl
 function RestoreSheet({ onClose, onRestored }: { onClose: () => void; onRestored: () => void }) {
   const { restore } = useDevice();
   const [file, setFile] = useState<File | null>(null);
-  const [adminPassword, setAdminPassword] = useState('');
   const [password, setPassword] = useState('');
 
   return (
@@ -118,7 +125,7 @@ function RestoreSheet({ onClose, onRestored }: { onClose: () => void; onRestored
       tone="danger"
       onConfirm={async () => {
         if (!file) throw new Error('Choose the backup file.');
-        await restore(file, adminPassword, password);
+        await restore(file, password);
         onRestored();
       }}
       onClose={onClose}
@@ -127,7 +134,7 @@ function RestoreSheet({ onClose, onRestored }: { onClose: () => void; onRestored
         <>
           <Section
             level={3}
-            footer="Every setting is replaced by the backup's, and RasBeacon restarts. A backup with plugins replaces the installed plugins; one without keeps them."
+            footer="Every setting is replaced by the backup's and RasBeacon restarts. Installed plugins are removed and the backup's plugins are installed with their settings and data."
           >
             <FileField
               label="Backup file"
@@ -142,16 +149,6 @@ function RestoreSheet({ onClose, onRestored }: { onClose: () => void; onRestored
               value={password}
               onChange={setPassword}
               error={errors.backupPassword}
-            />
-          </Section>
-          <Section level={3}>
-            <PasswordField
-              label="Admin password"
-              labelNote="(this RasBeacon's)"
-              autoComplete="current-password"
-              value={adminPassword}
-              onChange={setAdminPassword}
-              error={errors.adminPassword}
             />
           </Section>
         </>

@@ -32,6 +32,36 @@ export function RebootSection() {
   );
 }
 
+/** Turns RasBeacon off after asking. */
+export function ShutdownSection() {
+  const { shutDown } = useDevice();
+  const [confirming, setConfirming] = useState(false);
+
+  return (
+    <Section footer="To turn RasBeacon on again, unplug the power and plug it back in.">
+      <ButtonRow
+        tone="danger"
+        leading={{ icon: 'power_settings_new', className: 'text-red' }}
+        onClick={() => setConfirming(true)}
+      >
+        Shut down
+      </ButtonRow>
+      {confirming && (
+        <AlertDialog
+          title="Shut down RasBeacon?"
+          tone="danger"
+          confirmLabel="Shut down"
+          busyLabel="Shutting down…"
+          onConfirm={shutDown}
+          onClose={() => setConfirming(false)}
+        >
+          <p>All connected devices lose the internet. Unplug the power and plug it back in to turn it on again.</p>
+        </AlertDialog>
+      )}
+    </Section>
+  );
+}
+
 /** Erases everything and restarts into first-time setup. Tucked away, red, and confirmed twice. */
 export function FactoryResetSection() {
   const { factoryReset } = useDevice();

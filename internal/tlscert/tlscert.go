@@ -26,14 +26,26 @@ import (
 	"time"
 )
 
-// Validity is how long a generated certificate lasts. Ten years, so it
-// doesn't expire on a trip; you can make a new one at any time.
-const Validity = 10 * 365 * 24 * time.Hour
+// Validity is how long a generated certificate lasts: 820 days. Apple's
+// devices refuse server certificates valid for more than 825 days, so a
+// longer one could make an iPhone or Mac refuse the settings page.
+// RasBeacon makes a new one before it runs out (see RenewBefore).
+const Validity = 820 * 24 * time.Hour
+
+// RenewBefore is how long before it expires a generated certificate is
+// replaced, so it never runs out on a trip.
+const RenewBefore = 30 * 24 * time.Hour
 
 // Generate makes a self-signed certificate valid for RasBeacon's possible
-// hotspot addresses and the name rasbeacon.lan. It returns the certificate
-// and private key in PEM format.
-func Generate(name string, addresses []net.IP, now time.Time) (certPEM, keyPEM string, err error) {
+// hotspot addresses, the name rasbeacon.lan and any other hostnames. It
+// returns the certificate and private key in PEM format.
+func Generate(name string, hostnames []string, addresses []net.IP, now time.Time) (certPEM, keyPEM string, err error) {
+	dnsNames := []string{"rasbeacon.lan"}
+	for _, h := range hostnames {
+		if h != dnsNames[0] {
+			dnsNames = append(dnsNames, h)
+		}
+	}
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return "", "", err
@@ -50,7 +62,7 @@ func Generate(name string, addresses []net.IP, now time.Time) (certPEM, keyPEM s
 		NotAfter:    now.Add(Validity),
 		KeyUsage:    x509.KeyUsageDigitalSignature,
 		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		DNSNames:    []string{"rasbeacon.lan"},
+		DNSNames:    dnsNames,
 		IPAddresses: addresses,
 	}
 	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
@@ -96,7 +108,18 @@ type Info struct {
 	// Fingerprint is the SHA-256 of the certificate, as browsers show it
 	// (pairs of hex digits separated by colons).
 	Fingerprint string
+	NotBefore   time.Time
 	NotAfter    time.Time
+}
+
+// NeedsRenewal reports whether a generated certificate should be replaced
+// at now: it runs out within RenewBefore, or it is valid for longer than
+// Validity (RasBeacon 0.1 made them for ten years, which Apple's devices
+// may refuse).
+func (i Info) NeedsRenewal(now time.Time) bool {
+	// The day of margin Generate gives NotBefore, and a day more to spare.
+	tooLong := i.NotAfter.Sub(i.NotBefore) > Validity+2*24*time.Hour
+	return tooLong || i.NotAfter.Sub(now) < RenewBefore
 }
 
 // Describe reads the first certificate in certPEM.
@@ -114,5 +137,5 @@ func Describe(certPEM string) (Info, error) {
 	for i, b := range sum {
 		pairs[i] = fmt.Sprintf("%02X", b)
 	}
-	return Info{Subject: cert.Subject.CommonName, Fingerprint: strings.Join(pairs, ":"), NotAfter: cert.NotAfter}, nil
+	return Info{Subject: cert.Subject.CommonName, Fingerprint: strings.Join(pairs, ":"), NotBefore: cert.NotBefore, NotAfter: cert.NotAfter}, nil
 }

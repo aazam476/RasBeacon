@@ -1,6 +1,9 @@
 # Design: open-source portable Wi-Fi travel router
 
-- Status: **Proposed, revision 4**. All questions answered (section 13); waiting for approval to start milestone 1.
+- Status: **Implemented** (revision 4, the design the milestones followed).
+  It is kept as the record of what was decided and why, and says what was
+  built; [architecture.md](architecture.md) and [api.md](api.md) describe
+  RasBeacon in more detail.
 - Date: 2026-09-30
 - Depends on: [ADR 0001](decisions/0001-platform.md), which is accepted
 - Project name: **RasBeacon**. Daemons are `rbd` (privileged agent) and
@@ -29,7 +32,6 @@ Roles are assigned automatically:
 - The onboard radio becomes `wlan0`.
 - Ethernet is `eth0`.
 
-The UI lets you swap roles, for example to use a second USB adapter as the uplink.
 
 The **M1 hardware gate runs on every hotspot adapter we list**. It must hold at
 least 10 associated clients with WPA2/WPA3 for 30 minutes with no drops. The
@@ -44,7 +46,7 @@ compatibility table records the result.
 - **Image contents:**
   - Kernel and firmware
   - `hostapd`, `wpa_supplicant`, `dnsmasq`, `nftables`, `wireguard-tools`,
-    `systemd-networkd`, `systemd-timesyncd`, `iw`, `conntrack`
+    `systemd-networkd`, `systemd-timesyncd`, `iw`, `wireless-regdb`
   - Our two binaries and static web assets
 
   **Removed:** NetworkManager, desktop/X, Bluetooth services, avahi, and
@@ -59,12 +61,13 @@ compatibility table records the result.
     runner with QEMU user emulation, which is slower. Nothing in the code or
     workflows hard-codes the repository name, so the move is a plain push.
 - **Release artifacts:**
-  - `rasbeacon-<ver>-rpi-arm64.img.xz`: flash with Raspberry Pi Imager
-    ("Use custom") or balenaEtcher.
-  - `rasbeacon-<ver>.update`: signed update bundle.
-  - `SHA256SUMS` and `SHA256SUMS.sig` (Ed25519, minisign-compatible format).
-  - GitHub build-provenance attestation.
-  - `sources-<ver>.tar`: GPL/LGPL corresponding source (section 10).
+  - `rasbeacon-<board>-<ver>.img.xz`, one per board: flash with Raspberry
+    Pi Imager ("Use custom") or balenaEtcher.
+  - `rasbeacon-<board>-<ver>.rbupdate`: the signed update (Pi 4/5; the file
+    carries its own Ed25519 signature, see section 9).
+  - `SHA256SUMS`.
+  - `rasbeacon-<board>-<ver>.packages.txt`: every package in the image with
+    its source package and version, for the GPL/LGPL sources (section 10).
 
   Every feature is in the single image. There are no variants.
 
@@ -128,7 +131,12 @@ rbd     root, systemd-hardened; owns /persistent/rasbeacon; renders configs to /
 - **`rbweb`** serves the static UI and a REST/JSON API. It never reads
   secrets: secret fields are write-only and the API only reports
   "set / not set". It handles:
-  - Sessions, login rate limiting and CSRF protection.
+  - Sessions, login rate limiting and CSRF protection. Every request that
+    checks the admin password (login, a new password, factory reset) goes
+    through one gate: one check at a time, counted by the rate limit.
+  - Answering only under RasBeacon's own names (its address,
+    `rasbeacon.lan`, the owner's name for it), so a web page can't reach
+    the API through DNS rebinding.
   - Admin password hashing (argon2id from `golang.org/x/crypto`, our only
     third-party Go dependency).
 - **`rbd`** changes state under a single lock (one change at a time) and is the **only** writer of network state.
@@ -139,9 +147,9 @@ rbd     root, systemd-hardened; owns /persistent/rasbeacon; renders configs to /
 - **Language:** Go, stdlib-first. Each daemon is one static binary, uses about
   10 to 20 MB of RAM, cross-compiles trivially, and Go is familiar to
   contributors.
-- **Frontend:** plain HTML, CSS and ES modules, no build step and no npm.
-  Mobile-first, one screen per task, works offline, and all assets are served
-  from the device.
+- **Frontend:** React and TypeScript, built with Vite (npm is used only to
+  build it; the device runs no Node.js). Mobile-first, one screen per task,
+  works offline, and all assets are served from the device.
 
 Secrets:
 - Stored in `/persistent/rasbeacon/secrets.json`, `root:root 0600` (directory 0700).
@@ -149,7 +157,7 @@ Secrets:
 - Never logged:
   - `wpa_supplicant` and `hostapd` run without `-d`.
   - `rbd`'s logger redacts known secret keys.
-  - The eduroam identity is shown masked (`N***@rutgers.edu`) in logs and exports.
+  - The eduroam identity is shown masked (`u***@example.com`) in logs and exports.
 
 Release images contain no keys, passwords or per-device material. Everything
 per-device is generated on first boot.
@@ -210,20 +218,27 @@ per-device is generated on first boot.
 - **Enterprise uplinks:** `eap=TTLS` + `phase2="auth=PAP"`, `PEAP` +
   `MSCHAPV2`, or `TLS` with a client cert/key. Fields:
   - `identity` and `anonymous_identity`
-  - `ca_cert` (uploaded PEM/DER; multiple CAs concatenated)
-  - `domain_suffix_match` or `domain_match` (from the "server name" field;
-    `*.ruw.rutgers.edu` maps to `domain_suffix_match=ruw.rutgers.edu`)
+  - `ca_cert`: the uploaded CA (PEM/DER; multiple CAs concatenated); the
+    system's CA list when only a server name is given; or, with neither,
+    `probe://` at the first connection and then
+    `hash://server/sha256/<the server certificate's SHA-256>` ("trust on
+    first connect", `internal/agent/servercert.go`)
+  - `domain_suffix_match` (from the "server name" field;
+    `*.radius.example.com` maps to `domain_suffix_match=radius.example.com`)
   - `ieee80211w=1` (PMF optional). `key_mgmt=WPA-EAP WPA-EAP-SHA256` covers
     WPA2- and WPA3-Enterprise.
 
-  **The UI refuses to save an Enterprise network without a CA certificate.**
-  An "I understand the risk" override exists only under an expanded Advanced
-  section and shows a persistent warning banner. The default is never "no
+  **The login server is always checked.** The CA certificate and server
+  name are optional (under Advanced); without them the first connection's
+  certificate is trusted, before any password is sent, and only that one
+  afterwards. A "Don't check the login server" override exists only under
+  Advanced and shows a persistent warning banner. The default is never "no
   validation".
 - **No eduroam preset:** RasBeacon is a general travel router, so eduroam
   is added like any WPA-Enterprise network (from the scan, or Add manually),
-  with TTLS/PAP as the default login method. `docs/eduroam.md` explains it,
-  with Rutgers as an example; nothing about it is built into the code.
+  with TTLS/PAP as the default login method. `docs/wpa-enterprise.md`
+  explains it, with eduroam as one example; nothing about it is built into
+  the code.
 - **Regulatory:** one country setting is applied to cfg80211 (`iw reg set`),
   hostapd and wpa_supplicant.
 
@@ -258,10 +273,10 @@ main:        default via <uplink gw> (networkd, metric by uplink priority)
     br-lan* is sent to table 51820, and WireGuard's own UDP packets are
     created by the device itself, so they always use `main`.
   - In `DIRECT`, rule 100 is deleted rather than swapped (same effect).
-  - The `TIME_SYNC` state is not separate: the tunnel simply doesn't
-    handshake until the clock is right, which the state machine already
-    treats as "not working". The time floor and HTTP `Date` fallback (4.7)
-    are implemented.
+  - The tunnel doesn't wait for the clock: it simply doesn't handshake
+    until the clock is right, which the state machine already treats as
+    "not working". The time floor and the HTTPS `Date` fallback (4.7) keep
+    the clock right.
   - The health check is the handshake age (at most 180 s, with keepalive
     25 s); probes through the tunnel are left for later if hardware
     testing shows a need.
@@ -349,72 +364,62 @@ main:        default via <uplink gw> (networkd, metric by uplink priority)
 
 ### 4.5 Uplink / tunnel / kill-switch state machine
 
-States, all owned by `rbd`:
+`internal/tunnel` decides, every few seconds, where devices' traffic goes
+while the VPN is on. It has no side effects: rbd feeds it what it saw and
+applies the answer (firewall, routing, DNS).
 
-| State | Client forwarding |
+| State | Devices' traffic |
 |---|---|
-| `LOCKDOWN` | None (boot, before the first render) |
-| `NO_UPLINK` | None |
-| `TIME_SYNC` | None when WireGuard is enabled. **Kill switch OFF skips this**: goes to `DIRECT` right away and returns to the tunnel once time is synced. |
-| `TUNNEL_CONNECTING` | KS ON: none. KS OFF: `DIRECT` rules. |
-| `TUNNEL_UP` | Only via `wg0` |
-| `TUNNEL_DOWN` | KS ON: none. KS OFF: see `DIRECT`. |
-| `DIRECT` | Via uplink (only with KS OFF, or with WireGuard disabled) |
-| `PORTAL` | Via uplink, ports 80/443/53 only, time-limited (4.6) |
+| `Off` | VPN off: directly through the uplink (with the kill switch on, nowhere; see section 6) |
+| `Connecting` | VPN on, no working tunnel yet: into the tunnel, where it is dropped until it works |
+| `Up` | Through the tunnel |
+| `Down` | The tunnel worked, then stopped: into the tunnel, dropped |
+| `Direct` | Kill switch off only, after the tunnel was broken for 30 s: directly through the uplink, until the tunnel works again for a while |
 
-Transitions (the diagram is in `docs/architecture.md` once this doc is
-approved):
+Transitions:
 
 ```
-LOCKDOWN → NO_UPLINK             (ruleset rendered)
-NO_UPLINK → TIME_SYNC            (uplink has IPv4 + default route)
-TIME_SYNC → TUNNEL_CONNECTING    (time trusted, or 60 s elapsed: try with the saved floor)
-TUNNEL_CONNECTING → TUNNEL_UP    (healthy, see below)
-TUNNEL_UP → TUNNEL_DOWN          (unhealthy, see below)
-TUNNEL_DOWN → TUNNEL_UP          (healthy AND hold-down elapsed)
-TUNNEL_DOWN → DIRECT             (KS OFF only; immediate)
-DIRECT → TUNNEL_UP               (KS OFF: healthy for ≥30 s; flushes client conntrack)
-any → NO_UPLINK                  (uplink lost; client conntrack flushed)
-any(with uplink) → PORTAL        (user action in UI; only if a portal is detected)
-PORTAL → TIME_SYNC               (probe returns 204, or timeout/cancel; policy restored first)
+Off → Connecting                 (VPN turned on)
+Connecting, Down → Up            (healthy)
+Connecting, Down → Direct        (kill switch off, broken for 30 s)
+Up → Down                        (unhealthy)
+Direct → Up                      (healthy for the return delay: 30 s, doubling
+                                  up to 5 min while the tunnel keeps breaking)
+any → Off                        (VPN turned off)
 ```
 
-**What "down" means.** WireGuard has no connection state, so we define health
-ourselves. Every 5 s we evaluate:
-- `hs_age`: time since the peer's latest handshake, read over netlink. The
-  protocol rekeys every 120 s and rejects sessions older than 180 s.
-- `probe`: an ICMP echo to the tunnel **probe address**, sent with the
-  tunnel table forced. It defaults to the first `DNS=` address in the `.conf`
-  (usually the server's tunnel IP) and can be configured.
+Login mode for a hotel's page (4.6) sets the tunnel aside for web and DNS
+traffic on its own, without changing the state.
 
-The tunnel is **healthy** when `hs_age ≤ 180 s` and the last 3 probes
-succeeded. It is **unhealthy** after 3 consecutive probe failures (about 15 s),
-or when `hs_age > 180 s` while traffic is being sent.
+**What "healthy" means.** WireGuard has no connection state, so health is
+the age of the peer's latest handshake: the protocol renews its session
+every 2 minutes while traffic (keepalives included) flows, so a handshake
+older than 180 s means the server stopped answering.
 
 **Hysteresis:**
-- `TUNNEL_DOWN → TUNNEL_UP` needs 3 successful probes in a row.
-- For kill switch OFF, going back from `DIRECT` to the tunnel needs 30 s of
-  continuous health. The hold-down doubles (up to 5 min) if more than 3 flaps
-  happen within 10 minutes.
-- With kill switch ON, hysteresis only affects what the UI shows. Traffic is
+- For kill switch OFF, going back from `Direct` to the tunnel needs the
+  return delay of continuous health. The delay doubles (up to 5 min) each
+  time the tunnel breaks again soon after, and resets after 10 minutes of
+  working.
+- With kill switch ON, timing only affects what the UI shows. Traffic is
   always pinned to `wg0`, so safety doesn't depend on timing.
 
 **No leaks during changes:**
-- Every state change is one atomic `nft -f`, applied **before** routing rules
+- Every change is one atomic `nft -f`, applied **before** routing rules
   change when tightening, and **after** they change when loosening.
-- Client conntrack entries are flushed whenever the egress for clients changes,
-  so NATed flows can't linger on the old path.
-- Changing kill-switch mode, importing a new WireGuard config or changing the
-  uplink passes through a `LOCKDOWN` render first.
+- When the path for devices' traffic changes, connections on the old path
+  stop at once: the firewall only accepts established connections on the
+  *current* path (tested in `test/netns/portal_test.go`). Nothing has to be
+  flushed, so there is no moment where an old connection slips through.
 
 ### 4.6 Captive portals
 
-**Detection** (device traffic, over the uplink): on every uplink change, and
-every 10 min while the tunnel is unhealthy:
+**Detection** (device traffic, over the uplink): rbd checks on every uplink
+change and every 10 minutes, every minute while the VPN is on but its
+tunnel down, and every 5 s in login mode (`internal/agent/portal.go`):
 - HTTP GET `http://connectivitycheck.gstatic.com/generate_204` and
-  `http://captive.apple.com/hotspot-detect.html`. The probe URLs are
-  configurable, so users who don't want Google or Apple URLs can change them.
-- The uplink's DHCP option 114 (RFC 8910) is read when present.
+  `http://captive.apple.com/hotspot-detect.html`. The two addresses are
+  fixed, the same checks phones make.
 
 A redirect or unexpected body counts as a portal. The UI shows a banner with
 the portal's URL.
@@ -448,9 +453,10 @@ the portal's URL.
    - Devices that didn't show a sheet can open any `http://` URL, or use the
      portal link in our UI.
 3. `rbd` probes over the uplink every 5 s. When the probe returns 204, the
-   portal is done: `rbd` applies the normal ruleset **first** (atomic), flushes
-   client conntrack, then moves to `TIME_SYNC` and the tunnel comes up.
-   Timeout or cancel restores the normal ruleset the same way.
+   portal is done: `rbd` applies the normal ruleset **first** (atomic), and
+   the tunnel comes up. Connections opened during login mode stop at once,
+   because the firewall only accepts established connections on the current
+   path. Timeout or cancel restores the normal ruleset the same way.
 4. The notice page and the UI warn that during portal mode, web and DNS
    traffic from **all** client devices bypasses the tunnel (decided: all
    devices, so the login sheet can appear on whichever one is handy).
@@ -475,14 +481,9 @@ off:**
   default, at the cost of RAM, image size, and no automatic login sheet on the
   phone.
 
-**As built in M5:** detection uses the two checks above (not yet
-configurable, and the uplink's own DHCP option 114 isn't read yet); the
-notice, login mode (10 min, extendable to 30), automatic end on a passing
-check, and the conntrack question are implemented. Instead of flushing
-conntrack, the firewall only accepts established connections on the
-*current* egress path, which has the same effect without a race and is
-tested in `test/netns/portal_test.go`. Login mode can be started by any
-device on the hotspot, from the notice, without the admin password.
+Login mode lasts 10 minutes, extendable to 30, and ends by itself on a
+passing check. It can be started by any device on the hotspot, from the
+notice, without the admin password.
 
 **Re-login:** portals that expire sessions are detected by the next failed
 tunnel health check plus a portal probe, and the flow repeats.
@@ -494,12 +495,17 @@ tunnel health check plus a portal probe, and the flow repeats.
   validity checks (EAP) and WireGuard handshake timestamps start from a sane
   time.
 - **Sync:** `systemd-timesyncd` does NTP via the uplink. **If NTP is blocked**
-  (no answer in 20 s), `rbd` falls back to the HTTP `Date` header from three
-  plain-HTTP hosts. It accepts a time only when at least 2 agree within 5 s
-  and the time is at or after the floor.
-- **Tunnel dependency:** the tunnel waits for synced time, with a 60 s cap,
-  because WireGuard servers reject handshakes whose timestamp isn't newer than
-  the last one they accepted.
+  (not synchronized 30 s after the uplink connects), `rbd` falls back to the
+  `Date` header of three HTTPS servers (Google, Apple, Cloudflare), at most
+  once an hour and never while a login page is in the way. Their
+  certificates are checked as of the day each became valid, since the clock
+  that would check the dates is the one being set; plain HTTP would let a
+  network with a login page answer with any time. It accepts a time only
+  when at least 2 agree within 5 s and the time is at or after the floor.
+- **Tunnel dependency:** WireGuard servers reject handshakes whose
+  timestamp isn't newer than the last one they accepted, so the clock must
+  never go back: the time floor applied at boot sees to that, and the tunnel
+  starts without waiting for NTP.
 
 ### 4.8 Client behaviour
 - **Private or rotating MAC addresses** only produce new leases; the pool
@@ -563,8 +569,12 @@ tunnel health check plus a portal probe, and the flow repeats.
     match, validity dates and a name matching `rasbeacon.lan`/`10.87.0.1` or
     a custom hostname you enter.
 
-  An optional "redirect HTTP to HTTPS" switch is available. No HSTS, so turning
-  HTTPS off can never lock you out.
+  With HTTPS on, plain HTTP redirects to HTTPS, and logins over plain HTTP
+  are refused. No HSTS, but a browser that can't open the HTTPS page (one
+  that refuses the certificate) can't log in to turn HTTPS off either:
+  then the `factory-reset` file is the way back. So generated certificates
+  are valid for 820 days (Apple's devices refuse more than 825) and renewed
+  automatically 30 days before they run out.
 - Sessions: HttpOnly, SameSite=Strict cookies with CSRF tokens, 12 h idle
   timeout.
 - Login back-off: exponential per client IP, with a global lockout of 5 min
@@ -575,8 +585,8 @@ tunnel health check plus a portal probe, and the flow repeats.
 2. **Offline:** put the SD card in any computer, create an empty file named
    `factory-reset` on the visible partition, and boot. `rbd` wipes `/persistent/rasbeacon` and
    deletes the file.
-3. **Optional hardware button:** short GPIO3 (pin 5) to GND (pin 6) for 10 s
-   while running. A momentary button can be wired there.
+3. **Optional hardware button:** short GPIO 17 (pin 11) to GND (pin 9) for
+   10 s while running. A momentary button can be wired there.
 
 The Pi 5's power button is left at its default behavior.
 
@@ -625,7 +635,7 @@ The Pi 5's power button is left at its default behavior.
   domain-match mapping), dnsmasq, nftables per state, WireGuard.
 - **wg-quick parser:** table tests plus a Go fuzz target.
 - **State machine:** driven by scripted events and a fake clock (flapping,
-  hold-down doubling, portal timeout, `TIME_SYNC` fallback).
+  return-delay doubling, falling back to `Direct`, turning off).
 - **Redaction:** diagnostics export contains no secret from a fixture config
   (grep assertion).
 
@@ -689,12 +699,13 @@ web/                static UI (HTML/CSS/ES modules)
 image/              rpi-image-gen config, overlays, systemd units, sysctl, partition layout
 test/netns/         namespace harness + leak tests
 test/hwsim/         hwsim/EAP tests, test CA generator
-docs/               architecture, eduroam (Rutgers example), wireguard-server, compatibility table, updating, redistribution
+docs/               architecture, wpa-enterprise, wireguard-server, compatibility table, updating, redistribution
 .github/workflows/  ci.yml, release.yml
 LICENSE, LICENSES/THIRD_PARTY.md, CONTRIBUTING.md, SECURITY.md
 ```
 
-**Commit messages** use a type prefix, documented in `CONTRIBUTING.md` once it exists:
+**Commit messages** start with a type prefix and a colon, with no scope in
+parentheses (`docs: …`, not `docs(readme): …`), as `CONTRIBUTING.md` says:
 
 | Prefix | Use for |
 |---|---|
@@ -777,9 +788,12 @@ wins.
   GPL-3.0, LGPL, MIT and others, plus binary firmware (Broadcom/Cypress Wi-Fi,
   Pi boot firmware, MediaTek MT7612U from linux-firmware). Redistributing it
   requires:
-  1. Publishing corresponding source for GPL/LGPL packages. CI builds
-     `sources-<ver>.tar` with `apt-get source` for the exact installed
-     versions and attaches it to each release.
+  1. Providing the corresponding source for GPL/LGPL packages. Each release
+     lists every package's source package and exact version
+     (`.packages.txt`); those sources stay available in the Debian and
+     Raspberry Pi archives (snapshot.debian.org keeps every version), and a
+     written offer covers anyone who can't get them there
+     ([source-code.md](source-code.md)).
   2. Shipping every package's copyright file (kept under
      `/usr/share/doc/*/copyright` in the image) and listing firmware licenses
      in `LICENSES/THIRD_PARTY.md`. Each firmware license is checked
@@ -813,7 +827,8 @@ wins.
   SHA-256). rbd verifies the signature and board first, streams the bundle
   through `zstd` into `/dev/disk/by-slot/other/*`, verifies the SHA-256,
   then `systemctl reboot "0 tryboot"`. On a tryboot start, rbd confirms
-  after 60 s of normal running by writing `rpi-slot-tryboot`'s output to
+  after 60 s of normal running, once `systemctl is-active rbweb.service
+  rasbeacon-hostapd.service` succeeds (looking again every 15 s), by writing `rpi-slot-tryboot`'s output to
   `autoboot.txt`, or forces a plain reboot (back to the old slot) after
   5 minutes. Keys: `cmd/rbsign`, the `RASBEACON_UPDATE_SIGNING_KEY`
   secret, and `/usr/lib/rasbeacon/update-keys/*.pub` in the image.

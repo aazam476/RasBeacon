@@ -1,11 +1,14 @@
 import { useState } from 'react';
 import { useDevice } from '@/data/device';
-import type { Status, UpdateReflash } from '@/data/types';
+import type { Status, UpdateReflash, UpdateSettings } from '@/data/types';
+import { useForm } from '@/lib/useForm';
+import { Loaded } from '@/shell/Loaded';
 import { useAction } from '@/lib/useAction';
 import {
   ActivityIndicator,
   AlertDialog,
   Button,
+  ButtonRow,
   buttonClasses,
   FileField,
   FormError,
@@ -14,7 +17,8 @@ import {
   Notice,
   Row,
   Section,
-  SwitchRow,
+  SelectField,
+  TextField,
 } from '@/ui';
 import { BackupSheet } from './BackupSection';
 
@@ -27,7 +31,6 @@ const BOARDS: Record<string, string> = {
 
 /** The running version, news of a newer one, the result of the last update, and installing one. */
 export function SoftwareSection({ status }: { status: Status }) {
-  const { setCheckOnline } = useDevice();
   const { update, version } = status;
   const board = BOARDS[update.board] ?? update.board;
 
@@ -38,6 +41,7 @@ export function SoftwareSection({ status }: { status: Status }) {
           <p>RasBeacon restarts when it&apos;s done. Connected devices are offline for about two minutes.</p>
         </Notice>
       )}
+      {update.restartPending && <RestartPendingNotice message={update.message} />}
       {update.reflash ? (
         <ReflashNotice reflash={update.reflash} running={version} hasPlugins={status.plugins.length > 0} />
       ) : (
@@ -49,27 +53,24 @@ export function SoftwareSection({ status }: { status: Status }) {
             actions={update.latestUrl && <ReleaseLink url={update.latestUrl} />}
           >
             <p>Download its .rbupdate file for your board, then install it below.</p>
+            {update.newerVersion && (
+              <p>After this, RasBeacon offers {update.newerVersion}, which needs this version first.</p>
+            )}
           </Notice>
         )
       )}
 
-      <Section title="Software">
+      <Section title="Software" footer={lastCheckedText(update.lastChecked)}>
         <Row
           leading={{ tile: 'settings', color: 'gray' }}
           title={`RasBeacon ${version}`}
           subtitle={board ? `For ${board}` : undefined}
         />
-        {update.message && <Row title="Last update" subtitle={update.message} />}
-        {update.canCheckOnline && (
-          <SwitchRow
-            title="Check online for new versions"
-            subtitle="Asks GitHub every few hours; never installs anything by itself"
-            checked={update.checkOnline}
-            onChange={setCheckOnline}
-          />
-        )}
+        {update.message && !update.restartPending && <Row title="Last update" subtitle={update.message} />}
+        {update.canCheckOnline && <UpdateCheckRows status={status} />}
         {update.canInstall && <InstallUpdate busy={update.installing} />}
       </Section>
+      {update.canCheckOnline && <NotificationsSection />}
 
       {update.singleSystem ? (
         <Notice title="New versions are flashed">
@@ -90,7 +91,181 @@ export function SoftwareSection({ status }: { status: Status }) {
   );
 }
 
+/** "Last checked Oct 19, 7:13 PM.", or nothing before the first check. */
+function lastCheckedText(lastChecked: string | undefined): string | undefined {
+  const time = lastChecked ? Date.parse(lastChecked) : NaN;
+  if (Number.isNaN(time)) return undefined;
+  const when = new Date(time).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+  return `Last checked ${when}.`;
+}
+
+const CHECK_OPTIONS = [
+  { value: '0', label: 'Manually' },
+  { value: '1', label: 'Every hour' },
+  { value: '6', label: 'Every 6 hours' },
+  { value: '24', label: 'Every day' },
+  { value: '168', label: 'Every week' },
+];
+
+/**
+ * How often RasBeacon asks GitHub for a new version (it saves as soon as it changes), and asking
+ * now. RasBeacon only tells you; installing stays yours to do.
+ */
+function UpdateCheckRows({ status }: { status: Status }) {
+  const { updateSettings, saveUpdateSettings, checkForUpdates } = useDevice();
+  const { update } = status;
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <>
+      <SelectField
+        label="Check for new versions"
+        options={CHECK_OPTIONS}
+        value={String(update.checkHours)}
+        disabled={updateSettings.data === undefined}
+        onChange={(hours) => {
+          setError(null);
+          saveUpdateSettings({ notifyUrl: updateSettings.data?.notifyUrl ?? '', checkHours: Number(hours) }).catch(
+            (problem: unknown) => setError(problem instanceof Error ? problem.message : String(problem)),
+          );
+        }}
+      />
+      <ButtonRow leading={{ icon: 'refresh' }} action={checkForUpdates} busyLabel="Checking…">
+        Check now
+      </ButtonRow>
+      {(error || update.checkError) && (
+        <div className="row">
+          <FormError>{error ?? update.checkError}</FormError>
+        </div>
+      )}
+    </>
+  );
+}
+
+/** Where RasBeacon announces a new version: an ntfy topic (a push to your phone) or a webhook. */
+function NotificationsSection() {
+  const { updateSettings, reload } = useDevice();
+
+  return (
+    <Loaded data={updateSettings} what="the notification settings" onRetry={() => reload('updateSettings')}>
+      {(settings) => <NotificationsForm settings={settings} />}
+    </Loaded>
+  );
+}
+
+function NotificationsForm({ settings }: { settings: UpdateSettings }) {
+  const { saveUpdateSettings, testUpdateNotification } = useDevice();
+  const form = useForm({ notifyUrl: settings.notifyUrl }, (values) =>
+    saveUpdateSettings({ checkHours: settings.checkHours, notifyUrl: values.notifyUrl.trim() }),
+  );
+  const testing = useAction(() => testUpdateNotification(form.values.notifyUrl.trim()));
+  const [sent, setSent] = useState(false);
+
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        form.submit();
+      }}
+      noValidate
+    >
+      <Section
+        title="Update notifications"
+        footer={
+          settings.checkHours === 0
+            ? 'RasBeacon posts here once for each new version it finds. Choose how often to check above, so it looks by itself.'
+            : 'RasBeacon posts here once for each new version it finds: an ntfy topic reaches your phone through the ntfy app, or use a Discord or Home Assistant webhook.'
+        }
+      >
+        <TextField
+          label="Address"
+          labelNote="(optional)"
+          inputMode="url"
+          placeholder="https://ntfy.sh/your-topic"
+          autoComplete="off"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          value={form.values.notifyUrl}
+          onChange={(notifyUrl) => {
+            form.setField('notifyUrl', notifyUrl);
+            setSent(false);
+          }}
+          error={form.fieldErrors.notifyUrl ?? testing.fieldErrors.notifyUrl}
+        />
+        <div className="row flex-wrap gap-2">
+          <Button type="submit" size="sm" loading={form.pending} disabled={!form.dirty}>
+            Save
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={testing.pending}
+            disabled={form.values.notifyUrl.trim() === ''}
+            onClick={async () => {
+              setSent(false);
+              setSent(await testing.run());
+            }}
+          >
+            Send a test
+          </Button>
+        </div>
+        {(form.error || testing.error || form.saved || sent) && (
+          <div className="row">
+            {form.error || testing.error ? (
+              <FormError>{form.error ?? testing.error}</FormError>
+            ) : (
+              <FormSuccess>{sent ? 'Test sent: check that it arrived.' : 'Saved.'}</FormSuccess>
+            )}
+          </div>
+        )}
+      </Section>
+    </form>
+  );
+}
+
 /** A link to a release's page on GitHub, where its files are. */
+/**
+ * An installed update that RasBeacon hasn't restarted into yet (the restart failed, or the power
+ * went off first): why, and the restart that finishes it, asked first like Reboot.
+ */
+function RestartPendingNotice({ message }: { message?: string }) {
+  const { restartIntoUpdate } = useDevice();
+  const [confirming, setConfirming] = useState(false);
+
+  return (
+    <Notice
+      tone="warning"
+      icon="system_update_alt"
+      role="status"
+      title="Restart to finish the update"
+      actions={
+        <Button variant="secondary" size="sm" icon="restart_alt" onClick={() => setConfirming(true)}>
+          Restart
+        </Button>
+      }
+    >
+      {message && <p>{message}</p>}
+      {confirming && (
+        <AlertDialog
+          title="Restart RasBeacon?"
+          confirmLabel="Restart"
+          busyLabel="Restarting…"
+          onConfirm={restartIntoUpdate}
+          onClose={() => setConfirming(false)}
+        >
+          <p>It starts the new version. Connected devices disconnect for about two minutes.</p>
+        </AlertDialog>
+      )}
+    </Notice>
+  );
+}
+
 function ReleaseLink({ url }: { url: string }) {
   return (
     <a href={url} target="_blank" rel="noreferrer" className={buttonClasses('secondary', 'sm')}>

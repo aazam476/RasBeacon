@@ -88,6 +88,24 @@ export function parseMarkdown(source: string): Block[] {
 /** Characters a backslash can make plain ("\*" is a star, not italic). */
 const ESCAPABLE = /[\\`*_[\]()#+\-.!<>{}]/;
 
+/**
+ * Remembers a search for "the first match at or after a position". The line is read from left
+ * to right, so a later search starts further on: if the last one found nothing, or found a match
+ * still ahead, that is the answer again. Without this, a line full of marks that are never
+ * closed (a README with thousands of "[") would be searched to its end once per mark.
+ */
+function rememberedSearch(find: (from: number) => number): (from: number) => number {
+  let searchedFrom = Infinity;
+  let found = -1;
+  return (from) => {
+    if (from < searchedFrom || (found !== -1 && found < from)) {
+      searchedFrom = from;
+      found = find(from);
+    }
+    return found;
+  };
+}
+
 /** Reads the styles in one line of text. */
 export function parseInline(text: string): Inline[] {
   const out: Inline[] = [];
@@ -95,6 +113,16 @@ export function parseInline(text: string): Inline[] {
   const flush = () => {
     if (plain) out.push({ kind: 'text', text: plain });
     plain = '';
+  };
+  // Where the closing marks are, searched once for the whole line (see rememberedSearch).
+  const next = (mark: string) => rememberedSearch((from) => text.indexOf(mark, from));
+  const nextBacktick = next('`');
+  const nextDouble = { '*': next('**'), _: next('__') };
+  const nextLinkMiddle = next('](');
+  const nextParen = next(')');
+  const nextEmEnd = {
+    '*': rememberedSearch((from) => closingEm(text, '*', from)),
+    _: rememberedSearch((from) => closingEm(text, '_', from)),
   };
 
   let i = 0;
@@ -108,7 +136,7 @@ export function parseInline(text: string): Inline[] {
     }
 
     if (c === '`') {
-      const end = text.indexOf('`', i + 1);
+      const end = nextBacktick(i + 1);
       if (end > i + 1) {
         flush();
         out.push({ kind: 'code', text: text.slice(i + 1, end) });
@@ -119,7 +147,7 @@ export function parseInline(text: string): Inline[] {
 
     // **bold** or __bold__
     if ((c === '*' || c === '_') && text[i + 1] === c) {
-      const end = text.indexOf(c + c, i + 2);
+      const end = nextDouble[c](i + 2);
       if (end > i + 2) {
         flush();
         out.push({ kind: 'strong', children: parseInline(text.slice(i + 2, end)) });
@@ -132,7 +160,7 @@ export function parseInline(text: string): Inline[] {
     // like snake_case stay as they are.
     const opensEm = c === '*' || (c === '_' && !/\w/.test(text[i - 1] ?? ''));
     if (opensEm && text[i + 1] !== undefined && text[i + 1] !== ' ' && text[i + 1] !== c) {
-      const end = closingEm(text, c, i + 1);
+      const end = nextEmEnd[c](i + 1);
       if (end > 0) {
         flush();
         out.push({ kind: 'em', children: parseInline(text.slice(i + 1, end)) });
@@ -143,8 +171,8 @@ export function parseInline(text: string): Inline[] {
 
     // [text](https://address): only web addresses become links.
     if (c === '[') {
-      const middle = text.indexOf('](', i + 1);
-      const end = middle > 0 ? text.indexOf(')', middle + 2) : -1;
+      const middle = nextLinkMiddle(i + 1);
+      const end = middle > 0 ? nextParen(middle + 2) : -1;
       if (middle > i && end > middle) {
         const href = text.slice(middle + 2, end).trim();
         const children = parseInline(text.slice(i + 1, middle));

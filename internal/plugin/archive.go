@@ -139,7 +139,9 @@ func Open(file string) (*Archive, error) {
 			if len(a.Templates) >= maxTemplates {
 				return nil, fmt.Errorf("the plugin file has more than %d templates", maxTemplates)
 			}
-			a.Templates[base], err = readEntry(f, maxTemplateSize)
+			if a.Templates[base], err = readEntry(f, maxTemplateSize); err == nil {
+				err = CheckTemplate(base, a.Templates[base])
+			}
 		default:
 			return nil, fmt.Errorf("unexpected file %q in the plugin file", name)
 		}

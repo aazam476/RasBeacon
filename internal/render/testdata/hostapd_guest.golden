@@ -51,6 +51,13 @@ sae_require_mfp=1
 # Allow both WPA3 password methods (hunting-and-pecking and hash-to-element).
 sae_pwe=2
 wpa_passphrase=kq7m-2xvd-h8pt-rn4w
+# Keep the network-wide ("group") key instead of changing it every day.
+# Some Wi-Fi adapters and phones miss the change: they stay connected but
+# no longer receive broadcast messages, such as RasBeacon asking where a
+# device is (ARP), so Wi-Fi devices lose the internet while Ethernet
+# devices keep it. A new group key is still made whenever the hotspot
+# starts, and each device keeps its own key for everything else.
+wpa_group_rekey=0
 
 # ===== Guest network =====
 # A second network name on the same radio, for visitors. Everything above
@@ -77,3 +84,4 @@ ieee80211w=1
 sae_require_mfp=1
 sae_pwe=2
 wpa_passphrase=visitors-welcome
+wpa_group_rekey=0

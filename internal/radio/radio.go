@@ -60,16 +60,19 @@ type Radio struct {
 	SupportsAP bool   `json:"supportsAp"`
 	// MaxAPs is how many hotspot networks the radio can broadcast at once
 	// (see MaxAPInterfaces). The guest network needs 2.
-	MaxAPs int  `json:"maxAps"`
-	Role   Role `json:"role"`
+	MaxAPs int `json:"maxAps"`
+	// Has5GHz is true when the radio can use the 5 GHz band (see
+	// Supports5GHz). Many built-in radios, like the Pi Zero 2 W's, can't.
+	Has5GHz bool `json:"has5GHz"`
+	Role    Role `json:"role"`
 }
 
 // PhyInfoFunc returns the output of `iw phy <phy> info`. It is a parameter so
 // tests can supply canned output instead of running the command.
 type PhyInfoFunc func(phy string) (string, error)
 
-// Detect lists the Wi-Fi interfaces under sysClassNet (normally
-// /sys/class/net), sorted by interface name. Roles are not assigned yet; see
+// Detect lists the Wi-Fi radios under sysClassNet (normally
+// /sys/class/net): one interface per radio, sorted by interface name. Roles are not assigned yet; see
 // AssignRoles.
 func Detect(sysClassNet string, phyInfo PhyInfoFunc) ([]Radio, error) {
 	entries, err := os.ReadDir(sysClassNet)
@@ -112,13 +115,31 @@ func Detect(sysClassNet string, phyInfo PhyInfoFunc) ([]Radio, error) {
 		if info, err := phyInfo(phyName); err == nil {
 			r.SupportsAP = SupportsAPMode(info)
 			r.MaxAPs = MaxAPInterfaces(info)
+			r.Has5GHz = Supports5GHz(info)
 		}
 
 		radios = append(radios, r)
 	}
 
 	sort.Slice(radios, func(i, j int) bool { return radios[i].Interface < radios[j].Interface })
-	return radios, nil
+	return onePerRadio(radios), nil
+}
+
+// onePerRadio keeps the first interface of each radio (phy). One radio can
+// have several interfaces: while hostapd runs the guest network, the
+// hotspot's radio has both ap0 and guest0. If rbd restarts then, guest0 must
+// not look like a second radio, or it would be given the uplink.
+func onePerRadio(radios []Radio) []Radio {
+	seen := map[string]bool{}
+	var kept []Radio
+	for _, r := range radios {
+		if seen[r.Phy] {
+			continue
+		}
+		seen[r.Phy] = true
+		kept = append(kept, r)
+	}
+	return kept
 }
 
 // AssignRoles decides which radio runs the hotspot and which joins the uplink.
@@ -291,6 +312,44 @@ func atoi(s string) int {
 		n = n*10 + int(r-'0')
 	}
 	return n
+}
+
+// Supports5GHz reads `iw phy <name> info` output and reports whether the
+// radio can use the 5 GHz band. iw lists each band the radio has as
+// "Band 1:" (2.4 GHz), "Band 2:" (5 GHz) and so on, so a radio without a
+// "Band 2:" section is 2.4 GHz only.
+func Supports5GHz(iwPhyInfo string) bool {
+	for _, line := range strings.Split(iwPhyInfo, "\n") {
+		if strings.TrimSpace(line) == "Band 2:" {
+			return true
+		}
+	}
+	return false
+}
+
+// ChannelAllowed reads `iw phy <name> info` output and reports whether the
+// radio may run a hotspot on channel under the current country's rules.
+// iw lists every channel with what the country allows, for example:
+//
+//   - 2412 MHz [1] (20.0 dBm)
+//   - 2467 MHz [12] (disabled)
+//   - 5260 MHz [52] (20.0 dBm) (no IR, radar detection)
+//
+// "disabled" means the channel may not be used at all, and "no IR" ("no
+// initiating radiation") that the radio may not start a network on it, so
+// a hotspot can't use either. listed is false when the channel isn't in
+// the output at all, so the caller can't tell.
+func ChannelAllowed(iwPhyInfo string, channel int) (allowed, listed bool) {
+	want := fmt.Sprintf("[%d]", channel)
+	for _, line := range strings.Split(iwPhyInfo, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "* ") || !strings.Contains(trimmed, " MHz "+want) {
+			continue
+		}
+		forbidden := strings.Contains(trimmed, "(disabled)") || strings.Contains(trimmed, "no IR")
+		return !forbidden, true
+	}
+	return false, false
 }
 
 // readTrimmed reads a small sysfs file and removes the trailing newline.

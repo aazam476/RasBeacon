@@ -278,6 +278,8 @@ func (a *Agent) RunUplinkMonitor() {
 		time.Sleep(UplinkCheckInterval)
 		a.mu.Lock()
 		a.checkUplink()
+		a.checkHotspot()
+		a.renewCertificateIfDue()
 		a.sampleReadings()
 		a.mu.Unlock()
 	}
@@ -371,7 +373,7 @@ func (a *Agent) observeUplink() (api.UplinkStatus, []netip.Prefix) {
 				upstreamIPv4 = append(upstreamIPv4, prefix)
 				if name == s.Interface && s.Address == "" {
 					s.Address = prefix.Addr().String()
-					s.SubnetMask = subnetMask(prefix.Bits())
+					s.SubnetMask = render.Netmask(prefix.Bits())
 				}
 			}
 		}
@@ -515,6 +517,11 @@ func (a *Agent) moveLAN(prefix netip.Prefix) {
 	if a.guestActive() {
 		a.applyGuestBridge(true)
 	}
+	// The plugins' ports are forwarded from RasBeacon's address on the
+	// hotspot, which just changed.
+	if err := a.applyFirewall(); err != nil {
+		slog.Error("could not update the firewall for the new hotspot network", "error", err)
+	}
 	if err := a.applyDHCP(false); err != nil {
 		slog.Error("could not restart DHCP for the new hotspot network", "error", err)
 	}
@@ -624,6 +631,13 @@ func (a *Agent) UpdateUplinkSettings(req api.UplinkSettings) error {
 				return err
 			}
 			uploads[id] = parsed
+			// A login server trusted at the first connection stays trusted
+			// while the network is the same one with no CA or name given.
+			for _, old := range a.cfg.Uplink.Networks {
+				if old.ID == id && old.SSID == n.SSID && old.Enterprise != nil && e.ServerName == "" && parsed.caCert == "" {
+					saved.Enterprise.ServerCertHash = old.Enterprise.ServerCertHash
+				}
+			}
 		}
 
 		if n.Security == config.UplinkPersonal || n.Security == config.UplinkEnterprise {

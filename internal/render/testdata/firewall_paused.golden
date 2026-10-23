@@ -85,6 +85,10 @@ table inet rasbeacon {
 		# Devices whose internet access the owner paused: nothing from them
 		# is forwarded (they can still reach RasBeacon itself).
 		iifname @lans ether saddr { 3a:1f:22:aa:bb:cc, 8e:00:11:22:33:44 } reject
+		# ... and nothing reaches them from outside, not even answers to
+		# connections they started before.
+		oifname @lans ip daddr { 10.87.0.23 } drop
+		oifname @lans ip6 daddr { fd12:3456:789a:1::23 } drop
 
 		# Connections devices already started may continue, but only on the
 		# current path. When the path changes (for example from login mode
@@ -119,5 +123,24 @@ table inet rasbeacon {
 	# OUTPUT: packets RasBeacon itself sends. Allowed, except:
 	chain output {
 		type filter hook output priority filter; policy accept;
+	}
+}
+
+# Plugins all plug into one bridge ("rbplug0"), each with its own
+# port ("rbport*"). Packets between two ports of a bridge are
+# passed along by the bridge itself and never reach the table above, so
+# without this one any plugin could reach every other plugin, whatever its
+# permissions. The "forward" hook of a bridge table sees exactly those
+# packets (not the ones to RasBeacon itself), so dropping every one that
+# came in on a plugin's port leaves each plugin only what the rules above
+# allow it: RasBeacon itself, and (with permission) the internet and your
+# devices. Replaced the same way as the table above.
+table bridge rasbeacon
+delete table bridge rasbeacon
+
+table bridge rasbeacon {
+	chain forward {
+		type filter hook forward priority filter; policy accept;
+		iifname "rbport*" drop
 	}
 }

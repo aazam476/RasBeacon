@@ -85,6 +85,9 @@ func main() {
 	// Watch the internet connection in the background (see agent/uplink.go).
 	go a.RunUplinkMonitor()
 	if *devRoot == "" {
+		// Remember Enterprise login servers at the first connection (see
+		// agent/servercert.go).
+		go a.RunServerCertWatch()
 		// Keep the clock right (see agent/clock.go). These two are not run
 		// on the simulated device: they would contact real web servers.
 		go a.RunClockMonitor()

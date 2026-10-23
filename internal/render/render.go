@@ -129,11 +129,11 @@ func ULALANAddress(ula48 string) (netip.Prefix, error) {
 func (l LAN) Address() string { return l.Prefix.Addr().String() }
 
 // Netmask returns the classic dotted netmask, e.g. 255.255.255.0 for a /24.
-func (l LAN) Netmask() string {
-	bits := l.Prefix.Bits()
-	mask := uint32(0xffffffff) << (32 - bits)
-	return fmt.Sprintf("%d.%d.%d.%d", byte(mask>>24), byte(mask>>16), byte(mask>>8), byte(mask))
-}
+func (l LAN) Netmask() string { return Netmask(l.Prefix.Bits()) }
+
+// Netmask turns an IPv4 prefix length into a dotted netmask: 24 is
+// 255.255.255.0, 0 is 0.0.0.0.
+func Netmask(bits int) string { return net.IP(net.CIDRMask(bits, 32)).String() }
 
 // DHCP hands out the addresses from .20 to .250 (.1 to .19 are left free
 // for RasBeacon and future use).
@@ -170,6 +170,13 @@ type HotspotInput struct {
 	// no setup.txt was provided.
 	Open     bool
 	Password string // ignored when Open is true
+	// AcceptMACFile, when set, lets only the devices listed in that file
+	// join (one MAC address per line). It applies to this network, not the
+	// guest network.
+	AcceptMACFile string
+	// MaxDevices is the most devices on each network at once (0: hostapd's
+	// own limit).
+	MaxDevices int
 	// Guest adds the guest network on the same radio (nil: no guest
 	// network). The radio must support two access points (see
 	// radio.MaxAPInterfaces).
@@ -236,6 +243,12 @@ func Hostapd(in HotspotInput) (string, error) {
 	}
 	if err := config.ValidateSSID(in.SSID); err != nil {
 		return "", fmt.Errorf("hotspot name: %w", err)
+	}
+	if strings.ContainsAny(in.AcceptMACFile, "\n\r") {
+		return "", fmt.Errorf("invalid allow list file name %q", in.AcceptMACFile)
+	}
+	if in.MaxDevices < 0 || in.MaxDevices > config.MaxDevicesLimit {
+		return "", fmt.Errorf("device limit %d is out of range", in.MaxDevices)
 	}
 	if g := in.Guest; g != nil {
 		if in.Open {
@@ -318,6 +331,9 @@ var PluginSubnet = netip.MustParsePrefix("10.89.0.0/24")
 type DnsmasqInput struct {
 	LAN       LAN
 	LeaseFile string
+	// Hostname is RasBeacon's own name; <Hostname>.lan points to it, as
+	// does rasbeacon.lan.
+	Hostname string
 	// Captive is true during first-boot setup: every name points to
 	// RasBeacon so phones open the setup page automatically.
 	Captive bool
@@ -358,6 +374,7 @@ type dnsmasqData struct {
 	DHCPStart        string
 	DHCPEnd          string
 	LeaseFile        string
+	Hostname         string
 	Captive          bool
 	CaptivePortalAPI string
 	Upstream         []string
@@ -395,6 +412,12 @@ func Dnsmasq(in DnsmasqInput) (string, error) {
 			data.GuestDHCPStart = g.hostAddress(dhcpFirst)
 			data.GuestDHCPEnd = g.hostAddress(dhcpLast)
 		}
+	}
+	if in.Hostname != "" && in.Hostname != "rasbeacon" {
+		if strings.ContainsAny(in.Hostname, "/.\n\r ") {
+			return "", fmt.Errorf("invalid host name %q", in.Hostname)
+		}
+		data.Hostname = in.Hostname
 	}
 	for _, name := range data.NoticeHostnames {
 		if strings.ContainsAny(name, "/\n\r ") || name == "" {
@@ -436,9 +459,15 @@ type FirewallInput struct {
 	// yours, but reach nothing else (not your devices, not RasBeacon's
 	// settings, only its DHCP and DNS).
 	Guest bool
-	// PausedMACs are devices whose internet access the owner paused: the
-	// firewall refuses to forward anything from them.
+	// PausedMACs are devices whose internet access the owner paused (or
+	// that used up their data): the firewall refuses to forward anything
+	// from them.
 	PausedMACs []string
+	// PausedIPv4 and PausedIPv6 are those devices' addresses on the
+	// hotspot (from the DHCP leases and the neighbor table): nothing is
+	// forwarded to them either.
+	PausedIPv4 []netip.Addr
+	PausedIPv6 []netip.Addr
 	// Browser confines the login browser (see internal/browser) to the
 	// uplinks. nil when there is no browser user.
 	Browser *BrowserRule
@@ -473,10 +502,13 @@ type PluginPort struct {
 }
 
 // PluginBridge is the plugins' network's interface, and PluginGateway
-// RasBeacon's address on it.
+// RasBeacon's address on it. Each plugin's container is plugged into the
+// bridge by a port whose name starts with PluginPortPrefix (named by
+// plugin.HostPortName; the agent's tests check the two packages agree).
 const (
-	PluginBridge  = "rbplug0"
-	PluginGateway = "10.89.0.1"
+	PluginBridge     = "rbplug0"
+	PluginGateway    = "10.89.0.1"
+	PluginPortPrefix = "rbport"
 )
 
 type pluginPortData struct {
@@ -497,6 +529,8 @@ type BrowserRule struct {
 
 type firewallData struct {
 	PausedMACs      []string
+	PausedIPv4      []string
+	PausedIPv6      []string
 	Browser         *BrowserRule
 	RoutedIPv6      string
 	PortalOnly      bool
@@ -509,11 +543,14 @@ type firewallData struct {
 	TunnelDNS6      []string
 	TunnelInterface string
 	PluginBridge    string
-	PluginGateway   string
-	PluginInternet  []string
-	PluginLAN       []string
-	PluginPorts     []pluginPortData
-	LANAddress      string
+	// PluginBridgePorts matches the names of the plugins' ports on their
+	// bridge, such as "rbport*".
+	PluginBridgePorts string
+	PluginGateway     string
+	PluginInternet    []string
+	PluginLAN         []string
+	PluginPorts       []pluginPortData
+	LANAddress        string
 }
 
 // Firewall produces the nftables ruleset.
@@ -524,15 +561,16 @@ func Firewall(in FirewallInput) (string, error) {
 		}
 	}
 	data := firewallData{
-		Bridge:          BridgeName,
-		SSHEnabled:      in.SSHEnabled,
-		Egress:          in.Egress,
-		TunnelInterface: in.TunnelInterface,
-		PortalOnly:      in.PortalOnly,
-		Guest:           in.Guest,
-		GuestBridge:     GuestBridgeName,
-		PluginBridge:    PluginBridge,
-		PluginGateway:   PluginGateway,
+		Bridge:            BridgeName,
+		SSHEnabled:        in.SSHEnabled,
+		Egress:            in.Egress,
+		TunnelInterface:   in.TunnelInterface,
+		PortalOnly:        in.PortalOnly,
+		Guest:             in.Guest,
+		GuestBridge:       GuestBridgeName,
+		PluginBridge:      PluginBridge,
+		PluginGateway:     PluginGateway,
+		PluginBridgePorts: PluginPortPrefix + "*",
 	}
 	if len(in.Plugins) > 0 && !in.LANAddress.Is4() {
 		return "", fmt.Errorf("plugins need RasBeacon's hotspot address")
@@ -570,6 +608,18 @@ func Firewall(in FirewallInput) (string, error) {
 			return "", fmt.Errorf("invalid MAC address %q", mac)
 		}
 		data.PausedMACs = append(data.PausedMACs, hw.String())
+	}
+	for _, addr := range in.PausedIPv4 {
+		if !addr.Is4() {
+			return "", fmt.Errorf("invalid IPv4 address %v", addr)
+		}
+		data.PausedIPv4 = append(data.PausedIPv4, addr.String())
+	}
+	for _, addr := range in.PausedIPv6 {
+		if !addr.Is6() || addr.Is4In6() {
+			return "", fmt.Errorf("invalid IPv6 address %v", addr)
+		}
+		data.PausedIPv6 = append(data.PausedIPv6, addr.String())
 	}
 	if b := in.Browser; b != nil {
 		if b.UID <= 0 {

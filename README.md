@@ -13,23 +13,33 @@
 
 An open-source Wi-Fi travel router for the Raspberry Pi.
 Your devices join RasBeacon's hotspot, and RasBeacon joins the network where
-you are (hotel, campus eduroam, café). The goal is that all your traffic can
+you are (a hotel, a café, a campus or an office). The goal is that all your traffic can
 go through your own WireGuard VPN, with a kill switch and an easy way through
 hotel login pages.
 
 - **Setup happens in your phone's browser.** No command line, no compiling.
 - **No shared default passwords.** Every device generates its own on first
   boot.
-- **No telemetry and no cloud.** Everything works offline. The one
-  exception is the speed test, which only runs when you press its button:
-  like Cloudflare's own speed test page, it sends its result to Cloudflare.
+- **No telemetry and no cloud.** Everything works offline, and nothing
+  about you or your devices is sent anywhere. What RasBeacon itself
+  contacts on the internet:
+  - the speed test, only when you press its button (like Cloudflare's own
+    speed test page, it sends its result to Cloudflare);
+  - Google's and Apple's "is there internet?" addresses, every 10 minutes
+    (more often while the VPN can't connect), to notice a hotel's login
+    page, as phones do;
+  - the time: NTP, or Google, Apple and Cloudflare over HTTPS where NTP is
+    blocked;
+  - GitHub, once a day while plugins from the catalog are installed (to
+    offer their updates), and for new RasBeacon versions only if you
+    choose a schedule on the System page.
 - **Licensed under Apache-2.0.**
 
-> **Status: beta (v0.1). Everything is built and tested in CI; hardware
+> **Status: beta (v0.2). Everything is built and tested in CI; hardware
 > testing is in progress** (see the [full test plan](docs/testing/full.md)). RasBeacon
 > runs your hotspot (plus an optional guest network), connects it to the
 > internet through Ethernet or Wi-Fi (open, password, or WPA-Enterprise
-> such as eduroam, [guide](docs/eduroam.md)), can send everything through
+> networks such as eduroam, [guide](docs/wpa-enterprise.md)), can send everything through
 > your own WireGuard VPN with a kill switch, keeping several VPN profiles
 > ([server guide](docs/wireguard-server.md)), lets you log in to hotel login
 > pages without anything leaving the VPN, and installs signed updates with
@@ -91,9 +101,10 @@ hotel login pages.
    networks; RasBeacon joins the first one in the list that is in range,
    and prefers a plugged-in cable.
 9. **Optional, your VPN:** on the **VPN** page, import your WireGuard
-   `.conf` file and turn on *Use the VPN*. Keep the *Kill switch* on so
-   nothing is ever sent outside the VPN. You can import several files and
-   pick the one in use.
+   `.conf` file; the VPN turns on by itself. Keep the *Kill switch* on so
+   nothing is ever sent outside the VPN: while it is on, turning the VPN
+   off leaves your devices with no internet at all (the page warns you).
+   You can import several files, rename them, and pick the one in use.
 
 > **Important:** the setup network closes after 30 minutes if nobody
 > finishes setup. Unplug and replug the power to reopen it. Until setup is
@@ -112,7 +123,8 @@ hotel login pages.
 | Hotel or café Wi-Fi with a login page | Your phone should show RasBeacon's *This network needs a login* page by itself (or open `http://10.87.0.1/#/portal`). Tap **Open the login page here**: RasBeacon opens the hotel's page itself and shows it to you; tap and type on it as usual. Nothing from your devices leaves the VPN, and it closes by itself once you're logged in. If a page doesn't work that way, **Start login mode** instead: for at most 10 minutes (extendable to 30), web traffic from your devices skips the VPN so they can reach the page directly. |
 | A warning says the Ethernet port "seems to be plugged into a network" | The port is set to *Client port* (for your own laptop), but it's plugged into a network. Set it to *Uplink* on the Internet page if that cable is your internet connection. |
 | The status page warns that the built-in Wi-Fi is running the hotspot | RasBeacon didn't find a USB adapter it can use. Plug one in and choose *Reboot* on the System page. |
-| Nothing works and you want to see why | Put the SD card in a computer and create an empty file named `debug` on the `BOOTCONFIG` drive. Boot the Pi and wait 3 minutes, then unplug it. Back on the computer, open `rasbeacon-debug.txt` from the same drive. It holds the startup logs (no passwords, but device names and MAC addresses, so delete it afterwards). |
+| Nothing works and you want to see why | Put the SD card in a computer and create an empty file named `debug` on the `BOOTCONFIG` drive. Boot the Pi and wait 3 minutes, then unplug it. Back on the computer, open `rasbeacon-debug.txt` from the same drive. It holds the startup logs: no passwords (RasBeacon keeps them out of its logs, plugins' included), but device names and MAC addresses, so delete it afterwards. |
+| Want a new admin password | System → **Change admin password**, with the current one. Other devices are logged out. |
 | Forgot the admin password | Factory reset: put the SD card in a computer and create an empty file named `factory-reset` on the `BOOTCONFIG` drive. At the next start, RasBeacon erases all settings and runs first-time setup again. (Or hold the optional reset button for 10 seconds.) |
 | An update didn't install | The System page says why. "not signed by a key this RasBeacon trusts": use update files from the official Releases page; images built before signing was set up can't install updates, so flash the new image once. "for rpi64, but this is a pi4": the device runs an image from before the Pi 4 and Pi 5 shared one; flash the new image once. "older than the version running": RasBeacon doesn't go back to older versions. "needs a fresh install" (or "can't be installed over"): that version changed too much to install over yours; follow [the steps below](#updating). |
 
@@ -133,7 +145,11 @@ update**. RasBeacon itself doesn't need to be online for this. It checks
 that the file was signed by the RasBeacon release key, installs it next to
 the running version, and restarts into it. If the new version doesn't start
 correctly, it goes back to the old one by itself. Your settings are kept.
-(You can also turn on a check for new versions there; it is off by default.)
+
+RasBeacon can also look for new versions on GitHub by itself (every hour,
+6 hours, day or week; off by default) and tell your phone: enter an
+[ntfy](https://ntfy.sh) topic, or a Discord, Gotify or Home Assistant
+webhook, on the System page.
 
 RasBeacon never installs an older version than the one it runs. And
 sometimes a new version changes too much to be installed over an old one:
@@ -153,7 +169,12 @@ since their image has one copy of the system.
 - **Metered connection** (on a phone's hotspot or a paid plan): tick it on
   the **Hotspot** page. Android devices then hold back big downloads; on
   iPhones and Macs turn on *Low Data Mode* for the hotspot in Wi-Fi
-  settings.
+  settings, and on Windows set it as a metered connection.
+- **Who can join:** on the **Hotspot** page, let only the devices you list
+  join (by MAC address; phones often use a private one per network), and
+  set the most devices at once. Devices on Ethernet always get in.
+- **WPA3 only** for the hotspot, if all your devices support it: the
+  **Hotspot** page.
 - **Public IPv6 through the VPN:** if your WireGuard server routes a public
   IPv6 /64 to RasBeacon, enter it on the **VPN** page (under *Server
   details*); devices then get their own public IPv6 addresses.
@@ -166,11 +187,14 @@ since their image has one copy of the system.
   through the VPN. See [docs/plugins.md](docs/plugins.md).
 - **Your own DNS servers**, also through the VPN: the **Internet** page.
 - **Share the Wi-Fi with a QR code:** the **Hotspot** and **Guests** pages.
-- **Name your devices, see their data use** and set a limit on metered
-  connections: the **Clients** page.
-- **Backups:** the **System** page saves every setting (and plugins, if
-  you like) in a password-encrypted file, to restore or move to another
-  RasBeacon.
+- **Name your devices, see their data use** and set a data limit per
+  device: the **Clients** page.
+- **Backups:** the **System** page saves every setting and the plugins in
+  a password-encrypted file, to restore or move to another RasBeacon. You
+  choose whether it also keeps the plugins' data, and their apps (so a
+  restore works offline); otherwise they are downloaded again.
+- **Rename RasBeacon** (then reach it at `<name>.lan`) and **shut it down**:
+  the **System** page.
 - **SSH** for advanced users: the **SSH** page (keys only, hotspot side
   only).
 - **Factory-reset button:** connect a push button between pin 11 (GPIO 17)

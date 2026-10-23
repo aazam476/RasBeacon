@@ -24,16 +24,22 @@ type fakeRBD struct {
 	adminPassword string
 	lastForwarded string
 	remembered    map[string]bool
+	// verifyDelay is how long a password check takes (about half a second
+	// on a Pi; nothing by default).
+	verifyDelay time.Duration
+	// hostname is the owner's name for RasBeacon ("" for none).
+	hostname string
 }
 
 func (f *fakeRBD) handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /state", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, api.SetupState{Mode: f.mode, LANAddress: "10.87.0.1", PortalNotice: f.portalNotice})
+		writeJSON(w, http.StatusOK, api.SetupState{Mode: f.mode, LANAddress: "10.87.0.1", PortalNotice: f.portalNotice, Hostname: f.hostname})
 	})
 	mux.HandleFunc("POST /verify-password", func(w http.ResponseWriter, r *http.Request) {
 		var req api.PasswordRequest
 		_ = json.NewDecoder(r.Body).Decode(&req)
+		time.Sleep(f.verifyDelay)
 		writeJSON(w, http.StatusOK, api.VerifyPasswordResponse{OK: req.Password == f.adminPassword})
 	})
 	mux.HandleFunc("POST /remembered-logins", func(w http.ResponseWriter, r *http.Request) {
@@ -82,6 +88,10 @@ func request(s *Server, method, url, body string, headers map[string]string, coo
 	req.RemoteAddr = "10.87.0.23:50000"
 	local := &net.TCPAddr{IP: net.ParseIP("10.87.0.1"), Port: 80}
 	req = req.WithContext(context.WithValue(req.Context(), http.LocalAddrContextKey, local))
+	// A body is JSON unless the test says otherwise, as the web UI sends it.
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
@@ -364,7 +374,7 @@ func TestUpdateUpload_NeedsLoginAndIsStreamedToRBD(t *testing.T) {
 func TestStatus_TellsRBDWhoIsLooking(t *testing.T) {
 	s, rbd := newTestServer(api.ModeNormal)
 	cookies, _ := login(t, s)
-	if rec := request(s, "GET", "/api/v1/status", "", nil, cookies); rec.Code != http.StatusOK {
+	if rec := request(s, "GET", "http://10.87.0.1/api/v1/status", "", nil, cookies); rec.Code != http.StatusOK {
 		t.Fatalf("got %d", rec.Code)
 	}
 	if rbd.lastForwarded != "GET /status?viewer=10.87.0.23" {
@@ -391,24 +401,24 @@ func TestStayLoggedIn_SurvivesARestartUntilLogout(t *testing.T) {
 	// rbweb restarts: its sessions are gone, but the browser is logged in
 	// again with the remembered login.
 	restarted := New(s.rbd, s.ui)
-	rec = request(restarted, "GET", "/api/v1/session", "", nil, []*http.Cookie{remember})
+	rec = request(restarted, "GET", "http://10.87.0.1/api/v1/session", "", nil, []*http.Cookie{remember})
 	var info api.SessionInfo
 	_ = json.Unmarshal(rec.Body.Bytes(), &info)
 	if !info.LoggedIn || info.CSRFToken == "" {
 		t.Fatalf("want logged in again, got %s", rec.Body)
 	}
 	session := rec.Result().Cookies()
-	if rec := request(restarted, "GET", "/api/v1/status", "", nil, session); rec.Code != http.StatusOK {
+	if rec := request(restarted, "GET", "http://10.87.0.1/api/v1/status", "", nil, session); rec.Code != http.StatusOK {
 		t.Errorf("status with the new session: %d", rec.Code)
 	}
 
 	// Logging out forgets it.
-	rec = request(restarted, "DELETE", "/api/v1/session", "", nil, append(session, remember))
+	rec = request(restarted, "DELETE", "http://10.87.0.1/api/v1/session", "", nil, append(session, remember))
 	if rec.Code != http.StatusNoContent || len(rbd.remembered) != 0 {
 		t.Fatalf("logout: %d, remembered %v", rec.Code, rbd.remembered)
 	}
 	again := New(s.rbd, s.ui)
-	rec = request(again, "GET", "/api/v1/session", "", nil, []*http.Cookie{remember})
+	rec = request(again, "GET", "http://10.87.0.1/api/v1/session", "", nil, []*http.Cookie{remember})
 	if strings.Contains(rec.Body.String(), `"loggedIn":true`) {
 		t.Error("a forgotten login must not log in")
 	}
@@ -418,6 +428,18 @@ func TestStayLoggedIn_SurvivesARestartUntilLogout(t *testing.T) {
 	for _, c := range cookies {
 		if c.Name == rememberCookieName {
 			t.Error("unexpected remember cookie")
+		}
+	}
+}
+
+// Logging in and claiming only take JSON, so a form on another website
+// can't send them without the browser asking RasBeacon first.
+func TestPublicPosts_OnlyTakeJSON(t *testing.T) {
+	s, _ := newTestServer(api.ModeSetup)
+	for _, path := range []string{"/api/v1/setup/claim", "/api/v1/session"} {
+		form := map[string]string{"Content-Type": "application/x-www-form-urlencoded"}
+		if rec := request(s, "POST", "http://10.87.0.1"+path, `password=guess`, form, nil); rec.Code != http.StatusUnsupportedMediaType {
+			t.Errorf("POST %s as a form = %d, want 415", path, rec.Code)
 		}
 	}
 }

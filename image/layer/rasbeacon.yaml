@@ -19,6 +19,9 @@ mmdebstrap:
     - dnsmasq-utils
     # Joins upstream Wi-Fi networks (the uplink)
     - wpasupplicant
+    # The certificate authorities the system trusts: they check an
+    # Enterprise network's login server when only its name was given
+    - ca-certificates
     # The "wg" tool for the WireGuard VPN (the kernel has WireGuard built in;
     # RasBeacon doesn't use wg-quick)
     - wireguard-tools
@@ -29,6 +32,10 @@ mmdebstrap:
     - nftables
     # Wi-Fi and network tools used by rbd
     - iw
+    # Each country's Wi-Fi rules (/lib/firmware/regulatory.db): the kernel
+    # needs it for `iw reg set`, and rbd reads it to offer only the
+    # channels the country allows
+    - wireless-regdb
     - iproute2
     - rfkill
     # Shows USB adapters in the diagnostics report

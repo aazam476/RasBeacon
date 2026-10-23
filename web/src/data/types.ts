@@ -18,7 +18,7 @@ export type Mode =
 export type Band = '2.4GHz' | '5GHz';
 
 /** "wpa2-wpa3" lets new devices use WPA3; "wpa2" is for old devices. */
-export type Security = 'wpa2-wpa3' | 'wpa2';
+export type Security = 'wpa2-wpa3' | 'wpa2' | 'wpa3';
 
 /** GET /api/v1/setup (no login needed). */
 export interface SetupState {
@@ -30,6 +30,8 @@ export interface SetupState {
   suggestedHotspotSsid?: string;
   suggestedHotspotPassword?: string;
   setupClosesInSeconds?: number;
+  /** The hotspot's radio has no 5 GHz band, so setup offers only 2.4 GHz. */
+  no5GHz?: boolean;
 }
 
 /** The setup form. The API's ClaimRequest is the same without `adminPasswordConfirm`. */
@@ -39,6 +41,13 @@ export interface SetupForm {
   hotspotSsid: string;
   hotspotPassword: string;
   hotspotBand: Band;
+}
+
+/** The form that changes the admin password (System page). */
+export interface AdminPasswordForm {
+  currentPassword: string;
+  newPassword: string;
+  newPasswordConfirm: string;
 }
 
 /** POST /api/v1/setup/claim answers with this. */
@@ -94,7 +103,7 @@ export interface Client {
   /** Data used since the counters were reset (Wi-Fi devices; 0 for wired ones). */
   downBytes: number;
   upBytes: number;
-  /** Paused for going over the data limit on a metered connection. */
+  /** Paused for going over the data limit. */
   limitReached?: boolean;
 }
 
@@ -184,14 +193,29 @@ export interface UpdateStatus {
   message?: string;
   /** The optional online check for new releases. */
   canCheckOnline: boolean;
-  checkOnline: boolean;
+  /** How often it asks GitHub: 0 (only with Check now), 1, 6, 24 or 168 hours. */
+  checkHours: number;
+  /** When it last asked (ISO 8601), and why that failed. */
+  lastChecked?: string;
+  checkError?: string;
+  /** The newest release this RasBeacon can install, and its release page. */
   latestVersion?: string;
   latestUrl?: string;
+  /**
+   * An even newer release that can only be installed over `latestVersion` (or a later one), such as
+   * one signed with a new key. It is offered once `latestVersion` runs.
+   */
+  newerVersion?: string;
   /**
    * A newer version that can't be installed over this one: the online check found it, or its
    * update file was refused. The way to it is a backup, the new image, and the backup restored.
    */
   reflash?: UpdateReflash;
+  /**
+   * An installed update waits for its restart: the restart after installing failed (`message` says
+   * why), or RasBeacon was switched off first. `restartIntoUpdate` finishes it.
+   */
+  restartPending?: boolean;
 }
 
 /** A new version that needs a fresh install (`UpdateStatus.reflash`). */
@@ -219,7 +243,8 @@ export interface PortalStatus {
 }
 
 /** Where the WireGuard tunnel is. */
-export type VPNState = 'off' | 'connecting' | 'up' | 'down' | 'direct';
+/** `blocked`: the VPN is off but the kill switch is on, so devices have no internet. */
+export type VPNState = 'off' | 'connecting' | 'up' | 'down' | 'direct' | 'blocked';
 
 export interface VPNStatus {
   enabled: boolean;
@@ -318,6 +343,8 @@ export interface SpeedtestResult {
 export interface Speedtest {
   /** The test service, shown as "using …": "Cloudflare". */
   provider: string;
+  /** A test is running (started from any page or device): the button waits for it. */
+  running: boolean;
   /** null until the first test has run. */
   last: SpeedtestResult | null;
 }
@@ -369,6 +396,8 @@ export interface HotspotSettings {
   /** Tell devices the connection is limited (Android reads it automatically). */
   metered: boolean;
   password?: string;
+  /** Read-only: the hotspot's radio has no 5 GHz band, so only 2.4 GHz is offered. */
+  no5GHz?: boolean;
 }
 
 /**
@@ -382,6 +411,24 @@ export interface GuestSettings {
   hasPassword: boolean;
   /** False when the Wi-Fi adapter can only broadcast one network (read-only). */
   supported: boolean;
+}
+
+/** GET/PUT /api/v1/settings/access: which and how many devices may join the hotspot over Wi-Fi. */
+export interface AccessSettings {
+  /** Only the devices in `allowed` may join your network (the guest network isn't affected). */
+  allowListOn: boolean;
+  /** MAC addresses such as 3a:1f:22:aa:bb:cc. */
+  allowed: string[];
+  /** The most devices on each network at once; 0 for no limit (up to 231). */
+  maxDevices: number;
+}
+
+/** GET/PUT /api/v1/settings/updates: how often to look for a new version, and where to announce it. */
+export interface UpdateSettings {
+  /** 0 (only with Check now), 1, 6, 24 or 168 hours. */
+  checkHours: number;
+  /** An ntfy topic or a webhook; "" for none. */
+  notifyUrl: string;
 }
 
 /** GET/PUT /api/v1/settings/swap: the swap file on the SD card, in whole gigabytes. */
@@ -412,13 +459,18 @@ export interface UsageSettings {
   limitMb: number;
   /** When counting started (RFC 3339); read-only. */
   since?: string;
-  /** Whether the limit applies now (the hotspot's metered setting); read-only. */
-  metered: boolean;
   /** How many devices the limit pauses now; read-only. */
   devicesPaused: number;
 }
 
 /** POST /api/v1/wifi-qr: a QR code phones scan to join a network. */
+/** The channels a country allows a hotspot on, by band (POST /settings/hotspot/channels). */
+export type ChannelsByBand = Record<Band, number[]>;
+
+export interface HotspotChannelsResponse {
+  channels: ChannelsByBand;
+}
+
 export interface WiFiQR {
   ssid: string;
   /** An SVG image, black on white. */
@@ -444,10 +496,15 @@ export interface EnterpriseSettings {
   method: EAPMethod;
   identity: string;
   anonymousIdentity: string;
-  /** As the institution publishes it, e.g. "*.example.edu". */
+  /** As the network publishes it, e.g. "*.example.com". Optional. */
   serverName: string;
   /** Turns off checking the login server. Unsafe; the UI warns. */
   allowNoCertificateCheck: boolean;
+  /**
+   * Without a CA certificate or server name: the SHA-256 of the login server's certificate,
+   * trusted at the first connection (empty until then). Read only.
+   */
+  serverCertHash?: string;
   caCert?: string;
   caCertSummary: string;
   clientCert?: string;
@@ -733,9 +790,21 @@ export interface PluginPreview {
   cpus: number;
   storageMb: number;
   warnings?: string[];
+  /** Set when data kept from an earlier install waits, but not from the same author. */
+  keptData?: PluginKeptData;
 }
 
 /** The owner's choices in the install sheet or on a plugin's page. */
+/**
+ * Data kept from an earlier install with the same ID that doesn't come back by itself (it wasn't
+ * signed with the same key): the install sheet asks. `name` is the earlier plugin's, `keyId` its
+ * signing key; both are missing for data RasBeacon 0.1 kept, which didn't note them.
+ */
+export interface PluginKeptData {
+  name?: string;
+  keyId?: string;
+}
+
 export interface PluginChoices {
   /** By port key ("tcp/3000"). */
   ports: Record<string, number>;
@@ -757,6 +826,8 @@ export interface PluginCatalogEntry {
   downloadSize?: number;
   icon?: string;
   installedVersion?: string;
+  /** This version is newer than the installed one (the router compares them). */
+  updateAvailable?: boolean;
   runsHere: boolean;
   /** Set when this RasBeacon is too old for it: the version it needs ("0.2.0"). */
   needsRasBeacon?: string;
@@ -778,5 +849,11 @@ export interface PluginDrive {
 }
 
 export interface PluginLogsResponse {
-  lines: string[];
+  lines: PluginLogLine[];
+}
+
+/** One line a plugin wrote. `time` is when (RFC 3339, UTC), left out when it isn't known. */
+export interface PluginLogLine {
+  time?: string;
+  text: string;
 }

@@ -62,10 +62,27 @@ public half is built into the image; the private half signs releases.
 Images built **before** step 3 have no key and can't install update files;
 their owners update by flashing once. From then on, updates work.
 
-**If the private key leaks:** make a new key pair, add the new public key
-as a second file (`release-2.pub`), make a release signed with the *old*
-key that contains both public keys, then switch the secret to the new key
-and, in a later release, remove the old public key.
+Only `rbsign` ever sees the key: `image/build.sh` takes it out of the
+environment before it runs anything else (npm and its packages' install
+scripts included), and only the release workflow's `publish` job may write
+to the repository.
+
+**Changing the key** (for example if the private key may have leaked):
+
+1. Make a new key pair and add the new public key as a second file
+   (`release-2.pub`).
+2. Release, still signed with the *old* key. That release holds both
+   public keys, so devices that install it trust both.
+3. Switch the secret to the new key. In the next release, remove the old
+   public key and write the release from step 2 into `image/update-from`
+   (see below): devices older than it don't know the new key.
+
+Devices from v0.2.0 on then move up in steps by themselves: their online
+check offers the newest release they can install (the one from step 2),
+and after it, the next one. Devices on v0.1.0 only read the newest release,
+so they show it as needing a fresh install from the step-2 version on;
+installing that version's update file first (from its GitHub release) also
+works.
 
 **Forks** don't have the secret, so their builds make images but no update
 files.
@@ -85,7 +102,10 @@ can install it into [`image/update-from`](../image/update-from), e.g.
   flash the new image, set it up and restore the backup. Make sure that
   version can still restore backups from the older ones.
 - The online check reads the same from the release's `.update.json` file,
-  so owners see it before downloading anything.
+  so owners see it before downloading anything. When an older release
+  can be installed and can then install the new one, the check offers
+  that one first, and the System page names the new version that comes
+  after it; a fresh install is only needed when there is no such step.
 
 Empty `image/update-from` again for the next release unless the reason
 still holds; a version that can install `v2.0.0` usually can install
@@ -112,6 +132,10 @@ still holds; a version that can install `v2.0.0` usually can install
 See `internal/agent/update.go`. In short: the signature and board are
 checked first; the new system is written into the slot that isn't
 running; the SHA-256 of everything written must match the signed one;
-RasBeacon then restarts into the new slot *on trial*. If it runs normally
-for a minute, the new slot becomes the default; if not, the device goes
+RasBeacon then restarts into the new slot *on trial*
+(`systemctl reboot --reboot-argument="0 tryboot"`; if that fails, the
+System page says why and offers *Restart to finish the update*, as it
+does after a power cut before the restart). If it runs normally
+for a minute, with the web UI and the hotspot running, the new slot becomes
+the default; if not, the device goes
 back to the previous version by itself.

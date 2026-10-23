@@ -1,7 +1,14 @@
 package agent
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	"errors"
+	"math/big"
 	"os"
 	"path/filepath"
 	"testing"
@@ -49,19 +56,103 @@ func TestHTTPS_TurningOnMakesACertificateForRbweb(t *testing.T) {
 
 func TestHTTPS_UploadIsChecked(t *testing.T) {
 	e := newClaimedEnv(t, false)
-	certA, _, _ := tlscert.Generate("mine", nil, time.Now())
-	_, keyB, _ := tlscert.Generate("other", nil, time.Now())
+	certA, _, _ := tlscert.Generate("mine", nil, nil, time.Now())
+	_, keyB, _ := tlscert.Generate("other", nil, nil, time.Now())
 	err := e.agent.UpdateHTTPSSettings(api.HTTPSSettings{Enabled: true, Certificate: certA, PrivateKey: keyB})
 	var verr *config.ValidationError
 	if !errors.As(err, &verr) || verr.Field != "certificate" {
 		t.Fatalf("got %v", err)
 	}
 
-	certA2, keyA2, _ := tlscert.Generate("mine", nil, time.Now())
+	certA2, keyA2, _ := tlscert.Generate("mine", nil, nil, time.Now())
 	if err := e.agent.UpdateHTTPSSettings(api.HTTPSSettings{Enabled: true, Certificate: certA2, PrivateKey: keyA2}); err != nil {
 		t.Fatal(err)
 	}
 	if s := e.agent.HTTPSSettings(); !s.Uploaded || s.Subject != "mine" {
 		t.Errorf("settings = %+v", s)
+	}
+}
+
+// A certificate RasBeacon made is replaced before it runs out, and rbweb
+// restarts with the new one. An uploaded one is left to the owner.
+func TestHTTPS_GeneratedCertificateIsRenewedBeforeItRunsOut(t *testing.T) {
+	e := newClaimedEnv(t, false)
+	if err := e.agent.UpdateHTTPSSettings(api.HTTPSSettings{Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	e.timers.runAll()
+	old := e.agent.HTTPSSettings().Fingerprint
+
+	e.agent.mu.Lock()
+	e.agent.renewCertificateIfDue() // a new certificate: nothing to do
+	e.agent.mu.Unlock()
+	if e.agent.HTTPSSettings().Fingerprint != old {
+		t.Fatal("a new certificate was replaced")
+	}
+
+	// 800 days later, it runs out within a month.
+	later := time.Now().Add(800 * 24 * time.Hour)
+	e.agent.now = func() time.Time { return later }
+	e.runner.commands = nil
+	e.agent.mu.Lock()
+	e.agent.renewCertificateIfDue()
+	e.agent.mu.Unlock()
+	if e.agent.HTTPSSettings().Fingerprint == old {
+		t.Error("the certificate should be renewed")
+	}
+	if !e.runner.ran("systemctl restart rbweb.service") {
+		t.Error("rbweb restarts with the new certificate")
+	}
+	data, _ := os.ReadFile(filepath.Join(e.paths.RunTLSDir(), "cert.pem"))
+	if info, err := tlscert.Describe(string(data)); err != nil || info.Fingerprint != e.agent.HTTPSSettings().Fingerprint {
+		t.Errorf("rbweb's copy should be the new certificate: %v", err)
+	}
+
+	// An uploaded certificate is never replaced.
+	e.agent.mu.Lock()
+	e.agent.cfg.HTTPS.Uploaded = true
+	e.agent.lastCertCheck = time.Time{}
+	e.agent.now = func() time.Time { return later.Add(900 * 24 * time.Hour) }
+	renewed := e.agent.HTTPSSettings
+	e.agent.mu.Unlock()
+	before := renewed().Fingerprint
+	e.agent.mu.Lock()
+	e.agent.renewCertificateIfDue()
+	e.agent.mu.Unlock()
+	if renewed().Fingerprint != before {
+		t.Error("an uploaded certificate is the owner's to replace")
+	}
+}
+
+// RasBeacon 0.1 made certificates valid for ten years, which Apple's
+// devices may refuse: the next start replaces them.
+func TestHTTPS_TenYearCertificateIsReplacedAtStart(t *testing.T) {
+	e := newClaimedEnv(t, false)
+	if err := e.agent.UpdateHTTPSSettings(api.HTTPSSettings{Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	// A certificate like 0.1's: made a year ago, valid for ten years.
+	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	made := time.Now().AddDate(-1, 0, 0)
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "RasBeacon 0.1"},
+		NotBefore: made, NotAfter: made.AddDate(10, 0, 0), DNSNames: []string{"rasbeacon.lan"},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyDER, _ := x509.MarshalPKCS8PrivateKey(key)
+	mustWrite(t, e.agent.tlsCertFile(), string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})))
+	mustWrite(t, e.agent.tlsKeyFile(), string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})))
+
+	restarted := New(e.paths, e.runner)
+	restarted.afterFunc, restarted.usbRadioWait, restarted.background = e.timers.afterFunc, 0, func(func()) {}
+	if err := restarted.Start(); err != nil {
+		t.Fatal(err)
+	}
+	s := restarted.HTTPSSettings()
+	if s.Subject == "RasBeacon 0.1" || !s.Enabled {
+		t.Errorf("after the start: %+v, want a new certificate", s)
 	}
 }

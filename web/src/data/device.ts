@@ -1,14 +1,10 @@
 import { createContext, useContext } from 'react';
 import type {
+  AccessSettings,
+  AdminPasswordForm,
+  ChannelsByBand,
   ClaimResponse,
   DNSSettings,
-  UsageSettings,
-  WiFiQR,
-  PluginCatalog,
-  PluginChoices,
-  PluginDrive,
-  PluginPreview,
-  PluginsState,
   EthernetRole,
   GuestSettings,
   HotspotSettings,
@@ -16,6 +12,12 @@ import type {
   NearbyNetwork,
   NewNetworkForm,
   PictureBox,
+  PluginCatalog,
+  PluginChoices,
+  PluginDrive,
+  PluginLogLine,
+  PluginPreview,
+  PluginsState,
   PointerSpot,
   PortalBrowserFrame,
   PortalKey,
@@ -24,11 +26,14 @@ import type {
   SetupForm,
   SetupState,
   SSHSettings,
-  SwapSettings,
   Status,
+  SwapSettings,
+  UpdateSettings,
   UplinkSettings,
+  UsageSettings,
   VPNDetailsForm,
   VPNSettings,
+  WiFiQR,
 } from './types';
 
 /** Data that arrives from the router: undefined until the first answer. */
@@ -48,7 +53,7 @@ export type AppPhase =
   /** They couldn't be loaded. */
   | { kind: 'unreachable'; error: string }
   /** An unclaimed router that can't be set up (SetupState.mode). */
-  | { kind: 'notice'; notice: 'setup-closed' | 'setup-error' | 'no-radio' }
+  | { kind: 'notice'; notice: 'setup-closed' | 'setup-error' | 'no-radio' | 'off' }
   /** First boot: the setup wizard. */
   | { kind: 'setup' }
   | { kind: 'login' }
@@ -64,6 +69,8 @@ export type DataKey =
   | 'sshSettings'
   | 'dnsSettings'
   | 'swapSettings'
+  | 'updateSettings'
+  | 'accessSettings'
   | 'usageSettings'
   | 'plugins'
   | 'httpsSettings'
@@ -79,6 +86,12 @@ export interface PortalBrowserState {
   error: string | null;
 }
 
+/**
+ * How much of the plugins a backup holds: their settings; also their data; or also their apps,
+ * so a restore works offline. Apps left out are downloaded again after a restore.
+ */
+export type BackupPlugins = 'settings' | 'data' | 'everything';
+
 /** Everything the screens can read about the router. */
 export interface DeviceState {
   phase: AppPhase;
@@ -93,6 +106,8 @@ export interface DeviceState {
   sshSettings: Loadable<SSHSettings>;
   dnsSettings: Loadable<DNSSettings>;
   swapSettings: Loadable<SwapSettings>;
+  updateSettings: Loadable<UpdateSettings>;
+  accessSettings: Loadable<AccessSettings>;
   usageSettings: Loadable<UsageSettings>;
   plugins: Loadable<PluginsState>;
   httpsSettings: Loadable<HTTPSSettings>;
@@ -131,7 +146,7 @@ export interface DeviceActions {
    * Claim the router (POST /api/v1/setup/claim) and answer with what to join next. Leave the
    * phase at `setup`: the screen shows "Setup complete" from the answer until the phone has
    * moved to the new network.
-   * Field keys: adminPassword, adminPasswordConfirm, hotspotSsid, hotspotPassword.
+   * Field keys: adminPassword, adminPasswordConfirm, hotspotSsid, hotspotPassword, hotspotBand.
    */
   finishSetup: (form: SetupForm) => Promise<ClaimResponse>;
   /** Afterwards the phase is `ready`. `stayLoggedIn` keeps the browser logged in for 30 days. */
@@ -213,6 +228,8 @@ export interface DeviceActions {
   setActiveVpnProfile: (name: string) => Promise<void>;
   /** Remove a profile and its keys. */
   removeVpnProfile: (name: string) => Promise<void>;
+  /** Give a profile another name (its keys and whether it is in use stay). */
+  renameVpnProfile: (name: string, newName: string) => Promise<void>;
   /**
    * Import a WireGuard file as a new profile, from a chosen file or pasted text. `fileName` is
    * the chosen file's name, if any. Reject with the router's refusal for unsafe files.
@@ -228,15 +245,18 @@ export interface DeviceActions {
 
   // --- Hotspot and guests ------------------------------------------------------------------
 
-  /** Field keys: ssid, password, channel, country. */
+  /** Field keys: ssid, password, band, channel, country. */
   saveHotspotSettings: (settings: HotspotSettings) => Promise<void>;
-  /** Answer with the current Wi-Fi password. Reject when the admin password is wrong. */
-  revealHotspotPassword: (adminPassword: string) => Promise<string>;
+  /** Answer with the current Wi-Fi password (being logged in is enough). */
+  revealHotspotPassword: () => Promise<string>;
   /**
-   * A QR code to join a network: the hotspot (needs the admin password; reject when it is wrong)
-   * or the guest network.
+   * The channels the router lets the Hotspot page offer for `country`, by band: those the
+   * country allows a hotspot on (Japan has no channel 149). Field key: country (a code that isn't
+   * a country, such as UK for GB).
    */
-  wifiQr: (network: 'hotspot' | 'guest', adminPassword?: string) => Promise<WiFiQR>;
+  hotspotChannels: (country: string) => Promise<ChannelsByBand>;
+  /** A QR code to join a network: the hotspot or the guest network. */
+  wifiQr: (network: 'hotspot' | 'guest') => Promise<WiFiQR>;
   /** Field keys: enabled, ssid, password. */
   saveGuestSettings: (settings: GuestSettings) => Promise<void>;
 
@@ -247,7 +267,7 @@ export interface DeviceActions {
   flushClientLease: (mac: string) => Promise<void>;
   /** Name a device; "" goes back to the name it sends. Field key: name. */
   renameClient: (mac: string, name: string) => Promise<void>;
-  /** The data limit per device on metered connections, in MB (0 = none). Field key: limitMb. */
+  /** The data limit per device, in MB (0 = none). Field key: limitMb. */
   saveUsageLimit: (limitMb: number) => Promise<void>;
   /** Start counting data use again from zero (the screen has already asked). */
   resetUsage: () => Promise<void>;
@@ -266,22 +286,44 @@ export interface DeviceActions {
 
   /** Upload and install a .rbupdate file; resolves when the router has accepted it. */
   installUpdate: (file: File) => Promise<void>;
-  setCheckOnline: (enabled: boolean) => Promise<void>;
+  /** Save how often to look for a new version and where to announce it. Field keys: checkHours, notifyUrl. */
+  saveUpdateSettings: (settings: UpdateSettings) => Promise<void>;
+  /** Save the allow list and device limit; the hotspot restarts. Field keys: allowed, maxDevices. */
+  saveAccessSettings: (settings: AccessSettings) => Promise<void>;
+  /** Ask GitHub now; the result lands in status.update. */
+  checkForUpdates: () => Promise<void>;
+  /** Restart into an installed update that waits for it (status.update.restartPending). */
+  restartIntoUpdate: () => Promise<void>;
+  /** Send a test message to `url` (or the saved address). Field key: notifyUrl. */
+  testUpdateNotification: (url: string) => Promise<void>;
   /** The swap file's size in whole gigabytes (0 = off). Field key: sizeGb. */
   saveSwapSettings: (sizeGb: number) => Promise<void>;
   /** Resolves once the router answers again after restarting. */
   reboot: () => Promise<void>;
+  /** Turn RasBeacon off; afterwards the phase is the `off` notice. */
+  shutDown: () => Promise<void>;
+  /**
+   * Rename RasBeacon (lowercase letters, digits, hyphens). It restarts; resolves once it answers
+   * again, at the new address when the page was opened by the old name. Field key: hostname.
+   */
+  saveHostname: (hostname: string) => Promise<void>;
   /** Erase everything; afterwards the phase is `setup`. Reject when the admin password is wrong. */
   factoryReset: (adminPassword: string) => Promise<void>;
   /**
-   * Make an encrypted backup and save it as a file. Field keys: adminPassword, backupPassword.
+   * Change the admin password. Other devices are logged out and "Stay logged in" ends everywhere;
+   * this device stays logged in. Field keys: currentPassword, newPassword, newPasswordConfirm.
    */
-  backUp: (adminPassword: string, backupPassword: string, includePlugins: boolean) => Promise<void>;
+  changeAdminPassword: (form: AdminPasswordForm) => Promise<void>;
+  /**
+   * Make an encrypted backup and save it as a file. `plugins` is how much of the plugins goes
+   * in. Field keys: backupPassword.
+   */
+  backUp: (backupPassword: string, plugins: BackupPlugins) => Promise<void>;
   /**
    * Restore a backup: RasBeacon restarts with its settings (log in with the backup's admin
-   * password). Field keys: file, adminPassword, backupPassword.
+   * password). Field keys: file, backupPassword.
    */
-  restore: (file: File, adminPassword: string, backupPassword: string) => Promise<void>;
+  restore: (file: File, backupPassword: string) => Promise<void>;
 
   // --- Plugins -----------------------------------------------------------------------------
 
@@ -294,7 +336,8 @@ export interface DeviceActions {
   /** Download an installed plugin's update from the catalog for the install sheet. */
   previewPluginUpdate: (id: string) => Promise<PluginPreview>;
   /** Install a previewed plugin; it then shows as installing. Field keys: ports.<key>, settings.<key>, drive. */
-  installPlugin: (stagingId: string, choices: PluginChoices) => Promise<void>;
+  /** `useKeptData` gives it the data kept from an earlier install (the preview's `keptData`). */
+  installPlugin: (stagingId: string, choices: PluginChoices, useKeptData?: boolean) => Promise<void>;
   /** The install sheet was closed without installing. */
   cancelPluginInstall: (stagingId: string) => Promise<void>;
   /** Save a plugin's settings; it restarts if it runs. Field keys as installPlugin's. */
@@ -302,7 +345,7 @@ export interface DeviceActions {
   setPluginRunning: (id: string, running: boolean) => Promise<void>;
   removePlugin: (id: string, keepData: boolean) => Promise<void>;
   /** Its last 500 lines of output. */
-  pluginLogs: (id: string) => Promise<string[]>;
+  pluginLogs: (id: string) => Promise<PluginLogLine[]>;
   pluginDrives: () => Promise<PluginDrive[]>;
   /** The extra catalog sources ("owner/repo"). Field keys: sources.<n>. */
   savePluginSources: (sources: string[]) => Promise<void>;

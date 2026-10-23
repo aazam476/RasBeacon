@@ -5,9 +5,9 @@ package agent
 // stop other programs.
 //
 // This API trusts its caller: rbweb is responsible for checking that the
-// person using the web UI is logged in. Actions that are especially
-// sensitive (revealing the hotspot password, factory reset) additionally
-// require the admin password in the request, checked here.
+// person using the web UI is logged in. Actions that decide who can get in
+// (factory reset, changing the admin password) also need the admin
+// password in the request, checked here.
 
 import (
 	"context"
@@ -126,6 +126,18 @@ func (a *Agent) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, code)
 	})
+	mux.HandleFunc("POST /settings/hotspot/channels", func(w http.ResponseWriter, r *http.Request) {
+		var req api.HotspotChannelsRequest
+		if !readJSON(w, r, &req) {
+			return
+		}
+		channels, err := a.HotspotChannels(req)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, channels)
+	})
 	mux.HandleFunc("GET /settings/usage", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, a.UsageSettings())
 	})
@@ -183,12 +195,24 @@ func (a *Agent) Handler() http.Handler {
 		writeJSON(w, http.StatusOK, a.HotspotSettings())
 	})
 
-	mux.HandleFunc("POST /settings/hotspot/reveal-password", func(w http.ResponseWriter, r *http.Request) {
-		var req api.PasswordRequest
+	mux.HandleFunc("GET /settings/access", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, a.AccessSettings())
+	})
+
+	mux.HandleFunc("PUT /settings/access", func(w http.ResponseWriter, r *http.Request) {
+		var req api.AccessSettings
 		if !readJSON(w, r, &req) {
 			return
 		}
-		password, err := a.RevealHotspotPassword(req.Password)
+		if err := a.UpdateAccessSettings(req); err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, a.AccessSettings())
+	})
+
+	mux.HandleFunc("POST /settings/hotspot/reveal-password", func(w http.ResponseWriter, r *http.Request) {
+		password, err := a.RevealHotspotPassword()
 		if err != nil {
 			writeError(w, err)
 			return
@@ -346,6 +370,18 @@ func (a *Agent) Handler() http.Handler {
 			return
 		}
 		if err := a.SaveVPNProfile(req); err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, a.VPNSettings())
+	})
+
+	mux.HandleFunc("POST /settings/vpn/profile/rename", func(w http.ResponseWriter, r *http.Request) {
+		var req api.VPNRenameRequest
+		if !readJSON(w, r, &req) {
+			return
+		}
+		if err := a.RenameVPNProfile(req.Name, req.NewName); err != nil {
 			writeError(w, err)
 			return
 		}
@@ -609,6 +645,35 @@ func (a *Agent) Handler() http.Handler {
 		writeJSON(w, http.StatusOK, result)
 	})
 
+	mux.HandleFunc("GET /settings/updates", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, a.UpdateSettings())
+	})
+	mux.HandleFunc("POST /settings/updates/test", func(w http.ResponseWriter, r *http.Request) {
+		var req api.NotifyTestRequest
+		if !readJSON(w, r, &req) {
+			return
+		}
+		if err := a.SendTestNotification(req.URL); err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, struct{}{})
+	})
+	mux.HandleFunc("POST /system/update/restart", func(w http.ResponseWriter, r *http.Request) {
+		if err := a.RestartIntoUpdate(); err != nil {
+			writeError(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("POST /system/update/check", func(w http.ResponseWriter, r *http.Request) {
+		status, err := a.CheckForUpdateNow()
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, status)
+	})
 	mux.HandleFunc("PUT /settings/updates", func(w http.ResponseWriter, r *http.Request) {
 		var req api.UpdateSettings
 		if !readJSON(w, r, &req) {
@@ -629,12 +694,41 @@ func (a *Agent) Handler() http.Handler {
 		w.WriteHeader(http.StatusNoContent)
 	})
 
+	mux.HandleFunc("POST /system/shutdown", func(w http.ResponseWriter, r *http.Request) {
+		a.Shutdown()
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	mux.HandleFunc("POST /system/hostname", func(w http.ResponseWriter, r *http.Request) {
+		var req api.HostnameRequest
+		if !readJSON(w, r, &req) {
+			return
+		}
+		if err := a.SetHostname(req.Hostname); err != nil {
+			writeError(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+
 	mux.HandleFunc("POST /system/factory-reset", func(w http.ResponseWriter, r *http.Request) {
 		var req api.PasswordRequest
 		if !readJSON(w, r, &req) {
 			return
 		}
 		if err := a.FactoryReset(req.Password); err != nil {
+			writeError(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	mux.HandleFunc("POST /system/admin-password", func(w http.ResponseWriter, r *http.Request) {
+		var req api.AdminPasswordRequest
+		if !readJSON(w, r, &req) {
+			return
+		}
+		if err := a.ChangeAdminPassword(req); err != nil {
 			writeError(w, err)
 			return
 		}

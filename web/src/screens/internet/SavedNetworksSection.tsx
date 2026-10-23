@@ -181,6 +181,11 @@ function NetworkRow({
   );
 }
 
+/** The start of a certificate's SHA-256, as "AB:CD:EF:01…", enough to recognize it. */
+function fingerprint(hash: string): string {
+  return `${(hash.slice(0, 16).match(/../g) ?? []).join(':').toUpperCase()}…`;
+}
+
 /** The Enterprise login of a saved network, with a warning when the login server isn't checked. */
 function EnterpriseSummary({ network }: { network: SavedNetwork }) {
   const enterprise = network.enterprise!;
@@ -189,7 +194,17 @@ function EnterpriseSummary({ network }: { network: SavedNetwork }) {
     ['Method', methodName(enterprise.method)],
   ];
   if (!enterprise.allowNoCertificateCheck) {
-    items.push(['Server', enterprise.serverName], ['CA certificate', enterprise.caCertSummary || 'none']);
+    if (enterprise.serverName) items.push(['Server', enterprise.serverName]);
+    if (enterprise.caCertSummary) items.push(['CA certificate', enterprise.caCertSummary]);
+    if (!enterprise.serverName && !enterprise.caCertSummary) {
+      // Trusted at the first connection: show which certificate, shortened like a fingerprint.
+      items.push([
+        'Login server',
+        enterprise.serverCertHash
+          ? `Trusted since the first connection (${fingerprint(enterprise.serverCertHash)})`
+          : 'Trusted at the first connection',
+      ]);
+    }
   }
   if (enterprise.clientCertSummary) items.push(['Your certificate', enterprise.clientCertSummary]);
 

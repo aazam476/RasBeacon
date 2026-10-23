@@ -102,6 +102,7 @@ func TestOpen_RefusesBadFiles(t *testing.T) {
 		"unexpected file":  func(f map[string]string) { f["run.sh"] = "rm -rf /" },
 		"path escape":      func(f map[string]string) { f["../evil"] = "x" },
 		"missing template": func(f map[string]string) { delete(f, "templates/AdGuardHome.yaml") },
+		"template loops":   func(f map[string]string) { f["templates/AdGuardHome.yaml"] = "{{range 1000000000000}}{{end}}" },
 		"image twice":      func(f map[string]string) { f[ImageFile] = "tar" },
 		"unknown field":    func(f map[string]string) { m := validManifest(); m["root"] = true; f[ManifestFile] = manifestJSON(m) },
 		"bad permission": func(f map[string]string) {
@@ -369,14 +370,14 @@ func TestRunArgs(t *testing.T) {
 	args := RunArgs(RunSpec{
 		ID: "samba", Image: "localhost/rasbeacon-plugin/samba:1", Address: "10.89.0.3", MemoryMB: 128, CPUs: 0.5,
 		Mounts:  []Mount{{Host: "/run/x/data/share", Container: "/share"}},
-		Devices: []string{"/dev/i2c-1"}, Env: map[string]string{"B": "2", "A": "1"},
+		Devices: []string{"/dev/i2c-1"}, Env: map[string]string{"B": "2", "A": "1"}, EnvFile: "/run/rbd/plugins/samba/env",
 		Masked: []string{"/sys/class/thermal"}, LogFile: "/run/rasbeacon/plugin-logs/samba.log",
 	})
 	joined := strings.Join(args, " ")
 	for _, want := range []string{
-		"--name rasbeacon-samba", "--network rasbeacon-plugins --ip 10.89.0.3 --dns 10.89.0.1",
+		"--name rasbeacon-samba", "--network rasbeacon-plugins:ip=10.89.0.3,host_interface_name=rbport3 --dns 10.89.0.1",
 		"--memory 128m --cpus 0.5", "--volume /run/x/data/share:/share", "--device /dev/i2c-1",
-		"--security-opt mask=/sys/class/thermal", "--env A=1 --env B=2 localhost/rasbeacon-plugin/samba:1",
+		"--security-opt mask=/sys/class/thermal", "--env-file /run/rbd/plugins/samba/env localhost/rasbeacon-plugin/samba:1",
 		"--security-opt no-new-privileges",
 	} {
 		if !strings.Contains(joined, want) {
@@ -386,8 +387,37 @@ func TestRunArgs(t *testing.T) {
 	if strings.Contains(joined, "--publish") || strings.Contains(joined, "--privileged") {
 		t.Error("ports are RasBeacon's firewall's job, and nothing runs privileged")
 	}
-	if LocalImage("x", "1.0+b/2") != "localhost/rasbeacon-plugin/x:1.0_b_2" {
-		t.Error(LocalImage("x", "1.0+b/2"))
+}
+
+// Image tags may only hold some characters. A version that has others gets
+// a tag of its own all the same, so two versions never share an image.
+func TestLocalImage_EachVersionGetsItsOwnTag(t *testing.T) {
+	if got := LocalImage("x", "1.0.2"); got != "localhost/rasbeacon-plugin/x:1.0.2" {
+		t.Errorf("a version that is a valid tag stays as it is: %s", got)
+	}
+	plus, underscore := LocalImage("x", "1.0+a"), LocalImage("x", "1.0_a")
+	if plus == underscore || !strings.HasPrefix(plus, "localhost/rasbeacon-plugin/x:1.0_a-") {
+		t.Errorf("1.0+a = %s, 1.0_a = %s: want two tags", plus, underscore)
+	}
+	long := LocalImage("x", strings.Repeat("9", 200)+"+build")
+	if tag := long[strings.LastIndex(long, ":")+1:]; len(tag) > 128 {
+		t.Errorf("tags are at most 128 characters: %d", len(tag))
+	}
+	if got := LocalImage("x", ".hidden"); !strings.HasPrefix(got, "localhost/rasbeacon-plugin/x:v.hidden-") {
+		t.Errorf("a tag can't start with a dot: %s", got)
+	}
+}
+
+// The environment file lists each variable once, sorted, and nothing else:
+// the values (plugin passwords among them) stay off the command line.
+func TestEnvFileContents(t *testing.T) {
+	got := string(EnvFileContents(map[string]string{"PASSWORD": "a b=c", "A": "1"}))
+	if got != "A=1\nPASSWORD=a b=c\n" {
+		t.Errorf("env file = %q", got)
+	}
+	args := strings.Join(RunArgs(RunSpec{ID: "x", Image: "i", Env: map[string]string{"PASSWORD": "a b=c"}}), " ")
+	if strings.Contains(args, "a b=c") {
+		t.Errorf("the value is on the command line: %s", args)
 	}
 }
 

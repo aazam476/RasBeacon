@@ -1,8 +1,8 @@
 import { useRef, useState } from 'react';
 import { useDevice } from '@/data/device';
-import type { PluginPreview } from '@/data/types';
+import type { PluginKeptData, PluginPreview } from '@/data/types';
 import { formatBytes } from '@/lib/format';
-import { Badge, Icon, Notice, Row, Section, Sheet } from '@/ui';
+import { Badge, FormSwitchRow, Icon, Notice, Row, Section, Sheet } from '@/ui';
 import { PluginFields } from './PluginFields';
 import { choicesOf, draftOf, PERMISSION_ICONS, sourceLabel } from './pluginDisplay';
 
@@ -19,6 +19,8 @@ interface InstallSheetProps {
 export function InstallSheet({ preview, onDone }: InstallSheetProps) {
   const { installPlugin, cancelPluginInstall, status } = useDevice();
   const [draft, setDraft] = useState(() => draftOf(preview.ports, preview.settings, preview.drive));
+  // Off until the owner says otherwise: nothing shows the kept data belongs to this plugin.
+  const [useKeptData, setUseKeptData] = useState(false);
   // Closing after Install isn't a cancel.
   const installed = useRef(false);
   const host = status.data?.hotspot.lanAddress;
@@ -31,7 +33,7 @@ export function InstallSheet({ preview, onDone }: InstallSheetProps) {
       confirmLabel={preview.update ? 'Update' : 'Install'}
       busyLabel={preview.update ? 'Updating…' : 'Installing…'}
       onConfirm={async () => {
-        await installPlugin(preview.stagingId, choicesOf(draft));
+        await installPlugin(preview.stagingId, choicesOf(draft), useKeptData);
         installed.current = true;
         onDone(preview.id);
       }}
@@ -90,6 +92,15 @@ export function InstallSheet({ preview, onDone }: InstallSheetProps) {
             errors={errors}
             host={host}
           />
+
+          {preview.keptData && (
+            <KeptDataSection
+              kept={preview.keptData}
+              signed={preview.signed}
+              checked={useKeptData}
+              onChange={setUseKeptData}
+            />
+          )}
 
           <Section level={3} title="What it uses" footer="Limits it can't go past. Its data stays when you update it.">
             <Row title="Memory" value={`Up to ${preview.memoryMb} MB`} />
@@ -158,5 +169,51 @@ function PluginHero({ preview }: { preview: PluginPreview }) {
       </p>
       <p className="text-footnote wrap-anywhere text-label-3">{sourceLabel(preview.source)}</p>
     </div>
+  );
+}
+
+/**
+ * Data kept from an earlier install with this ID, which isn't known to be this plugin's: the
+ * switch gives it to this one, off by default, with who signed the earlier one.
+ */
+function KeptDataSection({
+  kept,
+  signed,
+  checked,
+  onChange,
+}: {
+  kept: PluginKeptData;
+  signed: boolean;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  const earlier = kept.name ? `the earlier ${kept.name} install` : 'an earlier install';
+  let why: string;
+  if (!kept.name && !kept.keyId) why = "It was kept by RasBeacon 0.1, which didn't note whose it was.";
+  else if (!kept.keyId) why = "That one wasn't signed, so nothing shows this is the same plugin.";
+  else if (!signed) why = "This one isn't signed, so it may be another author's plugin.";
+  else why = 'This one is signed with another key, so it may be another author’s plugin.';
+
+  return (
+    <Section
+      level={3}
+      title="Kept data"
+      footer={`${why} Turn this on only if you trust it with that plugin's settings, passwords and files.`}
+    >
+      <FormSwitchRow
+        label={`Use the data kept from ${earlier}`}
+        description={
+          kept.keyId ? (
+            <>
+              Signed · <span className="font-mono wrap-anywhere">{kept.keyId}</span>
+            </>
+          ) : (
+            'Not signed'
+          )
+        }
+        checked={checked}
+        onChange={onChange}
+      />
+    </Section>
   );
 }

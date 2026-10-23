@@ -1,7 +1,9 @@
 package backup
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"crypto/rand"
 	"errors"
 	"os"
@@ -13,7 +15,7 @@ import (
 func makeBackup(t *testing.T, password string, files map[string][]byte) []byte {
 	t.Helper()
 	var buf bytes.Buffer
-	bw, err := Create(&buf, password, Info{Created: time.Unix(1, 0), Version: "v1.2.0", Plugins: true})
+	bw, err := Create(&buf, password, Info{Created: time.Unix(1, 0), Version: "v1.2.0", Plugins: true}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,9 +63,18 @@ func TestBackup_WrongPasswordAndDamage(t *testing.T) {
 	if _, err := Extract(bytes.NewReader(data), "wrong horse", t.TempDir()); !errors.Is(err, ErrWrongPassword) {
 		t.Errorf("wrong password: %v", err)
 	}
-	// Cut off: the last chunk is missing.
-	if _, err := Extract(bytes.NewReader(data[:len(data)-100]), "correct horse", t.TempDir()); err == nil {
-		t.Error("a cut-off file must be refused")
+	// Cut off: the last chunk is missing. A wrong password never makes a
+	// file shorter, so it is known to be cut off.
+	if _, err := Extract(bytes.NewReader(data[:len(data)-100]), "correct horse", t.TempDir()); !errors.Is(err, ErrIncomplete) {
+		t.Errorf("a cut-off file: %v, want ErrIncomplete", err)
+	}
+	// Cut off halfway, in the middle of a chunk.
+	if _, err := Extract(bytes.NewReader(data[:len(data)/2]), "correct horse", t.TempDir()); !errors.Is(err, ErrIncomplete) {
+		t.Errorf("cut off halfway: %v, want ErrIncomplete", err)
+	}
+	// Cut off inside its header: not even the header is whole.
+	if _, err := Extract(bytes.NewReader(data[:20]), "correct horse", t.TempDir()); !errors.Is(err, ErrNotBackup) {
+		t.Errorf("cut off in the header: %v", err)
 	}
 	// One byte changed in the middle.
 	changed := bytes.Clone(data)
@@ -105,5 +116,34 @@ func TestBackup_RefusesUnsafeNames(t *testing.T) {
 	data := makeBackup(t, "correct horse", map[string][]byte{"../escape": []byte("x")})
 	if _, err := Extract(bytes.NewReader(data), "correct horse", t.TempDir()); err == nil {
 		t.Error("names leaving the folder must be refused")
+	}
+}
+
+// Backups made before RasBeacon 0.2 are gzipped; they still restore.
+func TestExtract_OldGzipBackup(t *testing.T) {
+	var buf bytes.Buffer
+	enc, err := NewWriter(&buf, "correct horse")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gz := gzip.NewWriter(enc)
+	tw := tar.NewWriter(gz)
+	for _, file := range [][2]string{{InfoFile, `{"version":"v0.1.0","plugins":false}`}, {"config.json", `{"claimed":true}`}} {
+		_ = tw.WriteHeader(&tar.Header{Name: file[0], Mode: 0o600, Size: int64(len(file[1])), Typeflag: tar.TypeReg})
+		_, _ = tw.Write([]byte(file[1]))
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	_ = gz.Close()
+	_ = enc.Close()
+
+	dir := t.TempDir()
+	info, err := Extract(&buf, "correct horse", dir)
+	if err != nil || info.Version != "v0.1.0" {
+		t.Fatalf("info = %+v, %v", info, err)
+	}
+	if got, _ := os.ReadFile(filepath.Join(dir, "config.json")); string(got) != `{"claimed":true}` {
+		t.Errorf("config.json = %q", got)
 	}
 }

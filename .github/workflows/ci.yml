@@ -22,7 +22,8 @@ jobs:
         run: test -z "$(gofmt -l .)" || (echo "Run gofmt -w on:"; gofmt -l .; exit 1)
       - run: go vet ./...
       - run: go run honnef.co/go/tools/cmd/staticcheck@2025.1.1 ./...
-      - run: go test ./...
+      # -cover prints how much of each package the tests run.
+      - run: go test -cover ./...
 
   web:
     name: Web UI (typecheck, lint, format, tests, build)
@@ -41,7 +42,8 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run format:check
-      - run: npm test
+      # Runs the tests and prints how much of src/ they run.
+      - run: npm run coverage
       - run: npm run build
       # The demo router (npm run demo) must keep building too.
       - run: npm run build:demo
@@ -90,8 +92,14 @@ jobs:
             "modprobe mac80211_hwsim radios=2 && cd '$GITHUB_WORKSPACE/test/hwsim' && RASBEACON_REQUIRE_HWSIM=1 '$RUNNER_TEMP/hwsim.test' -test.v -test.count=1"
 
   e2e:
-    name: Browser end-to-end test (simulated device)
+    name: Browser end-to-end test (simulated device, ${{ matrix.viewport }})
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        # The same walkthrough on a phone-sized screen (tab bar) and a
+        # desktop-sized one (sidebar).
+        viewport: [phone, desktop]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -111,11 +119,12 @@ jobs:
         env:
           SCREENSHOT_DIR: ${{ runner.temp }}/screenshots
           RASBEACON_REQUIRE_BROWSER: "1"
+          E2E_VIEWPORT: ${{ matrix.viewport }}
         run: mkdir -p "$SCREENSHOT_DIR" && make e2e
       - name: Keep screenshots
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: e2e-screenshots
+          name: e2e-screenshots-${{ matrix.viewport }}
           path: ${{ runner.temp }}/screenshots
           retention-days: 3

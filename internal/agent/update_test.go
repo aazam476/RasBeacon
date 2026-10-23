@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -156,6 +157,17 @@ func TestUpdateStatus_OnlineCheckOffersOnlyNewerVersions(t *testing.T) {
 	if s.LatestVersion != "v2.0.0" || s.Reflash == nil || s.Reflash.MinFromVersion != "v1.5.0" || s.Reflash.URL == "" {
 		t.Errorf("a release that needs a fresh install: %+v", s)
 	}
+
+	// A step on the way to a newer release names that release too.
+	e.agent.mu.Lock()
+	e.agent.update.newest = "v1.4.0"
+	e.agent.mu.Unlock()
+	if s := status(latestRelease{TagName: "v1.3.0"}); s.LatestVersion != "v1.3.0" || s.NewerVersion != "v1.4.0" {
+		t.Errorf("a step: %+v", s)
+	}
+	if s := status(latestRelease{TagName: "v1.4.0"}); s.NewerVersion != "" {
+		t.Errorf("the newest release is no step: %+v", s)
+	}
 }
 
 func TestUpdate_InstallWritesTheOtherSlotAndTriesIt(t *testing.T) {
@@ -171,11 +183,115 @@ func TestUpdate_InstallWritesTheOtherSlotAndTriesIt(t *testing.T) {
 		t.Errorf("boot partition = %q", got)
 	}
 	e.timers.runAll()
-	if !e.runner.ran("systemctl reboot 0 tryboot") {
-		t.Error("RasBeacon should restart into the new slot on trial")
+	// systemd 257 refuses "systemctl reboot '0 tryboot'" (Too many
+	// arguments): the argument must go in --reboot-argument.
+	if !e.runner.ran("systemctl reboot --reboot-argument=0 tryboot") {
+		t.Errorf("RasBeacon should restart into the new slot on trial; ran %q", e.runner.commands)
+	}
+	if e.runner.ran("systemctl reboot 0 tryboot") {
+		t.Error("the argument must not be passed as a plain extra word")
+	}
+	var pending pendingUpdate
+	if err := config.ReadJSON(e.paths.UpdatePendingFile(), &pending); err != nil || !pending.Restarting {
+		t.Errorf("the pending update should be remembered as restarting: %+v, %v", pending, err)
+	}
+	if e.agent.Status().Update.RestartPending {
+		t.Error("nothing waits for a restart once it was asked for")
+	}
+}
+
+func TestUpdate_AFailedRestartIsShownAndCanBeTriedAgain(t *testing.T) {
+	e, key := newUpdateEnv(t)
+	e.runner.failing = append(e.runner.failing, "systemctl reboot")
+	if err := e.agent.InstallUpdate(bytes.NewReader(updateFile(t, key, "pi4", testBundle(strings.Repeat("B", 32), strings.Repeat("S", 64))))); err != nil {
+		t.Fatal(err)
+	}
+	e.timers.runAll()
+
+	// The failure is shown with its reason, and the update keeps waiting.
+	update := e.agent.Status().Update
+	if !update.RestartPending || !strings.Contains(update.Message, "couldn't restart into it") || !strings.Contains(update.Message, "failed: systemctl reboot") {
+		t.Errorf("status after a failed restart: %+v", update)
+	}
+	var pending pendingUpdate
+	if err := config.ReadJSON(e.paths.UpdatePendingFile(), &pending); err != nil || pending.Restarting || pending.Version != "v9.9.9" {
+		t.Errorf("the update should wait, not marked as restarting: %+v, %v", pending, err)
+	}
+
+	// "Restart to finish the update" tries again, and this time it works.
+	e.runner.failing = nil
+	if err := e.agent.RestartIntoUpdate(); err != nil {
+		t.Fatal(err)
+	}
+	e.timers.runAll()
+	if update := e.agent.Status().Update; update.RestartPending {
+		t.Errorf("the restart went through, so nothing waits: %+v", update)
+	}
+	if err := config.ReadJSON(e.paths.UpdatePendingFile(), &pending); err != nil || !pending.Restarting {
+		t.Errorf("the restart should be noted: %+v, %v", pending, err)
+	}
+}
+
+func TestUpdate_RestartingNeedsAnInstalledUpdate(t *testing.T) {
+	e, _ := newUpdateEnv(t)
+	var verr *config.ValidationError
+	if err := e.agent.RestartIntoUpdate(); !errors.As(err, &verr) {
+		t.Errorf("got %v, want a refusal when no update waits", err)
+	}
+	// On trial, the update is already running.
+	mustWrite(t, e.paths.UpdatePendingFile(), `{"version":"v9.9.9","fromVersion":"dev"}`)
+	e.agent.mu.Lock()
+	e.agent.update.trying = true
+	e.agent.mu.Unlock()
+	if err := e.agent.RestartIntoUpdate(); !errors.As(err, &verr) {
+		t.Errorf("got %v, want a refusal on trial", err)
+	}
+	if err := e.agent.restartIntoUpdate(); err != nil {
+		t.Errorf("the restart itself reads the pending file: %v", err)
+	}
+	_ = os.Remove(e.paths.UpdatePendingFile())
+	if err := e.agent.restartIntoUpdate(); err == nil {
+		t.Error("without a pending file there is nothing to restart into")
+	}
+}
+
+func TestUpdate_AnUpdateThatNeverRestartedWaitsAtTheNextStart(t *testing.T) {
+	e := newTestEnv(t)
+	// Installed, but rbd or the power stopped before the restart was asked for.
+	mustWrite(t, e.paths.UpdatePendingFile(), `{"version":"v9.9.9","fromVersion":"dev"}`)
+	e.start()
+	update := e.agent.Status().Update
+	if !update.RestartPending || !strings.Contains(update.Message, "Restart RasBeacon to finish installing it") {
+		t.Errorf("status = %+v", update)
 	}
 	if _, err := os.Stat(e.paths.UpdatePendingFile()); err != nil {
-		t.Error("the pending update should be remembered")
+		t.Error("the waiting update must be kept")
+	}
+}
+
+// While the signing key is being changed, the image holds the old key and the
+// new one (docs/releasing.md), and an update signed with either must install.
+func TestUpdate_AcceptsEveryKeyInTheImage(t *testing.T) {
+	e, oldKey := newUpdateEnv(t)
+	newPublic, newKey, _ := ed25519.GenerateKey(rand.Reader)
+	mustWrite(t, filepath.Join(e.paths.UpdateKeysDir(), "release-2.pub"), base64.StdEncoding.EncodeToString(newPublic))
+	// A broken key file is skipped, not a reason to refuse every update.
+	mustWrite(t, filepath.Join(e.paths.UpdateKeysDir(), "broken.pub"), "not a key")
+	if got := len(e.agent.trustedUpdateKeys()); got != 2 {
+		t.Fatalf("trusted keys = %d, want 2", got)
+	}
+
+	for name, key := range map[string]ed25519.PrivateKey{"old key": oldKey, "new key": newKey} {
+		t.Run(name, func(t *testing.T) {
+			system := strings.Repeat(strings.ToUpper(name[:1]), 64) // "O…" or "N…", unlike the slot's "o…"
+			file := updateFile(t, key, "pi4", testBundle(strings.Repeat("B", 32), system))
+			if err := e.agent.InstallUpdate(bytes.NewReader(file)); err != nil {
+				t.Fatal(err)
+			}
+			if got := e.readFile(e.paths.SlotDevice("other", "system")); got != system {
+				t.Errorf("system partition = %q", got)
+			}
+		})
 	}
 }
 
@@ -248,14 +364,50 @@ func TestUpdate_TrialIsConfirmedAfterANormalStart(t *testing.T) {
 	}
 }
 
+// Without the web UI or the hotspot, the owner couldn't reach RasBeacon to
+// go back, so the update isn't confirmed and the old system comes back.
+func TestUpdate_TrialIsntConfirmedWithoutTheWebUI(t *testing.T) {
+	e := newTestEnv(t)
+	mustWrite(t, e.paths.TrybootFlag(), "\x00\x00\x00\x01")
+	e.runner.outputs["rpi-slot-tryboot"] = "[all]\ntryboot_a_b=1\nboot_partition=3\n[tryboot]\nboot_partition=2\n"
+	e.start()
+	if _, err := e.agent.Claim(validClaim); err != nil {
+		t.Fatal(err)
+	}
+	e.runner.failing = []string{"systemctl is-active rbweb.service"}
+	restarted := New(e.paths, e.runner)
+	timers := &fakeTimers{}
+	restarted.afterFunc, restarted.usbRadioWait = timers.afterFunc, 0
+	if err := restarted.Start(); err != nil {
+		t.Fatal(err)
+	}
+	// Each round runs what is due: the first check, then the checks again.
+	for range 20 {
+		timers.runAll()
+	}
+	if _, err := os.Stat(e.paths.AutobootFile()); err == nil {
+		t.Error("the update must not be confirmed while the web UI isn't running")
+	}
+	if checks := restarted.update.confirmChecks; checks < 2 || checks > 16 {
+		t.Errorf("checked %d times, want a few retries before the rollback", checks)
+	}
+	if !e.runner.ran("systemctl reboot") {
+		t.Error("without confirmation, RasBeacon goes back to the old system")
+	}
+}
+
 func TestUpdate_FailedTrialIsReported(t *testing.T) {
 	e := newTestEnv(t)
 	// An update was installed, but this start is NOT a trial: the new slot
 	// didn't come up, and the bootloader went back to the old one.
-	mustWrite(t, e.paths.UpdatePendingFile(), `{"version":"v9.9.9","fromVersion":"dev"}`)
+	mustWrite(t, e.paths.UpdatePendingFile(), `{"version":"v9.9.9","fromVersion":"dev","restarting":true}`)
 	e.start()
-	if msg := e.agent.Status().Update.Message; !strings.Contains(msg, "didn't start correctly") {
-		t.Errorf("message = %q", msg)
+	update := e.agent.Status().Update
+	if !strings.Contains(update.Message, "didn't start correctly") || update.RestartPending {
+		t.Errorf("status = %+v", update)
+	}
+	if _, err := os.Stat(e.paths.UpdatePendingFile()); err == nil {
+		t.Error("a failed trial is over: the pending file goes")
 	}
 }
 
@@ -279,26 +431,114 @@ func TestUpdate_RealZstdDecompression(t *testing.T) {
 	}
 }
 
-func TestFetchLatestRelease(t *testing.T) {
+// releaseServer is a fake GitHub with a repository's releases: each one
+// given as its tag and, if not "", the minFromVersion of its .update.json.
+func releaseServer(t *testing.T, releases string, minFrom map[string]string) *httptest.Server {
+	t.Helper()
 	var serverURL string
 	mux := http.NewServeMux()
-	mux.HandleFunc("/repos/owner/rasbeacon/releases/latest", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"tag_name":"v1.2.0","html_url":"https://github.com/owner/rasbeacon/releases/tag/v1.2.0",
-			"assets":[{"name":"rasbeacon-v1.2.0.img.xz","browser_download_url":"` + serverURL + `/img"},
-			{"name":"rasbeacon-v1.2.0.update.json","browser_download_url":"` + serverURL + `/info"}]}`))
+	mux.HandleFunc("/repos/owner/rasbeacon/releases", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("per_page") == "" {
+			t.Error("the check should ask for a page of releases")
+		}
+		w.Write([]byte(strings.ReplaceAll(releases, "SERVER", serverURL)))
 	})
-	mux.HandleFunc("/info", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"version":"v1.2.0","minFromVersion":"v1.1.0"}`))
+	mux.HandleFunc("/info/", func(w http.ResponseWriter, r *http.Request) {
+		tag := strings.TrimPrefix(r.URL.Path, "/info/")
+		if tag == "broken" {
+			http.Error(w, "gone", http.StatusNotFound)
+			return
+		}
+		fmt.Fprintf(w, `{"version":%q,"minFromVersion":%q}`, tag, minFrom[tag])
 	})
 	server := httptest.NewServer(mux)
-	defer server.Close()
+	t.Cleanup(server.Close)
 	serverURL = server.URL
-	got, err := fetchLatestRelease(server.Client(), server.URL, "owner/rasbeacon")
-	if err != nil || got.TagName != "v1.2.0" || !strings.HasSuffix(got.HTMLURL, "v1.2.0") || got.minFromVersion != "v1.1.0" {
-		t.Errorf("got %+v, %v", got, err)
+	return server
+}
+
+// release is one release in GitHub's answer, with an .update.json file.
+func release(tag, extra string) string {
+	return fmt.Sprintf(`{"tag_name":%q,"html_url":"https://github.com/owner/rasbeacon/releases/tag/%s",%s
+		"assets":[{"name":"rasbeacon-%s.img.xz","browser_download_url":"SERVER/img"},
+		{"name":"rasbeacon-%s.update.json","browser_download_url":"SERVER/info/%s"}]}`, tag, tag, extra, tag, tag, tag)
+}
+
+func TestFetchUpdateRelease_StepsThroughVersionsThatNeedANewerStart(t *testing.T) {
+	// v0.3.0 needs v0.2.0 (say, a new signing key), and v0.2.1 needs
+	// nothing; v0.4.0-beta.1 is a pre-release and v0.5.0 a draft.
+	releases := "[" + strings.Join([]string{
+		release("v0.2.1", ""),
+		release("v0.4.0-beta.1", `"prerelease":true,`),
+		release("v0.5.0", `"draft":true,`),
+		release("v0.3.0", ""),
+		release("v0.1.0", ""),
+		release("v0.2.0", ""),
+	}, ",") + "]"
+	server := releaseServer(t, releases, map[string]string{"v0.3.0": "v0.2.0"})
+	fetch := func(running string) (latestRelease, string) {
+		t.Helper()
+		got, newest, err := fetchUpdateRelease(server.Client(), server.URL, "owner/rasbeacon", running)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got, newest
 	}
-	if _, err := fetchLatestRelease(server.Client(), server.URL, "owner/missing"); err == nil {
+
+	// v0.1.0 can't install v0.3.0 yet: it is offered v0.2.1 first.
+	got, newest := fetch("v0.1.0")
+	if got.TagName != "v0.2.1" || newest != "v0.3.0" || !strings.HasSuffix(got.HTMLURL, "v0.2.1") {
+		t.Errorf("from v0.1.0: offered %q, newest %q", got.TagName, newest)
+	}
+	// Once on v0.2.1, the next check offers v0.3.0.
+	if got, newest := fetch("v0.2.1"); got.TagName != "v0.3.0" || newest != "v0.3.0" || got.minFromVersion != "v0.2.0" {
+		t.Errorf("from v0.2.1: offered %+v, newest %q", got, newest)
+	}
+	// Nothing newer than the newest release.
+	if got, newest := fetch("v0.3.0"); got.TagName != "" || newest != "" {
+		t.Errorf("from v0.3.0: offered %q, newest %q", got.TagName, newest)
+	}
+}
+
+func TestFetchUpdateRelease_OffersTheNewestWhenNoneCanBeInstalled(t *testing.T) {
+	releases := "[" + release("v2.0.0", "") + "," + release("v1.5.0", "") + "]"
+	server := releaseServer(t, releases, map[string]string{"v2.0.0": "v1.5.0", "v1.5.0": "v1.5.0"})
+	got, newest, err := fetchUpdateRelease(server.Client(), server.URL, "owner/rasbeacon", "v1.0.0")
+	if err != nil || got.TagName != "v2.0.0" || newest != "v2.0.0" || got.minFromVersion != "v1.5.0" {
+		t.Errorf("got %+v, %q, %v; want v2.0.0, which needs a fresh install", got, newest, err)
+	}
+}
+
+func TestFetchUpdateRelease_UnreadableUpdateInfoIsFoundOutWhenInstalling(t *testing.T) {
+	// Without readable update info, the release is offered: installing its
+	// file says whether it fits (TestUpdate_TooNewAnUpdateAsksForAFreshInstall).
+	releases := `[{"tag_name":"v1.1.0","assets":[{"name":"x.update.json","browser_download_url":"SERVER/info/broken"}]},
+		{"tag_name":"v1.0.5","assets":[{"name":"x.update.json","browser_download_url":"SERVER/info/v1.0.4"}]},
+		{"tag_name":"v1.0.1"}]`
+	server := releaseServer(t, releases, map[string]string{"v1.0.4": "v9.0.0"})
+	got, newest, err := fetchUpdateRelease(server.Client(), server.URL, "owner/rasbeacon", "v1.0.0")
+	if err != nil || got.TagName != "v1.1.0" || got.minFromVersion != "" || newest != "v1.1.0" {
+		t.Errorf("got %+v, %q, %v", got, newest, err)
+	}
+	// Update info that names another version is ignored too.
+	if got := readMinFromVersion(server.Client(), latestRelease{TagName: "v1.0.5", Assets: []releaseAsset{{Name: "x.update.json", URL: server.URL + "/info/v1.0.4"}}}); got != "" {
+		t.Errorf("update info for another version: minFrom %q", got)
+	}
+}
+
+func TestFetchUpdateRelease_Errors(t *testing.T) {
+	server := releaseServer(t, "not json", nil)
+	if _, _, err := fetchUpdateRelease(server.Client(), server.URL, "owner/rasbeacon", "v1.0.0"); err == nil {
+		t.Error("an unreadable answer should be an error")
+	}
+	if _, _, err := fetchUpdateRelease(server.Client(), server.URL, "owner/missing", "v1.0.0"); err == nil {
 		t.Error("a missing repository should be an error")
+	}
+	if _, _, err := fetchUpdateRelease(server.Client(), "http://127.0.0.1:1", "owner/rasbeacon", "v1.0.0"); err == nil {
+		t.Error("an unreachable GitHub should be an error")
+	}
+	if _, _, err := fetchUpdateRelease(server.Client(), "http://bad host", "owner/rasbeacon", "v1.0.0"); err == nil {
+		t.Error("a bad address should be an error")
 	}
 }
 
@@ -339,13 +579,78 @@ func TestStorage_ThePi3ImageHasOneSystemPartition(t *testing.T) {
 	mustWrite(t, filepath.Join(e.paths.SysClassBlock(), "mmcblk0p1", "size"), "524288\n")
 	mustWrite(t, filepath.Join(e.paths.PersistentDir(), "rasbeacon", "settings"), strings.Repeat("x", 4096))
 
-	e.agent.mu.Lock()
-	s := e.agent.storageInfo()
-	e.agent.mu.Unlock()
+	storage := func() api.StorageInfo {
+		e.agent.mu.Lock()
+		defer e.agent.mu.Unlock()
+		return e.agent.storageInfo()
+	}
+	// /persistent is added up in the background, outside rbd's lock: the
+	// first answer doesn't wait for it.
+	if s := storage(); s.UserGB != 0 {
+		t.Errorf("before the first measurement: %+v", s)
+	}
+	e.runBackground()
+	s := storage()
 	if s.Medium != "microSD card" || !strings.HasPrefix(s.Filesystem, "Writable system") {
 		t.Errorf("storage = %+v", s)
 	}
 	if s.FirmwareGB < 0.268 || s.UserGB <= 0 || s.TotalGB < s.FirmwareGB+s.UserGB {
 		t.Errorf("storage = %+v: RasBeacon is the boot partition and the system files, settings what /persistent holds", s)
+	}
+	// Not measured again for 10 minutes.
+	storage()
+	e.backgroundMu.Lock()
+	queued := len(e.pending)
+	e.backgroundMu.Unlock()
+	if queued != 0 {
+		t.Errorf("%d measurements queued right after one, want none for 10 minutes", queued)
+	}
+}
+
+func TestUpdateCheck_AnnouncesANewVersionOnce(t *testing.T) {
+	e := newClaimedEnv(t, false)
+	runningVersion(t, "v1.0.0")
+	oldRepo, oldAPI := version.Repository, githubAPI
+	t.Cleanup(func() { version.Repository, githubAPI = oldRepo, oldAPI })
+	version.Repository = "owner/rasbeacon"
+
+	var announced []string
+	var serverURL string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/owner/rasbeacon/releases", func(w http.ResponseWriter, r *http.Request) {
+		// v1.2.0 can only be installed over v1.1.0, so v1.1.0 is announced.
+		w.Write([]byte(`[{"tag_name":"v1.2.0","assets":[{"name":"rasbeacon-v1.2.0.update.json","browser_download_url":"` + serverURL + `/info"}]},
+			{"tag_name":"v1.1.0","html_url":"https://github.com/owner/rasbeacon/releases/tag/v1.1.0"}]`))
+	})
+	mux.HandleFunc("/info", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"version":"v1.2.0","minFromVersion":"v1.1.0"}`))
+	})
+	mux.HandleFunc("/topic", func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		announced = append(announced, r.Header.Get("Title")+": "+string(body))
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+	serverURL = server.URL
+	githubAPI = server.URL
+
+	if err := e.agent.UpdateUpdateSettings(api.UpdateSettings{CheckHours: 24, NotifyURL: server.URL + "/topic"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.agent.UpdateUpdateSettings(api.UpdateSettings{CheckHours: 5}); err == nil {
+		t.Error("only the listed schedules may be chosen")
+	}
+	status, err := e.agent.CheckForUpdateNow()
+	if err != nil || status.LatestVersion != "v1.1.0" || status.NewerVersion != "v1.2.0" || status.LastChecked == "" || status.CheckHours != 24 {
+		t.Fatalf("status %+v, %v", status, err)
+	}
+	if _, err := e.agent.CheckForUpdateNow(); err != nil {
+		t.Fatal(err)
+	}
+	if len(announced) != 1 || !strings.Contains(announced[0], "RasBeacon v1.1.0") || !strings.Contains(announced[0], "v1.2.0 can only be installed over it") {
+		t.Errorf("announced %q, want the new version once", announced)
+	}
+	if err := e.agent.SendTestNotification(""); err != nil || len(announced) != 2 {
+		t.Errorf("test message: %v, %q", err, announced)
 	}
 }

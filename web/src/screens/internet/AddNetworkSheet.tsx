@@ -48,6 +48,9 @@ function initialForm(start: AddNetworkStart): NewNetworkForm {
   }
 }
 
+/** Dots where a password goes, as a hint (not a real value). */
+const PASSWORD_PLACEHOLDER = '••••••••';
+
 /** Typing settings for names and logins: no capitals, corrections or suggestions. */
 const PLAIN_INPUT = { autoComplete: 'off', autoCapitalize: 'none', autoCorrect: 'off', spellCheck: false } as const;
 
@@ -61,8 +64,8 @@ interface AddNetworkSheetProps {
 }
 
 /**
- * Adds a network to the list of networks RasBeacon joins. Enterprise networks (eduroam and
- * similar) get their login settings here, whether they were found by a scan or typed in.
+ * Adds a network to the list of networks RasBeacon joins. Enterprise networks (a company's or
+ * a university's) get their login settings here, whether they were found by a scan or typed in.
  */
 export function AddNetworkSheet({ start, list, onAdd, onClose }: AddNetworkSheetProps) {
   const { prepareNetwork } = useDevice();
@@ -96,7 +99,7 @@ export function AddNetworkSheet({ start, list, onAdd, onClose }: AddNetworkSheet
         return (
           <>
             {fromScan ? (
-              <Section level={3} footer="It is saved with the list: press Save at the bottom of the page afterwards.">
+              <Section level={3}>
                 <Row
                   leading={{ tile: 'wifi', color: 'blue' }}
                   title={<BreakableText>{start.network.ssid}</BreakableText>}
@@ -109,6 +112,7 @@ export function AddNetworkSheet({ start, list, onAdd, onClose }: AddNetworkSheet
                 {form.security === 'personal' && (
                   <PasswordField
                     label="Network password"
+                    placeholder={PASSWORD_PLACEHOLDER}
                     data-autofocus
                     value={form.password}
                     onChange={(password) => update('password', password)}
@@ -118,9 +122,10 @@ export function AddNetworkSheet({ start, list, onAdd, onClose }: AddNetworkSheet
                 )}
               </Section>
             ) : (
-              <Section level={3} footer="It is saved with the list: press Save at the bottom of the page afterwards.">
+              <Section level={3}>
                 <TextField
                   label="Network name"
+                  placeholder="SSID"
                   data-autofocus
                   value={form.ssid}
                   onChange={(ssid) => update('ssid', ssid)}
@@ -136,6 +141,7 @@ export function AddNetworkSheet({ start, list, onAdd, onClose }: AddNetworkSheet
                 {form.security === 'personal' && (
                   <PasswordField
                     label="Network password"
+                    placeholder={PASSWORD_PLACEHOLDER}
                     value={form.password}
                     onChange={(password) => update('password', password)}
                     error={errors.password}
@@ -170,17 +176,13 @@ interface EnterpriseFieldsProps {
   errors: Record<string, string | undefined>;
 }
 
-/** The login settings of a WPA-Enterprise network (eduroam and similar). */
+/** The login settings of a WPA-Enterprise network (a company's or a university's, eduroam). */
 function EnterpriseFields({ form, update, errors }: EnterpriseFieldsProps) {
   const tls = form.method === 'tls';
 
   return (
     <>
-      <Section
-        level={3}
-        title="Enterprise login"
-        footer="Your university or company publishes these settings (for eduroam, search for your institution's eduroam setup page)."
-      >
+      <Section level={3} title="Enterprise login" footer="Your company or university publishes these settings.">
         <SelectField
           label="Login method"
           options={METHOD_OPTIONS}
@@ -190,7 +192,7 @@ function EnterpriseFields({ form, update, errors }: EnterpriseFieldsProps) {
         <TextField
           label="Username"
           inputMode="email"
-          placeholder="NetID@example.edu"
+          placeholder="user@example.com"
           value={form.identity}
           onChange={(identity) => update('identity', identity)}
           error={errors.identity}
@@ -200,7 +202,7 @@ function EnterpriseFields({ form, update, errors }: EnterpriseFieldsProps) {
           label="Anonymous identity"
           labelNote="(optional)"
           inputMode="email"
-          placeholder="anonymous@example.edu"
+          placeholder="anonymous@example.com"
           value={form.anonymousIdentity}
           onChange={(anonymousIdentity) => update('anonymousIdentity', anonymousIdentity)}
           {...PLAIN_INPUT}
@@ -222,6 +224,7 @@ function EnterpriseFields({ form, update, errors }: EnterpriseFieldsProps) {
             <PasswordField
               label="Key passphrase"
               labelNote="(if the key has one)"
+              placeholder={PASSWORD_PLACEHOLDER}
               value={form.password}
               onChange={(password) => update('password', password)}
               error={errors.password}
@@ -231,6 +234,7 @@ function EnterpriseFields({ form, update, errors }: EnterpriseFieldsProps) {
         ) : (
           <PasswordField
             label="Your password"
+            placeholder={PASSWORD_PLACEHOLDER}
             value={form.password}
             onChange={(password) => update('password', password)}
             error={errors.password}
@@ -239,47 +243,47 @@ function EnterpriseFields({ form, update, errors }: EnterpriseFieldsProps) {
         )}
       </Section>
 
-      <Section
-        level={3}
-        title="Login server"
-        footer="RasBeacon only sends your password to the server that proves to be this one."
-      >
-        <FileField
-          label="CA certificate file"
-          labelNote="(choose several if your institution lists more than one)"
-          accept=".pem,.crt,.cer,.der"
-          multiple
-          onChange={(files) => update('caCertFiles', files, 'caCert')}
-          error={errors.caCert}
-        />
-        <TextField
-          label="Login server name"
-          placeholder="*.example.edu"
-          value={form.serverName}
-          onChange={(serverName) => update('serverName', serverName)}
-          error={errors.serverName}
-          {...PLAIN_INPUT}
-        />
-        {/* Unsafe, so it stays tucked away, and its warning shows as soon as it is on. */}
-        <Disclosure
-          title="Advanced"
-          leading={{ icon: 'warning', className: 'text-orange' }}
-          defaultOpen={form.allowNoCertificateCheck}
-        >
+      {/*
+        Optional: without a CA certificate or a server name, RasBeacon trusts the login server it
+        meets at the first connection, as phones do, and only that one afterwards.
+      */}
+      <Section level={3}>
+        <Disclosure title="Advanced" defaultOpen={form.allowNoCertificateCheck} content="rows">
+          <p className="row text-footnote text-label-2">
+            Optional. Without these, RasBeacon trusts the login server it meets the first time, and only that one
+            afterwards.
+          </p>
+          <FileField
+            label="CA certificate file"
+            labelNote="(choose several if there are more than one)"
+            accept=".pem,.crt,.cer,.der"
+            multiple
+            onChange={(files) => update('caCertFiles', files, 'caCert')}
+            error={errors.caCert}
+          />
+          <TextField
+            label="Login server name"
+            placeholder="radius.example.com"
+            value={form.serverName}
+            onChange={(serverName) => update('serverName', serverName)}
+            error={errors.serverName}
+            {...PLAIN_INPUT}
+          />
           <FormSwitchRow
             label="Don't check the login server"
             labelNote="(unsafe)"
             checked={form.allowNoCertificateCheck}
             onChange={(allow) => update('allowNoCertificateCheck', allow)}
-            className="p-0 lg:p-0"
           />
           {form.allowNoCertificateCheck && (
-            <Notice tone="danger" role="alert" title="The login server won't be checked">
-              <p>
-                Without the check, anyone nearby can create a fake network with the same name and collect your password.
-                Only use this to test, and change your password afterwards.
-              </p>
-            </Notice>
+            <div className="row">
+              <Notice tone="danger" role="alert" title="The login server won't be checked" className="w-full">
+                <p>
+                  Without the check, anyone nearby can create a fake network with the same name and collect your
+                  password. Only use this to test, and change your password afterwards.
+                </p>
+              </Notice>
+            </div>
           )}
         </Disclosure>
       </Section>

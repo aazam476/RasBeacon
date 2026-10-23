@@ -25,7 +25,7 @@ network={
 	# quotes, cannot break this file.
 	ssid=656475726f616d
 	# Higher numbers are joined first when several networks are in range.
-	priority=4
+	priority=7
 	# WPA2-Enterprise or WPA3-Enterprise, whichever the network offers.
 	key_mgmt=WPA-EAP WPA-EAP-SHA256
 	ieee80211w=1
@@ -33,14 +33,14 @@ network={
 	eap=TTLS
 	phase2="auth=PAP"
 	# Username, outer (anonymous) username and password, in hexadecimal.
-	identity=4e6574494440727574676572732e656475
-	anonymous_identity=616e6f6e796d6f757340727574676572732e656475
+	identity=6d65406578616d706c652e656475
+	anonymous_identity=616e6f6e796d6f7573406578616d706c652e656475
 	password=702277
-	# Only talk to a login server whose certificate is signed by this CA and
-	# whose name is ruw.rutgers.edu or ends in .ruw.rutgers.edu. This stops
-	# a fake network from collecting the password.
+	# Only talk to the real login server, so a fake network with the same
+	# name can't collect the password.
 	ca_cert="/persistent/rasbeacon/certs/a1-ca.pem"
-	domain_suffix_match="ruw.rutgers.edu"
+	# Its name must be login.example.edu or end in .login.example.edu.
+	domain_suffix_match="login.example.edu"
 }
 
 # Name: CorpNet
@@ -49,7 +49,7 @@ network={
 	# quotes, cannot break this file.
 	ssid=436f72704e6574
 	# Higher numbers are joined first when several networks are in range.
-	priority=3
+	priority=6
 	# WPA2-Enterprise or WPA3-Enterprise, whichever the network offers.
 	key_mgmt=WPA-EAP WPA-EAP-SHA256
 	ieee80211w=1
@@ -59,10 +59,10 @@ network={
 	# Username, outer (anonymous) username and password, in hexadecimal.
 	identity=616c696365
 	password=736563726574
-	# Only talk to a login server whose certificate is signed by this CA and
-	# whose name is radius.corp.example or ends in .radius.corp.example. This stops
-	# a fake network from collecting the password.
+	# Only talk to the real login server, so a fake network with the same
+	# name can't collect the password.
 	ca_cert="/persistent/rasbeacon/certs/b2-ca.pem"
+	# Its name must be radius.corp.example or end in .radius.corp.example.
 	domain_suffix_match="radius.corp.example"
 }
 
@@ -72,7 +72,7 @@ network={
 	# quotes, cannot break this file.
 	ssid=4c61624e6574
 	# Higher numbers are joined first when several networks are in range.
-	priority=2
+	priority=5
 	# WPA2-Enterprise or WPA3-Enterprise, whichever the network offers.
 	key_mgmt=WPA-EAP WPA-EAP-SHA256
 	ieee80211w=1
@@ -80,10 +80,10 @@ network={
 	eap=TLS
 	# Username, outer (anonymous) username and password, in hexadecimal.
 	identity=626f62
-	# Only talk to a login server whose certificate is signed by this CA and
-	# whose name is lab.example or ends in .lab.example. This stops
-	# a fake network from collecting the password.
+	# Only talk to the real login server, so a fake network with the same
+	# name can't collect the password.
 	ca_cert="/c/ca.pem"
+	# Its name must be lab.example or end in .lab.example.
 	domain_suffix_match="lab.example"
 	# EAP-TLS: the owner's personal certificate and key.
 	client_cert="/c/client.pem"
@@ -97,7 +97,7 @@ network={
 	# quotes, cannot break this file.
 	ssid=4e6f436865636b
 	# Higher numbers are joined first when several networks are in range.
-	priority=1
+	priority=4
 	# WPA2-Enterprise or WPA3-Enterprise, whichever the network offers.
 	key_mgmt=WPA-EAP WPA-EAP-SHA256
 	ieee80211w=1
@@ -108,4 +108,71 @@ network={
 	identity=6361726f6c
 	password=7077
 	# WARNING: the owner turned off checking the login server's certificate.
+}
+
+# Name: NameOnly
+network={
+	# The name is written in hexadecimal so any characters, including
+	# quotes, cannot break this file.
+	ssid=4e616d654f6e6c79
+	# Higher numbers are joined first when several networks are in range.
+	priority=3
+	# WPA2-Enterprise or WPA3-Enterprise, whichever the network offers.
+	key_mgmt=WPA-EAP WPA-EAP-SHA256
+	ieee80211w=1
+	# Login method: PEAP, then auth=MSCHAPV2 inside the encrypted tunnel.
+	eap=PEAP
+	phase2="auth=MSCHAPV2"
+	# Username, outer (anonymous) username and password, in hexadecimal.
+	identity=64617665
+	password=7077
+	# Only talk to the real login server, so a fake network with the same
+	# name can't collect the password.
+	ca_cert="/etc/ssl/certs/ca-certificates.crt"
+	# Its name must be radius.example.com or end in .radius.example.com.
+	domain_suffix_match="radius.example.com"
+}
+
+# Name: FirstTime
+network={
+	# The name is written in hexadecimal so any characters, including
+	# quotes, cannot break this file.
+	ssid=466972737454696d65
+	# Higher numbers are joined first when several networks are in range.
+	priority=2
+	# WPA2-Enterprise or WPA3-Enterprise, whichever the network offers.
+	key_mgmt=WPA-EAP WPA-EAP-SHA256
+	ieee80211w=1
+	# Login method: PEAP, then auth=MSCHAPV2 inside the encrypted tunnel.
+	eap=PEAP
+	phase2="auth=MSCHAPV2"
+	# Username, outer (anonymous) username and password, in hexadecimal.
+	identity=6572696e
+	password=7077
+	# First connection: only fetch the login server's certificate, without
+	# logging in (the password is never sent). RasBeacon remembers it and
+	# from then on accepts only that certificate, so a fake network can't
+	# collect the password later.
+	ca_cert="probe://"
+}
+
+# Name: Trusted
+network={
+	# The name is written in hexadecimal so any characters, including
+	# quotes, cannot break this file.
+	ssid=54727573746564
+	# Higher numbers are joined first when several networks are in range.
+	priority=1
+	# WPA2-Enterprise or WPA3-Enterprise, whichever the network offers.
+	key_mgmt=WPA-EAP WPA-EAP-SHA256
+	ieee80211w=1
+	# Login method: PEAP, then auth=MSCHAPV2 inside the encrypted tunnel.
+	eap=PEAP
+	phase2="auth=MSCHAPV2"
+	# Username, outer (anonymous) username and password, in hexadecimal.
+	identity=6672616e6b
+	password=7077
+	# Only talk to the real login server, so a fake network with the same
+	# name can't collect the password.
+	ca_cert="hash://server/sha256/abababababababababababababababababababababababababababababababab"
 }

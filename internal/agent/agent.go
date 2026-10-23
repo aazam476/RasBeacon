@@ -36,13 +36,16 @@
 package agent
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/netip"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -54,6 +57,7 @@ import (
 	"rasbeacon/internal/paths"
 	"rasbeacon/internal/portal"
 	"rasbeacon/internal/radio"
+	"rasbeacon/internal/regdb"
 	"rasbeacon/internal/render"
 	"rasbeacon/internal/routing"
 	"rasbeacon/internal/setupfile"
@@ -110,6 +114,10 @@ type Agent struct {
 	update     updateState
 	usage      usageState
 	plugins    pluginsState
+	// hotspotCheck is the hotspot's regular self-check (hotspotcheck.go).
+	hotspotCheck hotspotCheckState
+	// serverCert remembers Enterprise login servers (servercert.go).
+	serverCert serverCertState
 	// powerSockets are the plugins' power sockets (see pluginsrun.go).
 	powerSockets map[string]*http.Server
 	// backupTickets are backups asked for but not downloaded yet, by token
@@ -143,6 +151,14 @@ type Agent struct {
 	// usbRadioWait is how long startup waits for a USB Wi-Fi adapter to
 	// appear (see waitForRadios). Tests set it to zero.
 	usbRadioWait time.Duration
+	// regdb is the Wi-Fi regulatory database (nil without one; see
+	// hotspotstart.go).
+	regdb regdb.DB
+	// lastCertCheck is when renewCertificateIfDue last looked (https.go).
+	lastCertCheck time.Time
+	// lookupIP looks up a host name's addresses (the VPN server's); an
+	// address is answered as it is. Tests fake it.
+	lookupIP func(ctx context.Context, host string) ([]netip.Addr, error)
 }
 
 // New creates an agent that uses the given file locations and command
@@ -165,6 +181,9 @@ func New(p paths.Paths, runner system.Runner) *Agent {
 		plugins:    pluginsState{runner: runner},
 		// USB adapters usually appear within a few seconds of power-on.
 		usbRadioWait: 20 * time.Second,
+		lookupIP: func(ctx context.Context, host string) ([]netip.Addr, error) {
+			return net.DefaultResolver.LookupNetIP(ctx, "ip", host)
+		},
 	}
 	a.plugins.client = a.pluginHTTPClient
 	a.plugins.watchEvery = pluginWatchEvery
@@ -218,7 +237,8 @@ func (a *Agent) Start() error {
 		return err
 	}
 
-	// 2a. The installed plugins (started once the network is up).
+	// 2a. RasBeacon's name, and the installed plugins (started once the network is up).
+	a.applyHostname()
 	a.loadPlugins()
 
 	// 2b. The swap file (its size is a setting; a problem isn't fatal).
@@ -226,8 +246,14 @@ func (a *Agent) Start() error {
 		slog.Warn("swap could not be set up", "error", err)
 	}
 
-	// 2c. The HTTPS certificate for rbweb, if HTTPS is on. (rbweb waits
-	//     for rbd before starting, so it finds the files.)
+	// 2c. The HTTPS certificate for rbweb, if HTTPS is on, renewed first
+	//     if it runs out soon. (rbweb waits for rbd before starting, so it
+	//     finds the files.)
+	if a.certificateDue() {
+		if err := a.generateCertificate(); err != nil {
+			slog.Error("could not make a new HTTPS certificate", "error", err)
+		}
+	}
 	if _, err := a.applyHTTPS(); err != nil {
 		slog.Error("HTTPS could not be set up; the web UI stays on HTTP", "error", err)
 		a.warnings = append(a.warnings, "HTTPS could not be set up: "+err.Error())
@@ -242,7 +268,9 @@ func (a *Agent) Start() error {
 		return err
 	}
 
-	// 4. Find the Wi-Fi radios and pick the hotspot radio.
+	// 4. Find the Wi-Fi radios and pick the hotspot radio, and read which
+	//    channels each country allows.
+	a.loadRegulatoryDB()
 	if err := a.setUpRadios(); err != nil {
 		slog.Error("no usable hotspot radio", "error", err)
 		a.mode = api.ModeNoRadio
@@ -254,6 +282,9 @@ func (a *Agent) Start() error {
 		if err := a.startNormalMode(); err != nil {
 			return err
 		}
+		// The plugins start once, here: a later startNormalMode (after a
+		// hotspot or guest change) leaves them running.
+		a.background(a.startPlugins)
 		a.scheduleConfirmation() // only does something on an update's trial
 		return nil
 	}
@@ -278,10 +309,11 @@ func (a *Agent) handleFactoryResetFile() error {
 	return nil
 }
 
-// wipeData deletes everything in RasBeacon's data directory, and the
-// plugins' images and containers.
+// wipeData deletes everything in RasBeacon's data directory, the plugins'
+// images and containers, and the swap file.
 func (a *Agent) wipeData() error {
 	a.stopAllPlugins()
+	a.removeSwapFile()
 	if err := os.RemoveAll(a.paths.DataDir()); err != nil {
 		return fmt.Errorf("erasing settings: %w", err)
 	}
@@ -491,15 +523,9 @@ func (a *Agent) closeSetupWindow() {
 // startNormalMode runs the owner's hotspot.
 func (a *Agent) startNormalMode() error {
 	h := a.cfg.Hotspot
-	hotspot := render.HotspotInput{
-		Interface: radio.HotspotInterfaceName,
-		SSID:      h.SSID,
-		Band:      h.Band,
-		Channel:   h.Channel,
-		Country:   h.Country,
-		Security:  h.Security,
-		Password:  a.secrets.HotspotPassword,
-		Guest:     a.guestHostapd(),
+	hotspot, err := a.ownerHotspot()
+	if err != nil {
+		return err
 	}
 	// The guest network's bridge must exist before hostapd starts, and
 	// the plugins' before dnsmasq does (it answers plugins' DNS).
@@ -524,8 +550,32 @@ func (a *Agent) startNormalMode() error {
 	}
 	a.checkUplink() // fill in the status page right away
 	slog.Info("hotspot started", "ssid", h.SSID, "band", h.Band)
-	a.background(a.startPlugins)
 	return nil
+}
+
+// ownerHotspot describes the owner's hotspot for hostapd, and writes the
+// allow list it reads when that is on.
+func (a *Agent) ownerHotspot() (render.HotspotInput, error) {
+	h := a.cfg.Hotspot
+	hotspot := render.HotspotInput{
+		Interface:  radio.HotspotInterfaceName,
+		SSID:       h.SSID,
+		Band:       a.hotspotBand(),
+		Channel:    a.hotspotChannel(),
+		Country:    h.Country,
+		Security:   h.Security,
+		Password:   a.secrets.HotspotPassword,
+		MaxDevices: a.cfg.Access.MaxDevices,
+		Guest:      a.guestHostapd(),
+	}
+	if a.cfg.Access.AllowListOn {
+		list := strings.Join(a.cfg.Access.Allowed, "\n") + "\n"
+		if err := config.WriteFileAtomic(a.paths.HostapdAcceptFile(), []byte(list), 0o600); err != nil {
+			return hotspot, err
+		}
+		hotspot.AcceptMACFile = a.paths.HostapdAcceptFile()
+	}
+	return hotspot, nil
 }
 
 // applyHotspotAndDHCP writes hostapd.conf and dnsmasq.conf and restarts both
@@ -551,6 +601,7 @@ func (a *Agent) applyDHCP(captive bool) error {
 	input := render.DnsmasqInput{
 		LAN:              a.lan,
 		LeaseFile:        a.paths.DnsmasqLeases(),
+		Hostname:         a.cfg.Name(),
 		Captive:          captive,
 		Upstream:         a.upstreamDNS(),
 		Plugins:          a.pluginBridge,
@@ -593,6 +644,8 @@ func (a *Agent) applyFirewall() error {
 		Guest:           a.guestActive(),
 		RoutedIPv6:      a.wantedRoutedIPv6(),
 		PausedMACs:      a.pausedMACs(),
+		PausedIPv4:      a.pausedIPv4(),
+		PausedIPv6:      a.pausedIPv6(),
 	}
 	if a.mode == api.ModeNormal {
 		input.Plugins = a.pluginRules()

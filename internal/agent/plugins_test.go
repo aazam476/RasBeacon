@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"archive/tar"
 	"archive/zip"
 	"bytes"
 	"context"
@@ -18,6 +19,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -51,8 +53,26 @@ func testIcon() string {
 	return b.String()
 }
 
+// imageTar is a small image file as `docker save` writes it, with these
+// names in its manifest.json.
+func imageTar(names ...string) string {
+	var b bytes.Buffer
+	w := tar.NewWriter(&b)
+	manifest, _ := json.Marshal([]map[string]any{{"Config": "config.json", "RepoTags": names}})
+	w.WriteHeader(&tar.Header{Name: "manifest.json", Mode: 0o644, Size: int64(len(manifest))})
+	w.Write(manifest)
+	w.Close()
+	return b.String()
+}
+
 // writeTestPlugin makes a .rba (signed with key unless nil) and returns its bytes.
 func writeTestPlugin(t *testing.T, manifest map[string]any, key ed25519.PrivateKey) []byte {
+	t.Helper()
+	return writeTestPluginWithImage(t, manifest, key, imageTar("localhost/adguard:latest"))
+}
+
+// writeTestPluginWithImage is writeTestPlugin with this image.tar.
+func writeTestPluginWithImage(t *testing.T, manifest map[string]any, key ed25519.PrivateKey, imageFile string) []byte {
 	t.Helper()
 	dir := t.TempDir()
 	unsigned := filepath.Join(dir, "p.rba")
@@ -68,7 +88,7 @@ func writeTestPlugin(t *testing.T, manifest map[string]any, key ed25519.PrivateK
 	}
 	add(plugin.ManifestFile, string(m))
 	add(plugin.IconFile, testIcon())
-	add(plugin.ImageFile, "image tar")
+	add(plugin.ImageFile, imageFile)
 	// Every template the manifest lists: AdGuardHome.yaml as AdGuard Home's,
 	// any other a line with a setting.
 	templates, _ := manifest["templates"].([]map[string]any)
@@ -101,6 +121,26 @@ func newPluginEnv(t *testing.T) *testEnv {
 	e := newClaimedEnv(t, false)
 	e.runner.prefixOutputs = map[string]string{"podman load": "Loaded image: localhost/adguard:latest\n", "podman ps": "[]"}
 	e.runner.failing = []string{"mountpoint"} // nothing is mounted yet
+	e.runner.effect = func(args []string) {
+		// podman save writes the image (the last argument) to the file
+		// after --output.
+		if len(args) > 2 && args[0] == "podman" && args[1] == "save" {
+			for i, arg := range args[:len(args)-1] {
+				if arg == "--output" {
+					_ = os.WriteFile(args[i+1], []byte(imageTar(args[len(args)-1])), 0o600)
+				}
+			}
+		}
+		// podman run reads the environment from the file after --env-file.
+		if len(args) > 2 && args[0] == "podman" && args[1] == "run" {
+			for i, arg := range args[:len(args)-1] {
+				if arg == "--env-file" {
+					env, _ := os.ReadFile(args[i+1])
+					e.runEnvs = append(e.runEnvs, string(env))
+				}
+			}
+		}
+	}
 	e.runBackground()
 	return e
 }
@@ -176,14 +216,33 @@ func TestPlugins_InstallFromAFileStartsItWithItsOwnAddressPortsAndData(t *testin
 	}
 	for _, want := range []string{
 		"podman load --quiet --input", "podman tag localhost/adguard:latest localhost/rasbeacon-plugin/adguard-home:1.0",
+		"podman untag localhost/adguard:latest", // only RasBeacon's name stays
 		"fallocate --length 256M", "mkfs.ext4", "mount -o loop,nosuid,nodev",
 		"podman run --detach --replace --name rasbeacon-adguard-home",
-		"--network rasbeacon-plugins --ip 10.89.0.2 --dns 10.89.0.1",
-		"--security-opt mask=/sys/class/thermal", "--env UPSTREAM=quad9",
+		"--network rasbeacon-plugins:ip=10.89.0.2,host_interface_name=rbport2 --dns 10.89.0.1",
+		"--security-opt mask=/sys/class/thermal", "--env-file " + e.paths.PluginEnvFile("adguard-home"),
 	} {
 		if !e.runner.ran(want) {
 			t.Errorf("never ran %q", want)
 		}
+	}
+	// The settings reach the container through a file only root can read,
+	// gone once podman has read it, never on the command line.
+	if len(e.runEnvs) != 1 || !strings.Contains(e.runEnvs[0], "UPSTREAM=quad9\n") {
+		t.Errorf("environment files = %q", e.runEnvs)
+	}
+	if e.runner.ran("--env ") {
+		t.Error("environment variables must not be on podman's command line")
+	}
+	// No command rbd ran holds the password: a command line can end up in
+	// an error message, the journal and so the debug log on the SD card.
+	for _, command := range e.runner.commands {
+		if strings.Contains(command, "s3cret-pass") {
+			t.Errorf("a command line holds the plugin's password: %s", command)
+		}
+	}
+	if _, err := os.Stat(e.paths.PluginEnvFile("adguard-home")); !os.IsNotExist(err) {
+		t.Errorf("the environment file should be deleted after the start: %v", err)
 	}
 	// The password is a secret, not a setting; the template got its hash.
 	if strings.Contains(e.readFile(e.paths.ConfigFile()), "s3cret-pass") {
@@ -215,6 +274,35 @@ func TestPlugins_InstallFromAFileStartsItWithItsOwnAddressPortsAndData(t *testin
 	}
 	if strings.Contains(e.agent.Diagnostics(), "s3cret-pass") {
 		t.Error("diagnostics must not show plugin settings")
+	}
+}
+
+// A plugin's image.tar can name images itself, and podman load would take
+// those names from the images that have them. One naming another plugin's
+// image would make that plugin run this one's program.
+func TestPlugins_AnImageCarryingAnotherPluginsNameIsRefused(t *testing.T) {
+	e := newPluginEnv(t)
+	tar := imageTar("localhost/adguard:latest", "localhost/rasbeacon-plugin/samba:4.20")
+	_, err := e.installTestPlugin(writeTestPluginWithImage(t, testPluginManifest("1.0"), nil, tar), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := e.plugin("adguard-home")
+	if p.State == api.PluginRunning || !strings.Contains(p.Message, "another plugin's name, localhost/rasbeacon-plugin/samba:4.20") {
+		t.Errorf("after installing: %+v", p)
+	}
+	if e.runner.ran("podman load") {
+		t.Error("the image must not be loaded")
+	}
+
+	// An image file podman would read but RasBeacon can't (compressed) is
+	// refused too: its names can't be checked.
+	e = newPluginEnv(t)
+	if _, err := e.installTestPlugin(writeTestPluginWithImage(t, testPluginManifest("1.0"), nil, "\x1f\x8b gzip"), nil); err != nil {
+		t.Fatal(err)
+	}
+	if p := e.plugin("adguard-home"); p.State == api.PluginRunning || e.runner.ran("podman load") {
+		t.Errorf("a compressed image: %+v", p)
 	}
 }
 
@@ -295,19 +383,99 @@ func TestPlugins_SigningKeyIsPinnedOnFirstSignedInstall(t *testing.T) {
 		t.Error("an update keeps the settings and removes the old image")
 	}
 
-	// Remove with its data kept, then a different key may install it again.
-	mustWrite(t, filepath.Join(e.paths.PluginDir("adguard-home"), pluginDataImage), "data") // fallocate is fake here
+	// Remove it with its data kept.
+	dataFile := filepath.Join(e.paths.PluginDir("adguard-home"), pluginDataImage)
+	mustWrite(t, dataFile, "data") // fallocate is fake here
 	if err := e.agent.RemovePlugin(api.PluginRemoveRequest{ID: "adguard-home", KeepData: true}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(e.paths.PluginKeptDir(), "adguard-home.img")); err != nil {
 		t.Errorf("the data should be kept: %v", err)
 	}
+
+	// Another author's plugin with the same ID: the sheet asks, naming the
+	// earlier plugin and its key, and the data stays aside unless chosen.
+	preview, err := e.agent.StagePluginFile(bytes.NewReader(writeTestPlugin(t, testPluginManifest("2.0"), otherKey)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if k := preview.KeptData; k == nil || k.Name != "AdGuard Home" || k.KeyID != p.KeyID {
+		t.Fatalf("the sheet should ask about the data kept from the earlier AdGuard Home (key %s): %+v", p.KeyID, k)
+	}
 	if _, err := e.installTestPlugin(writeTestPlugin(t, testPluginManifest("2.0"), otherKey), nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(e.paths.PluginDir("adguard-home"), pluginDataImage)); err != nil {
-		t.Error("the kept data should come back")
+	if _, err := os.Stat(dataFile); err == nil {
+		t.Error("a plugin signed with another key must not get the kept data without being asked")
+	}
+
+	// The same author's plugin gets it back by itself, without a question.
+	if err := e.agent.RemovePlugin(api.PluginRemoveRequest{ID: "adguard-home"}); err != nil {
+		t.Fatal(err)
+	}
+	preview, err = e.agent.StagePluginFile(bytes.NewReader(writeTestPlugin(t, testPluginManifest("2.0"), key)))
+	if err != nil || preview.KeptData != nil {
+		t.Errorf("the same key: %+v, %v", preview.KeptData, err)
+	}
+	if _, err := e.installTestPlugin(writeTestPlugin(t, testPluginManifest("2.0"), key), nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.readFile(dataFile); got != "data" {
+		t.Errorf("the kept data should come back to the same author's plugin: %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(e.paths.PluginKeptDir(), "adguard-home.key.json")); !os.IsNotExist(err) {
+		t.Errorf("the note of whose data it was should go with it: %v", err)
+	}
+}
+
+// When nothing proves two installs are the same plugin (here both are
+// unsigned), kept data comes back only if the owner chooses it.
+func TestPlugins_UnsignedKeptDataComesBackOnlyWhenChosen(t *testing.T) {
+	for _, chosen := range []bool{false, true} {
+		e := newPluginEnv(t)
+		if _, err := e.installTestPlugin(writeTestPlugin(t, testPluginManifest("1.0"), nil), nil); err != nil {
+			t.Fatal(err)
+		}
+		dataFile := filepath.Join(e.paths.PluginDir("adguard-home"), pluginDataImage)
+		mustWrite(t, dataFile, "data")
+		if err := e.agent.RemovePlugin(api.PluginRemoveRequest{ID: "adguard-home", KeepData: true}); err != nil {
+			t.Fatal(err)
+		}
+		preview, err := e.agent.StagePluginFile(bytes.NewReader(writeTestPlugin(t, testPluginManifest("1.0"), nil)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if k := preview.KeptData; k == nil || k.Name != "AdGuard Home" || k.KeyID != "" {
+			t.Fatalf("the sheet should ask, saying the earlier one wasn't signed: %+v", k)
+		}
+		_, err = e.agent.InstallPlugin(api.PluginInstallRequest{
+			StagingID: preview.StagingID, Settings: map[string]string{"password": "s3cret-pass"}, UseKeptData: chosen,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		e.runBackground()
+		_, statErr := os.Stat(dataFile)
+		if back := statErr == nil; back != chosen {
+			t.Errorf("chosen %v: the data came back %v", chosen, back)
+		}
+	}
+}
+
+// Data kept by RasBeacon 0.1 has no note of whose it was: the sheet asks,
+// without a name or key, and it stays aside unless chosen.
+func TestPlugins_KeptDataWithoutAnOwnerStaysAside(t *testing.T) {
+	e := newPluginEnv(t)
+	mustWrite(t, filepath.Join(e.paths.PluginKeptDir(), "adguard-home.img"), "old data")
+	preview, err := e.agent.StagePluginFile(bytes.NewReader(writeTestPlugin(t, testPluginManifest("1.0"), nil)))
+	if err != nil || preview.KeptData == nil || *preview.KeptData != (api.PluginKeptData{}) {
+		t.Fatalf("preview = %+v, %v", preview.KeptData, err)
+	}
+	if _, err := e.installTestPlugin(writeTestPlugin(t, testPluginManifest("1.0"), nil), nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(e.paths.PluginDir("adguard-home"), pluginDataImage)); err == nil {
+		t.Error("data of unknown origin must not be given to a new install unasked")
 	}
 }
 
@@ -389,7 +557,7 @@ func TestPlugins_SettingsChangeRestartsIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if e.runner.count("podman run") != runs+1 || !e.runner.ran("--env UPSTREAM=cloudflare") {
+	if e.runner.count("podman run") != runs+1 || !strings.Contains(e.runEnvs[len(e.runEnvs)-1], "UPSTREAM=cloudflare\n") {
 		t.Error("changing settings restarts it with them")
 	}
 	if p.Ports[0].Host != 3001 || !strings.Contains(e.readFile(e.paths.FirewallRules()), "tcp dport 3001 dnat ip to 10.89.0.2:3000") {
@@ -420,10 +588,12 @@ func TestPlugins_WaitsForTheVPNBeforeDownloading(t *testing.T) {
 }
 
 func TestPlugins_LogLines(t *testing.T) {
-	text := "2026-10-14T10:00:00.000000000+00:00 stdout F started\n2026-10-14T10:00:01.5+00:00 stderr F oops\nraw line\n"
+	text := "2026-10-14T10:00:00.000000000+00:00 stdout F started\n2026-10-14T12:00:01.5+02:00 stderr F oops\nraw line\n"
 	lines := lastLogLines(text, 2)
-	if len(lines) != 2 || !strings.HasSuffix(lines[0], " oops") || lines[1] != "raw line" {
-		t.Errorf("lines = %q", lines)
+	// Times are sent in UTC, for the page to show in the viewer's time.
+	want := []api.PluginLogLine{{Time: "2026-10-14T10:00:01Z", Text: "oops"}, {Text: "raw line"}}
+	if !reflect.DeepEqual(lines, want) {
+		t.Errorf("lines = %+v, want %+v", lines, want)
 	}
 }
 
@@ -436,10 +606,13 @@ func TestPlugins_PowerSocketShutsDown(t *testing.T) {
 	if _, err := e.installTestPlugin(writeTestPlugin(t, m, nil), nil); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"--device " + filepath.Join(e.paths.DevDir(), "i2c-1"), "--device " + filepath.Join(e.paths.DevDir(), "gpiochip0"), "RASBEACON_SOCKET=/run/rasbeacon/rbd.sock"} {
+	for _, want := range []string{"--device " + filepath.Join(e.paths.DevDir(), "i2c-1"), "--device " + filepath.Join(e.paths.DevDir(), "gpiochip0")} {
 		if !e.runner.ran(want) {
 			t.Errorf("missing %q", want)
 		}
+	}
+	if !strings.Contains(e.runEnvs[len(e.runEnvs)-1], "RASBEACON_SOCKET=/run/rasbeacon/rbd.sock\n") {
+		t.Errorf("the plugin should be told where the socket is: %q", e.runEnvs)
 	}
 	if e.runner.ran("mask=/sys/class/thermal") && strings.Contains(e.runner.commands[len(e.runner.commands)-1], "mask=") {
 		t.Error("with the temperature permission the sensors aren't hidden")
@@ -585,8 +758,8 @@ func TestPlugins_PasswordsKeepTheirSpaces(t *testing.T) {
 func TestPlugins_LongLogLinesAreJoined(t *testing.T) {
 	text := "2026-10-14T10:00:00Z stdout P part one, \n2026-10-14T10:00:00Z stdout F part two\n"
 	lines := lastLogLines(text, 10)
-	if len(lines) != 1 || !strings.HasSuffix(lines[0], " part one, part two") {
-		t.Errorf("lines = %q", lines)
+	if len(lines) != 1 || lines[0].Text != "part one, part two" {
+		t.Errorf("lines = %+v", lines)
 	}
 }
 
@@ -653,5 +826,77 @@ func TestPlugins_TooNewForThisRasBeaconIsRefused(t *testing.T) {
 	m["minRasBeacon"] = "0.1.0"
 	if _, err := e.agent.StagePluginFile(bytes.NewReader(writeTestPlugin(t, m, nil))); err != nil {
 		t.Errorf("a plugin for this version: %v", err)
+	}
+}
+
+func TestPlugins_TheBuiltInSourceCanBeRemovedAndAddedBack(t *testing.T) {
+	e := newClaimedEnv(t, false)
+	state, err := e.agent.SetPluginSources(api.PluginSourcesRequest{Sources: []string{"someone/more-plugins"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(state.Sources) != 1 || state.Sources[0].Source != "someone/more-plugins" || state.Sources[0].BuiltIn {
+		t.Errorf("without the built-in source listed, it is removed: %+v", state.Sources)
+	}
+	state, err = e.agent.SetPluginSources(api.PluginSourcesRequest{Sources: []string{"someone/more-plugins", "AAZAM476/rasbeacon-plugins"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(state.Sources) != 2 || !state.Sources[0].BuiltIn {
+		t.Errorf("typing its name brings it back: %+v", state.Sources)
+	}
+}
+
+// A plugin's password never reaches the diagnostics report, even when an
+// error message carries it.
+func TestDiagnostics_HidesPluginPasswords(t *testing.T) {
+	e := newPluginEnv(t)
+	if _, err := e.installTestPlugin(writeTestPlugin(t, testPluginManifest("1.0"), nil), nil); err != nil {
+		t.Fatal(err)
+	}
+	e.agent.mu.Lock()
+	e.agent.setPluginState("adguard-home", api.PluginFailed, "It couldn't start: bad password s3cret-pass")
+	e.agent.mu.Unlock()
+	if report := e.agent.Diagnostics(); strings.Contains(report, "s3cret-pass") {
+		t.Errorf("the plugin's password is in the report:\n%s", report)
+	}
+}
+
+// Plugins start with RasBeacon, and a change to the hotspot or the guest
+// network leaves them running: restarting them would cut AdGuard Home's DNS
+// or a Samba transfer for nothing.
+func TestPlugins_HotspotAndGuestChangesLeaveThemRunning(t *testing.T) {
+	e := newPluginEnv(t)
+	if _, err := e.installTestPlugin(writeTestPlugin(t, testPluginManifest("1.0"), nil), nil); err != nil {
+		t.Fatal(err)
+	}
+	runs := e.runner.count("podman run")
+
+	settings := e.agent.HotspotSettings()
+	settings.SSID = "New Name"
+	if err := e.agent.UpdateHotspotSettings(settings); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.agent.UpdateGuestSettings(api.GuestSettings{Enabled: false, SSID: "Guests"}); err != nil {
+		t.Fatal(err)
+	}
+	e.runBackground()
+	if got := e.runner.count("podman run"); got != runs {
+		t.Errorf("the plugin was started again %d times", got-runs)
+	}
+}
+
+// When the hotspot network moves (the upstream network uses 10.87.0.0/24),
+// the plugins' ports follow RasBeacon to its new address.
+func TestPlugins_PortsFollowTheHotspotNetworkWhenItMoves(t *testing.T) {
+	e := newPluginEnv(t)
+	if _, err := e.installTestPlugin(writeTestPlugin(t, testPluginManifest("1.0"), nil), nil); err != nil {
+		t.Fatal(err)
+	}
+	e.fakeUplink("wlan0", "10.87.0.50", "24", false)
+	e.check()
+	rules := e.readFile(e.paths.FirewallRules())
+	if !strings.Contains(rules, "ip daddr 10.88.0.1 tcp dport") || strings.Contains(rules, "ip daddr 10.87.0.1 tcp dport") {
+		t.Errorf("the plugin's port should be forwarded from 10.88.0.1:\n%s", rules)
 	}
 }

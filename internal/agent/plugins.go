@@ -742,6 +742,10 @@ func (a *Agent) RemovePlugin(req api.PluginRemoveRequest) error {
 		return err
 	}
 	image := a.cfg.Plugins.Installed[req.ID].Image
+	owner := keptDataOwner{PublicKey: a.cfg.Plugins.Installed[req.ID].PublicKey}
+	if live := a.plugins.live[req.ID]; live != nil && live.manifest != nil {
+		owner.Name = live.manifest.Name
+	}
 	a.mu.Unlock()
 
 	a.stopPluginContainer(req.ID)
@@ -751,9 +755,7 @@ func (a *Agent) RemovePlugin(req api.PluginRemoveRequest) error {
 	}
 	dir := a.paths.PluginDir(req.ID)
 	if req.KeepData {
-		if err := os.MkdirAll(a.paths.PluginKeptDir(), 0o700); err == nil {
-			_ = os.Rename(filepath.Join(dir, pluginDataImage), filepath.Join(a.paths.PluginKeptDir(), req.ID+".img"))
-		}
+		a.keepPluginData(req.ID, owner)
 	}
 	if err := os.RemoveAll(dir); err != nil {
 		slog.Warn("could not delete the plugin's files", "plugin", req.ID, "error", err)
@@ -790,17 +792,17 @@ func (a *Agent) PluginLogs(id string) (api.PluginLogs, error) {
 	}
 	data, err := os.ReadFile(a.pluginLogFile(id))
 	if err != nil {
-		return api.PluginLogs{Lines: []string{}}, nil
+		return api.PluginLogs{Lines: []api.PluginLogLine{}}, nil
 	}
 	return api.PluginLogs{Lines: lastLogLines(string(data), 500)}, nil
 }
 
-// lastLogLines reads Podman's k8s-file log and keeps the last n lines as
-// "<hh:mm:ss> <text>". Each log line is "<time> <stream> <tag> <text>":
+// lastLogLines reads Podman's k8s-file log and keeps the last n lines, each
+// with its time in UTC. Each log line is "<time> <stream> <tag> <text>":
 // the tag is F for a full line, or P for part of a long line that goes on
 // in the next one (those parts are joined back together).
-func lastLogLines(text string, n int) []string {
-	var lines []string
+func lastLogLines(text string, n int) []api.PluginLogLine {
+	var lines []api.PluginLogLine
 	partial := ""
 	for _, line := range strings.Split(strings.TrimRight(text, "\n"), "\n") {
 		if line == "" {
@@ -809,7 +811,7 @@ func lastLogLines(text string, n int) []string {
 		fields := strings.SplitN(line, " ", 4)
 		t, err := time.Parse(time.RFC3339Nano, fields[0])
 		if len(fields) < 3 || err != nil {
-			lines = append(lines, line) // not in Podman's format: as it is
+			lines = append(lines, api.PluginLogLine{Text: line}) // not in Podman's format: as it is
 			continue
 		}
 		content := ""
@@ -820,14 +822,14 @@ func lastLogLines(text string, n int) []string {
 			partial += content
 			continue
 		}
-		lines = append(lines, t.Local().Format("15:04:05")+" "+partial+content)
+		lines = append(lines, api.PluginLogLine{Time: t.UTC().Format(time.RFC3339), Text: partial + content})
 		partial = ""
 	}
 	if len(lines) > n {
 		lines = lines[len(lines)-n:]
 	}
 	if lines == nil {
-		lines = []string{}
+		lines = []api.PluginLogLine{}
 	}
 	return lines
 }
@@ -859,24 +861,34 @@ func (a *Agent) PluginDrives() (api.PluginDrives, error) {
 
 // pluginSources lists the catalog's sources. The caller holds a.mu.
 func (a *Agent) pluginSources() []api.PluginSource {
-	sources := []api.PluginSource{{Source: plugin.BuiltInSource, BuiltIn: true}}
+	sources := []api.PluginSource{}
+	if !a.cfg.Plugins.NoBuiltInSource {
+		sources = append(sources, api.PluginSource{Source: plugin.BuiltInSource, BuiltIn: true})
+	}
 	for _, s := range a.cfg.Plugins.Sources {
 		sources = append(sources, api.PluginSource{Source: s})
 	}
 	return sources
 }
 
-// SetPluginSources saves the extra catalog sources.
+// SetPluginSources saves the catalog's sources: the built-in one is kept
+// only if it is in the list (removing it is allowed; adding its name again
+// brings it back).
 func (a *Agent) SetPluginSources(req api.PluginSourcesRequest) (api.PluginsState, error) {
 	var sources []string
+	builtIn := false
 	for i, s := range req.Sources {
 		checked, err := plugin.CheckSource(s)
 		if err != nil {
 			return api.PluginsState{}, &config.ValidationError{Field: fmt.Sprintf("sources.%d", i), Message: "Enter a GitHub repository like owner/repo."}
 		}
-		// The built-in source is always there, and each source counts once
-		// (GitHub names don't care about capital letters).
-		if strings.EqualFold(checked, plugin.BuiltInSource) || slices.ContainsFunc(sources, func(x string) bool { return strings.EqualFold(x, checked) }) {
+		// Each source counts once (GitHub names don't care about capital
+		// letters).
+		if strings.EqualFold(checked, plugin.BuiltInSource) {
+			builtIn = true
+			continue
+		}
+		if slices.ContainsFunc(sources, func(x string) bool { return strings.EqualFold(x, checked) }) {
 			continue
 		}
 		sources = append(sources, checked)
@@ -891,6 +903,7 @@ func (a *Agent) SetPluginSources(req api.PluginSourcesRequest) (api.PluginsState
 	}
 	newCfg := a.cfg.Clone()
 	newCfg.Plugins.Sources = sources
+	newCfg.Plugins.NoBuiltInSource = !builtIn
 	err := config.WriteJSON(a.paths.ConfigFile(), newCfg, 0o644)
 	if err == nil {
 		a.cfg = newCfg

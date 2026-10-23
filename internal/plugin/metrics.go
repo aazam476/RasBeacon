@@ -122,9 +122,14 @@ func trimNumber(n float64) string {
 	return strconv.FormatFloat(n, 'f', 1, 64)
 }
 
-// groupThousands rounds and writes 12345 as "12,345".
+// groupThousands rounds and writes 12345 as "12,345". The rounded number is
+// written as a float, not converted to an int64 first, which would
+// overflow above about 9.2e18.
 func groupThousands(n float64) string {
-	s := strconv.FormatInt(int64(math.Round(n)), 10)
+	if math.IsInf(n, 0) || math.IsNaN(n) {
+		return strconv.FormatFloat(n, 'g', -1, 64)
+	}
+	s := strconv.FormatFloat(math.Round(n), 'f', 0, 64)
 	negative := strings.HasPrefix(s, "-")
 	s = strings.TrimPrefix(s, "-")
 	var b strings.Builder

@@ -32,6 +32,12 @@ func TestProbe(t *testing.T) {
 		{"redirect to a login page", func(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, "/login?from=hotel", http.StatusFound)
 		}, Portal, "/login?from=hotel"},
+		// A Location that isn't a web address would run as script when the
+		// UI opens it, so the check's own address is used instead.
+		{"script in the Location", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Location", "javascript:alert(1)")
+			w.WriteHeader(http.StatusFound)
+		}, Portal, "/generate_204"},
 		{"login page served in place", func(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte("<html>Welcome to Hotel Wi-Fi. Please accept the terms.</html>"))
 		}, Portal, "/generate_204"},

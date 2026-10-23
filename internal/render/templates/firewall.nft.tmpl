@@ -120,6 +120,16 @@ table inet rasbeacon {
 		# is forwarded (they can still reach RasBeacon itself).
 		iifname @lans ether saddr { {{range $i, $m := .PausedMACs}}{{if $i}}, {{end}}{{$m}}{{end}} } reject
 {{- end}}
+{{- if or .PausedIPv4 .PausedIPv6}}
+		# ... and nothing reaches them from outside, not even answers to
+		# connections they started before.
+{{- end}}
+{{- if .PausedIPv4}}
+		oifname @lans ip daddr { {{range $i, $a := .PausedIPv4}}{{if $i}}, {{end}}{{$a}}{{end}} } drop
+{{- end}}
+{{- if .PausedIPv6}}
+		oifname @lans ip6 daddr { {{range $i, $a := .PausedIPv6}}{{if $i}}, {{end}}{{$a}}{{end}} } drop
+{{- end}}
 
 		# Connections devices already started may continue, but only on the
 		# current path. When the path changes (for example from login mode
@@ -211,5 +221,24 @@ table inet rasbeacon {
 {{- if .TunnelDNS6}}
 		ip6 daddr { {{range $i, $a := .TunnelDNS6}}{{if $i}}, {{end}}{{$a}}{{end}} } oifname != "{{.TunnelInterface}}" reject
 {{- end}}
+	}
+}
+
+# Plugins all plug into one bridge ("{{.PluginBridge}}"), each with its own
+# port ("{{.PluginBridgePorts}}"). Packets between two ports of a bridge are
+# passed along by the bridge itself and never reach the table above, so
+# without this one any plugin could reach every other plugin, whatever its
+# permissions. The "forward" hook of a bridge table sees exactly those
+# packets (not the ones to RasBeacon itself), so dropping every one that
+# came in on a plugin's port leaves each plugin only what the rules above
+# allow it: RasBeacon itself, and (with permission) the internet and your
+# devices. Replaced the same way as the table above.
+table bridge rasbeacon
+delete table bridge rasbeacon
+
+table bridge rasbeacon {
+	chain forward {
+		type filter hook forward priority filter; policy accept;
+		iifname "{{.PluginBridgePorts}}" drop
 	}
 }

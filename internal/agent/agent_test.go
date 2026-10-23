@@ -7,10 +7,12 @@ package agent
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"sort"
@@ -35,6 +37,9 @@ type fakeRunner struct {
 	prefixOutputs map[string]string
 	// failing makes command lines starting with one of these fail.
 	failing []string
+	// effect, if set, runs for every command, for commands that write
+	// files (podman save).
+	effect func(args []string)
 }
 
 func (f *fakeRunner) Run(name string, args ...string) (string, error) {
@@ -42,6 +47,9 @@ func (f *fakeRunner) Run(name string, args ...string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.commands = append(f.commands, line)
+	if f.effect != nil {
+		f.effect(append([]string{name}, args...))
+	}
 	if out, ok := f.outputs[line]; ok {
 		return out, nil
 	}
@@ -116,6 +124,10 @@ func (ft *fakeTimers) runAll() {
 
 const iwInfoWithAP = "Wiphy phy1\n\tSupported interface modes:\n\t\t * managed\n\t\t * AP\n"
 
+// iwInfoDualBand is the same for a radio with both bands, like the USB
+// Archer T3U.
+const iwInfoDualBand = iwInfoWithAP + "\tBand 1:\n\tBand 2:\n"
+
 // testEnv is a fresh fake device.
 type testEnv struct {
 	t      *testing.T
@@ -123,6 +135,10 @@ type testEnv struct {
 	runner *fakeRunner
 	timers *fakeTimers
 	agent  *Agent
+
+	// runEnvs are the environment files the plugins were started with, as
+	// podman read them (newPluginEnv).
+	runEnvs []string
 
 	// dhcpServer is the address the fake DHCP probe reports ("" = none).
 	dhcpServer string
@@ -180,16 +196,26 @@ func newTestEnv(t *testing.T) *testEnv {
 	if err := os.MkdirAll(p.BootConfigDir(), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	// The real Wi-Fi regulatory database, as the image has it.
+	regulatory, err := os.ReadFile("../regdb/testdata/regulatory.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustWrite(t, p.RegulatoryDB(), string(regulatory))
 
 	runner := &fakeRunner{outputs: map[string]string{
 		"iw phy phy0 info": iwInfoWithAP,
-		"iw phy phy1 info": iwInfoWithAP,
+		"iw phy phy1 info": iwInfoDualBand,
 	}}
 	timers := &fakeTimers{}
 	a := New(p, runner)
 	a.afterFunc = timers.afterFunc
 	a.usbRadioWait = 0
 	a.sleep = func(time.Duration) {} // don't really wait in tests
+	// Every name is at 203.0.113.7 (a documentation address), with no DNS.
+	a.lookupIP = func(context.Context, string) ([]netip.Addr, error) {
+		return []netip.Addr{netip.MustParseAddr("203.0.113.7")}, nil
+	}
 	// A card with 10 GB free, whatever this computer's disk holds.
 	a.diskFree = func(string) (int64, error) { return 10 << 30, nil }
 	e := &testEnv{t: t, paths: p, runner: runner, timers: timers, agent: a}

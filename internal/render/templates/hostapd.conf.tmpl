@@ -59,6 +59,16 @@ wmm_enabled=1
 # Devices on the hotspot may talk to each other (AirPlay, printers, ...).
 ap_isolate=0
 auth_algs=1
+{{- if .AcceptMACFile}}
+# Only the devices on the owner's list may join (Settings: Hotspot, Allowed
+# devices). Devices on Ethernet don't go through hostapd, so they always can.
+macaddr_acl=1
+accept_mac_file={{.AcceptMACFile}}
+{{- end}}
+{{- if .MaxDevices}}
+# The most devices connected at once.
+max_num_sta={{.MaxDevices}}
+{{- end}}
 {{- if .Open}}
 # OPEN network: no password. This is only used for the first-boot setup
 # network when no setup.txt was provided, and it closes after setup.
@@ -75,12 +85,25 @@ ieee80211w=1
 sae_require_mfp=1
 # Allow both WPA3 password methods (hunting-and-pecking and hash-to-element).
 sae_pwe=2
+{{- else if eq .Security "wpa3"}}
+# WPA3 only (SAE): the safest; devices without WPA3 can't join. Protected
+# Management Frames are required (2).
+wpa_key_mgmt=SAE
+ieee80211w=2
+sae_pwe=2
 {{- else}}
 # WPA2 only: a compatibility setting for old devices.
 wpa_key_mgmt=WPA-PSK
 ieee80211w=0
 {{- end}}
 wpa_passphrase={{.Password}}
+# Keep the network-wide ("group") key instead of changing it every day.
+# Some Wi-Fi adapters and phones miss the change: they stay connected but
+# no longer receive broadcast messages, such as RasBeacon asking where a
+# device is (ARP), so Wi-Fi devices lose the internet while Ethernet
+# devices keep it. A new group key is still made whenever the hotspot
+# starts, and each device keeps its own key for everything else.
+wpa_group_rekey=0
 {{- end}}
 {{- if .Guest}}
 
@@ -102,6 +125,9 @@ utf8_ssid=1
 # Guests can't talk to each other.
 ap_isolate=1
 auth_algs=1
+{{- if .MaxDevices}}
+max_num_sta={{.MaxDevices}}
+{{- end}}
 wpa=2
 rsn_pairwise=CCMP
 {{- if eq .Security "wpa2-wpa3"}}
@@ -109,9 +135,14 @@ wpa_key_mgmt=WPA-PSK SAE
 ieee80211w=1
 sae_require_mfp=1
 sae_pwe=2
+{{- else if eq .Security "wpa3"}}
+wpa_key_mgmt=SAE
+ieee80211w=2
+sae_pwe=2
 {{- else}}
 wpa_key_mgmt=WPA-PSK
 ieee80211w=0
 {{- end}}
 wpa_passphrase={{.Guest.Password}}
+wpa_group_rekey=0
 {{- end}}

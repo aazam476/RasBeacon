@@ -43,8 +43,9 @@ const (
 
 // Options configure a Forwarder.
 type Options struct {
-	// Servers are the DoH servers' URLs, asked in turn (the last one that
-	// answered first).
+	// Servers are the DoH servers' URLs, asked in turn from the first. A
+	// server that just failed is skipped for a little while (see
+	// failurePause), unless every server has failed.
 	Servers []string
 	// Bootstrap are plain DNS servers (IP addresses, port 53) that look up
 	// the DoH servers' host names, asked in turn.
@@ -68,10 +69,15 @@ type Forwarder struct {
 	lookup    func(ctx context.Context, server, host string) ([]netip.Addr, error)
 	client    *http.Client
 
-	mu        sync.Mutex
-	preferred int                   // the server that answered last
-	known     map[string]knownAddrs // bootstrap answers by host name
+	mu       sync.Mutex
+	failedAt map[int]time.Time     // when each server last failed
+	known    map[string]knownAddrs // bootstrap answers by host name
+	now      func() time.Time
 }
+
+// failurePause is how long a server that failed is skipped, so a server
+// that is down doesn't slow every lookup by a whole timeout.
+const failurePause = 30 * time.Second
 
 type knownAddrs struct {
 	addrs []netip.Addr
@@ -85,6 +91,8 @@ func New(o Options) (*Forwarder, error) {
 		timeout:   o.Timeout,
 		lookup:    o.Lookup,
 		known:     map[string]knownAddrs{},
+		failedAt:  map[int]time.Time{},
+		now:       time.Now,
 	}
 	if len(o.Servers) == 0 {
 		return nil, errors.New("no DoH servers")
@@ -136,20 +144,31 @@ func (f *Forwarder) Exchange(ctx context.Context, query []byte) []byte {
 	q := bytes.Clone(query)
 	q[0], q[1] = 0, 0
 
+	// From the first server down; ones that failed a moment ago go last.
 	f.mu.Lock()
-	first := f.preferred
+	var order, resting []int
+	for n := range f.servers {
+		if failed, ok := f.failedAt[n]; ok && f.now().Sub(failed) < failurePause {
+			resting = append(resting, n)
+		} else {
+			order = append(order, n)
+		}
+	}
 	f.mu.Unlock()
 	var lastErr error
-	for i := range f.servers {
-		n := (first + i) % len(f.servers)
+	for _, n := range append(order, resting...) {
 		answer, err := f.ask(ctx, f.servers[n], q)
+		f.mu.Lock()
+		if err != nil {
+			f.failedAt[n] = f.now()
+		} else {
+			delete(f.failedAt, n)
+		}
+		f.mu.Unlock()
 		if err != nil {
 			lastErr = err
 			continue
 		}
-		f.mu.Lock()
-		f.preferred = n
-		f.mu.Unlock()
 		answer[0], answer[1] = query[0], query[1]
 		return answer
 	}

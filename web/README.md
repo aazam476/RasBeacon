@@ -37,7 +37,8 @@ npm run dev           # http://localhost:5173, against an rbweb on port 8080 (se
 npm run demo          # the same with the demo router: no device needed
 npm run build         # type-check + production build into dist/ (embedded into rbweb)
 npm run build:demo    # the demo, built into dist-demo/
-npm test              # unit tests (vitest) of the real provider's logic
+npm test              # the tests in test/ (logic, requests, components; see docs/testing/README.md)
+npm run coverage      # the same, and how much of src/ they run
 npm run typecheck
 npm run lint          # oxlint
 npm run format        # Prettier, 120-character lines (format:check only checks)
@@ -87,7 +88,6 @@ src/
       RealDeviceProvider.tsx   Every action, through the API; loading and refreshing
       api.ts                   One function per API route (docs/api.md), CSRF token, time limits
       logic.ts                 Pure logic: the phase, input checks, files, gestures, error mapping
-      logic.test.ts            Its unit tests
     demo/            The demo router, for `npm run demo` (only App.tsx imports it)
       DemoDeviceProvider.tsx   Demo implementation of every action
       mockData.ts              One consistent sample router
@@ -104,6 +104,11 @@ src/
   screens/           One folder per page (status, internet, vpn, clients, hotspot, guests, ssh,
                      https, system, portal), the setup/login/notice phases, and common/ for
                      descriptions of states shared by several pages (describe.ts)
+test/
+  logic/             Pure functions (logic.ts, describe.ts, the plugins' wording, Markdown)
+  requests/          Every API call: the request it sends, checked against docs/api.md
+  components/        The screens, clicked and typed into on phone and desktop sizes, and the
+                     real provider against a fake rbweb (see docs/testing/README.md)
 ```
 
 The screens are the same components on phones and computers; the few differences (a sheet's
@@ -123,7 +128,7 @@ on the device) and `DemoDeviceProvider` (`npm run demo`). `App.tsx` picks one by
   It sits inside `<HashRouter>` and uses `useLocation()` to load what the open page needs.
 - `api.ts` has one function per API route (`docs/api.md`), the CSRF token, `ApiError` and a time
   limit on every request.
-- `logic.ts` is the logic from the original UI, kept pure and unit-tested (`logic.test.ts`):
+- `logic.ts` is the logic from the original UI, kept pure and unit-tested (`test/logic/logic.test.ts`):
   `decidePhase`, the input checks, reading the add-network form's files (`fileToUpload`,
   `certificatesToUpload`), the VPN details form (`splitList`, `vpnDetailsRequest`), taps and
   swipes on the login page picture (`classifyGesture`, `pageSizeFor`), and turning the router's
@@ -228,19 +233,26 @@ API paths are under `/api/v1` and are the original client's functions.
 | `saveVpnDetails(profile, form)`                                   | POST `/settings/vpn/profile/save`                                              | Built by `vpnDetailsRequest`. Field keys are the form's field names.                                                                                           |
 | `generateVpnKey(profile)`                                         | POST `/settings/vpn/profile/generate-key`                                      | The screen has asked for confirmation.                                                                                                                         |
 | `setActiveVpnProfile(name)`, `removeVpnProfile(name)`             | POST `/settings/vpn/profile/activate`, `/remove`                               |                                                                                                                                                                |
+| `renameVpnProfile(name, newName)`                                 | POST `/settings/vpn/profile/rename`                                            | Field key: `name` (the router's `newName`).                                                                                                                    |
 | `disconnectUplink`, `renewDhcpLease`, `rescanEthernetPort`        | POST `/uplink/disconnect`, `/uplink/renew`, `/uplink/ethernet/scan`            | Then the status is loaded again.                                                                                                                               |
 | `runSpeedtest`                                                    | POST `/speedtest`                                                              | About 20 seconds; the answer is the new `status.speedtest`.                                                                                                    |
 | `setClientInternetAccess`, `disconnectClient`, `flushClientLease` | POST `/clients/internet-access`, `/clients/disconnect`, `/clients/flush-lease` | Then the status is loaded again.                                                                                                                               |
 | `saveHotspotSettings`                                             | PUT `/settings/hotspot`                                                        |                                                                                                                                                                |
-| `revealHotspotPassword(adminPassword)`                            | POST `/settings/hotspot/reveal-password`                                       | Answer with `hotspotPassword`.                                                                                                                                 |
+| `revealHotspotPassword()`                                         | POST `/settings/hotspot/reveal-password`                                       | Answer with `hotspotPassword`. Being logged in is enough.                                                                                                      |
+| `saveAccessSettings(settings)`                                    | PUT `/settings/access`                                                         | The allow list and device limit. Field keys: `allowed`, `maxDevices`.                                                                                          |
 | `saveGuestSettings`                                               | PUT `/settings/guest`                                                          |                                                                                                                                                                |
 | `saveSshSettings`                                                 | PUT `/settings/ssh`                                                            |                                                                                                                                                                |
 | `setHttpsEnabled`                                                 | PUT `/settings/https`                                                          |                                                                                                                                                                |
 | `makeNewCertificate`                                              | PUT `/settings/https` with `generateNew: true`                                 | The screen has asked for confirmation.                                                                                                                         |
 | `uploadCertificate({ certificate, privateKey })`                  | PUT `/settings/https`                                                          | Send both files' text (`await file.text()`) as `certificate` and `privateKey`.                                                                                 |
 | `installUpdate(file)`                                             | POST `/system/update`                                                          | Takes minutes; resolve when the router has accepted the file. `status.update` (installing, message) shows the rest.                                            |
-| `setCheckOnline`                                                  | PUT `/settings/updates`                                                        |                                                                                                                                                                |
+| `saveUpdateSettings(settings)`                                    | PUT `/settings/updates`                                                        | `{ checkHours, notifyUrl }`; the answer is the new `status.update`.                                                                                            |
+| `checkForUpdates`, `testUpdateNotification(url)`                  | POST `/system/update/check`, `/settings/updates/test`                          |                                                                                                                                                                |
+| `restartIntoUpdate`                                               | POST `/system/update/restart`                                                  | Then waits for the restart and reloads, like `reboot`                                                                                                          |
 | `reboot`                                                          | POST `/system/reboot`                                                          | Resolve when the router answers again.                                                                                                                         |
+| `shutDown`                                                        | POST `/system/shutdown`                                                        | Then the phase is the `off` notice.                                                                                                                            |
+| `saveHostname(name)`                                              | POST `/system/hostname`                                                        | Resolve when the router answers again, at the new name if the page was opened by the old one.                                                                  |
+| `backUp(password, plugins)`, `restore(file, password)`            | POST `/system/backup`, `/system/restore/upload` and `/system/restore`          | `plugins` is `settings`, `data` or `everything`. Field keys: `backupPassword`, `file`.                                                                         |
 | `factoryReset(adminPassword)`                                     | POST `/system/factory-reset`                                                   | Then the phase is `setup`.                                                                                                                                     |
 
 ### 6. Added to the router for this UI
@@ -287,16 +299,15 @@ These features of the mockups were added to the router for this UI (see `docs/ap
   address (`/#/hotspot`, or the old `/#hotspot`). Every page has a level-1 heading with its name.
 
 - **Switches that apply at once** have `role="switch"`: "Use the VPN", "Kill switch", "Use HTTPS
-  for these settings pages", "Check online for new versions" and each client's "Internet access
-  for <name>". Use `getByRole('switch', …)` or `getByLabel(…)` and click; they have no Save. On the
+  for these settings pages" and each client's "Internet access for <name>". Use `getByRole('switch', …)` or `getByLabel(…)` and click; they have no Save. On the
   VPN page, "Save" saves the server details, inside "Server details (advanced)" (click it open
   first).
 - **Settings saved with Save** are still checkboxes, drawn as switches: "Turn on the guest
   network", "Turn on SSH", "Metered connection (…)", "Hidden network (…)" and "Don't check the
   login server (unsafe)". That last one is in the add-network sheet's collapsed "Advanced"
   section: click it open first.
-- **Internet:** adding a network happens in a sheet that "Add manually", "Set up eduroam" or a
-  scan result opens. Only results that can be added are buttons (named after the network); the
+- **Internet:** adding a network happens in a sheet that "Add manually" or a scan result
+  opens. Only results that can be added are buttons (named after the network); the
   connected one, saved ones and unsupported ones are plain rows. "Add to list" adds the network
   and closes the sheet. "Save" is in a bar that appears at the bottom once the list has changes
   ("You have changes that are not saved yet.", with "Discard changes"). The Ethernet port role is

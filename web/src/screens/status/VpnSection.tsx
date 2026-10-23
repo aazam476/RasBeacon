@@ -50,6 +50,8 @@ export function VpnSection({ vpn }: { vpn: VPNStatus }) {
         subtitle="Block traffic if the VPN drops"
         checked={vpn.killSwitch}
         onChange={setKillSwitch}
+        // Saving one switch sends the other's saved value too, so wait for the settings.
+        disabled={!vpnSettings.data}
       />
     </Section>
   );

@@ -1,5 +1,5 @@
 import { Link } from 'react-router';
-import { FALLBACK_LOGIN_URL } from '@/data/constants';
+import { loginPageAddress } from '@/data/constants';
 import type { PortalStatus } from '@/data/types';
 import { cn } from '@/lib/cn';
 import { formatCountdown } from '@/lib/format';
@@ -31,7 +31,7 @@ export function LoginPageLink({ portal, className }: { portal: PortalStatus; cla
   }
 
   return (
-    <a href={portal.loginUrl || FALLBACK_LOGIN_URL} target="_blank" rel="noreferrer" className={classes}>
+    <a href={loginPageAddress(portal.loginUrl)} target="_blank" rel="noreferrer" className={classes}>
       <Icon name="open_in_new" size={16} />
       <span>Open the login page</span>
     </a>

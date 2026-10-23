@@ -62,6 +62,10 @@ func (p Paths) ContainersDir() string { return p.join("persistent", "containers"
 // written, and its socket to rbd is.
 func (p Paths) PluginRunDir(id string) string { return filepath.Join(p.RunDir(), "plugins", id) }
 
+// PluginEnvFile holds a plugin's environment variables (its settings, with
+// passwords) for podman, while its container is being started.
+func (p Paths) PluginEnvFile(id string) string { return filepath.Join(p.PluginRunDir(id), "env") }
+
 // DriveMountDir is where a USB drive is mounted for a plugin.
 func (p Paths) DriveMountDir(uuid string) string { return filepath.Join(p.RunDir(), "drives", uuid) }
 
@@ -74,6 +78,9 @@ func (p Paths) SwapFile() string { return p.join("persistent", "swapfile") }
 
 // ProcSwaps lists the swap areas in use.
 func (p Paths) ProcSwaps() string { return p.join("proc", "swaps") }
+
+// RegulatoryDB is the Wi-Fi regulatory database (see internal/regdb).
+func (p Paths) RegulatoryDB() string { return p.join("lib", "firmware", "regulatory.db") }
 
 // DataDir is RasBeacon's directory on the persistent partition. A factory
 // reset deletes everything inside it.
@@ -162,6 +169,10 @@ func (p Paths) APISocket() string { return filepath.Join(p.RunDir(), "api.sock")
 
 // HostapdConfig is the generated hostapd (hotspot) configuration.
 func (p Paths) HostapdConfig() string { return filepath.Join(p.RunDir(), "hostapd.conf") }
+
+// HostapdAcceptFile lists the devices allowed on the hotspot, when the
+// owner turned the allow list on.
+func (p Paths) HostapdAcceptFile() string { return filepath.Join(p.RunDir(), "hostapd.accept") }
 
 // DnsmasqConfig is the generated DHCP/DNS server configuration.
 func (p Paths) DnsmasqConfig() string { return filepath.Join(p.RunDir(), "dnsmasq.conf") }

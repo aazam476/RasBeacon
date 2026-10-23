@@ -1,12 +1,26 @@
 import { useState } from 'react';
 import { useDevice } from '@/data/device';
 import type { VPNSettings } from '@/data/types';
-import { AlertDialog, BreakableText, Choice, ChoiceList, IconButton, Row, Section } from '@/ui';
+import {
+  AlertDialog,
+  BreakableText,
+  Choice,
+  ChoiceList,
+  EditButton,
+  IconButton,
+  RenameSheet,
+  Row,
+  Section,
+} from '@/ui';
 
-/** The imported WireGuard profiles: picking one makes it the tunnel in use; each can be removed. */
+/**
+ * The imported WireGuard profiles: picking one makes it the tunnel in use; each can be renamed
+ * (the pencil, shown on hover with a mouse) and removed.
+ */
 export function ProfilesSection({ settings }: { settings: VPNSettings }) {
-  const { setActiveVpnProfile, removeVpnProfile } = useDevice();
+  const { setActiveVpnProfile, removeVpnProfile, renameVpnProfile } = useDevice();
   const [removing, setRemoving] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState<string | null>(null);
 
   return (
     <Section title="WireGuard profiles" footer="The checked profile is the one in use.">
@@ -23,18 +37,31 @@ export function ProfilesSection({ settings }: { settings: VPNSettings }) {
               mono
               icon="description"
               trailing={
-                <IconButton
-                  icon="delete"
-                  ariaLabel={`Remove ${profile.name}`}
-                  className="hover:text-red"
-                  onClick={() => setRemoving(profile.name)}
-                />
+                <>
+                  <EditButton label={`Rename ${profile.name}`} onClick={() => setRenaming(profile.name)} />
+                  <IconButton
+                    icon="delete"
+                    ariaLabel={`Remove ${profile.name}`}
+                    className="hover:text-red"
+                    onClick={() => setRemoving(profile.name)}
+                  />
+                </>
               }
             />
           ))}
         </ChoiceList>
       )}
 
+      {renaming && (
+        <RenameSheet
+          title="Rename profile"
+          label="Name"
+          initial={renaming}
+          maxLength={64}
+          onSave={(name) => renameVpnProfile(renaming, name)}
+          onClose={() => setRenaming(null)}
+        />
+      )}
       {removing && (
         <AlertDialog
           title={`Remove ${removing}?`}

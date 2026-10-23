@@ -31,6 +31,8 @@ interface SheetProps {
    * when it succeeds the sheet closes, and when it fails it stays and shows why.
    */
   onConfirm: () => Promise<void>;
+  /** Grays out the confirm button (and Enter does nothing), e.g. while a required field is empty. */
+  confirmDisabled?: boolean;
   onClose: () => void;
   /**
    * The content, usually `Section`s of fields. Pass a function to put the messages of a
@@ -71,6 +73,7 @@ export function Sheet({
   tone = 'default',
   size = 'md',
   onConfirm,
+  confirmDisabled = false,
   onClose,
   children,
 }: SheetProps) {
@@ -191,6 +194,7 @@ export function Sheet({
   // --- Content --------------------------------------------------------------------------------
 
   async function confirm() {
+    if (confirmDisabled) return;
     if (await confirming.run()) dismiss();
   }
 
@@ -209,7 +213,13 @@ export function Sheet({
     </Button>
   );
   const confirmButton = (
-    <Button type="submit" size={buttonSize} variant={tone === 'danger' ? 'danger-filled' : 'primary'} loading={busy}>
+    <Button
+      type="submit"
+      size={buttonSize}
+      variant={tone === 'danger' ? 'danger-filled' : 'primary'}
+      loading={busy}
+      disabled={confirmDisabled && !busy}
+    >
       {busy ? busyLabel : confirmLabel}
     </Button>
   );
@@ -262,12 +272,18 @@ export function Sheet({
               onPointerCancel={(event) => onPointerUp(event, true)}
             >
               <div aria-hidden="true" className="mx-auto mt-[5px] h-[5px] w-9 rounded-full bg-label-3/45" />
-              <div className="grid grid-cols-[minmax(max-content,1fr)_minmax(0,auto)_minmax(max-content,1fr)] items-center gap-2 px-4 pt-1.5 pb-3">
-                <span className="justify-self-start">{cancelButton}</span>
-                <h2 id={titleId} className="text-center text-headline text-balance text-label">
-                  {title}
-                </h2>
-                <span className="justify-self-end">{confirmButton}</span>
+              {/* With large text the buttons leave no room beside the title, so it moves under them. */}
+              <div className="@container px-4 pt-1.5 pb-3">
+                <div className="grid grid-cols-[minmax(max-content,1fr)_minmax(0,auto)_minmax(max-content,1fr)] items-center gap-2 @max-[18rem]:grid-cols-2">
+                  <span className="justify-self-start">{cancelButton}</span>
+                  <h2
+                    id={titleId}
+                    className="text-center text-headline text-balance text-label @max-[18rem]:col-span-2 @max-[18rem]:row-start-2"
+                  >
+                    {title}
+                  </h2>
+                  <span className="justify-self-end">{confirmButton}</span>
+                </div>
               </div>
             </div>
           )}

@@ -1,10 +1,12 @@
 # Third-party components and redistribution
 
 RasBeacon's own code (this repository) is licensed under **Apache-2.0**
-(see [../LICENSE](../LICENSE)). Two things were copied from other projects:
-Cloudflare's speed test library, unchanged, with its license next to it in
-`internal/speedtest/cloudflare/`, and the outlines of the Material Symbols
-icons the web UI uses (`web/src/ui/icons.ts`). Both are listed below.
+(see [../LICENSE](../LICENSE)). Three things were copied from other
+projects: Cloudflare's speed test library, unchanged, with its license next
+to it in `internal/speedtest/cloudflare/`, the outlines of the Material
+Symbols icons the web UI uses (`web/src/ui/icons.ts`), and, for the tests
+only, the Wi-Fi regulatory database (`internal/regdb/testdata/`, with its
+license next to it). All are listed below.
 
 The released SD card images also contain software and firmware from others.
 This file lists what, and what redistributing the images requires.
@@ -25,6 +27,7 @@ This file lists what, and what redistributing the images requires.
 | rsc.io/qr 0.2.0 (QR codes, in rbd) | Go module | BSD-3-Clause |
 | Cloudflare speed test library 1.14.1 (in rbd, run in the headless browser) | github.com/cloudflare/speedtest (npm `@cloudflare/speedtest`) | MIT (`internal/speedtest/cloudflare/LICENSE`) |
 | Go standard library (in rbd and rbweb) | go.dev | BSD-3-Clause |
+| Wi-Fi regulatory database (`wireless-regdb` package in the images; a copy in `internal/regdb/testdata/` for the tests) | git.kernel.org wireless-regdb | ISC |
 
 The build tools (rpi-image-gen, Vite, TypeScript, Tailwind CSS, oxlint,
 Prettier, Vitest, Playwright, ...)
@@ -32,11 +35,13 @@ are used to build or test RasBeacon. They are not shipped in the images.
 
 ## Obligations when redistributing the images
 
-1. **Corresponding source for GPL and LGPL packages.** From milestone 6,
-   each release will include a `sources-<version>.tar` built from the exact
-   package versions in the image. Until then, test images are built from
-   public Debian and Raspberry Pi archives at the versions recorded in the
-   image's package list.
+1. **Corresponding source for GPL and LGPL packages.** Each release
+   includes `rasbeacon-<board>-<version>.packages.txt`, which lists every
+   package in the image with its source package and exact version. The
+   sources are in the public Debian and Raspberry Pi archives at those
+   versions (snapshot.debian.org keeps every version), and a written offer
+   covers anyone who can't get them there. See
+   [docs/source-code.md](../docs/source-code.md).
 2. **Keep the copyright files.** The images keep every package's
    `/usr/share/doc/*/copyright`.
 3. **Firmware:** keep the firmware license files that ship with the firmware

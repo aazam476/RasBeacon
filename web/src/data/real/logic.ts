@@ -13,6 +13,7 @@
 import type { AppPhase } from '../device';
 import { FieldErrors } from '../errors';
 import type {
+  AdminPasswordForm,
   GuestSettings,
   NewNetworkForm,
   PictureBox,
@@ -106,6 +107,15 @@ export function checkSetupForm(form: SetupForm): Errors {
   });
 }
 
+/** The new admin password form. Keys: currentPassword, newPassword, newPasswordConfirm. */
+export function checkAdminPasswordForm(form: AdminPasswordForm): Errors {
+  return found({
+    currentPassword: form.currentPassword === '' ? 'Enter the current password.' : null,
+    newPassword: checkAdminPassword(form.newPassword),
+    newPasswordConfirm: form.newPassword === form.newPasswordConfirm ? null : "The two passwords don't match.",
+  });
+}
+
 /** The guest network form. Keys: ssid, password. */
 export function checkGuestForm(settings: GuestSettings): Errors {
   if (!settings.enabled) return {};
@@ -140,14 +150,9 @@ export function checkNewNetwork(form: NewNetworkForm, list: SavedNetwork[]): Err
     } else if (!form.password) {
       errors.password = 'Enter your password.';
     }
-    if (!form.allowNoCertificateCheck) {
-      if (form.caCertFiles.length === 0) {
-        errors.caCert = "Choose the network's CA certificate file (your institution publishes it).";
-      }
-      if (!form.serverName) errors.serverName = "Enter the login server's name.";
-      else if (!SERVER_NAME.test(form.serverName.trim())) {
-        errors.serverName = 'Must look like radius.example.edu or *.example.edu.';
-      }
+    // Both optional: without them, RasBeacon trusts the login server it meets first.
+    if (!form.allowNoCertificateCheck && form.serverName.trim() && !SERVER_NAME.test(form.serverName.trim())) {
+      errors.serverName = 'Must look like radius.example.com or *.example.com.';
     }
   }
   return errors;

@@ -28,20 +28,22 @@ import { demoQrSvg } from './qrPicture';
 import {
   checkGuestSettings,
   checkHotspotSettings,
+  checkNewAdminPassword,
   checkNewNetwork,
   checkSetupForm,
   checkWifiPassword,
   checkWireGuardFile,
+  demoHotspotChannels,
 } from './rules';
 import { CLOSED_BROWSER, createDemoState, SCENARIOS, UNREACHABLE, type DemoState } from './scenarios';
 
 /**
- * Like the router: on a metered connection, devices that used the data limit are paused until the
- * counters are reset or the limit is raised.
+ * Like the router: devices that used the data limit are paused until the counters are reset or the
+ * limit is raised.
  */
 function applyUsageLimit(d: DemoState) {
   const { limitMb } = d.router.usageSettings;
-  const limit = d.router.hotspotSettings.metered && limitMb > 0 ? limitMb * 1_000_000 : 0;
+  const limit = limitMb > 0 ? limitMb * 1_000_000 : 0;
   let paused = 0;
   for (const client of d.router.status.clients) {
     const over = limit > 0 && client.downBytes + client.upBytes >= limit;
@@ -233,7 +235,12 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
       retry: async () => {
         await wait(900);
         change((d) => {
-          if (d.phase.kind === 'unreachable' || d.phase.kind === 'loading') d.phase = { kind: 'ready' };
+          if (
+            d.phase.kind === 'unreachable' ||
+            d.phase.kind === 'loading' ||
+            (d.phase.kind === 'notice' && d.phase.notice === 'off')
+          )
+            d.phase = { kind: 'ready' };
         });
       },
       reload: async (what: DataKey) => {
@@ -400,8 +407,12 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
       renewDhcpLease: () => wait(1200),
       rescanEthernetPort: () => wait(1200),
       runSpeedtest: async () => {
+        change((d) => {
+          d.router.status.speedtest.running = true;
+        });
         await wait(4000);
         change((d) => {
+          d.router.status.speedtest.running = false;
           d.router.status.speedtest.last = {
             server: 'San Jose, CA (SJC)',
             ageSeconds: 0,
@@ -419,7 +430,8 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
           d.router.status.vpn = {
             ...d.router.status.vpn,
             enabled,
-            state: enabled ? 'up' : 'off',
+            // Off with the kill switch on: nothing gets through.
+            state: enabled ? 'up' : d.router.vpnSettings.killSwitch ? 'blocked' : 'off',
             handshakeAgeSeconds: enabled ? 1 : d.router.status.vpn.handshakeAgeSeconds,
           };
         });
@@ -429,8 +441,17 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
         change((d) => {
           d.router.vpnSettings.killSwitch = killSwitch;
           const vpn = d.router.status.vpn;
-          // A broken tunnel lets traffic out directly once the kill switch is off, and blocks it once on.
-          const state = vpn.state === 'down' && !killSwitch ? 'direct' : vpn.state === 'direct' ? 'down' : vpn.state;
+          // A broken tunnel lets traffic out directly once the kill switch is off, and blocks it once on;
+          // with the VPN off, the kill switch blocks everything.
+          const state = !vpn.enabled
+            ? killSwitch
+              ? 'blocked'
+              : 'off'
+            : vpn.state === 'down' && !killSwitch
+              ? 'direct'
+              : vpn.state === 'direct'
+                ? 'down'
+                : vpn.state;
           d.router.status.vpn = { ...vpn, killSwitch, state };
         });
       },
@@ -440,6 +461,18 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
           const profile = d.router.vpnSettings.profiles.find((candidate) => candidate.name === name);
           d.router.vpnSettings.activeProfile = name;
           d.router.status.vpn = { ...d.router.status.vpn, endpoint: profile?.endpoint ?? '', handshakeAgeSeconds: 1 };
+        });
+      },
+      renameVpnProfile: async (name, newName) => {
+        await wait(600);
+        if (newName !== name && currentDemo.router.vpnSettings.profiles.some((profile) => profile.name === newName)) {
+          throw new FieldErrors({ name: 'Another profile already has this name.' });
+        }
+        change((d) => {
+          const settings = d.router.vpnSettings;
+          const profile = settings.profiles.find((p) => p.name === name);
+          if (profile) profile.name = newName;
+          if (settings.activeProfile === name) settings.activeProfile = newName;
         });
       },
       removeVpnProfile: async (name) => {
@@ -512,9 +545,19 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
         });
       },
 
+      hotspotChannels: async (country) => {
+        await wait(300);
+        return demoHotspotChannels(country);
+      },
       saveHotspotSettings: async (settings) => {
         await wait(1500);
         failIfAny(checkHotspotSettings(settings));
+        if (
+          settings.channel !== 0 &&
+          !demoHotspotChannels(settings.country)[settings.band].includes(settings.channel)
+        ) {
+          failIfAny({ channel: "This channel isn't allowed in this country." });
+        }
         change((d) => {
           const { password, ...rest } = settings;
           d.router.hotspotSettings = rest;
@@ -615,9 +658,9 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
           });
         }
         if (servers.length > 4) throw new FieldErrors({ servers: 'At most 4 DNS servers.' });
-        const plain = servers.filter(isIp);
-        const doh = servers.filter((server) => !isIp(server)).map((server) => full(server)!.toLowerCase());
-        change((d) => void (d.router.dnsSettings = { servers: [...plain, ...doh], withVpn }));
+        // In the order typed, as the router keeps them.
+        const ordered = servers.map((server) => (isIp(server) ? server : full(server)!.toLowerCase()));
+        change((d) => void (d.router.dnsSettings = { servers: ordered, withVpn }));
       },
       saveSshSettings: async (settings) => {
         await wait(900);
@@ -633,7 +676,7 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
           https.enabled = enabled;
           if (enabled && !https.fingerprint) {
             Object.assign(https, {
-              subject: 'CN=rasbeacon.local',
+              subject: 'CN=RasBeacon 7162',
               fingerprint: randomFingerprint(),
               validUntil: '2036-10-06',
             });
@@ -645,7 +688,7 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
         change((d) => {
           Object.assign(d.router.httpsSettings, {
             uploaded: false,
-            subject: 'CN=rasbeacon.local',
+            subject: 'CN=RasBeacon 7162',
             fingerprint: randomFingerprint(),
             validUntil: '2036-10-06',
           });
@@ -673,37 +716,99 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
         await wait(4000);
         if (!file.name.endsWith('.rbupdate')) throw new Error('This is not a RasBeacon update file (.rbupdate).');
         change((d) => void (d.router.status.update.installing = true));
-        // The router restarts into the new version a little later.
+        // The router restarts into the new version a little later, and then offers the next step,
+        // if there is one.
         setTimeout(
           () =>
             change((d) => {
-              d.router.status.version = 'v1.1.0';
+              const { latestVersion = 'v1.1.0', newerVersion } = d.router.status.update;
+              d.router.status.version = latestVersion;
               Object.assign(d.router.status.update, {
                 installing: false,
-                message: 'Updated to v1.1.0.',
-                latestVersion: undefined,
-                latestUrl: undefined,
+                message: `Updated to ${latestVersion}.`,
+                latestVersion: newerVersion,
+                latestUrl: newerVersion && `https://github.com/rasbeacon/rasbeacon/releases/tag/${newerVersion}`,
+                newerVersion: undefined,
               });
             }),
           8000,
         );
       },
-      setCheckOnline: async (enabled) => {
-        await wait(700);
+      saveUpdateSettings: async (settings) => {
+        await wait(600);
+        if (settings.notifyUrl && !/^https?:\/\/[^/\s]+/.test(settings.notifyUrl)) {
+          throw new FieldErrors({ notifyUrl: 'Enter a web address like https://ntfy.sh/your-topic.' });
+        }
         change((d) => {
-          Object.assign(
-            d.router.status.update,
-            enabled
-              ? {
-                  checkOnline: true,
-                  latestVersion: 'v1.1.0',
-                  latestUrl: 'https://github.com/rasbeacon/rasbeacon/releases/tag/v1.1.0',
-                }
-              : { checkOnline: false, latestVersion: undefined, latestUrl: undefined },
-          );
+          d.router.updateSettings = settings;
+          d.router.status.update.checkHours = settings.checkHours;
         });
       },
+      saveAccessSettings: async (settings) => {
+        await wait(1200);
+        const allowed: string[] = [];
+        for (const text of settings.allowed) {
+          const mac = text.trim().toLowerCase().replaceAll('-', ':');
+          if (!/^[0-9a-f]{2}(:[0-9a-f]{2}){5}$/.test(mac)) {
+            throw new FieldErrors({ allowed: `"${text.trim()}" is not a MAC address such as 3a:1f:22:aa:bb:cc.` });
+          }
+          if (!allowed.includes(mac)) allowed.push(mac);
+        }
+        if (settings.allowListOn && allowed.length === 0) {
+          throw new FieldErrors({ allowed: 'Add at least one device, or nobody could join over Wi-Fi.' });
+        }
+        if (settings.maxDevices < 0 || settings.maxDevices > 231) {
+          throw new FieldErrors({ maxDevices: 'Choose a number from 1 to 231, or no limit.' });
+        }
+        change((d) => void (d.router.accessSettings = { ...settings, allowed }));
+      },
+      checkForUpdates: async () => {
+        await wait(1500);
+        change((d) => {
+          Object.assign(d.router.status.update, {
+            lastChecked: new Date().toISOString(),
+            checkError: undefined,
+            latestVersion: 'v1.1.0',
+            latestUrl: 'https://github.com/rasbeacon/rasbeacon/releases/tag/v1.1.0',
+          });
+        });
+      },
+      testUpdateNotification: async (url) => {
+        await wait(1000);
+        if (!url && !currentDemo.router.updateSettings.notifyUrl) {
+          throw new FieldErrors({ notifyUrl: 'Enter the address first.' });
+        }
+      },
       reboot: () => wait(3000),
+      restartIntoUpdate: async () => {
+        await wait(3000);
+        change((d) => {
+          const { message } = d.router.status.update;
+          const installed = /Update (\S+) is installed/.exec(message ?? '')?.[1] ?? 'v1.1.0';
+          d.router.status.version = installed;
+          Object.assign(d.router.status.update, { restartPending: false, message: `Updated to ${installed}.` });
+        });
+      },
+      shutDown: async () => {
+        await wait(1500);
+        change((d) => void (d.phase = { kind: 'notice', notice: 'off' }));
+      },
+      saveHostname: async (hostname) => {
+        await wait(1200);
+        const name = hostname.trim().toLowerCase();
+        if (!/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(name)) {
+          throw new FieldErrors({
+            hostname: 'Use 1 to 63 lowercase letters, digits and hyphens, not starting or ending with a hyphen.',
+          });
+        }
+        if (currentDemo.router.status.clients.some((c) => c.hostname.toLowerCase() === name)) {
+          throw new FieldErrors({ hostname: 'A device on the hotspot already uses this name.' });
+        }
+        await wait(3000);
+        change((d) => {
+          d.router.status.device.hostname = `${name}.lan`;
+        });
+      },
       previewPluginFile: async (file) => {
         await wait(1200);
         if (!file.name.endsWith('.rba')) throw new FieldErrors({ file: 'This is not a RasBeacon plugin (.rba) file.' });
@@ -712,7 +817,15 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
           PLUGIN_DEFINITIONS.find((d) => file.name.startsWith(d.id.split('-')[0])) ?? definitionOf('trip-notes')!;
         const stagingId = newStagingId('file');
         staged.set(stagingId, { id: definition.id, source: 'file' });
-        return { ...previewOf(definition, currentDemo.router.plugins, stagingId), source: 'file' };
+        return {
+          ...previewOf(
+            definition,
+            currentDemo.router.plugins,
+            stagingId,
+            currentDemo.router.keptPluginData[definition.id],
+          ),
+          source: 'file',
+        };
       },
       pluginCatalog: async (refresh) => {
         await wait(refresh ? 1600 : 500);
@@ -727,7 +840,12 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
           throw new FieldErrors({ file: "This plugin isn't in the catalog any more. Check the catalog again." });
         const stagingId = newStagingId('catalog');
         staged.set(stagingId, { id: definition.id, source });
-        return previewOf(definition, currentDemo.router.plugins, stagingId);
+        return previewOf(
+          definition,
+          currentDemo.router.plugins,
+          stagingId,
+          currentDemo.router.keptPluginData[definition.id],
+        );
       },
       previewPluginUpdate: async (id) => {
         await wait(1800);
@@ -735,7 +853,12 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
         if (!definition) throw new Error('No update for this plugin is in the catalog.');
         const stagingId = newStagingId('update');
         staged.set(stagingId, { id, source: definition.source });
-        return previewOf(definition, currentDemo.router.plugins, stagingId);
+        return previewOf(
+          definition,
+          currentDemo.router.plugins,
+          stagingId,
+          currentDemo.router.keptPluginData[definition.id],
+        );
       },
       installPlugin: async (stagingId, choices) => {
         await wait(700);
@@ -752,6 +875,7 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
         const existing = plugins.plugins.find((p) => p.id === definition.id);
         const address = existing?.address ?? `10.89.0.${2 + plugins.plugins.length}`;
         change((d) => {
+          delete d.router.keptPluginData[definition.id]; // given back or not, the question is answered
           const list = d.router.plugins.plugins;
           const plugin: Plugin = {
             ...installedPlugin(definition, address, choices, 'installing'),
@@ -821,9 +945,15 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
           );
         });
       },
-      removePlugin: async (id) => {
+      removePlugin: async (id, keepData) => {
         await wait(1200);
-        change((d) => void (d.router.plugins.plugins = d.router.plugins.plugins.filter((p) => p.id !== id)));
+        change((d) => {
+          const removed = d.router.plugins.plugins.find((p) => p.id === id);
+          d.router.plugins.plugins = d.router.plugins.plugins.filter((p) => p.id !== id);
+          // Like the router: data of an unsigned plugin isn't known to be the next one's, so its
+          // next install asks. (A signed plugin's comes back to the same key by itself.)
+          if (keepData && removed && !removed.signed) d.router.keptPluginData[id] = { name: removed.name };
+        });
       },
       pluginLogs: async (id) => {
         await wait(400);
@@ -844,19 +974,19 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
         });
         failIfAny(errors);
         change((d) => {
-          d.router.plugins.sources = [
-            d.router.plugins.sources[0],
-            ...sources.map((source) => ({ source: source.trim(), builtIn: false })),
-          ];
+          // The built-in source only if it is still listed (it can be removed, and added back).
+          const builtIn = 'aazam476/RasBeacon-plugins';
+          const unique = [...new Set(sources.map((source) => source.trim()))];
+          d.router.plugins.sources = unique.map((source) => ({
+            source,
+            builtIn: source.toLowerCase() === builtIn.toLowerCase(),
+          }));
         });
       },
 
-      backUp: async (adminPassword, backupPassword) => {
+      backUp: async (backupPassword) => {
         await wait(1500);
-        const errors: Record<string, string> = {};
-        if (adminPassword === '' || adminPassword === 'wrong') errors.adminPassword = 'Wrong password.';
-        if (backupPassword.length < 8) errors.backupPassword = 'Use at least 8 characters.';
-        failIfAny(errors);
+        if (backupPassword.length < 8) throw new FieldErrors({ backupPassword: 'Use at least 8 characters.' });
         // The demo's "backup" is a small text file.
         const url = URL.createObjectURL(new Blob(['RasBeacon demo backup\n'], { type: 'application/octet-stream' }));
         const link = document.createElement('a');
@@ -865,17 +995,22 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
         link.click();
         setTimeout(() => URL.revokeObjectURL(url), 60_000);
       },
-      restore: async (file, adminPassword, backupPassword) => {
+      restore: async (file, backupPassword) => {
         await wait(2000);
         const errors: Record<string, string> = {};
         if (!file.name.endsWith('.rbbackup')) errors.file = 'This is not a RasBeacon backup (.rbbackup) file.';
-        if (adminPassword === '' || adminPassword === 'wrong') errors.adminPassword = 'Wrong password.';
         if (backupPassword === 'wrong' || backupPassword.length < 8) {
           errors.backupPassword = 'The password is wrong, or the backup file is damaged.';
         }
         failIfAny(errors);
       },
 
+      changeAdminPassword: async (form) => {
+        await wait(1200);
+        const errors = checkNewAdminPassword(form);
+        if (form.currentPassword === 'wrong') errors.currentPassword = 'Wrong password.';
+        failIfAny(errors);
+      },
       factoryReset: async (adminPassword) => {
         await wait(1500);
         if (adminPassword === '' || adminPassword === 'wrong') throw new Error('Wrong password.');
@@ -908,8 +1043,10 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
       sshSettings: loadable('sshSettings', router.sshSettings),
       dnsSettings: loadable('dnsSettings', router.dnsSettings),
       swapSettings: loadable('swapSettings', router.swapSettings),
+      updateSettings: loadable('updateSettings', router.updateSettings),
+      accessSettings: loadable('accessSettings', router.accessSettings),
       plugins: loadable('plugins', router.plugins),
-      usageSettings: loadable('usageSettings', { ...router.usageSettings, metered: router.hotspotSettings.metered }),
+      usageSettings: loadable('usageSettings', router.usageSettings),
       httpsSettings: loadable('httpsSettings', router.httpsSettings),
       nearbyNetworks: demo.nearbyNetworks,
       portal: loadable('portal', router.status.portal),
@@ -920,23 +1057,18 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
 
   // The one action that answers with a value from the state, so it is made with the state.
   const { hotspotPassword } = demo.router;
-  const revealHotspotPassword = useCallback(
-    async (adminPassword: string) => {
-      await wait(800);
-      if (failActions) throw new Error(UNREACHABLE);
-      if (adminPassword === '' || adminPassword === 'wrong') throw new Error('Wrong password.');
-      return hotspotPassword;
-    },
-    [hotspotPassword, failActions],
-  );
+  const revealHotspotPassword = useCallback(async () => {
+    await wait(500);
+    if (failActions) throw new Error(UNREACHABLE);
+    return hotspotPassword;
+  }, [hotspotPassword, failActions]);
   const { ssid: hotspotSsid } = demo.router.hotspotSettings;
   const { enabled: guestEnabled, ssid: guestSsid } = demo.router.guestSettings;
   const wifiQr = useCallback(
-    async (network: 'hotspot' | 'guest', adminPassword?: string) => {
+    async (network: 'hotspot' | 'guest') => {
       await wait(600);
       if (failActions) throw new Error(UNREACHABLE);
       if (network === 'hotspot') {
-        if (!adminPassword || adminPassword === 'wrong') throw new Error('Wrong password.');
         return { ssid: hotspotSsid, svg: demoQrSvg(`${hotspotSsid}:${hotspotPassword}`) };
       }
       if (!guestEnabled) throw new Error('The guest network is off.');

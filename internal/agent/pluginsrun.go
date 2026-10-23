@@ -125,7 +125,7 @@ func (a *Agent) planPluginRun(id string) (*pluginRunPlan, error) {
 	}
 	spec := plugin.RunSpec{
 		ID: id, Image: p.Image, Address: p.Address.String(), MemoryMB: m.Memory(), CPUs: m.CPULimit(),
-		Env: env, LogFile: a.pluginLogFile(id), Command: m.Command,
+		Env: env, EnvFile: a.paths.PluginEnvFile(id), LogFile: a.pluginLogFile(id), Command: m.Command,
 	}
 	dataMount := a.pluginDataMount(id)
 	for _, v := range m.Volumes {
@@ -191,6 +191,10 @@ func fillTemplate(name string, text []byte, values plugin.Values) ([]byte, error
 			data, err := json.Marshal(v)
 			return string(data), err
 		},
+	}
+	// Plugins installed before the check existed are checked here too.
+	if err := plugin.CheckTemplate(name, text); err != nil {
+		return nil, err
 	}
 	// missingkey=zero: {{.Settings.unknown}} is empty instead of an error.
 	t, err := template.New(name).Funcs(funcs).Option("missingkey=zero").Parse(string(text))
@@ -285,6 +289,14 @@ func writeIntoVolume(volumeDir, relative string, content []byte, once bool) erro
 // runPlugin (re)starts a plugin's container with its current settings.
 // It must be marked busy by the caller, and is called without a.mu.
 func (a *Agent) runPlugin(id string) error {
+	if err := a.fetchPluginImage(id); err != nil {
+		slog.Error("plugin's image couldn't be downloaded again", "plugin", id, "error", err)
+		a.mu.Lock()
+		a.setPluginState(id, api.PluginFailed, "Its app couldn't be downloaded again ("+err.Error()+
+			"). RasBeacon tries again every few minutes, or start it once the internet works.")
+		a.mu.Unlock()
+		return err
+	}
 	a.mu.Lock()
 	plan, err := a.planPluginRun(id)
 	if err == nil {
@@ -295,9 +307,7 @@ func (a *Agent) runPlugin(id string) error {
 		err = a.preparePluginRun(plan)
 	}
 	if err == nil {
-		if _, err = a.plugins.runner.Run("podman", plugin.RunArgs(plan.spec)...); err != nil {
-			err = fmt.Errorf("podman couldn't start it: %w", err)
-		}
+		err = a.startPluginContainer(plan.spec)
 	}
 
 	a.mu.Lock()
@@ -312,6 +322,21 @@ func (a *Agent) runPlugin(id string) error {
 	}
 	a.setPluginState(id, api.PluginRunning, "")
 	slog.Info("plugin started", "plugin", id)
+	return nil
+}
+
+// startPluginContainer runs `podman run` for spec. The environment goes in
+// a file only root can read, deleted again once Podman has read it: on the
+// command line, it would show in error messages and logs, and it holds the
+// plugin's passwords.
+func (a *Agent) startPluginContainer(spec plugin.RunSpec) error {
+	if err := config.WriteFileAtomic(spec.EnvFile, plugin.EnvFileContents(spec.Env), 0o600); err != nil {
+		return err
+	}
+	defer os.Remove(spec.EnvFile)
+	if _, err := a.plugins.runner.Run("podman", plugin.RunArgs(spec)...); err != nil {
+		return fmt.Errorf("podman couldn't start it: %w", err)
+	}
 	return nil
 }
 
@@ -511,11 +536,40 @@ func (a *Agent) startPlugins() {
 func (a *Agent) watchPlugins() {
 	for round := 0; ; round++ {
 		time.Sleep(a.plugins.watchEvery)
-		a.checkPluginContainers()
-		if round%2 == 0 {
-			a.readPluginHealth()
+		a.pluginWatchRound(round)
+	}
+}
+
+// pluginWatchRound is one round of watchPlugins (they are numbered from 0).
+func (a *Agent) pluginWatchRound(round int) {
+	a.checkPluginContainers()
+	if round%2 == 0 {
+		a.readPluginHealth()
+	}
+	if round%20 == 19 { // every five minutes
+		a.retryPluginFetches()
+	}
+	a.dailyCatalogCheck()
+}
+
+// retryPluginFetches tries again to download the images of restored
+// plugins that should run but couldn't get them yet (no internet right
+// after the restart, for example).
+func (a *Agent) retryPluginFetches() {
+	a.mu.Lock()
+	var ids []string
+	for _, id := range a.pluginIDs() {
+		p := a.cfg.Plugins.Installed[id]
+		live := a.plugins.live[id]
+		if p.Fetch != nil && p.Running && live != nil && !live.busy && live.state == api.PluginFailed {
+			live.busy = true
+			ids = append(ids, id)
 		}
-		a.dailyCatalogCheck()
+	}
+	a.mu.Unlock()
+	for _, id := range ids {
+		_ = a.runPlugin(id) // a problem shows in its state
+		a.endPluginWork(id)
 	}
 }
 

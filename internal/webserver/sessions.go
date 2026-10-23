@@ -57,6 +57,13 @@ func newSessionStore() *sessionStore {
 func (s *sessionStore) create() (id, csrfToken string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// Sessions are otherwise only dropped when they are looked up, so the
+	// ones nobody comes back to go here.
+	for oldID, old := range s.sessions {
+		if s.now().Sub(old.lastSeen) > sessionIdleTimeout {
+			delete(s.sessions, oldID)
+		}
+	}
 	id = randomToken()
 	csrfToken = randomToken()
 	s.sessions[id] = &session{csrfToken: csrfToken, lastSeen: s.now()}
@@ -92,6 +99,18 @@ func (s *sessionStore) removeAll() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.sessions = map[string]*session{}
+}
+
+// removeAllExcept ends every session but keep (the admin password changed
+// in that one).
+func (s *sessionStore) removeAllExcept(keep string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for id := range s.sessions {
+		if id != keep {
+			delete(s.sessions, id)
+		}
+	}
 }
 
 // fromRequest finds the session for the cookie in r, if any.
