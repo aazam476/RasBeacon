@@ -132,7 +132,10 @@ still holds; a version that can install `v2.0.0` usually can install
 See `internal/agent/update.go`. In short: the signature and board are
 checked first; the new system is written into the slot that isn't
 running; the SHA-256 of everything written must match the signed one;
-RasBeacon then restarts into the new slot *on trial*. If it runs normally
+RasBeacon then restarts into the new slot *on trial*
+(`systemctl reboot --reboot-argument="0 tryboot"`; if that fails, the
+System page says why and offers *Restart to finish the update*, as it
+does after a power cut before the restart). If it runs normally
 for a minute, with the web UI and the hotspot running, the new slot becomes
 the default; if not, the device goes
 back to the previous version by itself.

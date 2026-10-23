@@ -471,7 +471,12 @@ install updates (on the Pi 3/Zero 2 W image, check instead that System says
    **Install update**, confirm. Keep the page open: uploading takes a minute
    or two, then RasBeacon restarts (the hotspot is gone for about 2
    minutes). **Expect:** *Updated to <new version>*, and every setting kept
-   (hotspot, networks, VPN, DNS, swap). Note how long it took.
+   (hotspot, networks, VPN, DNS, swap). Note how long it took. If RasBeacon
+   doesn't restart by itself, System shows *Restart to finish the update*
+   with the reason: note the reason (it's a bug), then press **Restart**.
+   Updating from v0.1.0 stops before the restart without that notice,
+   because v0.1.0's restart command fails on systemd 257: after installing,
+   run `systemctl reboot --reboot-argument="0 tryboot"` over SSH.
 4. **Rollback (if you can):** start another update (the same file again
    works), and as soon as the hotspot disappears for the restart, pull the
    power, wait 5 s, plug it back in. **Expect:** RasBeacon comes back on the
