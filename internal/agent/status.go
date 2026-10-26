@@ -263,6 +263,8 @@ func (a *Agent) Diagnostics() string {
 	paused := fmt.Sprintf("blocked devices: %d by the owner, %d over the data limit: %s\n",
 		len(a.cfg.Clients.Paused), len(a.usage.overLimit), strings.Join(a.pausedMACs(), ", "))
 	hotspotEvents := slices.Clone(a.hotspotCheck.events)
+	// Times the hotspot stopped sending to its devices (hotspotstall.go).
+	stalls := stallReport(a.readStalls())
 	// Who may join: an allow list or a limit explains a device that can't.
 	access := fmt.Sprintf("access: allow list %s (%d addresses), device limit %s\n",
 		onOff(a.cfg.Access.AllowListOn), len(a.cfg.Access.Allowed), limitText(a.cfg.Access.MaxDevices))
@@ -285,6 +287,7 @@ func (a *Agent) Diagnostics() string {
 	for _, event := range hotspotEvents {
 		fmt.Fprintf(&report, "hotspot check: %s\n", event)
 	}
+	report.WriteString(stalls)
 	u := status.Uplink
 	fmt.Fprintf(&report, "uplink: connected=%v kind=%s interface=%s address=%s gateway=%s ipv6=%v\n",
 		u.Connected, u.Kind, u.Interface, u.Address, u.Gateway, u.IPv6)

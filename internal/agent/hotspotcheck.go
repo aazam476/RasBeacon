@@ -10,6 +10,9 @@ package agent
 // Ethernet client port (also in the bridge) keep working. The check puts
 // the interface back, or restarts the hotspot, and keeps a short record of
 // what it did for the diagnostics report.
+//
+// It also notices a hotspot that is up but has stopped sending data to its
+// devices; that part is in hotspotstall.go.
 
 import (
 	"fmt"
@@ -41,6 +44,9 @@ type hotspotCheckState struct {
 	lastRestart time.Time
 	// events are the latest repairs, oldest first, for diagnostics.
 	events []string
+	// counters are each device's packet counters at the last check, by
+	// MAC address, for the stall check (hotspotstall.go).
+	counters map[string]stationCounters
 }
 
 // checkHotspot runs the check if it is due. The caller holds a.mu.
@@ -77,6 +83,9 @@ func (a *Agent) checkHotspot() {
 			}
 		}
 	}
+
+	// 3. The hotspot must still be sending data to its devices.
+	a.checkHotspotStall()
 }
 
 // bridgeOf returns the bridge an interface is in ("" for none).
@@ -89,17 +98,21 @@ func (a *Agent) bridgeOf(iface string) string {
 }
 
 // restartHotspot restarts hostapd for the reason given, at most once per
-// hotspotRestartPause. The caller holds a.mu.
-func (a *Agent) restartHotspot(reason string) {
+// hotspotRestartPause. It returns whether it restarted (or tried to). The
+// caller holds a.mu.
+func (a *Agent) restartHotspot(reason string) bool {
 	if !a.hotspotCheck.lastRestart.IsZero() && a.now().Sub(a.hotspotCheck.lastRestart) < hotspotRestartPause {
 		a.noteHotspotEvent(reason + "; not restarting again so soon")
-		return
+		return false
 	}
 	a.hotspotCheck.lastRestart = a.now()
 	a.noteHotspotEvent(reason + "; restarting the hotspot")
 	if err := system.ServiceRestart(a.runner, hostapdService); err != nil {
 		a.noteHotspotEvent("the restart failed: " + err.Error())
 	}
+	// Every device joins again after a restart, so its counters start over.
+	a.hotspotCheck.counters = nil
+	return true
 }
 
 // noteHotspotEvent logs a repair and keeps it for the diagnostics report.

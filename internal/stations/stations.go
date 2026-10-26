@@ -61,6 +61,15 @@ type Station struct {
 	// (Tx is towards it), used to work out the rates.
 	RxBytes uint64 `json:"-"`
 	TxBytes uint64 `json:"-"`
+	// RxPackets and TxPackets count the radio's packets from and to the
+	// device. The hotspot's stall check (internal/agent/hotspotstall.go)
+	// watches them: a device that keeps sending while the Pi sends it
+	// nothing means the hotspot has stopped delivering.
+	RxPackets uint64 `json:"-"`
+	TxPackets uint64 `json:"-"`
+	// MFP is true when the device uses protected management frames
+	// (always with WPA3), for the stall log.
+	MFP bool `json:"-"`
 }
 
 // ParseStationDump reads `iw dev <iface> station dump` output, which lists
@@ -107,6 +116,12 @@ func ParseStationDump(output string) []Station {
 			current.RxBytes, _ = strconv.ParseUint(value, 10, 64)
 		case "tx bytes":
 			current.TxBytes, _ = strconv.ParseUint(value, 10, 64)
+		case "rx packets":
+			current.RxPackets, _ = strconv.ParseUint(value, 10, 64)
+		case "tx packets":
+			current.TxPackets, _ = strconv.ParseUint(value, 10, 64)
+		case "MFP":
+			current.MFP = value == "yes"
 		}
 	}
 	return result

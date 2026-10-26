@@ -128,6 +128,11 @@ func (p Paths) ClockFile() string { return filepath.Join(p.DataDir(), "clock") }
 // UsageFile keeps each device's data use since the counters were reset.
 func (p Paths) UsageFile() string { return filepath.Join(p.DataDir(), "usage.json") }
 
+// HotspotStallsFile keeps the latest times the hotspot stopped delivering
+// data to its devices (see internal/agent/hotspotstall.go). It lives on
+// /persistent so the record survives a power-off.
+func (p Paths) HotspotStallsFile() string { return filepath.Join(p.DataDir(), "hotspot-stalls.json") }
+
 // TLSDir holds the web UI's HTTPS certificate and key (cert.pem, key.pem).
 func (p Paths) TLSDir() string { return filepath.Join(p.DataDir(), "tls") }
 

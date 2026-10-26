@@ -9,9 +9,12 @@ import (
 const sampleDump = `Station 3a:1f:22:aa:bb:cc (on ap0)
 	inactive time:	1200 ms
 	rx bytes:	123456
+	rx packets:	648
+	tx packets:	4
 	signal:  	-48 [-50, -52] dBm
 	tx bitrate:	144.4 MBit/s MCS 15 short GI
 	connected time:	367 seconds
+	MFP:		yes
 Station 8E:00:11:22:33:44 (on ap0)
 	inactive time:	40 ms
 	signal:  	-71 [-73, -74] dBm
@@ -29,6 +32,12 @@ func TestParseStationDump(t *testing.T) {
 	}
 	if got[0].MAC != "3a:1f:22:aa:bb:cc" || got[0].SignalDBm != -48 || got[0].ConnectedSeconds != 367 {
 		t.Errorf("first station parsed wrong: %+v", got[0])
+	}
+	if got[0].RxPackets != 648 || got[0].TxPackets != 4 || !got[0].MFP {
+		t.Errorf("packet counters or MFP parsed wrong: %+v", got[0])
+	}
+	if got[1].MFP || got[1].TxPackets != 0 {
+		t.Errorf("a device without these lines should have zero values: %+v", got[1])
 	}
 	if got[1].MAC != "8e:00:11:22:33:44" {
 		t.Errorf("MAC should be lowercased, got %q", got[1].MAC)
