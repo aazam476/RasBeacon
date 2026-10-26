@@ -9,6 +9,10 @@ export function VpnSection({ vpn }: { vpn: VPNStatus }) {
   const { vpnSettings, setVpnEnabled, setKillSwitch } = useDevice();
   const view = vpnStateView(vpn);
   const profile = vpnSettings.data?.activeProfile;
+  // The same rule as the VPN page: without a profile the kill switch does nothing, so it shows
+  // off and can't be pressed. This also waits for the settings, since saving one switch sends
+  // the other's saved value too.
+  const configured = (vpnSettings.data?.profiles.length ?? 0) > 0;
 
   return (
     <Section
@@ -48,10 +52,9 @@ export function VpnSection({ vpn }: { vpn: VPNStatus }) {
         leading={{ tile: 'block', color: 'red' }}
         title="Kill switch"
         subtitle="Block traffic if the VPN drops"
-        checked={vpn.killSwitch}
+        checked={configured && vpn.killSwitch}
         onChange={setKillSwitch}
-        // Saving one switch sends the other's saved value too, so wait for the settings.
-        disabled={!vpnSettings.data}
+        disabled={!configured}
       />
     </Section>
   );

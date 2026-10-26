@@ -129,6 +129,20 @@ describe('VPN', () => {
     expect(vpn.getByRole('switch', { name: /Kill switch/ })).toHaveProperty('disabled', true);
     expect(vpn.getByRole('switch', { name: /Use the VPN/ })).toHaveProperty('disabled', true);
   });
+
+  // A new device has the kill switch on, but it does nothing until a profile exists. Status
+  // shows it the way the VPN page does: off and grayed out.
+  it('the kill switch shows off and can’t be pressed without a profile', () => {
+    const device = fakeDevice((router) => {
+      router.status.vpn.killSwitch = true;
+      router.vpnSettings.profiles = [];
+      router.vpnSettings.activeProfile = '';
+    });
+    renderScreen(<StatusScreen />, device);
+    const killSwitch = within(section('VPN')).getByRole('switch', { name: /Kill switch/ });
+    expect(killSwitch).toHaveProperty('disabled', true);
+    expect(killSwitch.getAttribute('aria-checked')).toBe('false');
+  });
 });
 
 describe('devices and networks', () => {
