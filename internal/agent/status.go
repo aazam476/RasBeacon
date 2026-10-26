@@ -234,6 +234,9 @@ func (a *Agent) Diagnostics() string {
 
 	a.mu.Lock()
 	secretsToHide := []string{a.secrets.HotspotPassword, a.secrets.GuestPassword, a.setupPassword, a.identity.SuggestedHotspotPassword, a.secrets.UpdateNotifyURL}
+	// DoH addresses can hold a personal account ID (and may appear in an
+	// error from rbdoh).
+	secretsToHide = append(secretsToHide, a.cfg.DNS.DoH...)
 	for _, keys := range a.secrets.WireGuardKeys {
 		secretsToHide = append(secretsToHide, keys.PrivateKey, keys.PresharedKey)
 	}

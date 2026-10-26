@@ -3,6 +3,7 @@ package agent
 import (
 	"encoding/json"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 
@@ -210,5 +211,25 @@ func TestDNS_NoServersIsAnEmptyList(t *testing.T) {
 	data, _ := json.Marshal(e.agent.DNSSettings())
 	if !strings.Contains(string(data), `"servers":[]`) {
 		t.Errorf("got %s", data)
+	}
+}
+
+func TestDNS_PersonalDoHAddressesStayPrivate(t *testing.T) {
+	e := newClaimedEnv(t, false)
+	personal := "https://dns.nextdns.io/abc123"
+	if err := e.agent.UpdateDNSSettings(api.DNSSettings{Servers: []string{"9.9.9.9", personal}}); err != nil {
+		t.Fatal(err)
+	}
+	// Only root may read the forwarder's settings file.
+	info, err := os.Stat(e.paths.DoHEnv())
+	if err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("doh.env mode = %v, %v; want 0600", info, err)
+	}
+	// The report hides the address, also where an error message repeats it.
+	e.runner.outputs["journalctl --no-pager -n 400 -u rbd.service -u rbweb.service -u "+hostapdService+" -u "+dnsmasqService+
+		" -u rasbeacon-wpa@* -u systemd-networkd.service"] = `rbdoh: Post "` + personal + `": timeout` + "\n"
+	report := e.agent.Diagnostics()
+	if strings.Contains(report, "abc123") || !strings.Contains(report, `Post "<redacted>"`) {
+		t.Error("the diagnostics report must hide a personal DoH address")
 	}
 }

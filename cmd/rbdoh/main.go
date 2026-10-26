@@ -34,7 +34,9 @@ func main() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	servers := strings.Fields(os.Getenv("RBDOH_SERVERS"))
 	bootstrap := strings.Fields(os.Getenv("RBDOH_BOOTSTRAP"))
-	slog.Info("rbdoh starting", "version", version.Version, "listen", *listen, "servers", servers, "bootstrap", bootstrap)
+	// Only how many DoH servers: their addresses can hold a personal account
+	// ID, and this log goes into the diagnostics report.
+	slog.Info("rbdoh starting", "version", version.Version, "listen", *listen, "servers", len(servers), "bootstrap", bootstrap)
 
 	options := doh.Options{Servers: servers, Bootstrap: bootstrap}
 	if *caFile != "" {

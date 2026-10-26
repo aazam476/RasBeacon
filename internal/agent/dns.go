@@ -87,7 +87,9 @@ func (a *Agent) UpdateDNSSettings(req api.DNSSettings) error {
 		return err
 	}
 	a.cfg = newCfg
-	slog.Info("DNS servers saved", "servers", newCfg.DNS.Order, "withVPN", newCfg.DNS.WithVPN)
+	// Only how many: a DoH address can hold a personal account ID (such as
+	// https://dns.nextdns.io/abc123), and the log goes into diagnostics.
+	slog.Info("DNS servers saved", "plain", len(newCfg.DNS.Servers), "doh", len(newCfg.DNS.DoH), "withVPN", newCfg.DNS.WithVPN)
 	if a.vpnActive() {
 		// The tunnel's DNS routes and the firewall's guard change too.
 		if err := a.applyVPNConfig(); err != nil {
@@ -152,7 +154,9 @@ func (a *Agent) applyDoH(captive bool) error {
 		_ = os.Remove(a.paths.DoHEnv())
 		return system.ServiceStop(a.runner, dohService)
 	}
-	if err := config.WriteFileAtomic(a.paths.DoHEnv(), []byte(want), 0o644); err != nil {
+	// Only root may read it (systemd reads it as root to start rbdoh): the
+	// DoH addresses can hold a personal account ID.
+	if err := config.WriteFileAtomic(a.paths.DoHEnv(), []byte(want), 0o600); err != nil {
 		return err
 	}
 	if err := system.ServiceRestart(a.runner, dohService); err != nil {
