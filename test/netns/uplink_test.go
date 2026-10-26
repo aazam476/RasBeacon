@@ -13,7 +13,9 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -161,7 +163,8 @@ func TestNormalMode_IPv6PrivateNetworkWithoutDefaultRoute(t *testing.T) {
 // RB_DOH_SERVER=address:port runs a DNS-over-HTTPS server (see serveDoH in
 // dns_test.go). Two more helper modes work on IPv6 where busybox nc might not:
 // RB_GREETER=[address]:port answers every TCP connection with
-// "...-standin", and RB_DIAL=[address]:port connects and prints the answer.
+// "...-standin", and RB_DIAL=[address]:port connects and prints the answer
+// (with RB_DIAL_MARK, on a marked connection).
 func TestMain(m *testing.M) {
 	if address := os.Getenv("RB_DOH_SERVER"); address != "" {
 		serveDoH(address, os.Getenv("RB_DOH_CERT"), os.Getenv("RB_DOH_KEY"))
@@ -170,7 +173,23 @@ func TestMain(m *testing.M) {
 		greet(address)
 	}
 	if address := os.Getenv("RB_DIAL"); address != "" {
-		conn, err := net.DialTimeout("tcp", address, 2*time.Second)
+		dialer := net.Dialer{Timeout: 2 * time.Second}
+		// RB_DIAL_MARK=0x5242 marks the connection, as rbd's downloads
+		// for plugins are marked (agent.pluginDialer).
+		if mark := os.Getenv("RB_DIAL_MARK"); mark != "" {
+			value, _ := strconv.ParseInt(strings.TrimPrefix(mark, "0x"), 16, 32)
+			dialer.Control = func(_, _ string, c syscall.RawConn) error {
+				var markErr error
+				err := c.Control(func(fd uintptr) {
+					markErr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_MARK, int(value))
+				})
+				if err != nil {
+					return err
+				}
+				return markErr
+			}
+		}
+		conn, err := dialer.Dial("tcp", address)
 		if err != nil {
 			fmt.Println("error:", err)
 			os.Exit(1)

@@ -13,13 +13,16 @@ package netns
 
 import (
 	"net/netip"
+	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"rasbeacon/internal/plugin"
 	"rasbeacon/internal/render"
+	"rasbeacon/internal/routing"
 )
 
 // buildPlugins adds two plugins to the router of buildNetwork, plugged into
@@ -103,5 +106,58 @@ func TestPlugins_CantReachEachOther(t *testing.T) {
 	}
 	if tcpConnects("rb-plug-b", render.PluginGateway, "53") {
 		t.Error("plugin B has no permissions, so RasBeacon's DNS server shouldn't answer it")
+	}
+}
+
+// TestPlugins_ReachTheInternetOnlyThroughTheVPN checks SECURITY.md's
+// promise that a plugin never reaches the internet outside the VPN. Rule
+// 102 sends plugins' traffic for networks the Pi is on (such as the
+// hotel's 10.99.0.0/24) to the main table, so only the firewall keeps it
+// out of the uplink.
+func TestPlugins_ReachTheInternetOnlyThroughTheVPN(t *testing.T) {
+	buildVPNNetwork(t)
+	buildPlugins(t)
+	// The plugin may use the internet; with the VPN in use, that means the
+	// tunnel only.
+	rules, err := render.Firewall(render.FirewallInput{
+		Egress:          []string{routing.TunnelInterface},
+		TunnelInterface: routing.TunnelInterface,
+		TunnelDNS:       []netip.Addr{netip.MustParseAddr(vpnServerAddress)},
+		LANAddress:      render.DefaultLAN.Prefix.Addr(),
+		Plugins:         []render.PluginRule{{Address: netip.MustParseAddr("10.89.0.2"), Internet: true}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rulesFile := filepath.Join(t.TempDir(), "firewall.nft")
+	writeFile(t, rulesFile, rules)
+	inNS(t, routerNS, "nft", "-f", rulesFile)
+	waitForHandshake(t)
+
+	if !tcpConnects("rb-plug-a", tunnelSite, "8080") {
+		t.Fatal("the plugin should reach the site behind the VPN (only reachable through the tunnel)")
+	}
+	if tcpConnects("rb-plug-a", "10.99.0.2", "8081") {
+		t.Error("LEAK: the plugin reached the uplink network outside the VPN")
+	}
+
+	// RasBeacon's own downloads for plugins (marked, rule 111) take the
+	// tunnel too. The control: the same connection unmarked goes out of
+	// the uplink, where the site doesn't answer.
+	markedDial := func(mark string) bool {
+		out, _ := tryInNS(routerNS, 4*time.Second, "env", "RB_DIAL="+tunnelSite+":8080", "RB_DIAL_MARK="+mark, os.Args[0])
+		return strings.Contains(out, "standin")
+	}
+	if !markedDial(routing.PluginMark) {
+		t.Error("RasBeacon's marked downloads for plugins should go through the tunnel")
+	}
+	if markedDial("") {
+		t.Error("test setup broken: an unmarked connection from RasBeacon should not use the tunnel")
+	}
+
+	// The VPN server disappears: the plugin reaches nothing.
+	inNS(t, upstreamNS, "ip", "link", "delete", serverInterface)
+	if tcpConnects("rb-plug-a", tunnelSite, "8080") || tcpConnects("rb-plug-a", "10.99.0.2", "8081") {
+		t.Error("LEAK: without the tunnel, the plugin must reach nothing")
 	}
 }
