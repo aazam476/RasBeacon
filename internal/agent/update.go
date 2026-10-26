@@ -463,6 +463,9 @@ func (a *Agent) CheckForUpdateNow() (api.UpdateStatus, error) {
 	if version.Repository == "" {
 		return api.UpdateStatus{}, &config.ValidationError{Field: "update", Message: "This build doesn't know where its releases are."}
 	}
+	if err := a.needInternet(); err != nil {
+		return api.UpdateStatus{}, err
+	}
 	err := a.checkForUpdate()
 	a.mu.Lock()
 	defer a.mu.Unlock()

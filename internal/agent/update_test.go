@@ -642,6 +642,13 @@ func TestUpdateCheck_AnnouncesANewVersionOnce(t *testing.T) {
 	if err := e.agent.UpdateUpdateSettings(api.UpdateSettings{CheckHours: 5}); err == nil {
 		t.Error("only the listed schedules may be chosen")
 	}
+	// Without the internet, "Check now" says so at once and asks nobody.
+	if _, err := e.agent.CheckForUpdateNow(); !errors.Is(err, errNoUplink) {
+		t.Fatalf("got %v, want %v", err, errNoUplink)
+	}
+	e.agent.mu.Lock()
+	e.agent.uplink.status.Connected = true
+	e.agent.mu.Unlock()
 	status, err := e.agent.CheckForUpdateNow()
 	if err != nil || status.LatestVersion != "v1.1.0" || status.NewerVersion != "v1.2.0" || status.LastChecked == "" || status.CheckHours != 24 {
 		t.Fatalf("status %+v, %v", status, err)

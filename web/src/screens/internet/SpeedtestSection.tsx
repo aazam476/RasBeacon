@@ -2,6 +2,7 @@ import { useDevice } from '@/data/device';
 import type { Status } from '@/data/types';
 import { formatAgo, mbpsValue } from '@/lib/format';
 import { ButtonRow, Row, Section, StatRow } from '@/ui';
+import { NEEDS_INTERNET } from '../common/describe';
 
 /**
  * The last speed test and a way to run a new one. It only runs when asked, one at a time: while
@@ -42,6 +43,7 @@ export function SpeedtestSection({ status }: { status: Status }) {
         busy={status.speedtest.running}
         busyLabel="Running…"
         disabled={!status.uplink.connected}
+        note={!status.uplink.connected && NEEDS_INTERNET}
       >
         Run speed test
       </ButtonRow>

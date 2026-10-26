@@ -27,6 +27,19 @@ const uplinkPauseTime = 10 * time.Minute
 // errNoUplink answers buttons that need an internet connection.
 var errNoUplink = &config.ValidationError{Message: "RasBeacon isn't connected to the internet right now."}
 
+// needInternet answers errNoUplink at once when RasBeacon has no internet,
+// so that features that need it (the catalog, downloads, the update check)
+// say so instead of waiting for a network call to time out. It takes a.mu
+// itself: call it without holding the lock.
+func (a *Agent) needInternet() error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if !a.uplink.status.Connected {
+		return errNoUplink
+	}
+	return nil
+}
+
 // DisconnectUplink leaves the network that carries the internet now.
 func (a *Agent) DisconnectUplink() error {
 	a.mu.Lock()

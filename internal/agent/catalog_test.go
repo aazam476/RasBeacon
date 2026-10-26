@@ -100,6 +100,7 @@ func catalogEnv(t *testing.T, gh *fakeGitHub) *testEnv {
 	e.agent.plugins.client = func() *http.Client { return &http.Client{Transport: gh} }
 	e.agent.cfg.Plugins.Sources = []string{testSource}
 	e.agent.cfg.Plugins.NoBuiltInSource = true
+	e.agent.uplink.status.Connected = true // the catalog needs the internet
 	e.agent.mu.Unlock()
 	return e
 }
@@ -269,5 +270,36 @@ func TestCatalog_ARemovedSourceOffersNothingMore(t *testing.T) {
 	var saved catalogCache
 	if err := config.ReadJSON(e.paths.PluginCatalogFile(), &saved); err != nil || len(saved.Entries) != 0 {
 		t.Errorf("saved catalog = %+v, %v", saved, err)
+	}
+}
+
+// The owner's report (A1c item 5): without internet the Plugins page
+// hung. Browse plugins and installing from it now say so at once, and the
+// catalog keeps what the last check found.
+func TestCatalog_WithoutInternetSaysSoAtOnceAndKeepsTheLastList(t *testing.T) {
+	_, key, _ := ed25519.GenerateKey(rand.Reader)
+	gh := &fakeGitHub{releases: map[string]map[string][]byte{
+		testSource: {"adguard-home-1.0.rba": writeTestPlugin(t, testPluginManifest("1.0"), key)},
+	}}
+	e := catalogEnv(t, gh)
+	before := e.agent.PluginCatalog(api.PluginCatalogRequest{})
+
+	e.agent.mu.Lock()
+	e.agent.uplink.status.Connected = false
+	e.agent.mu.Unlock()
+	asked := gh.asked
+	after := e.agent.PluginCatalog(api.PluginCatalogRequest{Refresh: true})
+	if gh.asked != asked {
+		t.Errorf("GitHub was asked %d times without internet", gh.asked-asked)
+	}
+	if after.Errors[testSource] != errNoUplink.Message {
+		t.Errorf("errors = %v, want the no-internet message", after.Errors)
+	}
+	if len(after.Entries) != 1 || after.CheckedAt != before.CheckedAt {
+		t.Errorf("the last list and its time should stay: before %+v, after %+v", before, after)
+	}
+	_, err := e.agent.StagePluginFromCatalog(api.PluginDownloadRequest{Source: testSource, File: "adguard-home-1.0.rba"})
+	if !errors.Is(err, errNoUplink) {
+		t.Errorf("installing from the catalog: got %v, want %v", err, errNoUplink)
 	}
 }

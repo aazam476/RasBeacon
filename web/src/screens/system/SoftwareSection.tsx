@@ -20,6 +20,7 @@ import {
   SelectField,
   TextField,
 } from '@/ui';
+import { NEEDS_INTERNET } from '../common/describe';
 import { BackupSheet } from './BackupSection';
 
 const BOARDS: Record<string, string> = {
@@ -133,7 +134,13 @@ function UpdateCheckRows({ status }: { status: Status }) {
           );
         }}
       />
-      <ButtonRow leading={{ icon: 'refresh' }} action={checkForUpdates} busyLabel="Checking…">
+      <ButtonRow
+        leading={{ icon: 'refresh' }}
+        action={checkForUpdates}
+        busyLabel="Checking…"
+        disabled={!status.uplink.connected}
+        note={!status.uplink.connected && NEEDS_INTERNET}
+      >
         Check now
       </ButtonRow>
       {(error || update.checkError) && (

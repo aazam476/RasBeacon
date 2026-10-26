@@ -316,6 +316,21 @@ export const SCENARIOS: DemoScenario[] = [
     },
   },
   {
+    // Every feature that needs the internet shows grayed out with the reason: the VPN switch here,
+    // the speed test, Check now on the System page and in Browse plugins.
+    id: 'no-internet',
+    group: 'Status',
+    title: 'No internet: features that need it are grayed out',
+    route: '/',
+    apply: (d) => {
+      disconnectUplink(d);
+      d.router.status.uplink.wifi.state = 'searching';
+      d.router.status.vpn = { ...d.router.status.vpn, enabled: false, state: 'off' };
+      d.router.vpnSettings.enabled = false;
+      d.router.vpnSettings.killSwitch = false;
+    },
+  },
+  {
     id: 'no-free-radio',
     group: 'Status',
     title: 'No Wi-Fi radio free for the internet, no Ethernet port',

@@ -263,6 +263,8 @@ interface ButtonRowProps {
   disabled?: boolean;
   /** Text on the right, e.g. a count. */
   value?: ReactNode;
+  /** A short line under the label, e.g. why it is grayed out ("Needs an internet connection"). */
+  note?: ReactNode;
   children: ReactNode;
   className?: string;
 }
@@ -277,6 +279,7 @@ export function ButtonRow({
   busyLabel,
   disabled = false,
   value,
+  note,
   children,
   className,
 }: ButtonRowProps) {
@@ -302,6 +305,7 @@ export function ButtonRow({
       <Leading leading={leading} />
       <span className={cn('min-w-0 flex-1 text-body wrap-break-word', tone === 'danger' ? 'text-red' : 'text-tint')}>
         {busy && busyLabel ? busyLabel : children}
+        {note && <span className="block text-subhead text-label-2">{note}</span>}
       </span>
       {hasValue(value) && <span className="text-body text-label-2">{value}</span>}
       {busy && <ActivityIndicator size={18} />}

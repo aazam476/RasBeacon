@@ -311,6 +311,16 @@ func (a *Agent) refreshCatalog() {
 		sources = append(sources, plugin.BuiltInSource)
 	}
 	sources = append(sources, a.cfg.Plugins.Sources...)
+	if !a.uplink.status.Connected {
+		// Without the internet there's nothing to ask: say so for each
+		// source at once, and keep what the last check found (and when).
+		a.plugins.catalog.Errors = map[string]string{}
+		for _, source := range sources {
+			a.plugins.catalog.Errors[source] = errNoUplink.Message
+		}
+		a.mu.Unlock()
+		return
+	}
 	a.mu.Unlock()
 
 	blocked := a.waitForPluginPath("")

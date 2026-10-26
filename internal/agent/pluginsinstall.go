@@ -96,6 +96,9 @@ func (a *Agent) StagePluginFromCatalog(req api.PluginDownloadRequest) (api.Plugi
 	if !ok {
 		return api.PluginPreview{}, &config.ValidationError{Field: "file", Message: "This plugin isn't in the catalog any more. Check the catalog again."}
 	}
+	if err := a.needInternet(); err != nil {
+		return api.PluginPreview{}, err
+	}
 	if err := a.waitForPluginPath(""); err != nil {
 		return api.PluginPreview{}, err
 	}

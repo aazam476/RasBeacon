@@ -6,6 +6,7 @@ import { formatBytes } from '@/lib/format';
 import { usePageTitle } from '@/shell/navigation';
 import { ActivityIndicator, Button, ButtonRow, FormError, IconButton, Notice, Row, Section, TextField } from '@/ui';
 import { InstallSheet } from './InstallSheet';
+import { NEEDS_INTERNET } from '../common/describe';
 import { errorText } from './pluginDisplay';
 
 /** "8 Oct, 14:05": when the catalog was last checked. */
@@ -22,7 +23,9 @@ function checkedLabel(iso: string | undefined): string {
  */
 export function CatalogScreen() {
   usePageTitle('Browse plugins');
-  const { pluginCatalog } = useDevice();
+  const { pluginCatalog, status } = useDevice();
+  // Asking GitHub needs the internet; the saved list still shows without it.
+  const offline = status.data?.uplink.connected === false;
   const [catalog, setCatalog] = useState<PluginCatalog | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
@@ -60,6 +63,8 @@ export function CatalogScreen() {
           busy={checking}
           busyLabel="Checking…"
           onClick={() => void load(true)}
+          disabled={offline}
+          note={offline && NEEDS_INTERNET}
         >
           Check now
         </ButtonRow>
