@@ -907,6 +907,7 @@ func (a *Agent) SetPluginSources(req api.PluginSourcesRequest) (api.PluginsState
 	err := config.WriteJSON(a.paths.ConfigFile(), newCfg, 0o644)
 	if err == nil {
 		a.cfg = newCfg
+		a.forgetRemovedSources()
 	}
 	a.mu.Unlock()
 	if err != nil {

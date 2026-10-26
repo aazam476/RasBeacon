@@ -243,3 +243,31 @@ func TestCatalog_UnsignedPluginsUpdateFromFilesOnly(t *testing.T) {
 		t.Errorf("err = %v, want it refused as unsigned", err)
 	}
 }
+
+func TestCatalog_ARemovedSourceOffersNothingMore(t *testing.T) {
+	gh := &fakeGitHub{releases: map[string]map[string][]byte{
+		testSource: {"adguard-home-1.0.rba": writeTestPlugin(t, testPluginManifest("1.0"), nil)},
+	}}
+	e := catalogEnv(t, gh)
+	e.agent.PluginCatalog(api.PluginCatalogRequest{})
+	// A second source that failed, so the catalog also has an error.
+	e.agent.mu.Lock()
+	e.agent.plugins.catalog.Errors["other/plugins"] = "GitHub answered 404."
+	e.agent.mu.Unlock()
+
+	if _, err := e.agent.SetPluginSources(api.PluginSourcesRequest{Sources: []string{}}); err != nil {
+		t.Fatal(err)
+	}
+	catalog := e.agent.PluginCatalog(api.PluginCatalogRequest{})
+	if len(catalog.Entries) != 0 || len(catalog.Errors) != 0 {
+		t.Errorf("a removed source's plugins and errors should be gone: %+v", catalog)
+	}
+	if _, err := e.agent.StagePluginFromCatalog(api.PluginDownloadRequest{Source: testSource, File: "adguard-home-1.0.rba"}); err == nil {
+		t.Error("a removed source's plugin must not be downloaded")
+	}
+	// The saved catalog forgets it too, so a restart doesn't bring it back.
+	var saved catalogCache
+	if err := config.ReadJSON(e.paths.PluginCatalogFile(), &saved); err != nil || len(saved.Entries) != 0 {
+		t.Errorf("saved catalog = %+v, %v", saved, err)
+	}
+}

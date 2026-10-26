@@ -240,6 +240,28 @@ func (a *Agent) loadCatalog() {
 	}
 }
 
+// forgetRemovedSources drops what the saved catalog has from sources that
+// are no longer listed, so their plugins can't be seen or installed any
+// more. The caller holds a.mu.
+func (a *Agent) forgetRemovedSources() {
+	a.loadCatalog()
+	listed := func(source string) bool {
+		return slices.ContainsFunc(a.pluginSources(), func(s api.PluginSource) bool {
+			return strings.EqualFold(s.Source, source)
+		})
+	}
+	c := &a.plugins.catalog
+	before := len(c.Entries) + len(c.Errors)
+	c.Entries = slices.DeleteFunc(c.Entries, func(e catalogRecord) bool { return !listed(e.Source) })
+	maps.DeleteFunc(c.Errors, func(source, _ string) bool { return !listed(source) })
+	if len(c.Entries)+len(c.Errors) == before {
+		return // nothing to forget
+	}
+	if err := config.WriteJSON(a.paths.PluginCatalogFile(), c, 0o600); err != nil {
+		slog.Warn("could not save the catalog", "error", err)
+	}
+}
+
 // PluginCatalog lists the plugins the sources offer. GitHub is only asked
 // when refresh is set (Check now), or nothing was fetched yet.
 func (a *Agent) PluginCatalog(req api.PluginCatalogRequest) api.PluginCatalog {

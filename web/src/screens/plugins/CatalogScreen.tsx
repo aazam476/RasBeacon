@@ -93,7 +93,9 @@ export function CatalogScreen() {
         <p className="py-4 text-center text-subhead text-label-2">No plugins found in the sources.</p>
       )}
 
-      <SourcesSection />
+      {/* After a source is added, ask GitHub for what it offers; after one is removed, the
+          saved list (now without it) is enough. */}
+      <SourcesSection onSaved={(added) => void load(added)} />
     </>
   );
 }
@@ -177,8 +179,12 @@ function CatalogRow({ entry }: { entry: PluginCatalogEntry }) {
   );
 }
 
-/** Where the catalog looks: RasBeacon's own source, and GitHub repositories the owner adds. */
-function SourcesSection() {
+/**
+ * Where the catalog looks: RasBeacon's own source, and GitHub repositories the owner adds.
+ * `onSaved` runs after the list is saved (`added` is true when a source was added), so the
+ * catalog above can be loaded again.
+ */
+function SourcesSection({ onSaved }: { onSaved: (added: boolean) => void }) {
   const { plugins, savePluginSources } = useDevice();
   const [adding, setAdding] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -193,6 +199,7 @@ function SourcesSection() {
     try {
       await savePluginSources(next);
       setAdding('');
+      onSaved(next.length > listed.length);
     } catch (problem) {
       setError(errorText(problem));
     } finally {
