@@ -657,6 +657,26 @@ func TestWireGuard(t *testing.T) {
 	}
 }
 
+// While the server's name hasn't been looked up yet, the file has no
+// Endpoint line at all (rbd sets the address later with `wg set`).
+func TestWireGuard_WithoutAnEndpointYet(t *testing.T) {
+	got, err := WireGuard(WireGuardInput{
+		PrivateKey:    "yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=",
+		PeerPublicKey: "xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=",
+		AllowedIPs:    []netip.Prefix{netip.MustParsePrefix("0.0.0.0/0")},
+		Keepalive:     25,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(got, "Endpoint =") {
+		t.Errorf("no Endpoint line expected:\n%s", got)
+	}
+	if _, err := WireGuard(WireGuardInput{Endpoint: "a:1\nPostUp = rm"}); err == nil {
+		t.Error("an endpoint with a line break must be rejected")
+	}
+}
+
 func TestDnsmasq_UpstreamWithAPort(t *testing.T) {
 	got, err := Dnsmasq(DnsmasqInput{LAN: DefaultLAN, LeaseFile: "x", Upstream: []string{"9.9.9.9", "127.0.0.1#5053"}})
 	if err != nil {

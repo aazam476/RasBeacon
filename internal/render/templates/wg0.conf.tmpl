@@ -14,7 +14,11 @@ PublicKey = {{.PeerPublicKey}}
 {{- if .PresharedKey}}
 PresharedKey = {{.PresharedKey}}
 {{- end}}
+{{- if .Endpoint}}
 Endpoint = {{.Endpoint}}
+{{- else}}
+# No Endpoint yet: rbd sets the server's address once it has looked it up.
+{{- end}}
 # Which addresses may come back through the tunnel. RasBeacon sends
 # everything through it.
 AllowedIPs = {{.AllowedIPs}}

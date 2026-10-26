@@ -54,3 +54,28 @@ describe('profiles', () => {
     expect(device.renameVpnProfile).toHaveBeenCalledWith(name, 'Home');
   });
 });
+
+describe('use the VPN', () => {
+  // The tunnel can't start without the internet, so the switch says why instead of trying (rbd
+  // refuses it too). Turning the VPN off always works.
+  it('can’t be turned on without internet, and says why', () => {
+    renderScreen(
+      <VpnScreen />,
+      fakeDevice((router) => {
+        router.status.uplink.connected = false;
+        router.status.vpn = { ...router.status.vpn, enabled: false, state: 'off' };
+      }),
+    );
+    expect(screen.getByRole('switch', { name: /Use the VPN/ })).toHaveProperty('disabled', true);
+    expect(screen.getByText('Needs an internet connection')).toBeTruthy();
+  });
+
+  it('can still be turned off without internet', async () => {
+    const device = fakeDevice((router) => {
+      router.status.uplink.connected = false;
+    });
+    const { user } = renderScreen(<VpnScreen />, device);
+    await user.click(screen.getByRole('switch', { name: /Use the VPN/ }));
+    expect(device.setVpnEnabled).toHaveBeenCalledWith(false);
+  });
+});

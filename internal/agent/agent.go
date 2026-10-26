@@ -194,6 +194,12 @@ type Agent struct {
 	// lookupIP looks up a host name's addresses (the VPN server's); an
 	// address is answered as it is. Tests fake it.
 	lookupIP func(ctx context.Context, host string) ([]netip.Addr, error)
+	// endpointAddresses remembers where each VPN server's name pointed the
+	// last time it was looked up, keyed by "host:port" (for example
+	// "vpn.example.com:51820" → "203.0.113.7:51820"). WireGuard is only
+	// ever given these addresses, never the name, so that `wg setconf`
+	// can't hang on a lookup while a.mu is held. Guarded by a.mu.
+	endpointAddresses map[string]string
 }
 
 // New creates an agent that uses the given file locations and command

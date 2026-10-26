@@ -42,6 +42,8 @@ func newVPNEnv(t *testing.T, killSwitch bool) (*testEnv, *fakeClock) {
 	if err := e.agent.ImportVPNProfile(testWireGuardConf, "home.conf"); err != nil {
 		t.Fatal(err)
 	}
+	// Turning the VPN on needs the internet.
+	e.agent.uplink.status.Connected = true
 	if err := e.agent.SetVPNSwitches(api.VPNSwitches{Enabled: true, KillSwitch: killSwitch}); err != nil {
 		t.Fatal(err)
 	}
@@ -308,8 +310,13 @@ func TestVPN_Profiles(t *testing.T) {
 	if err := e.agent.SetActiveVPNProfile("office.conf"); err != nil {
 		t.Fatal(err)
 	}
-	if !e.runner.ran("ip link delete dev wg0") || !strings.Contains(e.readFile(e.paths.WireGuardConfig()), "office.example.com") {
-		t.Errorf("the tunnel should be rebuilt for office.conf; commands: %v", e.runner.commands)
+	if !e.runner.ran("ip link delete dev wg0") || strings.Contains(e.readFile(e.paths.WireGuardConfig()), "example.com") {
+		t.Errorf("the tunnel should be rebuilt for office.conf, with no server name for wg to look up; commands: %v", e.runner.commands)
+	}
+	// The other server's name is looked up in the background, then set.
+	e.runBackground()
+	if !e.runner.ran("endpoint 203.0.113.7:51820") {
+		t.Errorf("the looked-up address should be given to WireGuard; commands: %v", e.runner.commands)
 	}
 	if got := e.firewallEgress(); got != `elements = { "wg0" }` {
 		t.Errorf("devices' traffic must stay in the tunnel while switching, egress = %s", got)
@@ -500,5 +507,59 @@ func TestVPN_ServerLookupDoesntUndoANewerSave(t *testing.T) {
 	e.runBackground()
 	if !e.runner.ran("wg set wg0 peer " + p.Peer.PublicKey + " endpoint 203.0.113.7:51820") {
 		t.Errorf("commands: %q", e.runner.commands)
+	}
+}
+
+// The owner's report (A1c item 2): turning the VPN on without internet ran
+// `wg setconf` with the server's name, which hung 30 s on the lookup while
+// rbd's lock was held, so every page waited. WireGuard must only ever get
+// an address: none at first, the looked-up one later, and that one again
+// the next time the tunnel is set up (no new lookup needed).
+func TestVPN_WireGuardIsNeverGivenAServerName(t *testing.T) {
+	e, _ := newVPNEnv(t, true)
+	if conf := e.readFile(e.paths.WireGuardConfig()); strings.Contains(conf, "vpn.example.com") || strings.Contains(conf, "Endpoint =") {
+		t.Fatalf("before the lookup the file must have no server at all:\n%s", conf)
+	}
+	e.runBackground()
+	if !e.runner.ran("endpoint 203.0.113.7:51820") {
+		t.Errorf("the looked-up address should be set; commands: %v", e.runner.commands)
+	}
+
+	// Turned off and on again: the remembered address goes straight in.
+	for _, on := range []bool{false, true} {
+		if err := e.agent.SetVPNSwitches(api.VPNSwitches{Enabled: on, KillSwitch: true}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if conf := e.readFile(e.paths.WireGuardConfig()); !strings.Contains(conf, "Endpoint = 203.0.113.7:51820") {
+		t.Errorf("the remembered address should be in the file:\n%s", conf)
+	}
+	e.backgroundMu.Lock()
+	queued := len(e.pending)
+	e.backgroundMu.Unlock()
+	if queued != 0 {
+		t.Errorf("a known address needs no new lookup, but %d are queued", queued)
+	}
+}
+
+// Without internet the VPN can't be turned on (it can't start anyway), and
+// rbd says why at once instead of trying. Turning it off always works.
+func TestVPN_CantBeTurnedOnWithoutInternet(t *testing.T) {
+	e, _ := newVPNEnv(t, false)
+	e.agent.uplink.status.Connected = false
+	if err := e.agent.SetVPNSwitches(api.VPNSwitches{Enabled: false}); err != nil {
+		t.Fatalf("turning the VPN off must work without internet: %v", err)
+	}
+	e.runner.commands = nil
+	err := e.agent.SetVPNSwitches(api.VPNSwitches{Enabled: true})
+	if !errors.Is(err, errNoUplink) {
+		t.Fatalf("got %v, want %v", err, errNoUplink)
+	}
+	if e.runner.ran("wg") || e.agent.cfg.VPN.Enabled {
+		t.Errorf("nothing may change; commands: %v", e.runner.commands)
+	}
+	// The kill switch alone can still be changed.
+	if err := e.agent.SetVPNSwitches(api.VPNSwitches{KillSwitch: true}); err != nil {
+		t.Errorf("the kill switch should still change without internet: %v", err)
 	}
 }

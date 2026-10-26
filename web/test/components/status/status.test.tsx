@@ -143,6 +143,16 @@ describe('VPN', () => {
     expect(killSwitch).toHaveProperty('disabled', true);
     expect(killSwitch.getAttribute('aria-checked')).toBe('false');
   });
+
+  it('“Use the VPN” can’t be turned on without internet, and says why', () => {
+    renderStatus((status) => {
+      status.uplink.connected = false;
+      status.vpn = { ...status.vpn, enabled: false, state: 'off' };
+    });
+    const vpn = within(section('VPN'));
+    expect(vpn.getByRole('switch', { name: /Use the VPN/ })).toHaveProperty('disabled', true);
+    expect(vpn.getByText('Needs an internet connection')).toBeTruthy();
+  });
 });
 
 describe('devices and networks', () => {

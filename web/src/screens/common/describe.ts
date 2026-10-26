@@ -159,3 +159,18 @@ export function vpnStateView(vpn: VPNStatus): VpnStateView {
       };
   }
 }
+
+/**
+ * The short reason shown in place of a feature's subtitle when it needs the internet and
+ * RasBeacon has none right now. rbd refuses those features with its own message too.
+ */
+export const NEEDS_INTERNET = 'Needs an internet connection';
+
+/**
+ * Why "Use the VPN" can't be turned on right now, or null when it can: the tunnel can't start
+ * without the internet. Turning the VPN off always works. (Without a profile the switch is grayed
+ * out as well; the pages handle that case themselves.)
+ */
+export function vpnSwitchBlocked(vpn: VPNStatus, online: boolean): string | null {
+  return !vpn.enabled && !online ? NEEDS_INTERNET : null;
+}

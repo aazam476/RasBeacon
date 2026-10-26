@@ -2,17 +2,19 @@ import { useDevice } from '@/data/device';
 import type { VPNStatus } from '@/data/types';
 import { formatAgo, formatBytes } from '@/lib/format';
 import { Badge, BreakableText, LinkRow, Row, Section, SwitchRow } from '@/ui';
-import { vpnStateView } from '../common/describe';
+import { vpnStateView, vpnSwitchBlocked } from '../common/describe';
 
 /** The VPN's two switches, the profile in use and the tunnel's readings. */
 export function VpnSection({ vpn }: { vpn: VPNStatus }) {
-  const { vpnSettings, setVpnEnabled, setKillSwitch } = useDevice();
+  const { status, vpnSettings, setVpnEnabled, setKillSwitch } = useDevice();
   const view = vpnStateView(vpn);
   const profile = vpnSettings.data?.activeProfile;
   // The same rule as the VPN page: without a profile the kill switch does nothing, so it shows
   // off and can't be pressed. This also waits for the settings, since saving one switch sends
   // the other's saved value too.
   const configured = (vpnSettings.data?.profiles.length ?? 0) > 0;
+  // Without the internet the VPN can't be turned on; the reason replaces the subtitle.
+  const blocked = profile ? vpnSwitchBlocked(vpn, status.data?.uplink.connected ?? false) : null;
 
   return (
     <Section
@@ -26,10 +28,10 @@ export function VpnSection({ vpn }: { vpn: VPNStatus }) {
       <SwitchRow
         leading={{ tile: 'vpn_lock', color: 'teal' }}
         title="Use the VPN"
-        subtitle="Send your devices' traffic through WireGuard"
+        subtitle={blocked ?? "Send your devices' traffic through WireGuard"}
         checked={vpn.enabled}
         onChange={setVpnEnabled}
-        disabled={!profile}
+        disabled={!profile || blocked !== null}
       />
       {profile && <LinkRow to="/vpn" title="Profile" value={<BreakableText>{profile}</BreakableText>} />}
       {/* With the tunnel off, the last handshake no longer says anything about it. */}

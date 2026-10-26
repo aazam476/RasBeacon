@@ -146,7 +146,7 @@ func (a *Agent) applyVPNConfig() error {
 		PrivateKey:    wg.PrivateKey.String(),
 		PeerPublicKey: wg.Peer.PublicKey.String(),
 		PresharedKey:  presharedKeyText(wg.Peer),
-		Endpoint:      wg.Peer.Endpoint,
+		Endpoint:      a.knownEndpoint(wg.Peer.Endpoint),
 		AllowedIPs:    wg.Peer.AllowedIPs,
 		Keepalive:     wg.EffectiveKeepalive(),
 	})
@@ -175,8 +175,29 @@ func (a *Agent) applyVPNConfig() error {
 		}
 	}
 	a.vpn.lastRefresh = a.now()
+	if a.knownEndpoint(wg.Peer.Endpoint) == "" {
+		// The server is a name not looked up yet: the tunnel starts without
+		// an address, and the lookup runs now in the background.
+		key, endpoint := wg.Peer.PublicKey.String(), wg.Peer.Endpoint
+		a.background(func() { a.refreshEndpoint(key, endpoint) })
+	}
 	a.applyRoutedIPv6()
 	return a.updateTunnel()
+}
+
+// knownEndpoint returns the "address:port" to give WireGuard for endpoint:
+// endpoint itself when it already is an address, the address its name had
+// at the last lookup, or "" when the name hasn't been looked up yet. It
+// never looks anything up, so it is safe to call with a.mu held.
+func (a *Agent) knownEndpoint(endpoint string) string {
+	host, _, err := net.SplitHostPort(endpoint)
+	if err != nil {
+		return ""
+	}
+	if _, err := netip.ParseAddr(host); err == nil {
+		return endpoint
+	}
+	return a.endpointAddresses[endpoint]
 }
 
 // wantedRoutedIPv6 returns the public IPv6 network that should be on the
@@ -275,7 +296,8 @@ func (a *Agent) updateTunnel() error {
 const endpointLookupTime = 15 * time.Second
 
 // refreshEndpoint looks up the VPN server's name in endpoint ("host:port")
-// again and gives WireGuard the address it has now. Called without a.mu:
+// again, remembers the address (see knownEndpoint), and gives WireGuard the
+// address it has now. Called without a.mu:
 // the lookup may take endpointLookupTime. The owner may have saved another
 // server meanwhile, so the address is only set if peerKey and endpoint are
 // still the saved ones; otherwise an old server would replace the new one.
@@ -298,6 +320,10 @@ func (a *Agent) refreshEndpoint(peerKey, endpoint string) {
 		return // the settings changed while looking: they set the endpoint themselves
 	}
 	address := net.JoinHostPort(addresses[0].Unmap().String(), port)
+	if a.endpointAddresses == nil {
+		a.endpointAddresses = map[string]string{}
+	}
+	a.endpointAddresses[endpoint] = address
 	cmd := routing.SetEndpoint(peerKey, address)
 	if _, err := a.runner.Run(cmd[0], cmd[1:]...); err != nil {
 		slog.Warn("could not set the VPN server's address", "endpoint", endpoint, "address", address, "error", err)
@@ -494,6 +520,13 @@ func (a *Agent) SetVPNSwitches(req api.VPNSwitches) error {
 	}
 	if req.KillSwitch && !a.cfg.VPN.KillSwitch && len(a.cfg.VPN.Profiles) == 0 {
 		return &config.ValidationError{Field: "killSwitch", Message: "Import a WireGuard profile first."}
+	}
+	// Turning the VPN on needs the internet: without it the tunnel can't
+	// start, and the page shows the switch grayed out for the same reason.
+	// Turning it off always works. (Without any profile, saveVPN below
+	// says to set one up first, which is the more useful answer.)
+	if req.Enabled && !a.cfg.VPN.Enabled && len(a.cfg.VPN.Profiles) > 0 && !a.uplink.status.Connected {
+		return errNoUplink
 	}
 	newCfg := a.cfg.Clone()
 	newCfg.VPN.Enabled, newCfg.VPN.KillSwitch = req.Enabled, req.KillSwitch

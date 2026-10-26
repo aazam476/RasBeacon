@@ -3,7 +3,7 @@ import type { VPNSettings, VPNStatus } from '@/data/types';
 import { formatAgo, formatBytes } from '@/lib/format';
 import { Loaded } from '@/shell/Loaded';
 import { BreakableText, Notice, Row, Section, SwitchRow, type NoticeTone, type Tone } from '@/ui';
-import { vpnStateView } from '../common/describe';
+import { vpnStateView, vpnSwitchBlocked } from '../common/describe';
 import { ImportProfileSection } from './ImportProfileSection';
 import { ProfilesSection } from './ProfilesSection';
 import { PublicKeySection, ServerDetailsSection } from './ServerDetails';
@@ -19,7 +19,7 @@ export function VpnScreen() {
         return (
           <>
             <Loaded data={status} what="the VPN state" onRetry={refreshStatus}>
-              {(status) => <TunnelSections vpn={status.vpn} settings={settings} />}
+              {(status) => <TunnelSections vpn={status.vpn} online={status.uplink.connected} settings={settings} />}
             </Loaded>
             <ProfilesSection settings={settings} />
             <ImportProfileSection />
@@ -40,10 +40,12 @@ const NOTICE_TONES: Record<Tone, NoticeTone> = {
   tint: 'info',
 };
 
-function TunnelSections({ vpn, settings }: { vpn: VPNStatus; settings: VPNSettings }) {
+function TunnelSections({ vpn, online, settings }: { vpn: VPNStatus; online: boolean; settings: VPNSettings }) {
   const { setVpnEnabled, setKillSwitch } = useDevice();
   const view = vpnStateView(vpn);
   const configured = settings.profiles.length > 0;
+  // Without the internet the VPN can't be turned on; the reason replaces the subtitle.
+  const blocked = configured ? vpnSwitchBlocked(vpn, online) : null;
 
   return (
     <>
@@ -66,10 +68,10 @@ function TunnelSections({ vpn, settings }: { vpn: VPNStatus; settings: VPNSettin
         <SwitchRow
           leading={{ tile: 'vpn_lock', color: 'teal' }}
           title="Use the VPN"
-          subtitle="Send all your devices' traffic through WireGuard"
+          subtitle={blocked ?? "Send all your devices' traffic through WireGuard"}
           checked={vpn.enabled}
           onChange={setVpnEnabled}
-          disabled={!configured}
+          disabled={!configured || blocked !== null}
         />
         {vpn.enabled && (
           <>

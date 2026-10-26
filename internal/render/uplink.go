@@ -218,7 +218,7 @@ type WireGuardInput struct {
 	PrivateKey    string
 	PeerPublicKey string
 	PresharedKey  string // optional
-	Endpoint      string // "host:port"
+	Endpoint      string // "address:port", or "" while it isn't known yet
 	AllowedIPs    []netip.Prefix
 	Keepalive     int
 }
@@ -230,7 +230,9 @@ func WireGuard(in WireGuardInput) (string, error) {
 			return "", fmt.Errorf("invalid WireGuard key")
 		}
 	}
-	if strings.ContainsAny(in.Endpoint, "\n\r") || in.Endpoint == "" {
+	// An empty endpoint is allowed: the server's address isn't known yet,
+	// and rbd sets it with `wg set` once it has looked the name up.
+	if strings.ContainsAny(in.Endpoint, "\n\r") {
 		return "", fmt.Errorf("invalid endpoint %q", in.Endpoint)
 	}
 	var allowed []string
