@@ -324,21 +324,33 @@ interface SwitchRowProps {
   className?: string;
 }
 
-/** A setting that applies as soon as its switch is flipped. The title names the switch. */
+/**
+ * A setting that applies as soon as its switch is flipped. The title names the switch.
+ *
+ * With very large text on a narrow phone (200% on a 320 px screen), the icon and the switch grow
+ * too and leave the title a few letters wide. So when the row itself is narrower than 14rem (which
+ * only happens with large text: rem grows with the text size), it does what iOS does: the icon
+ * goes, and the switch moves to its own line under the text.
+ */
 export function SwitchRow({ title, subtitle, leading, checked, onChange, disabled, className }: SwitchRowProps) {
   const id = useId();
 
   return (
-    <div className={cn('row', className)}>
-      <Leading leading={leading} />
+    <div className={cn('row @container flex-wrap', className)}>
+      {/* `contents`: the wrapper adds no box, so the row still lines up with its icon. */}
+      <span className="contents @max-[14rem]:hidden">
+        <Leading leading={leading} />
+      </span>
       <RowText title={title} subtitle={subtitle} titleId={`${id}-title`} subtitleId={`${id}-subtitle`} />
-      <Switch
-        checked={checked}
-        onChange={onChange}
-        labelledBy={`${id}-title`}
-        describedBy={subtitle ? `${id}-subtitle` : undefined}
-        disabled={disabled}
-      />
+      <span className="flex @max-[14rem]:basis-full">
+        <Switch
+          checked={checked}
+          onChange={onChange}
+          labelledBy={`${id}-title`}
+          describedBy={subtitle ? `${id}-subtitle` : undefined}
+          disabled={disabled}
+        />
+      </span>
     </div>
   );
 }
