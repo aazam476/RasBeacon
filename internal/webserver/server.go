@@ -20,6 +20,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	pathpkg "path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -589,6 +590,13 @@ func (s *Server) handleUI(w http.ResponseWriter, r *http.Request) {
 		path = "index.html"
 	}
 	if _, err := fs.Stat(s.ui, path); err != nil {
+		// A missing file (index.php, .env, wp-login.php: what scanners try)
+		// is "not found", so they don't report software that isn't here.
+		// Only addresses without a file extension are screens.
+		if pathpkg.Ext(path) != "" {
+			http.NotFound(w, r)
+			return
+		}
 		path = "index.html"
 	}
 	if _, err := fs.Stat(s.ui, "index.html"); err != nil {

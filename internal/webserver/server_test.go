@@ -139,6 +139,21 @@ func TestNormalMode_DoesNotRedirect(t *testing.T) {
 	}
 }
 
+// Missing files are "not found", so vulnerability scanners trying
+// index.php or wp-login.php don't report software that isn't here; only
+// addresses without an extension are the web UI's screens.
+func TestUI_MissingFilesAreNotFound(t *testing.T) {
+	s, _ := newTestServer(api.ModeNormal)
+	for _, path := range []string{"/index.php", "/wp-login.php", "/.env", "/assets/missing.js"} {
+		if rec := request(s, "GET", "http://rasbeacon.lan"+path, "", nil, nil); rec.Code != http.StatusNotFound {
+			t.Errorf("%s = %d, want 404", path, rec.Code)
+		}
+	}
+	if rec := request(s, "GET", "http://rasbeacon.lan/assets/app-1a2b.js", "", nil, nil); rec.Code != http.StatusOK {
+		t.Errorf("an existing file = %d, want 200", rec.Code)
+	}
+}
+
 func TestUI_HashedAssetsAreCachedLong(t *testing.T) {
 	s, _ := newTestServer(api.ModeNormal)
 	rec := request(s, "GET", "http://10.87.0.1/assets/app-1a2b.js", "", nil, nil)
