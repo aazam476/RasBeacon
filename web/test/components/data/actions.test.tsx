@@ -562,3 +562,51 @@ describe('login pages', () => {
     );
   });
 });
+
+describe('first-time setup', () => {
+  const form = {
+    adminPassword: 'tangerine-orbit-42',
+    adminPasswordConfirm: 'tangerine-orbit-42',
+    hotspotSsid: 'Travel',
+    hotspotPassword: 'kq7m-2xvd-h8pt',
+    hotspotBand: '5GHz' as const,
+  };
+
+  it('a form with problems is refused before anything is sent', async () => {
+    const { device, sent } = await withReadyDevice({});
+    const before = sent.length;
+    const error = await device()
+      .finishSetup({ ...form, adminPasswordConfirm: 'different' })
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(FieldErrors);
+    expect((error as FieldErrors).fields.adminPasswordConfirm).toBeTruthy();
+    expect(sent.slice(before).some((r) => r.method === 'POST')).toBe(false);
+  });
+
+  it('the router’s refusal of a hotspot setting comes back for the form’s field', async () => {
+    const { device } = await withReadyDevice({
+      'POST /setup/claim': { status: 400, body: { error: 'This adapter can’t use 5 GHz.', field: 'hotspot.band' } },
+    });
+    const error = await device()
+      .finishSetup(form)
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(FieldErrors);
+    expect((error as FieldErrors).fields).toEqual({ hotspotBand: 'This adapter can’t use 5 GHz.' });
+  });
+});
+
+describe('Internet settings before they load', () => {
+  // Both send the whole saved uplink settings with one change; guessing the rest would lose
+  // saved networks.
+  it.each([
+    ['the Ethernet role', (d: Device) => d.setEthernetRole('uplink')],
+    ['the saved networks', (d: Device) => d.saveWifiNetworks([])],
+  ])('%s can’t be saved before the Internet settings load', async (_, change) => {
+    const { sent } = fakeRbweb({ answers: { 'GET /settings/uplink': { hang: true } } });
+    const device = renderProvider();
+    await waitFor(() => expect(device().status.data).toBeTruthy());
+    const error = await Promise.resolve(change(device())).catch((e: unknown) => e);
+    expect(error).toEqual(new Error("The Internet settings haven't loaded yet."));
+    expect(sent.some((r) => r.method === 'PUT')).toBe(false);
+  });
+});
