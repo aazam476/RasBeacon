@@ -17,9 +17,9 @@ This file lists what, and what redistributing the images requires.
 |---|---|---|
 | Debian trixie packages (Linux userland, systemd, hostapd, dnsmasq, nftables, OpenSSH, ...) | deb.debian.org | Various: GPL-2.0, GPL-3.0, LGPL, BSD, MIT, and others. Each package's terms are in `/usr/share/doc/<package>/copyright` inside the image. |
 | Raspberry Pi kernel, boot firmware and packages | archive.raspberrypi.com | Kernel: GPL-2.0. Boot firmware: Broadcom redistributable binary license. |
-| Wi-Fi firmware for the built-in radio (Cypress/Synaptics `brcmfmac`) | `firmware-brcm80211` package | Binary redistribution license, **to verify (milestone 6)** |
-| Wi-Fi firmware for MediaTek MT76 USB adapters | `linux-firmware` | MediaTek redistribution license, **to verify** |
-| Wi-Fi firmware for Realtek RTW88 USB adapters | `linux-firmware` | Realtek redistribution license, **to verify** |
+| Wi-Fi firmware for the built-in radio (Cypress/Synaptics `brcmfmac`) | `firmware-brcm80211` (from the Raspberry Pi base image) | Proprietary binary license that allows redistribution (as it must, for Debian and Raspberry Pi to ship it); the terms are in `/usr/share/doc/firmware-brcm80211/copyright` inside the image |
+| Wi-Fi firmware for MediaTek MT76 USB adapters | `firmware-mediatek` (Debian non-free-firmware) | Proprietary binary license that allows redistribution; the terms are in `/usr/share/doc/firmware-mediatek/copyright` inside the image |
+| Wi-Fi firmware for Realtek RTW88 USB adapters | `firmware-realtek` (Debian non-free-firmware) | Proprietary binary license that allows redistribution; the terms are in `/usr/share/doc/firmware-realtek/copyright` inside the image |
 | React, React DOM, React Router (in the web UI) | npm | MIT |
 | Tailwind CSS base styles (in the web UI's built CSS) | npm | MIT |
 | Material Symbols Rounded icon shapes (SVG paths in `web/src/ui/icons.ts`, in the web UI) | fonts.google.com/icons (github.com/google/material-design-icons) | Apache-2.0 |

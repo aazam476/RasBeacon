@@ -1,5 +1,8 @@
 package plugin
 
+// This file builds the Podman commands that run plugins: their shared
+// network, their container's ports, folders, devices and settings.
+
 import (
 	"crypto/sha256"
 	"encoding/hex"

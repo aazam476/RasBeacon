@@ -156,7 +156,7 @@ func ParseTempDisabled(out string) []string {
 const (
 	SecurityOpen       = "open"
 	SecurityPersonal   = "personal"
-	SecurityEnterprise = "enterprise" // e.g. eduroam; supported from milestone 3
+	SecurityEnterprise = "enterprise" // WPA-Enterprise, e.g. eduroam
 	SecurityOther      = "other"      // e.g. old WEP; not supported
 )
 

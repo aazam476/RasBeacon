@@ -43,8 +43,8 @@ func New() (config.Identity, error) {
 }
 
 // passwordAlphabet leaves out characters people confuse when reading a
-// password off a screen: 0/o, 1/l/i. 32 symbols means each one carries 5 bits
-// of randomness.
+// password off a screen: 0/o, 1/l/i. Its 31 symbols give each one almost 5
+// bits of randomness.
 const passwordAlphabet = "abcdefghjkmnpqrstuvwxyz23456789"
 
 // NewReadablePassword returns a random Wi-Fi password like

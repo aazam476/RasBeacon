@@ -1,5 +1,9 @@
 package backup
 
+// This file writes and reads backup files: a tar archive of the settings
+// (and plugins), compressed with zstd, then encrypted with the backup's
+// password.
+
 import (
 	"archive/tar"
 	"bufio"

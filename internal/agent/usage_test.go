@@ -111,7 +111,7 @@ func TestClients_DataUseIsCountedAndTheLimitBlocksADevice(t *testing.T) {
 		t.Errorf("saved = %+v, %v", saved, err)
 	}
 
-	// A limit beyond 1 TB is refused.
+	// A negative limit is refused.
 	var invalid *config.ValidationError
 	if _, err := e.agent.UpdateUsageSettings(api.UsageSettings{LimitMB: -1}); !errors.As(err, &invalid) {
 		t.Errorf("got %v", err)

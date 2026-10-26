@@ -1,5 +1,8 @@
 package plugin
 
+// This file lists the USB drives a plugin may be given (from lsblk) and
+// chooses how each kind of file system is mounted.
+
 import (
 	"encoding/json"
 	"slices"

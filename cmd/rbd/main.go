@@ -1,7 +1,7 @@
 // Command rbd is RasBeacon's privileged background program (a "daemon").
 //
-// It runs as root, started by systemd (image/overlay/usr/lib/systemd/system/
-// rbd.service), and owns all network state. The logic lives in
+// It runs as root, started by systemd (rbd.service, in
+// image/layer/rasbeacon.d/customize.overlay/usr/lib/systemd/system/), and owns all network state. The logic lives in
 // internal/agent; this file only wires it up:
 //
 //  1. Set up logging (systemd's journal collects everything on stderr).

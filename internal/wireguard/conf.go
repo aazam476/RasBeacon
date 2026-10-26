@@ -1,5 +1,8 @@
 package wireguard
 
+// This file reads WireGuard profiles (.conf files in wg-quick's format)
+// and checks what RasBeacon accepts in them.
+
 import (
 	"fmt"
 	"net"

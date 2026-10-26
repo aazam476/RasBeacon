@@ -9,7 +9,10 @@
 //	RBDOH_BOOTSTRAP plain DNS servers that look up the DoH servers' names,
 //	                space-separated, asked in turn
 //
-// systemd runs it as a throwaway unprivileged user (DynamicUser).
+// systemd runs it as its own unprivileged user, rbdoh (not a throwaway
+// DynamicUser): the VPN's routing rules pick its traffic by that user's ID,
+// so it goes through the tunnel like devices' DNS (see dohUser in
+// internal/agent/dns.go).
 package main
 
 import (

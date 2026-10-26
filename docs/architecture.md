@@ -45,8 +45,9 @@ The reasons behind the big decisions are in [design.md](design.md) and
   127.0.0.1:5053, and it asks the DoH servers over HTTPS. It looks up the
   DoH servers' own names with the plain DNS servers in the list, then the
   network's (127.0.0.53), and keeps the last addresses found in case those
-  fail later. It runs as a throwaway unprivileged user (systemd
-  `DynamicUser`).
+  fail later. It runs as its own unprivileged user, `rbdoh` (not a
+  throwaway `DynamicUser`), because the VPN's routing rules pick its
+  traffic by that user's ID.
 - **nftables** is the Linux firewall. It also does the *NAT* that lets all
   your devices share RasBeacon's one address on the upstream network.
 - **wpa_supplicant** joins upstream Wi-Fi networks with the built-in radio.

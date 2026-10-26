@@ -6,7 +6,7 @@
 // The Raspberry Pi's built-in Wi-Fi chip can only hold about 8 connected
 // devices when it acts as a hotspot, which is not enough. So RasBeacon uses a
 // USB Wi-Fi adapter for the hotspot and keeps the built-in chip for joining
-// the upstream network (the "uplink", added in milestone 2).
+// the upstream network (the "uplink").
 //
 // # How detection works
 //

@@ -2,8 +2,8 @@
 // /api/v1/ API to devices on the hotspot.
 //
 // It runs as the unprivileged "rbweb" user. systemd grants it only the right
-// to listen on port 80 (see image/overlay/usr/lib/systemd/system/
-// rbweb.service). The logic lives in internal/webserver.
+// to listen on ports 80 and 443 (see rbweb.service, in
+// image/layer/rasbeacon.d/customize.overlay/usr/lib/systemd/system/). The logic lives in internal/webserver.
 package main
 
 import (

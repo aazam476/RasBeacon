@@ -1,5 +1,8 @@
 package plugin
 
+// This file fills in placeholders such as {port:3000} in a plugin's
+// manifest (see Values).
+
 import (
 	"regexp"
 	"strconv"

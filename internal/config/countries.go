@@ -1,5 +1,8 @@
 package config
 
+// This file checks Wi-Fi country codes: the two-letter codes the Linux
+// regulatory database knows, with a hint for common mistakes (UK for GB).
+
 import "strings"
 
 // countryCodes are the ISO 3166-1 two-letter country codes. The Wi-Fi

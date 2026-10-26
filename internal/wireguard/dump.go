@@ -1,5 +1,8 @@
 package wireguard
 
+// This file reads `wg show wg0 dump`: whether the tunnel has reached the
+// server lately, and how much it sent and received.
+
 import (
 	"strconv"
 	"strings"

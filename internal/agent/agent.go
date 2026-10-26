@@ -6,20 +6,50 @@
 //
 // # Files in this package
 //
-//	agent.go       startup sequence and switching between modes (this file)
-//	operations.go  actions requested through the API (claim, settings, ...)
-//	uplink.go      the connection to the internet (Ethernet, Wi-Fi)
-//	enterprise.go  certificates for eduroam and other Enterprise networks
-//	vpn.go         the WireGuard VPN and its kill switch
-//	guest.go       the guest network
-//	portal.go      hotel login pages (captive portals) with the VPN on
-//	portalbrowser.go  logging in to them from RasBeacon's own browser
-//	clock.go       keeping the time right without a clock battery
-//	https.go       the HTTPS setting
-//	update.go      installing and confirming updates
-//	status.go      the status page and diagnostics export
-//	readings.go    hardware readings, traffic, storage, Ethernet details
-//	server.go      the local HTTP API that rbweb talks to
+//	agent.go           startup sequence and switching between modes (this file)
+//	operations.go      actions requested through the API (claim, settings, ...)
+//	server.go          the local HTTP API that rbweb talks to
+//	status.go          the status page and the diagnostics report
+//	readings.go        hardware readings, traffic, storage, Ethernet details
+//
+//	The hotspot and its devices:
+//	hotspotstart.go    checking new hotspot settings, and undoing ones that fail
+//	hotspotcheck.go    the minute check that repairs the hotspot
+//	hotspotstall.go    noticing a hotspot that stopped sending to its devices
+//	guest.go           the guest network
+//	access.go          who may join: the allow list and the device limit
+//	clients.go         pausing, disconnecting and forgetting devices
+//	usage.go           device names and the data each one uses
+//	qr.go              the QR codes for joining the hotspot
+//
+//	The internet side:
+//	uplink.go          the connection to the internet (Ethernet, Wi-Fi)
+//	uplinkcontrols.go  the Internet page's buttons (disconnect, renew, ...)
+//	enterprise.go      certificates for eduroam and other Enterprise networks
+//	servercert.go      trusting an Enterprise login server on first connect
+//	dns.go             the owner's DNS servers, plain and DNS-over-HTTPS
+//	vpn.go             the WireGuard VPN and its kill switch
+//	portal.go          hotel login pages (captive portals) with the VPN on
+//	portalbrowser.go   logging in to them from RasBeacon's own browser
+//	speedtest.go       the speed test
+//
+//	Plugins:
+//	plugins.go         the plugins' state and settings (see its list of files)
+//	pluginsinstall.go  previewing and installing plugins
+//	pluginsrun.go      starting, watching and stopping their containers
+//	pluginsnet.go      the catalog, and downloads through the VPN
+//	pluginsfetch.go    downloading a plugin's app again after a restore
+//	pluginskept.go     data kept when a plugin is removed
+//	socketmark_*.go    marking plugin downloads for the VPN (Linux only)
+//
+//	The System page:
+//	update.go          installing and confirming updates
+//	backup.go          backups and restores
+//	https.go           the HTTPS setting
+//	hostname.go        RasBeacon's name on the network
+//	swap.go            the swap file
+//	clock.go           keeping the time right without a clock battery
+//	remember.go        "Stay logged in"
 //
 // # One change at a time
 //
@@ -65,7 +95,8 @@ import (
 	"rasbeacon/internal/system"
 )
 
-// systemd services rbd controls. Their unit files are in image/overlay/.
+// systemd services rbd controls. Their unit files are in
+// image/layer/rasbeacon.d/customize.overlay/usr/lib/systemd/system/.
 const (
 	hostapdService = "rasbeacon-hostapd.service"
 	dnsmasqService = "rasbeacon-dnsmasq.service"

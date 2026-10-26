@@ -1,5 +1,9 @@
 package agent
 
+// This file has who may join the hotspot: the allow list of MAC addresses
+// (hostapd's accept_mac_file) and the device limit (max_num_sta). Devices
+// on the Ethernet client port and the guest network aren't affected.
+
 import (
 	"fmt"
 	"log/slog"

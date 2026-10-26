@@ -4,8 +4,10 @@ package webserver
 //
 // After a successful login, the browser receives a random session ID in a
 // cookie. Every later request sends the cookie back, and we look the ID up in
-// a table kept in memory. Sessions are lost when rbweb restarts; you then
-// simply log in again. Nothing about sessions is written to disk.
+// a table kept in memory, so sessions are lost when rbweb restarts. With
+// "Stay logged in", rbd keeps a token in a second cookie, and rbweb starts
+// a new session from it after a restart (see currentSession); otherwise you
+// log in again. Nothing about sessions themselves is written to disk.
 //
 // CSRF protection: a malicious web page could try to make your browser send
 // a request to RasBeacon (a "cross-site request forgery"). Two defences:

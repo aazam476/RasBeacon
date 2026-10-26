@@ -10,7 +10,8 @@ package's license is in the image at `/usr/share/doc/<package>/copyright`.
 
 ## Finding the exact source code
 
-Every release includes `rasbeacon-<board>-<version>.packages.txt`, listing
+Every release includes `rasbeacon-<version>.packages.txt` (Pi 4 and 5) and
+`rasbeacon-pi3-zero2w-<version>.packages.txt` (Pi 3 and Zero 2 W), listing
 each package with its **source package** and **version**, for example:
 
 ```

@@ -31,8 +31,9 @@ build.sh                       builds one image: rpi64 or rpi3 (used by CI)
 | `system_a`, `system_b` | `/` (active one, read-only) | The operating system, one copy per slot |
 | `persistent` (ext4) | `/persistent` | Settings (`/persistent/rasbeacon`), SSH host keys |
 
-The system is read-only, so a power cut can't corrupt it. Updates will write
-the other slot and switch over with automatic rollback (milestone 6).
+The system is read-only, so a power cut can't corrupt it. Updates write the
+other slot and switch over, going back by themselves if the new version
+doesn't start (see docs/releasing.md).
 
 ## Building
 

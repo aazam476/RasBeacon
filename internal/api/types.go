@@ -2,7 +2,7 @@
 // and rbd.
 //
 // These Go types are the single source of truth for the API. The web UI has
-// matching TypeScript types in web/src/api/types.ts, and docs/api.md
+// matching TypeScript types in web/src/data/types.ts, and docs/api.md
 // describes every endpoint. When you change a type here, update both.
 //
 // Field names use camelCase in JSON (the `json:"..."` tags) because that is
@@ -89,7 +89,7 @@ type ClaimResponse struct {
 }
 
 // PasswordRequest carries the admin password, for login and for actions
-// that ask for it again (reveal hotspot password, factory reset).
+// that ask for it again (factory reset).
 type PasswordRequest struct {
 	Password string `json:"password"`
 }
@@ -692,8 +692,8 @@ type AccessSettings struct {
 	MaxDevices int `json:"maxDevices"`
 }
 
-// RevealPasswordResponse returns the hotspot password after the admin
-// password was entered again.
+// RevealPasswordResponse returns the hotspot password. Being logged in is
+// enough to ask for it.
 type RevealPasswordResponse struct {
 	HotspotPassword string `json:"hotspotPassword"`
 }
@@ -727,7 +727,7 @@ type ClientNameRequest struct {
 }
 
 // WiFiQRRequest asks for a QR code to join a network (POST /wifi-qr):
-// "hotspot" (needs the admin password) or "guest".
+// "hotspot" or "guest". Being logged in is enough.
 type WiFiQRRequest struct {
 	Network string `json:"network"`
 }

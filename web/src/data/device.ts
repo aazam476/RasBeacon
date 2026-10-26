@@ -347,7 +347,7 @@ export interface DeviceActions {
   /** Its last 500 lines of output. */
   pluginLogs: (id: string) => Promise<PluginLogLine[]>;
   pluginDrives: () => Promise<PluginDrive[]>;
-  /** The extra catalog sources ("owner/repo"). Field keys: sources.<n>. */
+  /** Every catalog source ("owner/repo"), the built-in one too if kept. Field keys: sources.<n>. */
   savePluginSources: (sources: string[]) => Promise<void>;
 }
 

@@ -1,5 +1,8 @@
 package update
 
+// This file writes an update's partition images (a tar of sparse images)
+// to the other A/B slot.
+
 import (
 	"archive/tar"
 	"fmt"

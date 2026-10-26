@@ -1,5 +1,9 @@
 package agent
 
+// This file downloads a plugin's app (its container image) again after a
+// restore from a backup that didn't hold it, checking that the download is
+// the same plugin, version and author.
+
 import (
 	"encoding/base64"
 	"errors"

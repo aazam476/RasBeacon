@@ -1,5 +1,8 @@
 package plugin
 
+// This file reads the image names inside a plugin's image.tar, so a plugin
+// can't bring an image named like another plugin's.
+
 import (
 	"archive/tar"
 	"encoding/json"

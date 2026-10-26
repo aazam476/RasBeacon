@@ -1,5 +1,8 @@
 package speedtest
 
+// This file is a small stand-in for Cloudflare's speed test service, used
+// by the tests and the simulated device (rbd -dev).
+
 import (
 	"fmt"
 	"io"

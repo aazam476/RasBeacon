@@ -1,9 +1,7 @@
 /**
  * The real provider's pure logic, kept apart from React so it can be unit-tested
- * (logic.test.ts). Most of it comes from the original UI: decidePhase (app/useApp.ts), the form
- * checks (shared/validation.ts, Setup/setupForm.ts, Guest/useGuestSettings.ts), the network list
- * helpers (Uplink/networkList.ts), the VPN form (VPN/vpnForm.ts) and the gestures on the login
- * page picture (Portal/browserGestures.ts).
+ * (logic.test.ts): which screen to show (decidePhase), the form checks, the network list
+ * helpers, the VPN form and the gestures on the login page picture.
  *
  * These checks mirror the router's (internal/config/config.go, internal/auth/password.go), so
  * mistakes show while typing. The router checks everything again; if the two ever disagree, the

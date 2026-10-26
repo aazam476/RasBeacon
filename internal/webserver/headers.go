@@ -1,5 +1,8 @@
 package webserver
 
+// This file adds the security headers to every answer: the Content-Security-
+// Policy, no framing, and no guessing of file types.
+
 import "net/http"
 
 // contentSecurityPolicy tells the browser what RasBeacon's pages may load

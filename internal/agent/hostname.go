@@ -1,5 +1,8 @@
 package agent
 
+// This file has RasBeacon's name on the network (System → About): the
+// system's host name, and the <name>.lan address dnsmasq answers for it.
+
 import (
 	"fmt"
 	"log/slog"
