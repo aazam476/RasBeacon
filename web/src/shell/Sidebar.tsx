@@ -36,7 +36,9 @@ export function Sidebar() {
               <NavLink
                 key={item.path}
                 to={item.path}
-                end
+                // Only Status ("/") must match exactly, or it would be highlighted on every page;
+                // the others stay highlighted on their own pages, such as a plugin's page.
+                end={item.path === '/'}
                 className={({ isActive }) =>
                   cn(
                     'flex min-h-8 items-center gap-2.5 rounded-[8px] px-2 text-body text-label transition-colors',

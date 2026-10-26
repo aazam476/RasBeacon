@@ -48,6 +48,14 @@ describe('on a computer', () => {
     expect(sidebar.queryByRole('link', { name: 'More' })).toBeNull();
   });
 
+  it('keeps Plugins highlighted on a plugin’s page, and Status only on its own', () => {
+    setViewport('desktop');
+    renderScreen(<Pages />, fakeDevice(), '/plugins/adguard-home');
+    const sidebar = within(screen.getByRole('navigation', { name: 'Main navigation' }));
+    expect(sidebar.getByRole('link', { name: 'Plugins' }).getAttribute('aria-current')).toBe('page');
+    expect(sidebar.getByRole('link', { name: 'Status' }).getAttribute('aria-current')).toBeNull();
+  });
+
   it('leads back from Browse plugins to Plugins', async () => {
     setViewport('desktop');
     const device = fakeDevice(undefined, { pluginCatalog: async () => ({ entries: [] }) });

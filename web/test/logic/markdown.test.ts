@@ -10,6 +10,19 @@ describe('parseMarkdown', () => {
     ]);
   });
 
+  it('keeps a # that ends a heading’s text, and drops closing #s after a space', () => {
+    expect(parseMarkdown('## Using C#')[0]).toEqual({
+      kind: 'heading',
+      level: 2,
+      content: [{ kind: 'text', text: 'Using C#' }],
+    });
+    expect(parseMarkdown('## Setup ##')[0]).toEqual({
+      kind: 'heading',
+      level: 2,
+      content: [{ kind: 'text', text: 'Setup' }],
+    });
+  });
+
   it('reads lists, with wrapped items, and headings', () => {
     const blocks = parseMarkdown(
       '# Using it\n\n- **Fan:** three steps. From\n  *Fan on at* on.\n- Power button.\n1. One',

@@ -20,7 +20,8 @@ export type Block =
   | { kind: 'list'; ordered: boolean; items: Inline[][] }
   | { kind: 'code'; text: string };
 
-const HEADING = /^(#{1,6})\s+(.*?)\s*#*\s*$/;
+// Closing #s ("## Title ##") are dropped only after a space, so "## Using C#" keeps its "#".
+const HEADING = /^(#{1,6})\s+(.*?)(?:\s+#+)?\s*$/;
 const LIST_ITEM = /^\s{0,3}([-*+]|\d{1,9}[.)])\s+(.*)$/;
 
 /** Reads Markdown text into blocks. */

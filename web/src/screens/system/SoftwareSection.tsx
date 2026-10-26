@@ -25,8 +25,6 @@ import { BackupSheet } from './BackupSection';
 const BOARDS: Record<string, string> = {
   rpi64: 'Raspberry Pi 4 and 5',
   rpi3: 'Raspberry Pi Zero 2 W, 3B and 3B+',
-  pi4: 'Raspberry Pi 4',
-  pi5: 'Raspberry Pi 5',
 };
 
 /** The running version, news of a newer one, the result of the last update, and installing one. */

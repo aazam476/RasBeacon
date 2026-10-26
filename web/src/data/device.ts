@@ -335,8 +335,11 @@ export interface DeviceActions {
   previewCatalogPlugin: (source: string, file: string) => Promise<PluginPreview>;
   /** Download an installed plugin's update from the catalog for the install sheet. */
   previewPluginUpdate: (id: string) => Promise<PluginPreview>;
-  /** Install a previewed plugin; it then shows as installing. Field keys: ports.<key>, settings.<key>, drive. */
-  /** `useKeptData` gives it the data kept from an earlier install (the preview's `keptData`). */
+  /**
+   * Install a previewed plugin; it then shows as installing. `useKeptData` gives it the data kept
+   * from an earlier install (the preview's `keptData`). Field keys: ports.<key>, settings.<key>,
+   * drive.
+   */
   installPlugin: (stagingId: string, choices: PluginChoices, useKeptData?: boolean) => Promise<void>;
   /** The install sheet was closed without installing. */
   cancelPluginInstall: (stagingId: string) => Promise<void>;
