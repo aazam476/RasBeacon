@@ -1,7 +1,7 @@
 // How every request is sent: the login's CSRF token, the router's errors, and no answer at all.
 import { describe, expect, it, vi } from 'vitest';
 import * as api from '@/data/real/api';
-import { fakeRouter } from './helpers';
+import { fakeRouter, testFile } from './helpers';
 
 describe('sending requests', () => {
   it('sends the CSRF token from the login with every change, not with reads', async () => {
@@ -53,6 +53,35 @@ describe('sending requests', () => {
       status: 502,
       message: 'RasBeacon answered with an error (502).',
     });
+  });
+
+  it('lets an upload run as long as it takes, but gives up on other requests', async () => {
+    vi.useFakeTimers();
+    try {
+      // A router that never answers, but notices when the browser gives up.
+      const aborted: string[] = [];
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(
+          (url: string, init: RequestInit = {}) =>
+            new Promise<Response>((_, reject) => {
+              init.signal?.addEventListener('abort', () => {
+                aborted.push(url);
+                reject(new DOMException('aborted', 'AbortError'));
+              });
+            }),
+        ),
+      );
+      const upload = api.uploadBackup(testFile('big.rbbackup')).catch(() => undefined);
+      const status = api.getStatus().catch(() => undefined);
+      // Two hours: a 6 GB backup over a slow hotspot.
+      await vi.advanceTimersByTimeAsync(2 * 60 * 60_000);
+      await status;
+      expect(aborted).toEqual(['/api/v1/status']);
+      void upload;
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('says RasBeacon can’t be reached when nothing answers', async () => {

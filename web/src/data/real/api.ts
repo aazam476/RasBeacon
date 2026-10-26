@@ -108,6 +108,7 @@ interface RequestOptions {
   body?: unknown;
   /** Sent as the raw body (update files). */
   file?: Blob;
+  /** How long to wait for the answer. Ignored for uploads (`file`), which have no limit. */
   timeoutMs?: number;
   /** Set on the second try after a refused CSRF token, so it is retried only once. */
   retried?: boolean;
@@ -143,7 +144,10 @@ async function request<T>(method: string, path: string, options: RequestOptions 
   if (method !== 'GET' && csrfToken) headers['X-CSRF-Token'] = csrfToken;
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  // Uploads (updates, plugins, backups) get no time limit here: a large backup on a slow link can
+  // take hours. rbweb ends an upload that stops sending data for 2 minutes
+  // (internal/webserver/transfers.go), so a stuck one still fails.
+  const timer = file === undefined ? setTimeout(() => controller.abort(), timeoutMs) : undefined;
   let response: Response;
   try {
     response = await fetch(`/api/v1${path}`, {
@@ -306,8 +310,7 @@ export const putHTTPSSettings = (
 ) => request<HTTPSSettings>('PUT', '/settings/https', { body: settings, timeoutMs: 45_000 });
 
 /** Uploads and installs an update file; takes minutes on slow Wi-Fi. */
-export const installUpdate = (file: File) =>
-  request<UpdateStatus>('POST', '/system/update', { file, timeoutMs: 30 * 60_000 });
+export const installUpdate = (file: File) => request<UpdateStatus>('POST', '/system/update', { file });
 export const getAccessSettings = () => request<AccessSettings>('GET', '/settings/access');
 export const putAccessSettings = (settings: AccessSettings) =>
   request<AccessSettings>('PUT', '/settings/access', { body: settings });
@@ -333,8 +336,7 @@ export const DIAGNOSTICS_URL = '/api/v1/diagnostics';
 
 export const getPlugins = () => request<PluginsState>('GET', '/plugins');
 /** Uploads a .rba; it is checked before the install sheet opens. */
-export const uploadPlugin = (file: File) =>
-  request<PluginPreview>('POST', '/plugins/upload', { file, timeoutMs: 30 * 60_000 });
+export const uploadPlugin = (file: File) => request<PluginPreview>('POST', '/plugins/upload', { file });
 export const getPluginCatalog = (refresh: boolean) =>
   request<PluginCatalog>('POST', '/plugins/catalog', { body: { refresh }, timeoutMs: 120_000 });
 export const downloadCatalogPlugin = (source: string, file: string) =>
@@ -366,8 +368,7 @@ export const prepareBackup = (password: string, plugins: string) =>
   request<{ token: string; fileName: string }>('POST', '/system/backup', { body: { password, plugins } });
 /** Where the browser downloads a backup asked for with `prepareBackup`. */
 export const backupDownloadUrl = (token: string) => `/api/v1/system/backup/${encodeURIComponent(token)}`;
-export const uploadBackup = (file: File) =>
-  request<void>('POST', '/system/restore/upload', { file, timeoutMs: 30 * 60_000 });
+export const uploadBackup = (file: File) => request<void>('POST', '/system/restore/upload', { file });
 export const restoreBackup = (password: string) =>
   request<{ version: string; created: string; plugins: boolean }>('POST', '/system/restore', {
     body: { password },
