@@ -363,3 +363,42 @@ func TestBackup_AnUploadLeftByAnUnfinishedRestoreIsRemovedAtStart(t *testing.T) 
 		t.Error("the leftover upload should be removed when rbd starts")
 	}
 }
+
+func TestBackup_OtherPagesAnswerWhileARestoreLoadsPluginImages(t *testing.T) {
+	e := newPluginEnv(t)
+	if _, err := e.installTestPlugin(writeTestPlugin(t, testPluginManifest("1.0"), nil), nil); err != nil {
+		t.Fatal(err)
+	}
+	file, err := e.backUp(api.BackupRequest{Password: "backup-pass-1", Plugins: "everything"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.agent.StageRestore(bytes.NewReader(file)); err != nil {
+		t.Fatal(err)
+	}
+	// While podman loads the backup's image (minutes on a Pi), the agent's
+	// lock must be free, and a second restore or upload is refused.
+	var lockFree, secondRefused, uploadRefused bool
+	effect := e.runner.effect
+	e.runner.effect = func(args []string) {
+		effect(args)
+		if len(args) > 1 && args[0] == "podman" && args[1] == "load" {
+			if e.agent.mu.TryLock() {
+				lockFree = true
+				e.agent.mu.Unlock()
+			}
+			_, err := e.agent.Restore(api.RestoreRequest{Password: "backup-pass-1"})
+			secondRefused = errors.Is(err, ErrRestoreBusy)
+			uploadRefused = errors.Is(e.agent.StageRestore(bytes.NewReader(file)), ErrRestoreBusy)
+		}
+	}
+	if _, err := e.agent.Restore(api.RestoreRequest{Password: "backup-pass-1"}); err != nil {
+		t.Fatal(err)
+	}
+	if !lockFree {
+		t.Error("the agent's lock must be free while plugin images load")
+	}
+	if !secondRefused || !uploadRefused {
+		t.Errorf("a second restore (%v) and an upload (%v) during a restore must be refused", secondRefused, uploadRefused)
+	}
+}

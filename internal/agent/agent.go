@@ -114,7 +114,11 @@ const switchDelay = 5 * time.Second
 
 // Agent holds all of rbd's state. Create it with New and call Start once.
 type Agent struct {
-	mu sync.Mutex
+	// restoring is held while a backup is uploaded or restored, so two
+	// can't overlap (they share one upload file). It is separate from mu
+	// because a restore loads plugin images for minutes without mu.
+	restoring sync.Mutex
+	mu        sync.Mutex
 
 	paths  paths.Paths
 	runner system.Runner

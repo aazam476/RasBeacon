@@ -461,7 +461,8 @@ func writeError(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusBadRequest, api.ErrorResponse{Error: validation.Message, Field: validation.Field})
 	case errors.Is(err, ErrWrongPassword):
 		writeJSON(w, http.StatusForbidden, api.ErrorResponse{Error: err.Error(), Field: "password"})
-	case errors.Is(err, ErrWrongMode), errors.Is(err, ErrNoWiFiUplink), errors.Is(err, ErrUpdateBusy), errors.Is(err, ErrSpeedtestBusy):
+	case errors.Is(err, ErrWrongMode), errors.Is(err, ErrNoWiFiUplink), errors.Is(err, ErrUpdateBusy), errors.Is(err, ErrSpeedtestBusy),
+		errors.Is(err, ErrRestoreBusy):
 		writeJSON(w, http.StatusConflict, api.ErrorResponse{Error: err.Error()})
 	default:
 		slog.Error("request failed", "error", err)

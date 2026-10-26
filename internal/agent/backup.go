@@ -330,8 +330,15 @@ func copySparse(src, dst string) error {
 	return copyErr
 }
 
+// ErrRestoreBusy means a backup is already being uploaded or restored.
+var ErrRestoreBusy = errors.New("A backup is already being restored.")
+
 // StageRestore keeps an uploaded backup until its password is given.
 func (a *Agent) StageRestore(body io.Reader) error {
+	if !a.restoring.TryLock() {
+		return ErrRestoreBusy
+	}
+	defer a.restoring.Unlock()
 	a.mu.Lock()
 	normal := a.mode == api.ModeNormal
 	a.mu.Unlock()
@@ -368,6 +375,10 @@ func (a *Agent) StageRestore(body io.Reader) error {
 // Restore opens the uploaded backup with its password, checks it, replaces
 // the settings and the plugins with the backup's and restarts RasBeacon.
 func (a *Agent) Restore(req api.RestoreRequest) (api.RestoreResult, error) {
+	if !a.restoring.TryLock() {
+		return api.RestoreResult{}, ErrRestoreBusy
+	}
+	defer a.restoring.Unlock()
 	upload := a.restoreUploadFile()
 	f, err := os.Open(upload)
 	if err != nil {
@@ -424,6 +435,17 @@ func (a *Agent) Restore(req api.RestoreRequest) (api.RestoreResult, error) {
 		}
 	}
 
+	// Loading the backup's plugin images can take minutes, so it happens
+	// before taking a.mu: the other pages keep answering meanwhile. It
+	// only adds images under RasBeacon's names; nothing changes for the
+	// installed plugins until the lock is held below.
+	var newImages map[string]bool
+	if !keepPlugins {
+		if newImages, err = a.loadRestoredImages(staging, &cfg); err != nil {
+			return api.RestoreResult{}, fmt.Errorf("restoring the plugins: %w", err)
+		}
+	}
+
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.mode != api.ModeNormal {
@@ -435,7 +457,7 @@ func (a *Agent) Restore(req api.RestoreRequest) (api.RestoreResult, error) {
 	if keepPlugins {
 		cfg.Plugins.Installed = a.cfg.Plugins.Installed
 		secrets.Plugins = a.secrets.Plugins
-	} else if err := a.replacePlugins(staging, &cfg); err != nil {
+	} else if err := a.replacePlugins(staging, cfg, newImages); err != nil {
 		return api.RestoreResult{}, fmt.Errorf("restoring the plugins: %w", err)
 	}
 
@@ -528,34 +550,39 @@ func readPluginFetch(staging, id string) (config.PluginFetch, error) {
 	return fetch, nil
 }
 
-// replacePlugins swaps the installed plugins for the backup's: their
-// files, data and images. The backup's images are loaded first, so a
-// problem with them leaves the installed plugins as they are; plugins
-// whose image isn't in the backup get where to download it (cfg is
-// changed). The caller holds a.mu.
-func (a *Agent) replacePlugins(staging string, cfg *config.Config) error {
+// loadRestoredImages loads the images a backup holds for its plugins, so a
+// problem with them leaves the installed plugins as they are. Plugins whose
+// image isn't in the backup get where to download it (cfg is changed). It
+// returns the backup's plugins' images, which the restore keeps. Called
+// without a.mu: it can take minutes.
+func (a *Agent) loadRestoredImages(staging string, cfg *config.Config) (map[string]bool, error) {
 	newImages := map[string]bool{}
 	for id, p := range cfg.Plugins.Installed {
 		p.Fetch = nil
 		image := filepath.Join(staging, "plugin-images", id+".tar")
 		if _, err := os.Stat(image); err == nil {
 			if err := a.loadPluginImage(image, p.Image); err != nil {
-				return fmt.Errorf("loading %s's image: %w", id, err)
+				return nil, fmt.Errorf("loading %s's image: %w", id, err)
 			}
-			newImages[p.Image] = true
 		} else if p.Image != "" {
 			fetch, err := readPluginFetch(staging, id)
 			if err != nil {
-				return fmt.Errorf("%s's image isn't in the backup", id)
+				return nil, fmt.Errorf("%s's image isn't in the backup", id)
 			}
 			p.Fetch = &fetch
 		}
 		cfg.Plugins.Installed[id] = p
-		// Kept if already here (the same version is installed now): then
-		// it needn't be downloaded again.
+		// Kept also if it was here already (the same version is installed
+		// now): then it needn't be downloaded again.
 		newImages[p.Image] = true
 	}
+	return newImages, nil
+}
 
+// replacePlugins swaps the installed plugins for the backup's: their files
+// and data. Images not in newImages (see loadRestoredImages) are removed.
+// The caller holds a.mu.
+func (a *Agent) replacePlugins(staging string, cfg config.Config, newImages map[string]bool) error {
 	a.stopAllPlugins()
 	for id, p := range a.cfg.Plugins.Installed {
 		if p.Image != "" && !newImages[p.Image] {
