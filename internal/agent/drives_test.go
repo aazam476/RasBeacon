@@ -75,6 +75,9 @@ func TestDrives_TheChosenDriveIsChecked(t *testing.T) {
 	}{
 		{"a drive is needed", false, "", "Choose a USB drive."},
 		{"a made-up ID", false, "../../etc", "Choose a USB drive from the list."},
+		// An optional drive may be left out, but one that is given is
+		// checked the same way.
+		{"a made-up ID for an optional drive", true, "../../etc", "Choose a USB drive from the list."},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -112,6 +115,23 @@ func TestDrives_AnUnpluggedDriveStopsThePluginWithAReason(t *testing.T) {
 	}
 	if p := e.plugin("adguard-home"); p.State == api.PluginRunning || !strings.Contains(p.Message, "isn't plugged in") {
 		t.Errorf("plugin = %s %q, want it stopped because its drive is missing", p.State, p.Message)
+	}
+}
+
+func TestDrives_APluginRunsWithoutItsUnpluggedOptionalDrive(t *testing.T) {
+	e := newPluginEnv(t)
+	e.runner.outputs["lsblk "+strings.Join(plugin.LsblkArgs, " ")] = `{"blockdevices":[]}`
+	if _, err := installOnDrive(e, drivePlugin(t, true), "1234-ABCD"); err != nil {
+		t.Fatal(err)
+	}
+	if p := e.plugin("adguard-home"); p.State != api.PluginRunning {
+		t.Errorf("plugin = %s %q, want it running without its optional drive", p.State, p.Message)
+	}
+	driveDir := e.paths.DriveMountDir("1234-ABCD")
+	for _, c := range e.runner.commands {
+		if strings.HasPrefix(c, "podman run") && strings.Contains(c, driveDir) {
+			t.Errorf("the unplugged drive must not be given to the container: %s", c)
+		}
 	}
 }
 

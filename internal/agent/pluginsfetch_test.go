@@ -4,6 +4,8 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -93,5 +95,27 @@ func TestRefetch_APublishedImageIsPulledThroughTheProxyAndRenamed(t *testing.T) 
 	}
 	if e.runner.ran("podman tag") {
 		t.Error("a failed pull must not be renamed")
+	}
+}
+
+// The download proxy for plugin images only opens HTTPS connections, so it
+// can't be used to reach anything else through the VPN.
+func TestDownloadProxy_OnlyOpensHTTPSConnections(t *testing.T) {
+	e := newPluginEnv(t)
+	for _, tc := range []struct {
+		method, host string
+	}{
+		{http.MethodConnect, "example.com:80"},
+		{http.MethodConnect, "example.com:22"},
+		{http.MethodConnect, "example.com"}, // no port at all
+		{http.MethodGet, "example.com:443"}, // not a CONNECT
+	} {
+		r := httptest.NewRequest(tc.method, "http://"+tc.host, nil)
+		r.Host = tc.host
+		w := httptest.NewRecorder()
+		e.agent.proxyConnect(w, r)
+		if w.Code != http.StatusForbidden {
+			t.Errorf("%s %s: got %d, want 403", tc.method, tc.host, w.Code)
+		}
 	}
 }
