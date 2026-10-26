@@ -50,7 +50,8 @@ function AdminPasswordSheet({ onChanged, onClose }: { onChanged: () => void; onC
     >
       {(errors) => (
         <>
-          <Section level={3}>
+          {/* One group for the three related fields, as iOS does. */}
+          <Section level={3} footer="The new password needs at least 10 characters.">
             <PasswordField
               label="Current password"
               autoComplete="current-password"
@@ -59,8 +60,6 @@ function AdminPasswordSheet({ onChanged, onClose }: { onChanged: () => void; onC
               onChange={set('currentPassword')}
               error={errors.currentPassword}
             />
-          </Section>
-          <Section level={3} footer="At least 10 characters.">
             <PasswordField
               label="New password"
               autoComplete="new-password"
