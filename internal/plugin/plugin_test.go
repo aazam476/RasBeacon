@@ -442,3 +442,16 @@ func TestSupportedBy(t *testing.T) {
 		}
 	}
 }
+
+func TestWithoutTag(t *testing.T) {
+	for ref, want := range map[string]string{
+		"docker.io/adguard/adguardhome:v0.107": "docker.io/adguard/adguardhome",
+		"docker.io/alpine":                     "docker.io/alpine",
+		"registry.example:5000/app":            "registry.example:5000/app", // a port, not a tag
+		"registry.example:5000/app:2":          "registry.example:5000/app",
+	} {
+		if got := WithoutTag(ref); got != want {
+			t.Errorf("%s: got %s, want %s", ref, got, want)
+		}
+	}
+}

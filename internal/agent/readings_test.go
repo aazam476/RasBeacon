@@ -107,7 +107,7 @@ func TestReadings_EthernetDetailsAndUplinkExtras(t *testing.T) {
 		t.Fatal("expected Ethernet details")
 	}
 	if d.CarrierState != "Link detected (1 Gbps, full duplex)" || d.Controller != "eth0 (bcmgenet)" || d.MTU != "1500 bytes" ||
-		d.PacketStatistics != "RX 1.48 GB / TX 820 MB (0 errors)" || d.DNSServers != "192.168.1.1" ||
+		d.PacketStatistics != "RX 1.48\u00a0GB / TX 820\u00a0MB (0 errors)" || d.DNSServers != "192.168.1.1" ||
 		!strings.HasSuffix(d.DHCPLease, "remaining") || d.PortDescription != "The Raspberry Pi's built-in Ethernet port." {
 		t.Errorf("details = %+v", d)
 	}

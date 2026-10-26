@@ -221,11 +221,7 @@ func (a *Agent) pluginFetch(id string) *config.PluginFetch {
 // pinnedRef is a published image's name pinned by its digest
 // (ghcr.io/x/y@sha256:...); the digest pins it, not the tag.
 func pinnedRef(image plugin.RegistryImage) string {
-	ref := image.Ref
-	if i := strings.LastIndex(ref, ":"); i > strings.LastIndex(ref, "/") {
-		ref = ref[:i]
-	}
-	return ref + "@" + image.Digest
+	return plugin.WithoutTag(image.Ref) + "@" + image.Digest
 }
 
 // backupPlugin adds one plugin: its files, its image (`podman save`) or

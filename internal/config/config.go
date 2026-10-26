@@ -1007,7 +1007,8 @@ func checkEAPText(text string, required bool) error {
 }
 
 // isDomainName reports whether name looks like a DNS name such as
-// "radius.example.com": dot-separated labels of letters, digits and hyphens.
+// "radius.example.com": dot-separated labels of lowercase letters, digits and
+// hyphens (callers lowercase it first).
 func isDomainName(name string) bool {
 	if name == "" || len(name) > 253 {
 		return false
@@ -1046,7 +1047,8 @@ func ParseDoH(text string) (string, error) {
 		if addr.IsUnspecified() || addr.IsLoopback() || addr.IsMulticast() {
 			return "", errors.New("not a DNS server's address")
 		}
-	} else if !validHostname(host) {
+	} else if name := strings.ToLower(strings.TrimSuffix(host, ".")); !strings.Contains(name, ".") || !isDomainName(name) {
+		// A server's name has at least one dot (dns.google).
 		return "", errors.New("not a host name")
 	}
 	if port := u.Port(); port != "" {
@@ -1087,23 +1089,4 @@ func ValidateHostname(name string) error {
 		return &ValidationError{Field: "hostname", Message: "The name can't start or end with a hyphen."}
 	}
 	return nil
-}
-
-// validHostname accepts DNS names with at least one dot: letters, digits
-// and hyphens in labels of 1 to 63 characters.
-func validHostname(host string) bool {
-	if len(host) > 253 || !strings.Contains(host, ".") {
-		return false
-	}
-	for _, label := range strings.Split(strings.TrimSuffix(host, "."), ".") {
-		if label == "" || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
-			return false
-		}
-		for _, c := range label {
-			if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-') {
-				return false
-			}
-		}
-	}
-	return true
 }

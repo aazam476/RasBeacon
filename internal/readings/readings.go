@@ -244,7 +244,8 @@ func ResolvectlDNS(output string) []string {
 	return strings.Fields(servers)
 }
 
-// Bytes formats a byte count as people read it, e.g. "1.48 GB", "820 MB".
+// Bytes formats a byte count as people read it, e.g. "1.48 GB", "820 MB",
+// with a non-breaking space so the number and unit stay on one line.
 func Bytes(n uint64) string {
 	units := []string{"bytes", "KB", "MB", "GB", "TB"}
 	value := float64(n)
@@ -255,13 +256,13 @@ func Bytes(n uint64) string {
 	}
 	switch {
 	case unit == 0:
-		return fmt.Sprintf("%d bytes", n)
+		return fmt.Sprintf("%d\u00a0bytes", n)
 	case value >= 100:
-		return fmt.Sprintf("%.0f %s", value, units[unit])
+		return fmt.Sprintf("%.0f\u00a0%s", value, units[unit])
 	case value >= 10:
-		return fmt.Sprintf("%.1f %s", value, units[unit])
+		return fmt.Sprintf("%.1f\u00a0%s", value, units[unit])
 	default:
-		return fmt.Sprintf("%.2f %s", value, units[unit])
+		return fmt.Sprintf("%.2f\u00a0%s", value, units[unit])
 	}
 }
 

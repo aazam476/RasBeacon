@@ -378,12 +378,9 @@ func (a *Agent) pluginValues(id string, m *plugin.Manifest, p config.InstalledPl
 	return v
 }
 
-// checkPorts checks the ports chosen for a plugin: each from 1 to 65535,
-// not one of RasBeacon's own, and not taken by another plugin. It returns
-// the ports to save ("tcp/3000" → port on RasBeacon). The caller holds
-// a.mu.
-func (a *Agent) checkPorts(id string, m *plugin.Manifest, requested map[string]int) (map[string]int, error) {
-	// taken: "tcp/8080" → the name of the plugin using it.
+// takenPorts lists the ports on RasBeacon that plugins other than id use:
+// "tcp/8080" → the name of the plugin using it. The caller holds a.mu.
+func (a *Agent) takenPorts(id string) map[string]string {
 	taken := map[string]string{}
 	for other, p := range a.cfg.Plugins.Installed {
 		if other == id {
@@ -394,6 +391,15 @@ func (a *Agent) checkPorts(id string, m *plugin.Manifest, requested map[string]i
 			taken[protocol+"/"+strconv.Itoa(host)] = a.pluginName(other)
 		}
 	}
+	return taken
+}
+
+// checkPorts checks the ports chosen for a plugin: each from 1 to 65535,
+// not one of RasBeacon's own, and not taken by another plugin. It returns
+// the ports to save ("tcp/3000" → port on RasBeacon). The caller holds
+// a.mu.
+func (a *Agent) checkPorts(id string, m *plugin.Manifest, requested map[string]int) (map[string]int, error) {
+	taken := a.takenPorts(id)
 	chosen := map[string]int{}
 	for _, port := range m.Ports {
 		key := portKey(port)
@@ -425,16 +431,7 @@ func (a *Agent) checkPorts(id string, m *plugin.Manifest, requested map[string]i
 // suggestPorts picks ports for a plugin: the ones it has, else its
 // defaults, else the next free ones. The caller holds a.mu.
 func (a *Agent) suggestPorts(id string, m *plugin.Manifest, current map[string]int) map[string]int {
-	taken := map[string]bool{}
-	for other, p := range a.cfg.Plugins.Installed {
-		if other == id {
-			continue
-		}
-		for key, host := range p.Ports {
-			protocol, _, _ := strings.Cut(key, "/")
-			taken[protocol+"/"+strconv.Itoa(host)] = true
-		}
-	}
+	taken := a.takenPorts(id)
 	suggested := map[string]int{}
 	for _, port := range m.Ports {
 		host := current[portKey(port)]
@@ -443,12 +440,12 @@ func (a *Agent) suggestPorts(id string, m *plugin.Manifest, current map[string]i
 		}
 		// Move up until a free port is found (wrapping around to 1024, the
 		// first port that isn't a "well-known" one).
-		for tries := 0; tries < 2000 && (plugin.Reserved(host) || taken[port.Protocol+"/"+strconv.Itoa(host)]); tries++ {
+		for tries := 0; tries < 2000 && (plugin.Reserved(host) || taken[port.Protocol+"/"+strconv.Itoa(host)] != ""); tries++ {
 			if host++; host > 65535 {
 				host = 1024
 			}
 		}
-		taken[port.Protocol+"/"+strconv.Itoa(host)] = true
+		taken[port.Protocol+"/"+strconv.Itoa(host)] = a.pluginName(id)
 		suggested[portKey(port)] = host
 	}
 	return suggested

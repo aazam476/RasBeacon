@@ -10,6 +10,8 @@ import (
 	"math"
 	"strconv"
 	"strings"
+
+	"rasbeacon/internal/readings"
 )
 
 // ReadMetric picks a metric's value out of a JSON answer and formats it for
@@ -62,7 +64,8 @@ func ReadMetric(m Metric, body []byte) (string, error) {
 	case "percent":
 		return strconv.FormatFloat(n*100, 'f', 1, 64) + "%", nil
 	case "bytes":
-		return formatBytes(n), nil
+		// The same way as RasBeacon's other sizes ("14.2 MB").
+		return readings.Bytes(uint64(math.Max(0, math.Round(n)))), nil
 	case "ms":
 		return trimNumber(n) + "\u00a0ms", nil
 	case "seconds":
@@ -144,20 +147,4 @@ func groupThousands(n float64) string {
 		return "-" + b.String()
 	}
 	return b.String()
-}
-
-// formatBytes writes a size in decimal units, as the rest of the UI does.
-// The space before a unit is a non-breaking one (\u00a0), so "12.3" and
-// "MB" never end up on different lines.
-func formatBytes(n float64) string {
-	units := []string{"B", "KB", "MB", "GB", "TB"}
-	unit := 0
-	for n >= 1000 && unit < len(units)-1 {
-		n /= 1000
-		unit++
-	}
-	if unit == 0 || n >= 100 {
-		return strconv.FormatFloat(math.Round(n), 'f', 0, 64) + "\u00a0" + units[unit]
-	}
-	return strconv.FormatFloat(n, 'f', 1, 64) + "\u00a0" + units[unit]
 }

@@ -81,7 +81,7 @@ func TestLeaseDNSAndFormatting(t *testing.T) {
 	if got := ResolvectlDNS("Link 3 (eth0): 192.168.1.1 fd00::1\n"); len(got) != 2 || got[1] != "fd00::1" {
 		t.Errorf("got %v", got)
 	}
-	for n, want := range map[uint64]string{512: "512 bytes", 1_480_000_000: "1.48 GB", 820_000_000: "820 MB", 14_200_000: "14.2 MB"} {
+	for n, want := range map[uint64]string{512: "512\u00a0bytes", 1_480_000_000: "1.48\u00a0GB", 820_000_000: "820\u00a0MB", 14_200_000: "14.2\u00a0MB"} {
 		if got := Bytes(n); got != want {
 			t.Errorf("Bytes(%d) = %q, want %q", n, got, want)
 		}

@@ -47,11 +47,7 @@ type registryManifest struct {
 // repository: docker.io/adguard/adguardhome:v1 → registry-1.docker.io,
 // adguard/adguardhome.
 func SplitRef(ref string) (host, repository string) {
-	name := ref
-	if i := strings.LastIndex(name, ":"); i > strings.LastIndex(name, "/") {
-		name = name[:i] // the tag
-	}
-	host, repository, _ = strings.Cut(name, "/")
+	host, repository, _ = strings.Cut(WithoutTag(ref), "/")
 	if host == "docker.io" {
 		host = "registry-1.docker.io"
 		if !strings.Contains(repository, "/") {
@@ -59,6 +55,16 @@ func SplitRef(ref string) (host, repository string) {
 		}
 	}
 	return host, repository
+}
+
+// WithoutTag cuts the tag off an image's name: "docker.io/adguard/adguardhome:v0.107"
+// becomes "docker.io/adguard/adguardhome". A colon before the last slash
+// belongs to a registry's port ("registry.example:5000/app"), not a tag.
+func WithoutTag(ref string) string {
+	if i := strings.LastIndex(ref, ":"); i > strings.LastIndex(ref, "/") {
+		return ref[:i]
+	}
+	return ref
 }
 
 // DownloadSize asks the image's registry how much an image download is for
