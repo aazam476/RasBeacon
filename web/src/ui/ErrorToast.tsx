@@ -49,7 +49,8 @@ export function ErrorToastProvider({ children }: { children: ReactNode }) {
         role="alert"
         className="pointer-events-none fixed inset-x-0 top-[calc(env(safe-area-inset-top)+0.5rem)] z-50 flex justify-center px-3 lg:top-auto lg:right-6 lg:bottom-6 lg:left-auto lg:px-0"
       >
-        {toast && <Toast toast={toast} onGone={remove} />}
+        {/* The key makes each new message a new Toast, with its own full ten seconds. */}
+        {toast && <Toast key={toast.id} toast={toast} onGone={remove} />}
       </div>
     </ErrorToastContext>
   );
@@ -118,11 +119,8 @@ function Toast({ toast, onGone }: { toast: ToastMessage; onGone: (id: number) =>
   );
 
   useLayoutEffect(() => {
-    // A new message while the last one is on screen or on its way out: it comes back in.
-    if (leaving.current) leaving.current = false;
     enter();
-    remaining.current = SHOW_FOR_MS;
-  }, [id, enter]);
+  }, [enter]);
 
   // The countdown stops while the message is pointed at or focused, and while the tab is hidden.
   const paused = hovered || focused || hidden;

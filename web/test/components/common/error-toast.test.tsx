@@ -57,6 +57,22 @@ describe('error message', () => {
     await waitFor(() => expect(toast().textContent).toBe(''));
   });
 
+  it('a message that replaces another gets its own ten seconds', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderFailingButton();
+    await user.click(screen.getByRole('button', { name: 'Turn on' }));
+    // Nine seconds in, a new failure replaces the message.
+    await act(() => vi.advanceTimersByTimeAsync(9_000));
+    await user.click(screen.getByRole('button', { name: 'Turn on' }));
+    // Five seconds later it is still there (it used to get only what was left of the first one's
+    // time, at least two seconds).
+    await act(() => vi.advanceTimersByTimeAsync(5_000));
+    expect(toast().textContent).toBe('The VPN could not start.');
+    await act(() => vi.advanceTimersByTimeAsync(6_000));
+    await waitFor(() => expect(toast().textContent).toBe(''));
+  });
+
   it('a swipe back toward its edge sends it away; a slow, short one doesn’t', async () => {
     const user = userEvent.setup();
     renderFailingButton();
