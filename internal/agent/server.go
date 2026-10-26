@@ -29,448 +29,128 @@ import (
 const frameWait = 10 * time.Second
 
 // Handler returns the HTTP routes for the agent's API.
+//
+// Most routes do the same three steps: read the JSON request, ask the
+// agent, then send the answer (or the error). The helpers at the end of
+// this file (view, save, call, do, act, result and pluginCall) do those
+// steps, so each such route is one line. Routes that do something
+// different (streamed files, the login browser's pictures) are written
+// out in full.
 func (a *Agent) Handler() http.Handler {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("GET /state", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, a.SetupState())
-	})
-
-	mux.HandleFunc("POST /claim", func(w http.ResponseWriter, r *http.Request) {
-		var req api.ClaimRequest
-		if !readJSON(w, r, &req) {
-			return
-		}
-		resp, err := a.Claim(req)
-		if err != nil {
-			writeError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, resp)
-	})
-
-	mux.HandleFunc("POST /verify-password", func(w http.ResponseWriter, r *http.Request) {
-		var req api.PasswordRequest
-		if !readJSON(w, r, &req) {
-			return
-		}
-		writeJSON(w, http.StatusOK, api.VerifyPasswordResponse{OK: a.VerifyAdminPassword(req.Password)})
-	})
-
+	// --- First-time setup and logging in -------------------------------
+	mux.HandleFunc("GET /state", view(a.SetupState))
+	mux.HandleFunc("POST /claim", call(a.Claim))
+	mux.HandleFunc("POST /verify-password", call(func(req api.PasswordRequest) (api.VerifyPasswordResponse, error) {
+		return api.VerifyPasswordResponse{OK: a.VerifyAdminPassword(req.Password)}, nil
+	}))
 	// "Stay logged in" (see remember.go). rbweb has checked the password
 	// before asking for a token.
-	mux.HandleFunc("POST /remembered-logins", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /remembered-logins", result(func() (api.RememberedLogin, error) {
 		token, expires, err := a.RememberLogin()
-		if err != nil {
-			writeError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, api.RememberedLogin{Token: token, Expires: expires})
-	})
-	mux.HandleFunc("POST /remembered-logins/check", func(w http.ResponseWriter, r *http.Request) {
-		var req api.RememberedLogin
-		if !readJSON(w, r, &req) {
-			return
-		}
-		writeJSON(w, http.StatusOK, api.VerifyPasswordResponse{OK: a.CheckRememberedLogin(req.Token)})
-	})
-	mux.HandleFunc("POST /remembered-logins/forget", func(w http.ResponseWriter, r *http.Request) {
-		var req api.RememberedLogin
-		if !readJSON(w, r, &req) {
-			return
-		}
-		if err := a.ForgetLogin(req.Token); err != nil {
-			writeError(w, err)
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
-	})
+		return api.RememberedLogin{Token: token, Expires: expires}, err
+	}))
+	mux.HandleFunc("POST /remembered-logins/check", call(func(req api.RememberedLogin) (api.VerifyPasswordResponse, error) {
+		return api.VerifyPasswordResponse{OK: a.CheckRememberedLogin(req.Token)}, nil
+	}))
+	mux.HandleFunc("POST /remembered-logins/forget", do(func(req api.RememberedLogin) error { return a.ForgetLogin(req.Token) }))
 
+	// --- Status and the Clients page -----------------------------------
 	mux.HandleFunc("GET /status", func(w http.ResponseWriter, r *http.Request) {
 		// rbweb says which device is looking (?viewer=<its address>).
 		writeJSON(w, http.StatusOK, a.StatusFor(r.URL.Query().Get("viewer")))
 	})
+	// Per-device controls. Each answers 204.
+	mux.HandleFunc("POST /clients/internet-access", do(func(req api.ClientInternetAccessRequest) error {
+		return a.SetClientInternetAccess(req.MAC, req.Allowed)
+	}))
+	mux.HandleFunc("POST /clients/name", do(func(req api.ClientNameRequest) error { return a.SetClientName(req.MAC, req.Name) }))
+	mux.HandleFunc("POST /clients/disconnect", do(func(req api.ClientRequest) error { return a.DisconnectClient(req.MAC) }))
+	mux.HandleFunc("POST /clients/flush-lease", do(func(req api.ClientRequest) error { return a.FlushClientLease(req.MAC) }))
+	mux.HandleFunc("GET /settings/usage", view(a.UsageSettings))
+	mux.HandleFunc("PUT /settings/usage", call(a.UpdateUsageSettings))
+	mux.HandleFunc("POST /clients/usage/reset", result(a.ResetUsage))
 
-	// Per-device controls on the Clients page. Each answers 204.
-	mux.HandleFunc("POST /clients/internet-access", func(w http.ResponseWriter, r *http.Request) {
-		var req api.ClientInternetAccessRequest
-		if !readJSON(w, r, &req) {
-			return
-		}
-		if err := a.SetClientInternetAccess(req.MAC, req.Allowed); err != nil {
-			writeError(w, err)
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
-	})
-	mux.HandleFunc("POST /clients/name", func(w http.ResponseWriter, r *http.Request) {
-		var req api.ClientNameRequest
-		if !readJSON(w, r, &req) {
-			return
-		}
-		if err := a.SetClientName(req.MAC, req.Name); err != nil {
-			writeError(w, err)
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
-	})
-	mux.HandleFunc("POST /wifi-qr", func(w http.ResponseWriter, r *http.Request) {
-		var req api.WiFiQRRequest
-		if !readJSON(w, r, &req) {
-			return
-		}
-		code, err := a.WiFiQR(req)
-		if err != nil {
-			writeError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, code)
-	})
-	mux.HandleFunc("POST /settings/hotspot/channels", func(w http.ResponseWriter, r *http.Request) {
-		var req api.HotspotChannelsRequest
-		if !readJSON(w, r, &req) {
-			return
-		}
-		channels, err := a.HotspotChannels(req)
-		if err != nil {
-			writeError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, channels)
-	})
-	mux.HandleFunc("GET /settings/usage", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, a.UsageSettings())
-	})
-	mux.HandleFunc("PUT /settings/usage", func(w http.ResponseWriter, r *http.Request) {
-		var req api.UsageSettings
-		if !readJSON(w, r, &req) {
-			return
-		}
-		settings, err := a.UpdateUsageSettings(req)
-		if err != nil {
-			writeError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, settings)
-	})
-	mux.HandleFunc("POST /clients/usage/reset", func(w http.ResponseWriter, r *http.Request) {
-		settings, err := a.ResetUsage()
-		if err != nil {
-			writeError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, settings)
-	})
-	clientActions := map[string]func(string) error{
-		"POST /clients/disconnect":  a.DisconnectClient,
-		"POST /clients/flush-lease": a.FlushClientLease,
-	}
-	for route, action := range clientActions {
-		mux.HandleFunc(route, func(w http.ResponseWriter, r *http.Request) {
-			var req api.ClientRequest
-			if !readJSON(w, r, &req) {
-				return
-			}
-			if err := action(req.MAC); err != nil {
-				writeError(w, err)
-				return
-			}
-			w.WriteHeader(http.StatusNoContent)
-		})
-	}
-
-	mux.HandleFunc("GET /settings/hotspot", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, a.HotspotSettings())
-	})
-
-	mux.HandleFunc("PUT /settings/hotspot", func(w http.ResponseWriter, r *http.Request) {
-		var req api.HotspotSettings
-		if !readJSON(w, r, &req) {
-			return
-		}
-		if err := a.UpdateHotspotSettings(req); err != nil {
-			writeError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, a.HotspotSettings())
-	})
-
-	mux.HandleFunc("GET /settings/access", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, a.AccessSettings())
-	})
-
-	mux.HandleFunc("PUT /settings/access", func(w http.ResponseWriter, r *http.Request) {
-		var req api.AccessSettings
-		if !readJSON(w, r, &req) {
-			return
-		}
-		if err := a.UpdateAccessSettings(req); err != nil {
-			writeError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, a.AccessSettings())
-	})
-
-	mux.HandleFunc("POST /settings/hotspot/reveal-password", func(w http.ResponseWriter, r *http.Request) {
+	// --- Hotspot, who may join, guests and SSH -------------------------
+	mux.HandleFunc("GET /settings/hotspot", view(a.HotspotSettings))
+	mux.HandleFunc("PUT /settings/hotspot", save(a.UpdateHotspotSettings, a.HotspotSettings))
+	mux.HandleFunc("POST /settings/hotspot/channels", call(a.HotspotChannels))
+	mux.HandleFunc("POST /settings/hotspot/reveal-password", result(func() (api.RevealPasswordResponse, error) {
 		password, err := a.RevealHotspotPassword()
-		if err != nil {
-			writeError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, api.RevealPasswordResponse{HotspotPassword: password})
-	})
+		return api.RevealPasswordResponse{HotspotPassword: password}, err
+	}))
+	mux.HandleFunc("POST /wifi-qr", call(a.WiFiQR))
+	mux.HandleFunc("GET /settings/access", view(a.AccessSettings))
+	mux.HandleFunc("PUT /settings/access", save(a.UpdateAccessSettings, a.AccessSettings))
+	mux.HandleFunc("GET /settings/guest", view(a.GuestSettings))
+	mux.HandleFunc("PUT /settings/guest", save(a.UpdateGuestSettings, a.GuestSettings))
+	mux.HandleFunc("GET /settings/ssh", view(a.SSHSettings))
+	mux.HandleFunc("PUT /settings/ssh", save(a.UpdateSSHSettings, a.SSHSettings))
 
-	mux.HandleFunc("GET /settings/guest", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, a.GuestSettings())
-	})
-
-	mux.HandleFunc("PUT /settings/guest", func(w http.ResponseWriter, r *http.Request) {
-		var req api.GuestSettings
-		if !readJSON(w, r, &req) {
-			return
-		}
-		if err := a.UpdateGuestSettings(req); err != nil {
-			writeError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, a.GuestSettings())
-	})
-
-	mux.HandleFunc("GET /settings/ssh", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, a.SSHSettings())
-	})
-
-	mux.HandleFunc("PUT /settings/ssh", func(w http.ResponseWriter, r *http.Request) {
-		var req api.SSHSettings
-		if !readJSON(w, r, &req) {
-			return
-		}
-		if err := a.UpdateSSHSettings(req); err != nil {
-			writeError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, a.SSHSettings())
-	})
-
-	mux.HandleFunc("GET /settings/uplink", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, a.UplinkSettings())
-	})
-
-	mux.HandleFunc("PUT /settings/uplink", func(w http.ResponseWriter, r *http.Request) {
-		var req api.UplinkSettings
-		if !readJSON(w, r, &req) {
-			return
-		}
-		if err := a.UpdateUplinkSettings(req); err != nil {
-			writeError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, a.UplinkSettings())
-	})
-
-	mux.HandleFunc("POST /uplink/scan", func(w http.ResponseWriter, r *http.Request) {
-		resp, err := a.ScanNearby()
-		if err != nil {
-			writeError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, resp)
-	})
-
-	// The Internet page's buttons. Each answers 204.
-	uplinkActions := map[string]func() error{
-		"POST /uplink/disconnect":    a.DisconnectUplink,
-		"POST /uplink/renew":         a.RenewDHCPLease,
-		"POST /uplink/ethernet/scan": a.RescanEthernetPort,
-	}
-	for route, action := range uplinkActions {
-		mux.HandleFunc(route, func(w http.ResponseWriter, r *http.Request) {
-			if err := action(); err != nil {
-				writeError(w, err)
-				return
-			}
-			w.WriteHeader(http.StatusNoContent)
-		})
-	}
-
+	// --- The Internet page ---------------------------------------------
+	mux.HandleFunc("GET /settings/uplink", view(a.UplinkSettings))
+	mux.HandleFunc("PUT /settings/uplink", save(a.UpdateUplinkSettings, a.UplinkSettings))
+	mux.HandleFunc("POST /uplink/scan", result(a.ScanNearby))
+	// Its buttons. Each answers 204.
+	mux.HandleFunc("POST /uplink/disconnect", act(a.DisconnectUplink))
+	mux.HandleFunc("POST /uplink/renew", act(a.RenewDHCPLease))
+	mux.HandleFunc("POST /uplink/ethernet/scan", act(a.RescanEthernetPort))
 	// Runs Cloudflare's speed test (about 20 seconds; see speedtest.go) and
 	// answers with the result.
-	mux.HandleFunc("POST /speedtest", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /speedtest", result(func() (api.Speedtest, error) {
 		if err := a.RunSpeedtest(); err != nil {
-			writeError(w, err)
-			return
+			return api.Speedtest{}, err
 		}
 		a.mu.Lock()
-		result := a.speedtestStatus()
-		a.mu.Unlock()
-		writeJSON(w, http.StatusOK, result)
-	})
+		defer a.mu.Unlock()
+		return a.speedtestStatus(), nil
+	}))
+	mux.HandleFunc("GET /settings/dns", view(a.DNSSettings))
+	mux.HandleFunc("PUT /settings/dns", save(a.UpdateDNSSettings, a.DNSSettings))
 
-	mux.HandleFunc("GET /settings/swap", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, a.SwapSettings())
-	})
-	mux.HandleFunc("PUT /settings/swap", func(w http.ResponseWriter, r *http.Request) {
-		var req api.SwapSettings
-		if !readJSON(w, r, &req) {
-			return
-		}
-		if err := a.UpdateSwapSettings(req); err != nil {
-			writeError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, a.SwapSettings())
-	})
-
-	mux.HandleFunc("GET /settings/dns", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, a.DNSSettings())
-	})
-	mux.HandleFunc("PUT /settings/dns", func(w http.ResponseWriter, r *http.Request) {
-		var req api.DNSSettings
-		if !readJSON(w, r, &req) {
-			return
-		}
-		if err := a.UpdateDNSSettings(req); err != nil {
-			writeError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, a.DNSSettings())
-	})
-
-	mux.HandleFunc("GET /settings/vpn", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, a.VPNSettings())
-	})
-
-	mux.HandleFunc("PUT /settings/vpn", func(w http.ResponseWriter, r *http.Request) {
-		var req api.VPNSwitches
-		if !readJSON(w, r, &req) {
-			return
-		}
-		if err := a.SetVPNSwitches(req); err != nil {
-			writeError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, a.VPNSettings())
-	})
-
-	mux.HandleFunc("POST /settings/vpn/import", func(w http.ResponseWriter, r *http.Request) {
-		var req api.VPNImportRequest
-		if !readJSON(w, r, &req) {
-			return
-		}
-		if err := a.ImportVPNProfile(req.Conf, req.Name); err != nil {
-			writeError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, a.VPNSettings())
-	})
-
-	mux.HandleFunc("POST /settings/vpn/profile/save", func(w http.ResponseWriter, r *http.Request) {
-		var req api.VPNProfileDetails
-		if !readJSON(w, r, &req) {
-			return
-		}
-		if err := a.SaveVPNProfile(req); err != nil {
-			writeError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, a.VPNSettings())
-	})
-
-	mux.HandleFunc("POST /settings/vpn/profile/rename", func(w http.ResponseWriter, r *http.Request) {
-		var req api.VPNRenameRequest
-		if !readJSON(w, r, &req) {
-			return
-		}
-		if err := a.RenameVPNProfile(req.Name, req.NewName); err != nil {
-			writeError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, a.VPNSettings())
-	})
-
-	profileActions := map[string]func(string) error{
+	// --- VPN -----------------------------------------------------------
+	// Each change answers with the VPN settings as they are afterwards.
+	mux.HandleFunc("GET /settings/vpn", view(a.VPNSettings))
+	mux.HandleFunc("PUT /settings/vpn", save(a.SetVPNSwitches, a.VPNSettings))
+	mux.HandleFunc("POST /settings/vpn/import", save(func(req api.VPNImportRequest) error {
+		return a.ImportVPNProfile(req.Conf, req.Name)
+	}, a.VPNSettings))
+	mux.HandleFunc("POST /settings/vpn/profile/save", save(a.SaveVPNProfile, a.VPNSettings))
+	mux.HandleFunc("POST /settings/vpn/profile/rename", save(func(req api.VPNRenameRequest) error {
+		return a.RenameVPNProfile(req.Name, req.NewName)
+	}, a.VPNSettings))
+	for route, action := range map[string]func(string) error{
 		"POST /settings/vpn/profile/activate":     a.SetActiveVPNProfile,
 		"POST /settings/vpn/profile/remove":       a.RemoveVPNProfile,
 		"POST /settings/vpn/profile/generate-key": a.GenerateVPNKey,
-	}
-	for route, action := range profileActions {
-		mux.HandleFunc(route, func(w http.ResponseWriter, r *http.Request) {
-			var req api.VPNProfileRequest
-			if !readJSON(w, r, &req) {
-				return
-			}
-			if err := action(req.Name); err != nil {
-				writeError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusOK, a.VPNSettings())
-		})
+	} {
+		mux.HandleFunc(route, save(func(req api.VPNProfileRequest) error { return action(req.Name) }, a.VPNSettings))
 	}
 
-	mux.HandleFunc("GET /settings/https", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, a.HTTPSSettings())
-	})
-
-	mux.HandleFunc("PUT /settings/https", func(w http.ResponseWriter, r *http.Request) {
-		var req api.HTTPSSettings
-		if !readJSON(w, r, &req) {
-			return
-		}
-		if err := a.UpdateHTTPSSettings(req); err != nil {
-			writeError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, a.HTTPSSettings())
-	})
-
-	mux.HandleFunc("GET /portal", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, a.PortalStatus())
-	})
-
-	// Login mode for captive portals. Each answers with the new status.
-	portalActions := map[string]func() error{
+	// --- HTTPS and the hotel login (captive portal) --------------------
+	mux.HandleFunc("GET /settings/https", view(a.HTTPSSettings))
+	mux.HandleFunc("PUT /settings/https", save(a.UpdateHTTPSSettings, a.HTTPSSettings))
+	mux.HandleFunc("GET /portal", view(a.PortalStatus))
+	// Login mode. Each answers with the new status.
+	for route, action := range map[string]func() error{
 		"POST /portal/start":  a.StartLoginMode,
 		"POST /portal/extend": a.ExtendLoginMode,
 		"POST /portal/stop":   a.StopLoginMode,
 		"POST /portal/check":  a.RecheckPortal,
+	} {
+		mux.HandleFunc(route, result(func() (api.PortalStatus, error) {
+			err := action() // first, so the status below is the new one
+			return a.PortalStatus(), err
+		}))
 	}
-	for route, action := range portalActions {
-		mux.HandleFunc(route, func(w http.ResponseWriter, r *http.Request) {
-			if err := action(); err != nil {
-				writeError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusOK, a.PortalStatus())
-		})
-	}
-
 	// The login browser (zero-leak login, see portalbrowser.go).
-	mux.HandleFunc("POST /portal/browser/start", func(w http.ResponseWriter, r *http.Request) {
-		var req api.PortalBrowserStart
-		if !readJSON(w, r, &req) {
-			return
-		}
-		if err := a.StartPortalBrowser(req); err != nil {
-			writeError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, a.PortalStatus())
-	})
-	mux.HandleFunc("POST /portal/browser/stop", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /portal/browser/start", save(a.StartPortalBrowser, a.PortalStatus))
+	mux.HandleFunc("POST /portal/browser/stop", result(func() (api.PortalStatus, error) {
 		a.StopPortalBrowser()
-		writeJSON(w, http.StatusOK, a.PortalStatus())
-	})
-	mux.HandleFunc("POST /portal/browser/input", func(w http.ResponseWriter, r *http.Request) {
-		var req api.PortalBrowserInput
-		if !readJSON(w, r, &req) {
-			return
-		}
-		if err := a.PortalBrowserInput(req); err != nil {
-			writeError(w, err)
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
-	})
+		return a.PortalStatus(), nil
+	}))
+	mux.HandleFunc("POST /portal/browser/input", do(a.PortalBrowserInput))
 	// Waits up to frameWait for a picture newer than ?after=.
 	mux.HandleFunc("GET /portal/browser/frame", func(w http.ResponseWriter, r *http.Request) {
 		after, _ := strconv.ParseInt(r.URL.Query().Get("after"), 10, 64)
@@ -479,133 +159,55 @@ func (a *Agent) Handler() http.Handler {
 		writeJSON(w, http.StatusOK, a.PortalBrowserFrame(ctx, after))
 	})
 
-	// The body is the update file itself, streamed (it can be hundreds of
-	// megabytes), so it isn't read with readJSON.
-	mux.HandleFunc("POST /system/update", func(w http.ResponseWriter, r *http.Request) {
-		if err := a.InstallUpdate(r.Body); err != nil {
-			writeError(w, err)
-			return
-		}
-		a.mu.Lock()
-		status := a.updateStatus()
-		a.mu.Unlock()
-		writeJSON(w, http.StatusOK, status)
-	})
-
-	// Plugins (plugins.go). Their actions' problems are explained to the
-	// owner, so they are answered as 400 with the reason.
-	mux.HandleFunc("GET /plugins", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, a.PluginsState())
-	})
+	// --- Plugins (plugins.go) ------------------------------------------
+	// Their actions' problems are explained to the owner, so they are
+	// answered as 400 with the reason (see pluginAnswer).
+	mux.HandleFunc("GET /plugins", view(a.PluginsState))
 	// The body is the .rba file itself, streamed like updates.
 	mux.HandleFunc("POST /plugins/upload", func(w http.ResponseWriter, r *http.Request) {
 		preview, err := a.StagePluginFile(r.Body)
 		pluginAnswer(w, preview, err)
 	})
-	mux.HandleFunc("POST /plugins/catalog", func(w http.ResponseWriter, r *http.Request) {
-		var req api.PluginCatalogRequest
-		if !readJSON(w, r, &req) {
-			return
-		}
-		writeJSON(w, http.StatusOK, a.PluginCatalog(req))
-	})
-	mux.HandleFunc("POST /plugins/catalog/download", func(w http.ResponseWriter, r *http.Request) {
-		var req api.PluginDownloadRequest
-		if !readJSON(w, r, &req) {
-			return
-		}
-		preview, err := a.StagePluginFromCatalog(req)
-		pluginAnswer(w, preview, err)
-	})
-	mux.HandleFunc("POST /plugins/update", func(w http.ResponseWriter, r *http.Request) {
-		var req api.PluginIDRequest
-		if !readJSON(w, r, &req) {
-			return
-		}
-		preview, err := a.UpdatePluginFromCatalog(req.ID)
-		pluginAnswer(w, preview, err)
-	})
-	mux.HandleFunc("POST /plugins/install", func(w http.ResponseWriter, r *http.Request) {
-		var req api.PluginInstallRequest
-		if !readJSON(w, r, &req) {
-			return
-		}
-		p, err := a.InstallPlugin(req)
-		pluginAnswer(w, p, err)
-	})
-	mux.HandleFunc("POST /plugins/cancel", func(w http.ResponseWriter, r *http.Request) {
-		var req api.PluginInstallRequest
-		if !readJSON(w, r, &req) {
-			return
-		}
+	mux.HandleFunc("POST /plugins/catalog", call(func(req api.PluginCatalogRequest) (api.PluginCatalog, error) {
+		return a.PluginCatalog(req), nil
+	}))
+	mux.HandleFunc("POST /plugins/catalog/download", pluginCall(a.StagePluginFromCatalog))
+	mux.HandleFunc("POST /plugins/update", pluginCall(func(req api.PluginIDRequest) (api.PluginPreview, error) {
+		return a.UpdatePluginFromCatalog(req.ID)
+	}))
+	mux.HandleFunc("POST /plugins/install", pluginCall(a.InstallPlugin))
+	mux.HandleFunc("POST /plugins/cancel", do(func(req api.PluginInstallRequest) error {
 		a.CancelPluginInstall(req.StagingID)
-		w.WriteHeader(http.StatusNoContent)
-	})
-	mux.HandleFunc("PUT /plugins/settings", func(w http.ResponseWriter, r *http.Request) {
-		var req api.PluginSettingsRequest
-		if !readJSON(w, r, &req) {
-			return
-		}
-		p, err := a.UpdatePluginSettings(req)
-		pluginAnswer(w, p, err)
-	})
+		return nil
+	}))
+	mux.HandleFunc("PUT /plugins/settings", pluginCall(a.UpdatePluginSettings))
 	for route, action := range map[string]func(string) error{
 		"POST /plugins/start": a.StartPlugin,
 		"POST /plugins/stop":  a.StopPlugin,
 	} {
-		mux.HandleFunc(route, func(w http.ResponseWriter, r *http.Request) {
-			var req api.PluginIDRequest
-			if !readJSON(w, r, &req) {
-				return
-			}
+		mux.HandleFunc(route, pluginCall(func(req api.PluginIDRequest) (api.PluginsState, error) {
 			err := action(req.ID)
-			pluginAnswer(w, a.PluginsState(), err)
-		})
+			return a.PluginsState(), err
+		}))
 	}
-	mux.HandleFunc("POST /plugins/remove", func(w http.ResponseWriter, r *http.Request) {
-		var req api.PluginRemoveRequest
-		if !readJSON(w, r, &req) {
-			return
-		}
+	mux.HandleFunc("POST /plugins/remove", pluginCall(func(req api.PluginRemoveRequest) (api.PluginsState, error) {
 		err := a.RemovePlugin(req)
-		pluginAnswer(w, a.PluginsState(), err)
-	})
-	mux.HandleFunc("POST /plugins/logs", func(w http.ResponseWriter, r *http.Request) {
-		var req api.PluginIDRequest
-		if !readJSON(w, r, &req) {
-			return
-		}
-		logs, err := a.PluginLogs(req.ID)
-		pluginAnswer(w, logs, err)
-	})
+		return a.PluginsState(), err
+	}))
+	mux.HandleFunc("POST /plugins/logs", pluginCall(func(req api.PluginIDRequest) (api.PluginLogs, error) {
+		return a.PluginLogs(req.ID)
+	}))
 	mux.HandleFunc("GET /plugins/drives", func(w http.ResponseWriter, r *http.Request) {
 		drives, err := a.PluginDrives()
 		pluginAnswer(w, drives, err)
 	})
-	mux.HandleFunc("PUT /plugins/sources", func(w http.ResponseWriter, r *http.Request) {
-		var req api.PluginSourcesRequest
-		if !readJSON(w, r, &req) {
-			return
-		}
-		state, err := a.SetPluginSources(req)
-		pluginAnswer(w, state, err)
-	})
+	mux.HandleFunc("PUT /plugins/sources", pluginCall(a.SetPluginSources))
 
-	// Backups (backup.go): asked for with the passwords, then downloaded
-	// with the ticket's token. The download is streamed as it is made:
-	// plugin data can be large.
-	mux.HandleFunc("POST /system/backup", func(w http.ResponseWriter, r *http.Request) {
-		var req api.BackupRequest
-		if !readJSON(w, r, &req) {
-			return
-		}
-		ticket, err := a.PrepareBackup(req)
-		if err != nil {
-			writeError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, ticket)
-	})
+	// --- Backups (backup.go) -------------------------------------------
+	// Asked for with the passwords, then downloaded with the ticket's
+	// token. The download is streamed as it is made: plugin data can be
+	// large.
+	mux.HandleFunc("POST /system/backup", call(a.PrepareBackup))
 	mux.HandleFunc("GET /system/backup/{token}", func(w http.ResponseWriter, r *http.Request) {
 		out := &startedWriter{w: w, start: func() {
 			w.Header().Set("Content-Type", "application/octet-stream")
@@ -625,6 +227,7 @@ func (a *Agent) Handler() http.Handler {
 			panic(http.ErrAbortHandler)
 		}
 	})
+	// The body is the backup file itself, streamed.
 	mux.HandleFunc("POST /system/restore/upload", func(w http.ResponseWriter, r *http.Request) {
 		if err := a.StageRestore(r.Body); err != nil {
 			writeError(w, err)
@@ -632,115 +235,149 @@ func (a *Agent) Handler() http.Handler {
 		}
 		w.WriteHeader(http.StatusNoContent)
 	})
-	mux.HandleFunc("POST /system/restore", func(w http.ResponseWriter, r *http.Request) {
-		var req api.RestoreRequest
-		if !readJSON(w, r, &req) {
-			return
-		}
-		result, err := a.Restore(req)
-		if err != nil {
-			writeError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, result)
-	})
+	mux.HandleFunc("POST /system/restore", call(a.Restore))
 
-	mux.HandleFunc("GET /settings/updates", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, a.UpdateSettings())
-	})
-	mux.HandleFunc("POST /settings/updates/test", func(w http.ResponseWriter, r *http.Request) {
-		var req api.NotifyTestRequest
-		if !readJSON(w, r, &req) {
-			return
-		}
-		if err := a.SendTestNotification(req.URL); err != nil {
+	// --- Updates -------------------------------------------------------
+	// The body is the update file itself, streamed (it can be hundreds of
+	// megabytes), so it isn't read with readJSON.
+	mux.HandleFunc("POST /system/update", func(w http.ResponseWriter, r *http.Request) {
+		if err := a.InstallUpdate(r.Body); err != nil {
 			writeError(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, struct{}{})
+		writeJSON(w, http.StatusOK, a.lockedUpdateStatus())
 	})
-	mux.HandleFunc("POST /system/update/restart", func(w http.ResponseWriter, r *http.Request) {
-		if err := a.RestartIntoUpdate(); err != nil {
-			writeError(w, err)
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
-	})
-	mux.HandleFunc("POST /system/update/check", func(w http.ResponseWriter, r *http.Request) {
-		status, err := a.CheckForUpdateNow()
-		if err != nil {
-			writeError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, status)
-	})
-	mux.HandleFunc("PUT /settings/updates", func(w http.ResponseWriter, r *http.Request) {
-		var req api.UpdateSettings
-		if !readJSON(w, r, &req) {
-			return
-		}
-		if err := a.UpdateUpdateSettings(req); err != nil {
-			writeError(w, err)
-			return
-		}
-		a.mu.Lock()
-		status := a.updateStatus()
-		a.mu.Unlock()
-		writeJSON(w, http.StatusOK, status)
-	})
+	mux.HandleFunc("GET /settings/updates", view(a.UpdateSettings))
+	mux.HandleFunc("PUT /settings/updates", save(a.UpdateUpdateSettings, a.lockedUpdateStatus))
+	mux.HandleFunc("POST /settings/updates/test", call(func(req api.NotifyTestRequest) (struct{}, error) {
+		return struct{}{}, a.SendTestNotification(req.URL)
+	}))
+	mux.HandleFunc("POST /system/update/restart", act(a.RestartIntoUpdate))
+	mux.HandleFunc("POST /system/update/check", result(a.CheckForUpdateNow))
 
-	mux.HandleFunc("POST /system/reboot", func(w http.ResponseWriter, r *http.Request) {
-		a.Reboot()
-		w.WriteHeader(http.StatusNoContent)
-	})
-
-	mux.HandleFunc("POST /system/shutdown", func(w http.ResponseWriter, r *http.Request) {
-		a.Shutdown()
-		w.WriteHeader(http.StatusNoContent)
-	})
-
-	mux.HandleFunc("POST /system/hostname", func(w http.ResponseWriter, r *http.Request) {
-		var req api.HostnameRequest
-		if !readJSON(w, r, &req) {
-			return
-		}
-		if err := a.SetHostname(req.Hostname); err != nil {
-			writeError(w, err)
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
-	})
-
-	mux.HandleFunc("POST /system/factory-reset", func(w http.ResponseWriter, r *http.Request) {
-		var req api.PasswordRequest
-		if !readJSON(w, r, &req) {
-			return
-		}
-		if err := a.FactoryReset(req.Password); err != nil {
-			writeError(w, err)
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
-	})
-
-	mux.HandleFunc("POST /system/admin-password", func(w http.ResponseWriter, r *http.Request) {
-		var req api.AdminPasswordRequest
-		if !readJSON(w, r, &req) {
-			return
-		}
-		if err := a.ChangeAdminPassword(req); err != nil {
-			writeError(w, err)
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
-	})
-
+	// --- The System page -----------------------------------------------
+	mux.HandleFunc("GET /settings/swap", view(a.SwapSettings))
+	mux.HandleFunc("PUT /settings/swap", save(a.UpdateSwapSettings, a.SwapSettings))
+	mux.HandleFunc("POST /system/reboot", act(func() error { a.Reboot(); return nil }))
+	mux.HandleFunc("POST /system/shutdown", act(func() error { a.Shutdown(); return nil }))
+	mux.HandleFunc("POST /system/hostname", do(func(req api.HostnameRequest) error { return a.SetHostname(req.Hostname) }))
+	mux.HandleFunc("POST /system/factory-reset", do(func(req api.PasswordRequest) error { return a.FactoryReset(req.Password) }))
+	mux.HandleFunc("POST /system/admin-password", do(a.ChangeAdminPassword))
 	mux.HandleFunc("GET /diagnostics", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = w.Write([]byte(a.Diagnostics()))
 	})
 
 	return mux
+}
+
+// lockedUpdateStatus is updateStatus for callers that don't hold a.mu.
+func (a *Agent) lockedUpdateStatus() api.UpdateStatus {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.updateStatus()
+}
+
+// --- Route helpers ---------------------------------------------------------
+//
+// Each helper makes a route's handler from an agent method. They are
+// "generic" functions: the letters in square brackets stand for types that
+// are filled in where the helper is used. For example, in
+//
+//	save(a.UpdateHotspotSettings, a.HotspotSettings)
+//
+// Req becomes api.HotspotSettings (what UpdateHotspotSettings takes) and
+// Resp becomes api.HotspotSettings too (what HotspotSettings returns), so
+// the compiler still checks every type.
+
+// view answers a GET with what read returns.
+func view[Resp any](read func() Resp) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, read())
+	}
+}
+
+// save reads a Req, saves it with change, then answers with read(): the
+// settings as they are after the change.
+func save[Req, Resp any](change func(Req) error, read func() Resp) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req Req
+		if !readJSON(w, r, &req) {
+			return
+		}
+		if err := change(req); err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, read())
+	}
+}
+
+// call reads a Req, passes it to fn and answers with fn's result.
+func call[Req, Resp any](fn func(Req) (Resp, error)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req Req
+		if !readJSON(w, r, &req) {
+			return
+		}
+		resp, err := fn(req)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, resp)
+	}
+}
+
+// do reads a Req, passes it to fn and answers 204 No Content.
+func do[Req any](fn func(Req) error) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req Req
+		if !readJSON(w, r, &req) {
+			return
+		}
+		if err := fn(req); err != nil {
+			writeError(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// act runs fn (the request has no body) and answers 204 No Content.
+func act(fn func() error) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := fn(); err != nil {
+			writeError(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// result runs fn (the request has no body) and answers with its result.
+func result[Resp any](fn func() (Resp, error)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		resp, err := fn()
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, resp)
+	}
+}
+
+// pluginCall is call for plugin actions: their errors are answered by
+// pluginAnswer.
+func pluginCall[Req, Resp any](fn func(Req) (Resp, error)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req Req
+		if !readJSON(w, r, &req) {
+			return
+		}
+		resp, err := fn(req)
+		pluginAnswer(w, resp, err)
+	}
 }
 
 // ListenUnix serves the API on a Unix socket. group is the numeric group ID
