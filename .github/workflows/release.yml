@@ -66,14 +66,20 @@ jobs:
         env:
           RELEASE: ${{ inputs.release }}
         run: |
-          if [ -n "${RELEASE}" ]; then
-            # vMAJOR.MINOR.PATCH, optionally with a label: v0.2.0-beta.1
-            if ! printf '%s' "${RELEASE}" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; then
-              echo "::error::The release name must look like v0.1.0 or v0.2.0-beta.1"
-              exit 1
-            fi
-            v="${RELEASE}"
-          elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then v="${GITHUB_REF_NAME}"; else v="dev-${GITHUB_SHA::7}"; fi
+          if [ -n "${RELEASE}" ]; then v="${RELEASE}"
+          elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then v="${GITHUB_REF_NAME}"
+          else
+            # A test build: named after the commit, nothing to check.
+            echo "version=dev-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # A release, typed in or pushed as a tag, must be vMAJOR.MINOR.PATCH,
+          # optionally with a label (v0.2.0-beta.1). The version reaches the
+          # build's commands, so nothing else may get through.
+          if ! printf '%s' "$v" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; then
+            echo "::error::The release name must look like v0.1.0 or v0.2.0-beta.1"
+            exit 1
+          fi
           echo "version=$v" >> "$GITHUB_OUTPUT"
 
       - name: Get rpi-image-gen
@@ -97,7 +103,11 @@ jobs:
           # build.sh removes it from the environment before running
           # anything else and passes it only to rbsign.
           RASBEACON_UPDATE_SIGNING_KEY: ${{ secrets.RASBEACON_UPDATE_SIGNING_KEY }}
-        run: image/build.sh ${{ matrix.target.board }} ${{ steps.version.outputs.version }}
+          # Passed as variables, never pasted into the command line, so
+          # nothing in them can run as a command next to the signing key.
+          BOARD: ${{ matrix.target.board }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: image/build.sh "$BOARD" "$VERSION"
 
       - uses: actions/upload-artifact@v7
         with:
