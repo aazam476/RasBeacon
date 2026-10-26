@@ -155,7 +155,29 @@ func (a *Agent) UpdateGuestSettings(req api.GuestSettings) error {
 	if err := config.WriteJSON(a.paths.ConfigFile(), newCfg, 0o644); err != nil {
 		return err
 	}
+	oldCfg, oldSecrets := a.cfg, a.secrets
 	a.cfg, a.secrets = newCfg, newSecrets
 	slog.Info("guest network settings saved", "enabled", newCfg.Guest.Enabled, "ssid", newCfg.Guest.SSID)
-	return a.startNormalMode()
+	if err := a.startNormalMode(); err != nil {
+		return err
+	}
+	// Some adapters say they can broadcast two networks but refuse the
+	// second one, and hostapd then stops. Like a hotspot save, the
+	// previous settings go back, so the hotspot (and this page) stays.
+	// Without this, the minute check would keep restarting hostapd with
+	// the same bad settings, and only a factory reset would get out.
+	if !a.hotspotStayedUp() {
+		if err := a.restoreHotspot(oldCfg, oldSecrets); err != nil {
+			return err
+		}
+		return errGuestDidntStart
+	}
+	return nil
+}
+
+// errGuestDidntStart is the answer when hostapd couldn't run the guest
+// network.
+var errGuestDidntStart = &config.ValidationError{
+	Field:   "enabled",
+	Message: "The Wi-Fi adapter couldn't run the guest network, so the previous settings were put back.",
 }

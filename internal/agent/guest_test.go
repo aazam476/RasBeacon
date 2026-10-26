@@ -179,3 +179,24 @@ func TestGuest_HotspotCantTakeTheGuestNetworksNameOrPassword(t *testing.T) {
 		t.Error("a refused save must not be written to disk")
 	}
 }
+
+func TestGuest_ANetworkTheAdapterRefusesIsUndone(t *testing.T) {
+	e := newGuestCapableEnv(t)
+	// The adapter lists two networks but refuses the second: hostapd stops.
+	e.runner.outputs["systemctl is-active "+hostapdService] = "failed\n"
+	err := e.agent.UpdateGuestSettings(guestOn)
+	var invalid *config.ValidationError
+	if !errors.As(err, &invalid) || invalid.Field != "enabled" || !strings.Contains(invalid.Message, "previous settings were put back") {
+		t.Fatalf("got %v, want the guest network refused", err)
+	}
+	if e.agent.GuestSettings().Enabled {
+		t.Error("the guest network should be off again")
+	}
+	var saved config.Config
+	if err := config.ReadJSON(e.paths.ConfigFile(), &saved); err != nil || saved.Guest.Enabled {
+		t.Errorf("the saved settings should be the previous ones: %+v, %v", saved.Guest, err)
+	}
+	if strings.Contains(e.readFile(e.paths.HostapdConfig()), "bss=guest0") {
+		t.Error("hostapd.conf should be back to one network")
+	}
+}
