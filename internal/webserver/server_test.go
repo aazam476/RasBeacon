@@ -182,8 +182,8 @@ func TestLogin_ThenChangesNeedCSRFToken(t *testing.T) {
 
 	// Changing settings without the CSRF header is refused.
 	rec = request(s, "PUT", "http://10.87.0.1/api/v1/settings/hotspot", `{}`, nil, cookies)
-	if rec.Code != http.StatusForbidden {
-		t.Errorf("PUT without CSRF token = %d, want 403", rec.Code)
+	if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), `"field":"csrfToken"`) {
+		t.Errorf("PUT without CSRF token = %d %s, want 403 naming the csrfToken field", rec.Code, rec.Body.String())
 	}
 
 	// With the header it is forwarded to rbd.

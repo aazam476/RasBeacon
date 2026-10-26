@@ -109,6 +109,29 @@ interface RequestOptions {
   /** Sent as the raw body (update files). */
   file?: Blob;
   timeoutMs?: number;
+  /** Set on the second try after a refused CSRF token, so it is retried only once. */
+  retried?: boolean;
+}
+
+/** rbweb's `field` on a 403 that refused the CSRF token (internal/webserver/server.go). */
+const CSRF_FIELD = 'csrfToken';
+
+/** The token fetch in progress, shared by every request that was refused at the same time. */
+let tokenRefresh: Promise<unknown> | null = null;
+
+/**
+ * Fetches a new CSRF token. After rbweb restarts (an update, unplugging the Pi), "Stay logged in"
+ * starts a new session with a new token, and the open page still has the old one. The page then
+ * sends many requests at once; they all wait for one fetch of /session instead of each making
+ * their own.
+ */
+function refreshToken(): Promise<unknown> {
+  tokenRefresh ??= getSession()
+    .catch(() => undefined)
+    .finally(() => {
+      tokenRefresh = null;
+    });
+  return tokenRefresh;
 }
 
 /** Sends one request and returns the parsed answer (undefined for 204). */
@@ -147,6 +170,13 @@ async function request<T>(method: string, path: string, options: RequestOptions 
       field = error.field;
     } catch {
       // Not JSON: keep the general message.
+    }
+    // Only a refused CSRF token is tried again, once, with a new token. Other 403s (such as a
+    // wrong current password) are real answers, and sending them again would count as another
+    // wrong try.
+    if (response.status === 403 && field === CSRF_FIELD && !options.retried) {
+      await refreshToken();
+      return request<T>(method, path, { ...options, retried: true });
     }
     throw new ApiError(response.status, message, field);
   }

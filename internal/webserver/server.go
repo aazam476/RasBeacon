@@ -494,6 +494,9 @@ func (s *Server) handleCaptiveAPI(w http.ResponseWriter, r *http.Request) {
 
 // --- Login-required handlers ---
 
+// csrfField marks a refusal for a missing or wrong CSRF token.
+const csrfField = "csrfToken"
+
 // requireLogin lets the request through only with a valid session, and for
 // requests that change something, a matching CSRF token.
 func (s *Server) requireLogin(next http.Handler) http.Handler {
@@ -508,7 +511,14 @@ func (s *Server) requireLogin(next http.Handler) http.Handler {
 			return
 		}
 		if r.Method != http.MethodGet && !csrfTokenMatches(sess, r.Header.Get("X-CSRF-Token")) {
-			writeJSON(w, http.StatusForbidden, api.ErrorResponse{Error: "Missing or wrong CSRF token. Reload the page and try again."})
+			// The field tells the web UI this refusal is about the token:
+			// after rbweb restarts, "Stay logged in" starts a new session
+			// with a new token, and the open page fetches it and tries
+			// again (see request() in web/src/data/real/api.ts).
+			writeJSON(w, http.StatusForbidden, api.ErrorResponse{
+				Error: "Missing or wrong CSRF token. Reload the page and try again.",
+				Field: csrfField,
+			})
 			return
 		}
 		next.ServeHTTP(w, r)

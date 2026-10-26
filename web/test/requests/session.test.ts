@@ -71,4 +71,70 @@ describe('sending requests', () => {
   it('links to a backup by its token, encoded', () => {
     expect(api.backupDownloadUrl('a/b c')).toBe('/api/v1/system/backup/a%2Fb%20c');
   });
+
+  describe('after rbweb restarts with a new session', () => {
+    /**
+     * A fake router whose session token is `current`: a change with any other token is refused
+     * like rbweb refuses it, and GET /session hands out the current one.
+     */
+    function restartedRouter(current: string, refuseAlways = false) {
+      const sent: { method: string; path: string; token?: string }[] = [];
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string, init: RequestInit = {}) => {
+          const method = init.method ?? 'GET';
+          const token = (init.headers as Record<string, string>)['X-CSRF-Token'];
+          sent.push({ method, path: url.replace(/^\/api\/v1/, ''), token });
+          if (method === 'GET') {
+            return Response.json({ loggedIn: true, csrfToken: current });
+          }
+          if (refuseAlways || token !== current) {
+            return Response.json(
+              { error: 'Missing or wrong CSRF token. Reload the page and try again.', field: 'csrfToken' },
+              { status: 403 },
+            );
+          }
+          return new Response(null, { status: 204 });
+        }),
+      );
+      return sent;
+    }
+
+    async function logInWith(token: string) {
+      fakeRouter({ body: { loggedIn: true, csrfToken: token } });
+      await api.logIn('tangerine-orbit-42', true);
+    }
+
+    it('fetches the new token and sends the change again', async () => {
+      await logInWith('old-token');
+      const sent = restartedRouter('new-token');
+      await expect(api.reboot()).resolves.toBeUndefined();
+      expect(sent.map((r) => `${r.method} ${r.path} ${r.token ?? ''}`.trim())).toEqual([
+        'POST /system/reboot old-token',
+        'GET /session',
+        'POST /system/reboot new-token',
+      ]);
+    });
+
+    it('tries only once, then shows the error', async () => {
+      await logInWith('old-token');
+      const sent = restartedRouter('new-token', true);
+      await expect(api.reboot()).rejects.toMatchObject({ status: 403, field: 'csrfToken' });
+      expect(sent).toHaveLength(3);
+    });
+
+    it('shares one token fetch between changes refused at the same time', async () => {
+      await logInWith('old-token');
+      const sent = restartedRouter('new-token');
+      await Promise.all([api.reboot(), api.shutDown()]);
+      expect(sent.filter((r) => r.path === '/session')).toHaveLength(1);
+      expect(sent.filter((r) => r.token === 'new-token')).toHaveLength(2);
+    });
+
+    it('never sends other refusals again, such as a wrong password', async () => {
+      const sent = fakeRouter({ status: 403, body: { error: 'Wrong password.', field: 'currentPassword' } });
+      await expect(api.reboot()).rejects.toMatchObject({ status: 403, field: 'currentPassword' });
+      expect(sent).toHaveLength(1);
+    });
+  });
 });
