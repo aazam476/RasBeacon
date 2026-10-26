@@ -615,6 +615,10 @@ func (a *Agent) UpdateUplinkSettings(req api.UplinkSettings) error {
 		} else if !a.isSavedNetworkID(id) {
 			return &config.ValidationError{Field: fmt.Sprintf("networks.%d.id", i), Message: "This network is not saved (reload the page)."}
 		}
+		if slices.Contains(a.ownSSIDs(), n.SSID) {
+			return &config.ValidationError{Field: fmt.Sprintf("networks.%d.ssid", i),
+				Message: "This is RasBeacon's own network. Choose the network RasBeacon should connect to."}
+		}
 		saved := config.SavedNetwork{ID: id, SSID: n.SSID, Security: n.Security, Hidden: n.Hidden, RandomMAC: n.RandomMAC}
 
 		if n.Security == config.UplinkEnterprise && n.Enterprise != nil {
@@ -708,7 +712,7 @@ func newNetworkID() string {
 func (a *Agent) ScanNearby() (api.ScanResponse, error) {
 	a.mu.Lock()
 	wifi := a.wifiUplinkInterface()
-	ownSSID := a.cfg.Hotspot.SSID
+	own := a.ownSSIDs()
 	mode := a.mode
 	a.mu.Unlock()
 
@@ -730,11 +734,22 @@ func (a *Agent) ScanNearby() (api.ScanResponse, error) {
 	}
 	networks := []uplink.NearbyNetwork{}
 	for _, n := range uplink.ParseScanResults(out) {
-		if n.SSID != ownSSID { // RasBeacon's own hotspot is not an uplink
+		if !slices.Contains(own, n.SSID) { // RasBeacon's own networks are not uplinks
 			networks = append(networks, n)
 		}
 	}
 	return api.ScanResponse{Networks: networks}, nil
+}
+
+// ownSSIDs lists the names of the networks RasBeacon broadcasts itself:
+// the hotspot, and the guest network while it is on. Joining one of them
+// as the uplink would connect RasBeacon to itself. The caller holds a.mu.
+func (a *Agent) ownSSIDs() []string {
+	own := []string{a.cfg.Hotspot.SSID}
+	if a.guestWanted() {
+		own = append(own, a.cfg.Guest.SSID)
+	}
+	return own
 }
 
 // SetDHCPProbe replaces the Ethernet safety check's DHCP probe. The

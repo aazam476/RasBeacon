@@ -359,3 +359,33 @@ func TestScanNearby_HidesOwnHotspot(t *testing.T) {
 		t.Errorf("got %+v, want only Hotel Guest", resp.Networks)
 	}
 }
+
+func TestScanNearby_HidesAndRefusesTheGuestNetworkToo(t *testing.T) {
+	e := newGuestCapableEnv(t)
+	if err := e.agent.UpdateGuestSettings(guestOn); err != nil {
+		t.Fatal(err)
+	}
+	e.runner.outputs["wpa_cli -p "+e.paths.WPAControlDir()+" -i wlan0 scan_results"] =
+		"bssid / frequency / signal level / flags / ssid\n" +
+			"52:3e:aa:12:34:56\t2437\t-30\t[WPA2-PSK-CCMP][ESS]\tAli's Guests\n" +
+			"aa:00:00:00:00:02\t2412\t-60\t[ESS]\tHotel Guest\n"
+	resp, err := e.agent.ScanNearby()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Networks) != 1 || resp.Networks[0].SSID != "Hotel Guest" {
+		t.Errorf("got %+v, want only Hotel Guest", resp.Networks)
+	}
+
+	// Saving either of RasBeacon's own networks as the uplink is refused.
+	for _, own := range []string{"Ali's Travel Wi-Fi", "Ali's Guests"} {
+		err := e.agent.UpdateUplinkSettings(api.UplinkSettings{
+			EthernetRole: config.EthernetUplink,
+			Networks:     []api.SavedNetwork{{SSID: own, Security: config.UplinkPersonal, Password: "some-password-1"}},
+		})
+		var invalid *config.ValidationError
+		if !errors.As(err, &invalid) || invalid.Field != "networks.0.ssid" {
+			t.Errorf("%s: got %v, want it refused", own, err)
+		}
+	}
+}
