@@ -576,11 +576,20 @@ func TestPlugins_WaitsForTheVPNBeforeDownloading(t *testing.T) {
 	e, _ := newVPNEnv(t, true)
 	e.runner.failing = []string{"mountpoint"}
 	e.runBackground()
+	// A plugin the catalog offers, so a refusal below can only come from
+	// the VPN check.
+	e.agent.mu.Lock()
+	e.agent.plugins.catalog.loaded = true
+	e.agent.plugins.catalog.Entries = []catalogRecord{{
+		Entry:       plugin.Entry{Source: plugin.BuiltInSource, File: "x.rba", ID: "adguard-home", Name: "AdGuard Home", Version: "1.0"},
+		DownloadURL: "https://github.com/" + plugin.BuiltInSource + "/releases/download/v1/x.rba",
+	}}
+	e.agent.mu.Unlock()
 	// The tunnel isn't up yet (the kill switch keeps it closed): catalog
-	// downloads fail at once.
+	// downloads fail at once, saying why.
 	_, err := e.agent.StagePluginFromCatalog(api.PluginDownloadRequest{Source: plugin.BuiltInSource, File: "x.rba"})
-	if err == nil {
-		t.Fatal("expected an error")
+	if err == nil || !strings.Contains(err.Error(), "kill switch") {
+		t.Fatalf("got %v, want the download refused until the VPN is up", err)
 	}
 	if err := e.agent.waitForPluginPath(""); err == nil || !strings.Contains(err.Error(), "kill switch") {
 		t.Errorf("got %v", err)

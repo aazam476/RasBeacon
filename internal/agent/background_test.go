@@ -195,9 +195,56 @@ func TestPluginWatchRound_DoesEachCheckOnItsRound(t *testing.T) {
 		}
 		return n
 	}
+	if _, err := e.installTestPlugin(writeTestPlugin(t, testPluginManifest("1.0"), nil), nil); err != nil {
+		t.Fatal(err)
+	}
+	e.runBackground()
+	checkedAt := func() time.Time {
+		e.agent.mu.Lock()
+		defer e.agent.mu.Unlock()
+		return e.agent.plugins.live["adguard-home"].checkedAt
+	}
+	ran := func(prefix string) bool {
+		for _, c := range e.runner.commands {
+			if strings.HasPrefix(c, prefix) {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Round 1: only the containers are looked at.
 	before := podmanPS()
 	e.agent.pluginWatchRound(1)
 	if podmanPS() != before+1 {
 		t.Errorf("each round looks at the containers")
+	}
+	if !checkedAt().IsZero() {
+		t.Error("an odd round must not run the health checks")
+	}
+	// Round 2: the health checks too.
+	e.agent.pluginWatchRound(2)
+	if checkedAt().IsZero() {
+		t.Error("an even round should run the health checks")
+	}
+
+	// Round 19 (every five minutes): a restored plugin still waiting for
+	// its image is tried again.
+	e.agent.mu.Lock()
+	p := e.agent.cfg.Plugins.Installed["adguard-home"]
+	p.Fetch = &config.PluginFetch{Ref: "docker.io/adguard/adguardhome@sha256:" + strings.Repeat("a", 64)}
+	p.Running = true
+	e.agent.cfg.Plugins.Installed["adguard-home"] = p
+	e.agent.plugins.live["adguard-home"].state = api.PluginFailed
+	e.agent.mu.Unlock()
+	e.runner.commands = nil
+	e.agent.pluginWatchRound(18)
+	if ran("podman image exists") {
+		t.Error("round 18 must not retry the download")
+	}
+	e.agent.pluginWatchRound(19)
+	e.runBackground()
+	if !ran("podman image exists") {
+		t.Errorf("round 19 should try the restored plugin's image again; commands: %v", e.runner.commands)
 	}
 }

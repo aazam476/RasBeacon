@@ -350,6 +350,7 @@ func TestUpdate_TrialIsConfirmedAfterANormalStart(t *testing.T) {
 	restarted := New(e.paths, e.runner)
 	timers := &fakeTimers{}
 	restarted.afterFunc, restarted.usbRadioWait = timers.afterFunc, 0
+	restarted.background = func(func()) {} // no loops left running after the test
 	if err := restarted.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -378,6 +379,7 @@ func TestUpdate_TrialIsntConfirmedWithoutTheWebUI(t *testing.T) {
 	restarted := New(e.paths, e.runner)
 	timers := &fakeTimers{}
 	restarted.afterFunc, restarted.usbRadioWait = timers.afterFunc, 0
+	restarted.background = func(func()) {} // no loops left running after the test
 	if err := restarted.Start(); err != nil {
 		t.Fatal(err)
 	}

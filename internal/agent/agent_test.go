@@ -443,6 +443,7 @@ func TestReboot_AfterClaim_StartsInNormalMode(t *testing.T) {
 	restarted := New(e.paths, e.runner)
 	restarted.afterFunc = e.timers.afterFunc
 	restarted.usbRadioWait = 0
+	restarted.background = func(func()) {} // no loops left running after the test
 	if err := restarted.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -463,6 +464,7 @@ func TestFactoryResetFile_WipesSettingsAtBoot(t *testing.T) {
 	restarted := New(e.paths, e.runner)
 	restarted.afterFunc = e.timers.afterFunc
 	restarted.usbRadioWait = 0
+	restarted.background = func(func()) {} // no loops left running after the test
 	if err := restarted.Start(); err != nil {
 		t.Fatal(err)
 	}
