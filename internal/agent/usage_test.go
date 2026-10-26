@@ -149,3 +149,32 @@ func TestClients_AFailedRadioReadDoesNotCountDataTwice(t *testing.T) {
 		t.Errorf("data use = %d down, %d up; want 1500 and 150", cl.DownBytes, cl.UpBytes)
 	}
 }
+
+func TestClients_DataUseIsSavedWhenRasBeaconStops(t *testing.T) {
+	e := newClaimedEnv(t, false)
+	c := &fakeClock{now: time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)}
+	e.agent.now = func() time.Time { return c.now }
+	phone := "3a:1f:22:aa:bb:cc"
+	sample := func(rx, tx uint64) {
+		e.runner.outputs["iw dev ap0 station dump"] = stationWithBytes(phone, rx, tx)
+		c.advance(5 * time.Second)
+		e.agent.mu.Lock()
+		e.agent.sampleReadings()
+		e.agent.mu.Unlock()
+	}
+	read := func() [2]uint64 {
+		var saved usageFile
+		_ = config.ReadJSON(e.paths.UsageFile(), &saved)
+		return saved.Devices[phone]
+	}
+	sample(0, 0)
+	sample(100, 1_000) // saved: the first save comes at once
+	sample(200, 3_000) // not saved yet: within usageSaveInterval
+	if got := read(); got != [2]uint64{1_000, 100} {
+		t.Fatalf("saved before stopping = %v", got)
+	}
+	e.agent.SaveUsage()
+	if got := read(); got != [2]uint64{3_000, 200} {
+		t.Errorf("saved when stopping = %v, want everything counted", got)
+	}
+}

@@ -101,12 +101,14 @@ func main() {
 	if *devRoot != "" {
 		go a.RunPortalMonitor(devsim.PortalProbe)
 	}
-	// When the device shuts down, save the time for the next boot.
+	// When the device shuts down, save the time for the next boot, and
+	// the data use counted since the last save.
 	go func() {
 		stop := make(chan os.Signal, 1)
 		signal.Notify(stop, syscall.SIGTERM, os.Interrupt)
 		<-stop
 		a.SaveClock()
+		a.SaveUsage()
 		slog.Info("rbd stopping")
 		os.Exit(0)
 	}()
