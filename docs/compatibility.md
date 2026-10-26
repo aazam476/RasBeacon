@@ -47,7 +47,7 @@ drivers generally can; please report what the Realtek adapters show.
 | Adapter | Chip (Linux driver) | USB ID | Status | Max clients | Throughput | Power | Notes |
 |---|---|---|---|---|---|---|---|
 | Alfa AWUS036ACM | MT7612U (mt76x2u) | 0e8d:7612 | Untested (reference) | Driver table 128; 10 unverified | 400+ Mb/s AP on 5 GHz/80 MHz (Pi 4B, iperf3, third-party) | About 380 mA heavy load (third-party); idle unmeasured | WPA3-SAE supported |
-| TP-Link Archer T3U | RTL8812BU (rtw88_8822bu) | 2357:012d | Untested, **at risk** | Driver table 32; 10 unverified | — | — | Reported AP-mode drops ("failed to download beacon") on older kernels. Pi kernel 6.18. |
+| TP-Link Archer T3U | RTL8812BU (rtw88_8822bu) | 2357:012d | Tested, **stalls** (see notes) | Driver table 32; 10 unverified | — | — | On the owner's Pi 4 (kernel 6.18), the hotspot stops sending data to its devices after a while: they stay connected but get no internet, with WPA2 and WPA3 alike. Restarting the hotspot fixes it, and RasBeacon now does that by itself within about two minutes, recording each stall in the diagnostics report ("hotspot stalls"). Reported AP-mode drops ("failed to download beacon") on older kernels. |
 | TP-Link Archer T3U Plus | RTL8812BU (rtw88_8822bu) | 2357:0138 | Untested, at risk | as above | — | — | |
 | TP-Link Archer T4U v3 | RTL8812BU (rtw88_8822bu) | 2357:0115 | Untested, at risk | as above | — | — | |
 | TP-Link Archer T4U v1/v2 | RTL8812AU (rtw88_8812au) | 2357:0101, 0103, 010d | Untested | Driver table 32 | — | — | In-kernel driver since Linux 6.14 |

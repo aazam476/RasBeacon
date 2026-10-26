@@ -516,7 +516,11 @@ install updates (on the Pi 3/Zero 2 W image, check instead that System says
    for at least 30 minutes. Phones drop idle Wi-Fi to save power; that's
    not a failure. **Expect:** the hotspot stays up, no "incorrect password",
    and devices rejoin. Afterwards download the diagnostics and look for
-   `beacon`, `flush`, `rtw88`, `timed out` or hostapd errors.
+   `beacon`, `flush`, `rtw88`, `timed out` or hostapd errors, and at the
+   **hotspot stalls** section. Each stall is a time the hotspot stopped
+   sending data to devices that stayed connected; RasBeacon restarted the
+   hotspot by itself. Note how many there were and the `hotspotUptime`
+   of each.
 5. **Memory (on a 1 GB board, and a Zero 2 W with 512 MB, if you have
    them):** open the zero-leak login (section 10) or run the speed test,
    then *SSH:* `free -m`. **Expect:** it works (slower on the Zero 2 W);
