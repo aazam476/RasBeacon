@@ -398,6 +398,8 @@ export interface HotspotSettings {
   password?: string;
   /** Read-only: the hotspot's radio has no 5 GHz band, so only 2.4 GHz is offered. */
   no5GHz?: boolean;
+  /** Read-only: the hotspot's radio can't run a WPA3-only hotspot, so it isn't offered. */
+  noWpa3?: boolean;
 }
 
 /**

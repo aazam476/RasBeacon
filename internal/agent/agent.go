@@ -610,7 +610,7 @@ func (a *Agent) ownerHotspot() (render.HotspotInput, error) {
 		Band:       a.hotspotBand(),
 		Channel:    a.hotspotChannel(),
 		Country:    h.Country,
-		Security:   h.Security,
+		Security:   a.hotspotSecurity(),
 		Password:   a.secrets.HotspotPassword,
 		MaxDevices: a.cfg.Access.MaxDevices,
 		Guest:      a.guestHostapd(),

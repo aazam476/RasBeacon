@@ -51,7 +51,7 @@ func (a *Agent) StatusFor(viewer string) api.Status {
 			SSID:       h.SSID,
 			Band:       h.Band,
 			Channel:    channel,
-			Security:   h.Security,
+			Security:   a.hotspotSecurity(), // what hostapd runs
 			Interface:  radio.HotspotInterfaceName,
 			LANAddress: a.lan.Address(),
 			Metered:    h.Metered,

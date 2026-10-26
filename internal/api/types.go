@@ -664,6 +664,9 @@ type HotspotSettings struct {
 	// No5GHz is true when the hotspot's radio can't use 5 GHz, so the page
 	// offers only 2.4 GHz. Read-only: ignored when saving.
 	No5GHz bool `json:"no5GHz,omitempty"`
+	// NoWPA3 is true when the hotspot's radio can't run a WPA3-only
+	// hotspot, so the page doesn't offer "WPA3 only".
+	NoWPA3 bool `json:"noWpa3,omitempty"`
 }
 
 // HotspotChannelsRequest asks which channels a country allows (POST

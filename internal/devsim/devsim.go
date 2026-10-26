@@ -121,7 +121,9 @@ type Runner struct{}
 // on 2.4 and 5 GHz ("Band 2" is 5 GHz).
 const iwPhyInfo = "Wiphy phy1\n\tSupported interface modes:\n\t\t * managed\n\t\t * AP\n\t\t * monitor\n" +
 	"\tvalid interface combinations:\n\t\t * #{ managed } <= 1, #{ AP } <= 2,\n\t\t   total <= 2, #channels <= 1\n" +
-	"\tBand 1:\n\tBand 2:\n"
+	"\tBand 1:\n\tBand 2:\n" +
+	// The cipher that lets hostapd run WPA3 (see radio.SupportsWPA3AP).
+	"\tSupported Ciphers:\n\t\t* CCMP-128 (00-0f-ac:4)\n\t\t* CMAC (00-0f-ac:6)\n"
 
 const stationDump = `Station 3a:1f:22:aa:bb:cc (on ap0)
 	signal:  	-48 [-50, -52] dBm

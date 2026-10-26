@@ -41,6 +41,24 @@ func (a *Agent) hotspotHas5GHz() bool {
 	return r != nil && r.Has5GHz
 }
 
+// hotspotHasWPA3 reports whether the hotspot's radio can run a WPA3-only
+// hotspot (radio.SupportsWPA3AP).
+func (a *Agent) hotspotHasWPA3() bool {
+	r := a.hotspotRadio()
+	return r != nil && r.HasWPA3
+}
+
+// hotspotSecurity is the security hostapd uses for the saved settings: the
+// saved one, except WPA2/WPA3 when "WPA3 only" is saved but the radio can't
+// run it (another adapter, or a restored backup). Like the band, the saved
+// choice stays, so a capable adapter brings WPA3 only back.
+func (a *Agent) hotspotSecurity() config.Security {
+	if a.cfg.Hotspot.Security == config.SecurityWPA3 && !a.hotspotHasWPA3() {
+		return config.SecurityWPA2WPA3
+	}
+	return a.cfg.Hotspot.Security
+}
+
 // hotspotBand is the band hostapd uses for the saved settings: the saved
 // band, except 2.4 GHz when the radio has no 5 GHz band.
 func (a *Agent) hotspotBand() config.Band {
@@ -119,6 +137,9 @@ func (a *Agent) checkHotspotForRadio(h config.HotspotConfig) error {
 	if h.Band == config.Band5GHz && !a.hotspotHas5GHz() {
 		return &config.ValidationError{Field: "hotspot.band", Message: "This Wi-Fi adapter can't use 5 GHz."}
 	}
+	if h.Security == config.SecurityWPA3 && !a.hotspotHasWPA3() {
+		return &config.ValidationError{Field: "hotspot.security", Message: "This Wi-Fi adapter can't run a WPA3-only hotspot."}
+	}
 	allowed := a.countryChannels(h.Country)[h.Band]
 	if len(allowed) == 0 {
 		return &config.ValidationError{Field: "hotspot.band", Message: "This country doesn't allow a hotspot on 5 GHz."}
@@ -190,10 +211,17 @@ var errHotspotDidntStart = &config.ValidationError{
 }
 
 // hotspotWarnings explains on the Status page when the hotspot doesn't run
-// on the saved band.
+// with the saved band or security.
 func (a *Agent) hotspotWarnings() []string {
-	if a.mode == api.ModeNormal && a.hotspotBand() != a.cfg.Hotspot.Band {
-		return []string{"The hotspot runs on 2.4 GHz: this Wi-Fi adapter can't use 5 GHz."}
+	if a.mode != api.ModeNormal {
+		return nil
 	}
-	return nil
+	var warnings []string
+	if a.hotspotBand() != a.cfg.Hotspot.Band {
+		warnings = append(warnings, "The hotspot runs on 2.4 GHz: this Wi-Fi adapter can't use 5 GHz.")
+	}
+	if a.hotspotSecurity() != a.cfg.Hotspot.Security {
+		warnings = append(warnings, "The hotspot runs as WPA2/WPA3: this Wi-Fi adapter can't run WPA3 only.")
+	}
+	return warnings
 }

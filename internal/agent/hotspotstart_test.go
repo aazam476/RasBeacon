@@ -244,3 +244,61 @@ func TestHotspot_WithoutTheDatabaseEveryChannelIsOffered(t *testing.T) {
 		t.Error("a damaged database must not be used")
 	}
 }
+
+// iwInfoWithCMAC is a dual-band radio that can run a WPA3 hotspot (it has
+// the cipher protected management frames need; see radio.SupportsWPA3AP).
+const iwInfoWithCMAC = iwInfoDualBand + "\tSupported Ciphers:\n\t\t* CCMP-128 (00-0f-ac:4)\n\t\t* CMAC (00-0f-ac:6)\n"
+
+func TestHotspot_WPA3OnlyIsRefusedOnARadioThatCantRunIt(t *testing.T) {
+	e := newClaimedEnv(t, false) // its radio lists no CMAC cipher
+	settings := e.agent.HotspotSettings()
+	if !settings.NoWPA3 {
+		t.Error("the Hotspot page should hear that WPA3 only isn't available")
+	}
+	settings.Security = config.SecurityWPA3
+	var refused *config.ValidationError
+	if err := e.agent.UpdateHotspotSettings(settings); !errors.As(err, &refused) || refused.Field != "hotspot.security" {
+		t.Errorf("WPA3 only = %v, want refused on the security", err)
+	}
+}
+
+// A WPA3-only hotspot moved to an adapter that can't run it (or restored
+// from a backup) still starts, as WPA2/WPA3, and the saved choice stays.
+func TestHotspot_SavedWPA3OnlyRunsAsWPA2WPA3OnARadioWithoutIt(t *testing.T) {
+	e := newTestEnv(t)
+	e.runner.outputs["iw phy phy1 info"] = iwInfoWithCMAC
+	e.start()
+	if _, err := e.agent.Claim(validClaim); err != nil {
+		t.Fatal(err)
+	}
+	e.timers.runAll()
+	settings := e.agent.HotspotSettings()
+	if settings.NoWPA3 {
+		t.Fatal("a radio with CMAC can run WPA3 only")
+	}
+	settings.Security = config.SecurityWPA3
+	if err := e.agent.UpdateHotspotSettings(settings); err != nil {
+		t.Fatal(err)
+	}
+	if hostapd := e.readFile(e.paths.HostapdConfig()); !strings.Contains(hostapd, "wpa_key_mgmt=SAE\n") {
+		t.Fatalf("hostapd should run WPA3 only:\n%s", hostapd)
+	}
+
+	// The adapter is swapped for one without the cipher.
+	e.runner.outputs["iw phy phy1 info"] = iwInfoDualBand
+	restarted := New(e.paths, e.runner)
+	restarted.afterFunc, restarted.usbRadioWait, restarted.background = e.timers.afterFunc, 0, func(func()) {}
+	if err := restarted.Start(); err != nil {
+		t.Fatal(err)
+	}
+	if hostapd := e.readFile(e.paths.HostapdConfig()); strings.Contains(hostapd, "wpa_key_mgmt=SAE\n") {
+		t.Errorf("hostapd must not run WPA3 only on this radio:\n%s", hostapd)
+	}
+	if got := restarted.HotspotSettings().Security; got != config.SecurityWPA3 {
+		t.Errorf("saved security = %s, want WPA3 only kept for a capable adapter", got)
+	}
+	status := restarted.Status()
+	if status.Hotspot.Security != config.SecurityWPA2WPA3 || !strings.Contains(strings.Join(status.Warnings, " "), "can't run WPA3 only") {
+		t.Errorf("status = %s, warnings %q", status.Hotspot.Security, status.Warnings)
+	}
+}

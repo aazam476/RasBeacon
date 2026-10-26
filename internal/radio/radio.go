@@ -64,6 +64,9 @@ type Radio struct {
 	// Has5GHz is true when the radio can use the 5 GHz band (see
 	// Supports5GHz). Many built-in radios, like the Pi Zero 2 W's, can't.
 	Has5GHz bool `json:"has5GHz"`
+	// HasWPA3 is true when the radio can run a WPA3-only hotspot (see
+	// SupportsWPA3AP).
+	HasWPA3 bool `json:"hasWpa3"`
 	Role    Role `json:"role"`
 }
 
@@ -116,6 +119,7 @@ func Detect(sysClassNet string, phyInfo PhyInfoFunc) ([]Radio, error) {
 			r.SupportsAP = SupportsAPMode(info)
 			r.MaxAPs = MaxAPInterfaces(info)
 			r.Has5GHz = Supports5GHz(info)
+			r.HasWPA3 = SupportsWPA3AP(r.Driver, info)
 		}
 
 		radios = append(radios, r)
@@ -325,6 +329,24 @@ func Supports5GHz(iwPhyInfo string) bool {
 		}
 	}
 	return false
+}
+
+// SupportsWPA3AP reads `iw phy <name> info` output and reports whether the
+// radio can run a WPA3 hotspot. WPA3 needs protected management frames,
+// which work in one of two ways:
+//
+//   - Full-MAC chips (brcmfmac, the Pi's built-in Wi-Fi) do the WPA3
+//     handshake in their firmware, which must say so: the extended feature
+//     SAE_OFFLOAD_AP. ("Device supports SAE with AUTHENTICATE command" is
+//     about joining WPA3 networks, not running one.)
+//   - Other drivers (mt76, rtw88 and the like) let hostapd do the handshake;
+//     the radio then only needs the BIP-CMAC-128 cipher, which iw lists as
+//     "CMAC (00-0f-ac:6)" under "Supported Ciphers".
+func SupportsWPA3AP(driver, iwPhyInfo string) bool {
+	if driver == "brcmfmac" {
+		return strings.Contains(iwPhyInfo, "SAE_OFFLOAD_AP")
+	}
+	return strings.Contains(iwPhyInfo, "(00-0f-ac:6)")
 }
 
 // ChannelAllowed reads `iw phy <name> info` output and reports whether the

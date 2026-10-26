@@ -17,7 +17,7 @@ import {
   TextField,
 } from '@/ui';
 import { QrCode } from '../common/QrCode';
-import { bandOptions, HOTSPOT_SECURITY_OPTIONS } from '../common/wifiOptions';
+import { bandOptions, securityOptions } from '../common/wifiOptions';
 import { AccessSection } from './AccessSection';
 
 /** The settings that restart the hotspot when they change; only `metered` doesn't. */
@@ -83,7 +83,9 @@ function HotspotForm({ settings }: { settings: HotspotSettings }) {
   // A hotspot saved on 5 GHz whose radio can't use it runs on 2.4 GHz (after the adapter was
   // swapped for another), so the form starts there.
   const band = settings.no5GHz ? '2.4GHz' : settings.band;
-  const form = useForm({ ...settings, band, password: '' }, saveHotspotSettings);
+  // Likewise, "WPA3 only" on a radio that can't run it runs as WPA2/WPA3.
+  const security = settings.noWpa3 && settings.security === 'wpa3' ? 'wpa2-wpa3' : settings.security;
+  const form = useForm({ ...settings, band, security, password: '' }, saveHotspotSettings);
   const { values, setField, fieldErrors } = form;
   const running = status.data?.hotspot.running;
 
@@ -142,6 +144,7 @@ function HotspotForm({ settings }: { settings: HotspotSettings }) {
           'The country decides which channels are legal.',
           values.security === 'wpa3' && "With WPA3 only, devices older than about 2019 can't join.",
           settings.no5GHz && "This Wi-Fi adapter can't use 5 GHz.",
+          settings.noWpa3 && "This Wi-Fi adapter can't run WPA3 only.",
         ]
           .filter(Boolean)
           .join(' ')}
@@ -173,7 +176,7 @@ function HotspotForm({ settings }: { settings: HotspotSettings }) {
         />
         <SelectField
           label="Security"
-          options={HOTSPOT_SECURITY_OPTIONS}
+          options={securityOptions(settings.noWpa3)}
           value={values.security}
           onChange={(security) => setField('security', security)}
         />

@@ -243,6 +243,28 @@ func TestSupports5GHz(t *testing.T) {
 	}
 }
 
+func TestSupportsWPA3AP(t *testing.T) {
+	// Excerpts of real `iw phy` output from the owner's Pi 4.
+	const rtw88 = "Wiphy phy2\n\tSupported Ciphers:\n\t\t* WEP40 (00-0f-ac:1)\n\t\t* CCMP-128 (00-0f-ac:4)\n" +
+		"\t\t* CMAC (00-0f-ac:6)\n\t\t* CMAC-256 (00-0f-ac:13)\n"
+	const brcmfmac = "Wiphy phy1\n\tSupported Ciphers:\n\t\t* CCMP-128 (00-0f-ac:4)\n\t\t* CMAC (00-0f-ac:6)\n" +
+		"\tDevice supports SAE with AUTHENTICATE command\n\tSupported extended features:\n\t\t* [ 4WAY_HANDSHAKE_STA_PSK ]: 4-way handshake with PSK in station mode\n"
+	for _, tc := range []struct {
+		name, driver, info string
+		want               bool
+	}{
+		{"a soft-MAC radio with CMAC", "rtw88_8822bu", rtw88, true},
+		{"a soft-MAC radio without it", "mt76x2u", "Wiphy phy2\n\tSupported Ciphers:\n\t\t* CCMP-128 (00-0f-ac:4)\n", false},
+		// It lists CMAC and joins WPA3 networks, but can't run a WPA3 hotspot.
+		{"brcmfmac without SAE offload", "brcmfmac", brcmfmac, false},
+		{"brcmfmac with SAE offload", "brcmfmac", brcmfmac + "\t\t* [ SAE_OFFLOAD_AP ]: support for SAE authentication offload in AP mode\n", true},
+	} {
+		if got := SupportsWPA3AP(tc.driver, tc.info); got != tc.want {
+			t.Errorf("%s: got %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
 func TestChannelAllowed(t *testing.T) {
 	tests := []struct {
 		channel        int

@@ -214,7 +214,7 @@ func (a *Agent) HotspotSettings() api.HotspotSettings {
 	h := a.cfg.Hotspot
 	return api.HotspotSettings{
 		SSID: h.SSID, Band: h.Band, Channel: h.Channel, Security: h.Security, Country: h.Country, Metered: h.Metered,
-		No5GHz: !a.hotspotHas5GHz(),
+		No5GHz: !a.hotspotHas5GHz(), NoWPA3: !a.hotspotHasWPA3(),
 	}
 }
 

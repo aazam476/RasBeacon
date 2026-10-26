@@ -65,6 +65,19 @@ describe('hotspot form', () => {
     expect(device.saveHotspotSettings).toHaveBeenCalledWith(expect.objectContaining({ band: '2.4GHz' }));
   });
 
+  it('doesn’t offer WPA3 only when the radio can’t run it, even if it was saved', async () => {
+    const device = fakeDevice((router) => {
+      router.hotspotSettings = { ...router.hotspotSettings, security: 'wpa3', noWpa3: true };
+    });
+    const { user } = renderScreen(<HotspotScreen />, device, '/hotspot');
+    const security = screen.getByLabelText<HTMLSelectElement>('Security');
+    expect(Array.from(security.options, (option) => option.value)).toEqual(['wpa2-wpa3', 'wpa2']);
+    expect(security.value).toBe('wpa2-wpa3');
+    expect(screen.getByText(/This Wi-Fi adapter can't run WPA3 only\./)).toBeTruthy();
+    await user.click(screen.getAllByRole('button', { name: 'Save' })[0]);
+    expect(device.saveHotspotSettings).toHaveBeenCalledWith(expect.objectContaining({ security: 'wpa2-wpa3' }));
+  });
+
   it('says when the hotspot isn’t running', () => {
     renderScreen(
       <HotspotScreen />,
