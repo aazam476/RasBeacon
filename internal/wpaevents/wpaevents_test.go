@@ -2,6 +2,7 @@ package wpaevents
 
 import (
 	"net"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -27,7 +28,13 @@ func TestParsingEvents(t *testing.T) {
 }
 
 func TestListen_AttachesAndPassesEventsOn(t *testing.T) {
-	dir := t.TempDir()
+	// A short folder: Unix socket paths may be at most 104 characters on
+	// macOS, and t.TempDir() is often longer there.
+	dir, err := os.MkdirTemp("/tmp", "rb")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	// A stand-in for wpa_supplicant's control socket.
 	server, err := net.ListenUnixgram("unixgram", &net.UnixAddr{Name: filepath.Join(dir, "wlan1"), Net: "unixgram"})
 	if err != nil {

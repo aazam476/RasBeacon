@@ -173,9 +173,24 @@ func (e *testEnv) fakeDHCPProbe(iface string, timeout time.Duration) (dhcpprobe.
 
 // newTestEnv creates a fake device with a built-in radio (wlan0) and a USB
 // Archer T3U (wlan1).
+// shortTempDir is a temporary folder with a short path, removed after the
+// test. Unix socket paths may be at most 104 characters on macOS (108 on
+// Linux), and t.TempDir() is often longer there, so tests that make
+// sockets use this.
+func shortTempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("/tmp", "rb")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
+}
+
 func newTestEnv(t *testing.T) *testEnv {
 	t.Helper()
-	p := paths.Paths{Root: t.TempDir()}
+	// Short, because plugins' power sockets are made inside it.
+	p := paths.Paths{Root: shortTempDir(t)}
 
 	// Fake /sys/class/net with two radios.
 	classNet := p.SysClassNet()

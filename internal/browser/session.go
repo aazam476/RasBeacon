@@ -157,11 +157,7 @@ func Start(opts Options) (*Session, error) {
 	s.cmd.Dir = profile
 	s.cmd.Stdout = s.stderr
 	s.cmd.Stderr = s.stderr
-	s.cmd.SysProcAttr = &syscall.SysProcAttr{
-		Credential: cred,
-		Setpgid:    true, // its helper processes form one group, stopped together
-		Pdeathsig:  syscall.SIGKILL,
-	}
+	s.cmd.SysProcAttr = processAttributes(cred)
 	if err := s.cmd.Start(); err != nil {
 		toBrowserR.Close()
 		toBrowserW.Close()

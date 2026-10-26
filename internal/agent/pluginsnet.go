@@ -99,7 +99,7 @@ func (a *Agent) pluginDialer() *net.Dialer {
 		Control: func(network, address string, c syscall.RawConn) error {
 			var markErr error
 			err := c.Control(func(fd uintptr) {
-				markErr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_MARK, int(mark))
+				markErr = setSocketMark(fd, int(mark))
 			})
 			if err != nil {
 				return err

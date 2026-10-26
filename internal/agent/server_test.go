@@ -244,7 +244,7 @@ func TestRoutes_BackupDownloadStreamsTheFile(t *testing.T) {
 
 func TestListenUnix_ServesTheRoutesOnlyToItsOwnerAndGroup(t *testing.T) {
 	e := newClaimedEnv(t, false)
-	socket := filepath.Join(t.TempDir(), "api.sock")
+	socket := filepath.Join(shortTempDir(t), "api.sock")
 	go func() { _ = e.agent.ListenUnix(socket, -1) }()
 
 	client := &http.Client{Transport: &http.Transport{
@@ -268,8 +268,12 @@ func TestListenUnix_ServesTheRoutesOnlyToItsOwnerAndGroup(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("GET /state over the socket = %d", resp.StatusCode)
 	}
-	if info, err := os.Stat(socket); err != nil || info.Mode().Perm() != 0o660 {
-		t.Errorf("socket mode = %v, %v; want 0660 (rbd and rbweb's group only)", info.Mode().Perm(), err)
+	info, err := os.Stat(socket)
+	if err != nil {
+		t.Fatal(err) // reading info below would crash the whole test run
+	}
+	if info.Mode().Perm() != 0o660 {
+		t.Errorf("socket mode = %v; want 0660 (rbd and rbweb's group only)", info.Mode().Perm())
 	}
 }
 
