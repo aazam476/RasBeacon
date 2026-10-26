@@ -567,3 +567,51 @@ func hexOf(s string) string {
 	}
 	return string(out)
 }
+
+// The owner's report (A1b step 7): eight VPN switch presses in two minutes
+// restarted dnsmasq eight times, each dropping DNS and DHCP for a moment.
+// dnsmasq now restarts only when its file changes, or when it isn't running.
+func TestApplyDHCP_RestartsDnsmasqOnlyWhenSomethingChanged(t *testing.T) {
+	e := newClaimedEnv(t, false)
+	restarts := func() int {
+		n := 0
+		for _, cmd := range e.runner.commands {
+			if cmd == "systemctl restart "+dnsmasqService {
+				n++
+			}
+		}
+		return n
+	}
+	apply := func() {
+		e.agent.mu.Lock()
+		defer e.agent.mu.Unlock()
+		if err := e.agent.applyDHCP(false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	e.runner.outputs["systemctl is-active "+dnsmasqService] = "active\n"
+
+	e.runner.commands = nil
+	apply()
+	apply()
+	if got := restarts(); got != 0 {
+		t.Errorf("nothing changed since start, but dnsmasq restarted %d times", got)
+	}
+
+	// A real change (metered, which dnsmasq tells devices) restarts it once.
+	e.agent.mu.Lock()
+	e.agent.cfg.Hotspot.Metered = !e.agent.cfg.Hotspot.Metered
+	e.agent.mu.Unlock()
+	apply()
+	apply()
+	if got := restarts(); got != 1 {
+		t.Errorf("one change: dnsmasq restarted %d times, want 1", got)
+	}
+
+	// If dnsmasq stopped, the next apply starts it even without a change.
+	e.runner.outputs["systemctl is-active "+dnsmasqService] = "failed\n"
+	apply()
+	if got := restarts(); got != 2 {
+		t.Errorf("a stopped dnsmasq must be started again; restarts = %d", got)
+	}
+}

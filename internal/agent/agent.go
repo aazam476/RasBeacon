@@ -200,6 +200,10 @@ type Agent struct {
 	// ever given these addresses, never the name, so that `wg setconf`
 	// can't hang on a lookup while a.mu is held. Guarded by a.mu.
 	endpointAddresses map[string]string
+	// dnsmasqApplied is the dnsmasq.conf that dnsmasq was last started
+	// with. applyDHCP skips the restart when nothing changed (see there).
+	// Guarded by a.mu.
+	dnsmasqApplied string
 }
 
 // New creates an agent that uses the given file locations and command
@@ -570,6 +574,7 @@ func (a *Agent) closeSetupWindow() {
 	slog.Warn("setup window expired; turning off the setup network until the next power cycle")
 	_ = system.ServiceStop(a.runner, hostapdService)
 	_ = system.ServiceStop(a.runner, dnsmasqService)
+	a.dnsmasqApplied = "" // stopped: the next applyDHCP must start it
 	a.mode = api.ModeSetupClosed
 }
 
@@ -676,12 +681,21 @@ func (a *Agent) applyDHCP(captive bool) error {
 	if err := a.applyDoH(captive); err != nil {
 		slog.Warn("the DNS-over-HTTPS forwarder could not be started", "error", err)
 	}
+	// Many saves (a VPN switch, a device's name) end up here without
+	// changing anything for dnsmasq. Each restart drops DNS and DHCP for a
+	// moment (the owner's report had 8 in 2 minutes), so it only happens
+	// when the file changed, or when dnsmasq isn't running.
+	if dnsmasqConf == a.dnsmasqApplied && a.serviceIsActive(dnsmasqService) {
+		return nil
+	}
 	if err := config.WriteFileAtomic(a.paths.DnsmasqConfig(), []byte(dnsmasqConf), 0o644); err != nil {
 		return err
 	}
+	a.dnsmasqApplied = "" // until the restart below has worked
 	if err := system.ServiceRestart(a.runner, dnsmasqService); err != nil {
 		return fmt.Errorf("starting DHCP/DNS: %w", err)
 	}
+	a.dnsmasqApplied = dnsmasqConf
 	return nil
 }
 
