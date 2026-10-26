@@ -611,6 +611,9 @@ func TestPlugins_PowerSocketShutsDown(t *testing.T) {
 			t.Errorf("missing %q", want)
 		}
 	}
+	if len(e.runEnvs) == 0 {
+		t.Fatal("the plugin never ran")
+	}
 	if !strings.Contains(e.runEnvs[len(e.runEnvs)-1], "RASBEACON_SOCKET=/run/rasbeacon/rbd.sock\n") {
 		t.Errorf("the plugin should be told where the socket is: %q", e.runEnvs)
 	}
@@ -621,7 +624,37 @@ func TestPlugins_PowerSocketShutsDown(t *testing.T) {
 	if _, err := os.Stat(socket); err != nil {
 		t.Fatalf("the power socket should exist: %v", err)
 	}
-	e.agent.closePowerSocket("adguard-home")
+	defer e.agent.closePowerSocket("adguard-home")
+
+	// The plugin asks over the socket, as an HTTP request.
+	client := &http.Client{Transport: &http.Transport{
+		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, "unix", socket)
+		},
+	}}
+	ask := func(body string) int {
+		t.Helper()
+		resp, err := client.Post("http://rbd/power", "application/json", strings.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+	for _, bad := range []string{`{"action":"explode"}`, `not json`} {
+		if code := ask(bad); code != http.StatusBadRequest {
+			t.Errorf("%s: got %d, want 400", bad, code)
+		}
+	}
+	e.runner.commands = nil
+	if code := ask(`{"action":"shutdown"}`); code != http.StatusNoContent {
+		t.Fatalf("shutdown: got %d, want 204", code)
+	}
+	// It waits a second (a timer), so the plugin gets the answer first.
+	e.timers.runAll()
+	if !e.runner.ran("systemctl poweroff") {
+		t.Errorf("the plugin's request should shut RasBeacon down; commands: %v", e.runner.commands)
+	}
 }
 
 func TestPlugins_TemplatesAreNeverWrittenThroughLinks(t *testing.T) {
