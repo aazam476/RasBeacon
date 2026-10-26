@@ -24,8 +24,10 @@ export function ClientSection({ client }: { client: NetworkClient }) {
             <h2 className={cn('min-w-0 text-headline wrap-break-word', paused ? 'text-label-2' : 'text-label')}>
               <BreakableText>{name}</BreakableText>
             </h2>
-            <EditButton label={`Rename ${name}`} onClick={() => setRenaming(true)} className="-my-1.5" />
+            {/* The tag comes right after the name, so its place doesn't depend on the pencil,
+                which is hidden until hovered with a mouse. */}
             {client.isThisDevice && <Badge tone="tint">This device</Badge>}
+            <EditButton label={`Rename ${name}`} onClick={() => setRenaming(true)} className="-my-1.5" />
           </span>
           <span className="mt-0.5 block text-subhead text-label-2">
             {networkName(client)}
