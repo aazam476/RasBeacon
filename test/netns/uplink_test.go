@@ -15,7 +15,6 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -178,16 +177,7 @@ func TestMain(m *testing.M) {
 		// for plugins are marked (agent.pluginDialer).
 		if mark := os.Getenv("RB_DIAL_MARK"); mark != "" {
 			value, _ := strconv.ParseInt(strings.TrimPrefix(mark, "0x"), 16, 32)
-			dialer.Control = func(_, _ string, c syscall.RawConn) error {
-				var markErr error
-				err := c.Control(func(fd uintptr) {
-					markErr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_MARK, int(value))
-				})
-				if err != nil {
-					return err
-				}
-				return markErr
-			}
+			dialer.Control = markSocket(int(value))
 		}
 		conn, err := dialer.Dial("tcp", address)
 		if err != nil {
