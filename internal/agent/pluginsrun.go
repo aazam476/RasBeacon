@@ -489,13 +489,14 @@ func (a *Agent) stopPluginContainer(id string) {
 	a.closePowerSocket(id)
 }
 
-// ensurePluginNetwork makes the plugins' bridge (before dnsmasq starts, so
-// it can answer plugins) and Podman's network on it. The caller holds a.mu.
+// ensurePluginNetwork makes Podman's network for plugins and its bridge
+// (before dnsmasq starts, so it can answer plugins). The caller holds a.mu.
 func (a *Agent) ensurePluginNetwork() bool {
 	// Podman unpacks images here (see the image's containers.conf).
 	if err := os.MkdirAll(filepath.Join(a.paths.ContainersDir(), "tmp"), 0o700); err != nil {
 		slog.Warn("could not make Podman's folder", "error", err)
 	}
+	a.ensurePodmanNetwork()
 	if err := system.EnsureBridge(a.runner, render.PluginBridge, render.PluginGateway+"/24"); err != nil {
 		slog.Error("could not make the plugins' network", "error", err)
 		return false
@@ -503,12 +504,29 @@ func (a *Agent) ensurePluginNetwork() bool {
 	return true
 }
 
-// startPlugins starts the plugins that were running before RasBeacon
-// restarted, and the crash watch. Runs in the background.
-func (a *Agent) startPlugins() {
+// ensurePodmanNetwork makes Podman's network for plugins, once: Podman
+// keeps it in /persistent. Podman refuses to make a network whose subnet
+// is already on one of the Pi's interfaces, and rbd gives the plugins'
+// bridge its address (10.89.0.1/24) right after this. So the network is
+// made first; if the bridge already has its address (rbd restarted
+// without a reboot), the address is taken off for a moment.
+func (a *Agent) ensurePodmanNetwork() {
+	if _, err := a.plugins.runner.Run("podman", "network", "exists", plugin.NetworkName); err == nil {
+		return // made before
+	}
+	if system.LinkExists(a.runner, render.PluginBridge) {
+		if _, err := a.runner.Run("ip", "address", "flush", "dev", render.PluginBridge); err != nil {
+			slog.Warn("could not clear the plugins' bridge address", "error", err)
+		}
+	}
 	if _, err := a.plugins.runner.Run("podman", plugin.NetworkCreateArgs()...); err != nil {
 		slog.Error("could not make Podman's network for plugins", "error", err)
 	}
+}
+
+// startPlugins starts the plugins that were running before RasBeacon
+// restarted, and the crash watch. Runs in the background.
+func (a *Agent) startPlugins() {
 	a.mu.Lock()
 	var ids []string
 	for _, id := range a.pluginIDs() {

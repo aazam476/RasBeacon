@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -47,5 +48,46 @@ func TestPluginNetwork_NamesMatchTheFirewall(t *testing.T) {
 	}
 	if port := plugin.HostPortName("10.89.0.17"); port != "rbport17" || !strings.HasPrefix(port, render.PluginPortPrefix) {
 		t.Errorf("port name %q doesn't start with the firewall's %q", port, render.PluginPortPrefix)
+	}
+}
+
+// commandIndex is where the first command starting with prefix is in the
+// list (-1 if it never ran).
+func commandIndex(commands []string, prefix string) int {
+	for i, c := range commands {
+		if strings.HasPrefix(c, prefix) {
+			return i
+		}
+	}
+	return -1
+}
+
+func TestPluginNetwork_PodmanNetworkIsMadeBeforeTheBridgeGetsItsAddress(t *testing.T) {
+	e := newPluginEnv(t)
+	ensure := func() {
+		e.runner.commands = nil
+		e.agent.mu.Lock()
+		e.agent.ensurePluginNetwork()
+		e.agent.mu.Unlock()
+	}
+
+	// Not made yet, and the bridge already has its address (rbd restarted
+	// without a reboot): Podman would refuse the subnet, so the address is
+	// taken off first and put back after.
+	e.runner.failing = append(e.runner.failing, "podman network exists")
+	e.runner.outputs["ip link show dev rbplug0"] = "5: rbplug0: <BROADCAST,UP> mtu 1500\n"
+	ensure()
+	flush := commandIndex(e.runner.commands, "ip address flush dev rbplug0")
+	create := commandIndex(e.runner.commands, "podman network create")
+	address := commandIndex(e.runner.commands, "ip address replace 10.89.0.1/24 dev rbplug0")
+	if flush < 0 || create < flush || address < create {
+		t.Errorf("want flush, then create, then the address; commands: %v", e.runner.commands)
+	}
+
+	// Made before (Podman keeps it in /persistent): nothing to do.
+	e.runner.failing = slices.DeleteFunc(e.runner.failing, func(p string) bool { return p == "podman network exists" })
+	ensure()
+	if e.runner.ran("podman network create") || e.runner.ran("ip address flush") {
+		t.Errorf("an existing network must be left alone; commands: %v", e.runner.commands)
 	}
 }
