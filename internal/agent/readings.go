@@ -92,6 +92,13 @@ func (a *Agent) sampleReadings() {
 	for _, iface := range []string{"ap0", render.GuestInterface} {
 		dump, err := system.StationDump(a.runner, iface)
 		if err != nil {
+			// The guest network may just be off. But if a network that
+			// runs couldn't be read (a slow USB adapter, a timeout), stop
+			// here and keep the last counters: forgetting them would make
+			// the next sample count each device's whole traffic again.
+			if iface == "ap0" || a.guestActive() {
+				return
+			}
 			continue
 		}
 		for _, s := range stations.ParseStationDump(dump) {
