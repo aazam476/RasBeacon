@@ -10,7 +10,9 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
 work="$(mktemp -d)"
-trap 'kill $(jobs -p) 2>/dev/null || true; rm -rf "$work"' EXIT
+# Stop rbd and rbweb, and wait until they have exited before removing the
+# folder: rbd saves the clock and data use as it stops.
+trap 'kill $(jobs -p) 2>/dev/null || true; wait 2>/dev/null || true; rm -rf "$work"' EXIT
 
 echo "Building the web UI and both programs..."
 make -C "$repo_root" build >/dev/null
