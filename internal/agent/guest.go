@@ -83,10 +83,11 @@ func (a *Agent) guestLAN() *render.LAN {
 }
 
 // guestStatus describes the guest network for the status page.
-func (a *Agent) guestStatus() api.GuestStatus {
+// hostapdRunning says whether hostapd, which runs it with the hotspot, is.
+func (a *Agent) guestStatus(hostapdRunning bool) api.GuestStatus {
 	s := api.GuestStatus{
 		Enabled: a.cfg.Guest.Enabled,
-		Running: a.guestActive() && a.serviceIsActive(hostapdService),
+		Running: a.guestActive() && hostapdRunning,
 		SSID:    a.cfg.Guest.SSID,
 		Clients: []stations.Station{},
 	}

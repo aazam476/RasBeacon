@@ -494,7 +494,7 @@ func (a *Agent) waitForRadios() ([]radio.Radio, error) {
 			return detected, nil
 		}
 		slog.Info("waiting for a USB Wi-Fi adapter to appear")
-		time.Sleep(time.Second)
+		a.sleep(time.Second) // a.sleep, so tests don't really wait
 	}
 }
 

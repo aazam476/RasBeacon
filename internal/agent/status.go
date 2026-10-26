@@ -37,6 +37,8 @@ func (a *Agent) StatusFor(viewer string) api.Status {
 		channel = config.DefaultChannel(h.Band)
 	}
 
+	// Asked once: the hotspot and the guest network run in the same hostapd.
+	hostapdRunning := a.serviceIsActive(hostapdService)
 	status := api.Status{
 		Version:       version.Version,
 		BoardModel:    a.boardModel(),
@@ -45,7 +47,7 @@ func (a *Agent) StatusFor(viewer string) api.Status {
 		Mode:          a.mode,
 		Plugins:       a.pluginSummaries(),
 		Hotspot: api.HotspotStatus{
-			Running:    a.serviceIsActive(hostapdService),
+			Running:    hostapdRunning,
 			SSID:       h.SSID,
 			Band:       h.Band,
 			Channel:    channel,
@@ -54,7 +56,7 @@ func (a *Agent) StatusFor(viewer string) api.Status {
 			LANAddress: a.lan.Address(),
 			Metered:    h.Metered,
 		},
-		Guest:    a.guestStatus(),
+		Guest:    a.guestStatus(hostapdRunning),
 		Uplink:   a.uplink.status,
 		VPN:      a.vpnStatus(),
 		Portal:   a.portalStatus(),

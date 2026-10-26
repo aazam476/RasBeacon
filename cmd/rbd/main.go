@@ -75,7 +75,9 @@ func main() {
 			}
 		}
 	}
-	a.SetWebGroup(lookupGroupID(*webGroup))
+	// rbweb's group may read the HTTPS files and use the API socket.
+	webGroupID := lookupGroupID(*webGroup)
+	a.SetWebGroup(webGroupID)
 	if err := a.Start(); err != nil {
 		// systemd restarts rbd after a failure (see rbd.service), and the
 		// firewall rules loaded at boot stay in place in the meantime.
@@ -113,7 +115,7 @@ func main() {
 		os.Exit(0)
 	}()
 
-	if err := a.ListenUnix(p.APISocket(), lookupGroupID(*webGroup)); err != nil {
+	if err := a.ListenUnix(p.APISocket(), webGroupID); err != nil {
 		slog.Error("API server stopped", "error", err)
 		os.Exit(1)
 	}
