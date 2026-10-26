@@ -204,6 +204,30 @@ DNS on RasBeacon, nothing on `br-lan`, and hostapd keeps guests apart from
 each other. It needs an adapter that can run two access points at once
 (`radio.MaxAPInterfaces`).
 
+## Plugins
+
+Plugins are small programs in Podman containers (`internal/plugin` reads and
+checks `.rba` files; `internal/agent/plugins*.go` installs and runs them; the
+details are in [plugins.md](plugins.md#how-it-works)).
+
+- **Network:** every plugin gets an address on its own bridge, `rbplug0`
+  (`10.89.0.0/24`, RasBeacon is `10.89.0.1`). Each container's port on the
+  bridge is named after its address (`rbport2` for `10.89.0.2`), and a
+  `bridge` firewall table drops whatever one plugin's port passes to
+  another's, so plugins can't reach each other.
+- **What a plugin may reach** follows its permissions, in the firewall
+  (`render.PluginRule`): with `internet`, the internet the way your devices
+  reach it; with `lan-access`, your devices (not guests); devices reach a plugin only on the
+  ports the owner gave it, on RasBeacon's address.
+- **The VPN:** routing rule 102 sends plugins' traffic for networks the Pi
+  is on to the main table (so replies reach your devices), rule 103 sends
+  the rest to the tunnel table, and rule 111 does the same for RasBeacon's
+  own downloads for plugins (marked `0x5242`). The firewall lets plugins out
+  only through the interfaces devices may use, so with the VPN on that is
+  the tunnel only (`test/netns` `TestPlugins_ReachTheInternetOnlyThroughTheVPN`).
+- **Storage:** each plugin's data is a fixed-size file, loop-mounted for its
+  container, so a plugin can't fill the card (see the table below).
+
 ## Updates
 
 Updates use the two copies ("slots", A and B) of the system on the SD card
@@ -286,6 +310,11 @@ address, and the certificate RasBeacon makes for HTTPS names both.
 | `/usr/lib/rasbeacon/update-keys/*.pub`, `/usr/lib/rasbeacon/board` | Update signing keys and the board name, built into the image | the build |
 | `/persistent/rasbeacon/certs/` (directory 0700) | Certificates and keys for WPA-Enterprise networks, named after each network's ID | rbd |
 | `/persistent/rasbeacon/identity.json` | Device ID, IPv6 prefix, suggested password | rbd, once |
+| `/persistent/rasbeacon/usage.json` (mode 0600) | Each device's data use since the counters were reset | rbd |
+| `/persistent/rasbeacon/hotspot-stalls.json` (mode 0600) | The latest 20 times the hotspot stopped sending to its devices, for diagnostics | rbd |
+| `/persistent/rasbeacon/plugins/installed/<id>/` | A plugin's manifest, settings files and `data.img` (its data, loop-mounted under `/run/rbd/plugins/<id>/`) | rbd |
+| `/persistent/rasbeacon/plugins/kept/`, `staging/`, `catalog.json` | Data kept from removed plugins, files waiting to be installed, the last catalog | rbd |
+| `/persistent/containers/` | Podman's images and containers | Podman |
 | `/persistent/swapfile` (mode 0600) | Swap space (System → Swap) | rbd |
 | `/run/rbd/doh.env` | The DoH servers and their bootstrap servers, for rbdoh (in memory) | rbd |
 | `/run/rbd/*.conf`, `firewall.nft` | Generated configs (in memory) | rbd |

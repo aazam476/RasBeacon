@@ -9,6 +9,7 @@ in the code is hard to follow, that is a bug worth reporting.
 ```
 cmd/rbd/            rbd: privileged background program (network agent)
 cmd/rbweb/          rbweb: web server for the settings pages
+cmd/rbdoh/          rbdoh: DNS-over-HTTPS forwarder for dnsmasq
 cmd/rbsign/         release tool: makes the update signing key, signs update files
 internal/agent/     rbd's logic: boot sequence, modes, settings, API
 internal/webserver/ rbweb's logic: sessions, login, forwarding to rbd
@@ -36,10 +37,10 @@ docs/               design, architecture, API, UI contract, glossary, testing gu
 ```sh
 make test     # all unit tests (Go and web UI)
 make lint     # formatting and static checks, the same as CI
-make build    # build the web UI and both programs into build/
+make build    # build the web UI and the three programs (rbd, rbweb, rbdoh) into build/
 make dev      # simulated device at http://127.0.0.1:8080
 make e2e      # browser walkthrough against a simulated device
-make pi       # build both programs for the Raspberry Pi (64-bit ARM)
+make pi       # build the three programs for the Raspberry Pi (64-bit ARM)
 ```
 
 - **Network namespace tests** (Linux, needs root, plus `nftables`,

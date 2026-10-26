@@ -38,10 +38,15 @@ public IP address) with the tunnel network `10.66.0.0/24`.
    ```sh
    wg genkey | sudo tee /etc/wireguard/server.key | wg pubkey | sudo tee /etc/wireguard/server.pub
    ```
-3. **Get RasBeacon's public key:** on RasBeacon's **VPN** page, open
-   *Server details*, tap **Generate new key**, and copy *RasBeacon's
-   public key*. (Or, if you'll import a file you write yourself, run
-   `wg genkey` on your computer and put the private key in the file.)
+3. **Make RasBeacon's keys** (on the server or any computer with WireGuard):
+   ```sh
+   wg genkey | tee rasbeacon.key | wg pubkey > rasbeacon.pub
+   ```
+   `rasbeacon.key` goes into the file for RasBeacon (step 7) and
+   `rasbeacon.pub` into the server's settings (step 4). Delete both files
+   once you've used them. (Later, once the profile is imported, the VPN
+   page's *Server details* → **Generate new key** can replace the key on
+   RasBeacon; then put its new public key on the server.)
 4. **Configure the server**, `/etc/wireguard/wg0.conf` (replace `eth0` with
    the server's internet interface, see `ip route show default`):
    ```ini
@@ -56,7 +61,7 @@ public IP address) with the tunnel network `10.66.0.0/24`.
 
    [Peer]
    # RasBeacon
-   PublicKey = <RasBeacon's public key>
+   PublicKey = <contents of rasbeacon.pub>
    AllowedIPs = 10.66.0.2/32
    ```
    (`PostUp` is fine **on the server**; it's only refused in the file you
@@ -69,12 +74,11 @@ public IP address) with the tunnel network `10.66.0.0/24`.
    ```sh
    sudo systemctl enable --now wg-quick@wg0
    ```
-7. **The file for RasBeacon** (paste this on the VPN page; skip
-   `PrivateKey` if you generated the key on RasBeacon in step 3, and use
-   *Server details* instead of importing):
+7. **The file for RasBeacon** (import it on the VPN page, from a file or
+   pasted):
    ```ini
    [Interface]
-   PrivateKey = <RasBeacon's private key, if you made it with wg genkey>
+   PrivateKey = <contents of rasbeacon.key>
    Address = 10.66.0.2/32
    DNS = 1.1.1.1
 

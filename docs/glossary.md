@@ -29,8 +29,8 @@ point, run by the program *hostapd*.
 : A web page a network makes you visit before it lets you online (hotel
   login pages). Phones detect them by trying to load a known page, such as
   `captive.apple.com`, and show a "Log in to network" screen. RasBeacon uses
-  the same trick on purpose during setup, and must get through other
-  networks' portals later (milestone 5).
+  the same trick on purpose during setup, and helps you through other
+  networks' portals: see *Zero-leak login*.
 
 **Channel**
 : A specific frequency within a *band*. Nearby networks on the same or
@@ -137,7 +137,7 @@ point, run by the program *hostapd*.
 
 **Guest network**
 : A second Wi-Fi network on RasBeacon for visitors. Guests get internet
-  access but can't reach your devices or the settings (milestone 7).
+  access but can't reach your devices or the settings.
 
 **Metered connection**
 : An internet connection that costs per megabyte or is limited, like a
@@ -146,7 +146,7 @@ point, run by the program *hostapd*.
 **Zero-leak login**
 : Logging in to a hotel's login page from a browser running on RasBeacon
   itself, shown on your phone as pictures, so none of your devices' traffic
-  leaves the VPN (milestone 7).
+  leaves the VPN.
 
 **ULA (unique local address)**
 : A private IPv6 address range (starting with `fd`) that each RasBeacon
@@ -154,11 +154,11 @@ point, run by the program *hostapd*.
 
 **Uplink**
 : The network RasBeacon itself connects to for internet: hotel Wi-Fi,
-  eduroam or Ethernet (milestone 2).
+  eduroam or Ethernet.
 
 **WireGuard**
-: A modern VPN protocol. RasBeacon will send your traffic through your own
-  WireGuard server (milestone 4).
+: A modern VPN protocol. RasBeacon can send your traffic through your own
+  WireGuard server, or a VPN provider's.
 
 **WPA2 / WPA3**
 : Wi-Fi password protection standards. WPA3 is newer and stronger;

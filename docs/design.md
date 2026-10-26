@@ -119,7 +119,7 @@ As built in milestone 1, this uses rpi-image-gen's `image-rota` layout
 hotspot clients (phones, laptops)
         │  HTTP(S) to 10.87.0.1 only
         ▼
-rbweb   user "rbweb", no capabilities, systemd-hardened
+rbweb   user "rbweb", only CAP_NET_BIND_SERVICE (ports 80/443), systemd-hardened
         (ProtectSystem=strict, NoNewPrivileges, AF_INET/AF_UNIX only)
         │  typed JSON-RPC over /run/rbd/api.sock (0660 root:rbweb)
         ▼
@@ -137,8 +137,8 @@ rbd     root, systemd-hardened; owns /persistent/rasbeacon; renders configs to /
   - Answering only under RasBeacon's own names (its address,
     `rasbeacon.lan`, the owner's name for it), so a web page can't reach
     the API through DNS rebinding.
-  - Admin password hashing (argon2id from `golang.org/x/crypto`, our only
-    third-party Go dependency).
+  - Admin password hashing (argon2id from `golang.org/x/crypto`; the only
+    other third-party Go dependency is `rsc.io/qr`, for the Wi-Fi QR codes).
 - **`rbd`** changes state under a single lock (one change at a time) and is the **only** writer of network state.
   It owns:
   - Validating and rendering configs.
@@ -156,7 +156,9 @@ Secrets:
 - Rendered into `/run/rbd/*.conf` at 0600.
 - Never logged:
   - `wpa_supplicant` and `hostapd` run without `-d`.
-  - `rbd`'s logger redacts known secret keys.
+  - `rbd` never logs passwords or keys, and the diagnostics report replaces
+    every secret it knows with `<redacted>` (and hides half of each MAC
+    address) before it is downloaded.
   - The eduroam identity is shown masked (`u***@example.com`) in logs and exports.
 
 Release images contain no keys, passwords or per-device material. Everything
@@ -169,7 +171,7 @@ per-device is generated on first boot.
 | Interface | Managed by | Address |
 |---|---|---|
 | `br-lan` (client side) = `ap0` + `eth0` when Ethernet is set to *Client port* | `rbd` (bridge), hostapd (`bridge=br-lan`) | `10.87.0.1/24`, plus an IPv6 ULA `/64` (4.4). If it collides with the uplink subnet **or the WireGuard tunnel's addresses**, `rbd` falls back to `10.88.0.1/24` (then `172.31.87.1/24`, `192.168.87.1/24`), restarts the hotspot so devices reconnect and get new addresses, and shows why in the UI. It doesn't move back while running. |
-| `ap0g` (guest, stretch) | hostapd second BSS | `10.87.8.1/24` |
+| `guest0` (guest network) in `br-guest` | hostapd second BSS (`bridge=br-guest`) | `10.87.1.1/24` (the /24 after the hotspot's); no IPv6 |
 | `wlan0` (Wi-Fi uplink) | wpa_supplicant (driven by `rbd`) + networkd DHCPv4/RA | From uplink DHCP |
 | `eth0` | *Uplink:* networkd DHCP client. *Client port:* bridged into `br-lan` | From uplink DHCP / none |
 | `wg0` | `rbd` via netlink | From the `.conf` `Address` |
@@ -199,7 +201,7 @@ per-device is generated on first boot.
     client port into a hotel wall jack), `eth0` stays out of the bridge. The
     UI then offers "This port looks like an uplink. Switch to Uplink?", so we
     never hand out addresses onto someone else's network.
-- **DHCP (dnsmasq on `br-lan`, and `ap0g` for guests):**
+- **DHCP (dnsmasq on `br-lan`, and `br-guest` for guests):**
   - Leases last 1 h and the pool is `.20` to `.250`. Leases are keyed on client
     identifier or MAC, so rotating private MAC addresses just get new leases.
   - The client count comes from **currently associated stations**
@@ -248,7 +250,7 @@ Tables and rules, with WireGuard enabled:
 ```
 ip rule  90: fwmark 0x5182 lookup main          # WireGuard's own UDP goes via uplink
 ip rule 100: iif br-lan lookup 51820            # all client traffic → tunnel table
-ip rule 101: iif ap0g lookup 51820
+ip rule 101: iif br-guest lookup 51820
 table 51820: default dev wg0
              unreachable default metric 4096    # KS ON: no fall-through to main
 main:        default via <uplink gw> (networkd, metric by uplink priority)
@@ -289,7 +291,7 @@ main:        default via <uplink gw> (networkd, metric by uplink priority)
   with a single `nft -f` transaction (flush and rebuild together). There are
   never partial rules.
 - **Chain `input` (policy drop):**
-  - Allowed: `lo`, established, DHCP/DNS/HTTP(S) on `br-lan`/`ap0g`, ICMP.
+  - Allowed: `lo`, established, DHCP/DNS/HTTP(S) on `br-lan`, DHCP/DNS on `br-guest`, ICMP.
   - Guests get DHCP/DNS only (no admin UI).
   - On uplinks: established flows and DHCP replies only.
   - Nothing is accepted from `wg0` except established.
@@ -299,7 +301,7 @@ main:        default via <uplink gw> (networkd, metric by uplink priority)
   - `br-lan` → uplink: accepted **only** when WireGuard is disabled, or in the
     kill-switch-OFF `DIRECT` state, or in `PORTAL` (4.6) restricted to
     TCP 80/443 and to UDP/TCP 53 towards the uplink's DNS.
-  - `ap0g` ↔ `br-lan`: dropped.
+  - `br-guest` ↔ `br-lan`: dropped.
   - Everything else: dropped.
   - IPv4 NAT masquerades on the egress interface.
 - **DNS:**
@@ -329,7 +331,8 @@ main:        default via <uplink gw> (networkd, metric by uplink priority)
 - **IPv6 (clients get IPv6):**
   - **Hotspot side:**
     - On first boot each device generates a random ULA `/48` (RFC 4193) and
-      puts `fdXX:XXXX:XXXX:1::/64` on `br-lan` (`:8::/64` on `ap0g`).
+      puts `fdXX:XXXX:XXXX:1::/64` on `br-lan`. The guest network has no
+      IPv6.
     - dnsmasq sends router advertisements (SLAAC plus RDNSS, no DHCPv6),
       which Android also needs.
   - **Egress** uses NAT66 (masquerade), because hotels, eduroam and most
@@ -352,7 +355,7 @@ main:        default via <uplink gw> (networkd, metric by uplink priority)
   - **Endpoint:** the device may reach the WireGuard endpoint over IPv4 or IPv6
     on the uplink.
 - **Boot ordering:**
-  1. `rbd-firewall-early.service` loads the **lockdown ruleset** (input:
+  1. `rasbeacon-firewall-early.service` loads the **lockdown ruleset** (input:
      lo + established only; forward: drop; output: allow) and runs
      `Before=network-pre.target`.
   2. Then `sysctl net.ipv4.ip_forward=1`. Forwarding is shipped off in
@@ -512,7 +515,7 @@ tunnel health check plus a portal probe, and the flow repeats.
   covers about 230 addresses and leases last 1 h. Client counts come from
   associations.
 - **Client-to-client traffic** (AirPlay, mDNS) works by default on `br-lan`, between Wi-Fi and wired clients alike.
-- **Guest mode (stretch):** a second BSS `ap0g` with its own SSID and password,
+- **Guest network:** a second BSS `guest0` (in `br-guest`) with its own SSID and password,
   `ap_isolate=1`, and firewall isolation from `br-lan`. It shares the kill-switch
   policy. The MT7612U allows 2 interfaces, per its `iw list` combinations.
 - **Metered toggle (stretch):**

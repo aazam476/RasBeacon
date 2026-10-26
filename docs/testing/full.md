@@ -442,7 +442,7 @@ Pi 4 in an Argon ONE V2 case, test that plugin too.
     `podman save -o image.tar docker.io/library/alpine:3.20 localhost/rasbeacon-plugin/adguard-home:0.107.79-2`,
     then zip it with any plugin's `manifest.json` (another `id`, such as
     `evil-test`, and no `image.ref`), `icon.png` and `README.md` into
-    `evil-test.rba` (docs/plugins.md, "The file"). **Install from a file.**
+    `evil-test.rba` (docs/plugins.md, "Making a plugin"). **Install from a file.**
     **Expect** it refused, naming the other plugin's image, and AdGuard Home
     still running its own image after a restart (*SSH:*
     `podman image inspect localhost/rasbeacon-plugin/adguard-home:0.107.79-2`

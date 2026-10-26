@@ -3,10 +3,10 @@
 # Everything a contributor needs day to day:
 #   make test     run all unit tests (Go and web UI)
 #   make lint     check formatting and common mistakes
-#   make build    build the web UI and both programs for this computer
+#   make build    build the web UI and the three programs for this computer
 #   make dev      run a simulated device at http://127.0.0.1:8080
 #   make e2e      run the browser walkthrough against a simulated device
-#   make pi       build both programs for the Raspberry Pi (arm64)
+#   make pi       build the three programs for the Raspberry Pi (arm64)
 
 # Version shown in the web UI; release builds pass VERSION=v0.1.0.
 VERSION ?= dev

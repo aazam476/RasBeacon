@@ -10,9 +10,9 @@ layout around them changes with the width:
 
 - **Below 1024px**, the phone layout: each page starts with a large title that shrinks into a
   translucent bar as you scroll, the content is in rounded groups of rows, and a floating tab bar
-  holds Status, Internet, VPN, Clients and More. More lists Hotspot, Guests, SSH, HTTPS and
-  System, each with how it stands ("On", "2 guests", "v1.0.0").
-- **1024px and wider**, the desktop layout: a floating sidebar with Status and the other eight
+  holds Status, Internet, VPN, Clients and More. More lists Hotspot, Guests, Plugins, SSH,
+  HTTPS and System, each with how it stands ("On", "2 guests", "v1.0.0").
+- **1024px and wider**, the desktop layout: a floating sidebar with Status and the other nine
   pages in three groups (Connection, Wi-Fi, Device), and a centered content column. Status and
   Clients flow into two columns from 1280px.
 
@@ -25,6 +25,7 @@ Both layouts use the same addresses, so resizing the window keeps you on the sam
 | `/#/vpn`                                                     | VPN: tunnel, kill switch, profiles, import, server details                          |
 | `/#/clients`                                                 | Clients: devices on the hotspot and the guest network                               |
 | `/#/hotspot`, `/#/guests`, `/#/ssh`, `/#/https`, `/#/system` | Those settings                                                                      |
+| `/#/plugins`, `/#/plugins/<id>`, `/#/plugins/catalog`        | Plugins: the installed ones, each plugin's page, and Browse plugins                 |
 | `/#/more`                                                    | The phone's More page                                                               |
 | `/#/portal`                                                  | The hotel login page screen; opens without logging in                               |
 
@@ -54,7 +55,7 @@ and the router are in a file of their own, which stays cached from one release t
 
 `npm run demo` runs the app on sample data instead of a router (the device's own build has no
 demo in it). Open **`/#/demo`** (or tap the
-Demo tag at the top) for a list of 62 states: setup, the notices, Status with warnings, every
+Demo tag at the top) for a list of states: setup, the notices, Status with warnings, every
 Wi-Fi, Ethernet and VPN state, the update states, each step of the hotel login page, loading and
 error states, and one where every change fails. Each one also opens directly with
 `?scenario=<id>#<page>`, for example `http://localhost:5173/?scenario=vpn-direct#/` (with `npm run demo`).
@@ -101,8 +102,8 @@ src/
                      ErrorToast, Notice, Badge, Meter, StatRow, ChoiceList, Disclosure, fields, icons
   shell/             Around the pages: PhoneLayout (title bar, tab bar), DesktopLayout (sidebar),
                      FullPage (setup, login, notices, hotel login page), Loaded, More, navigation
-  screens/           One folder per page (status, internet, vpn, clients, hotspot, guests, ssh,
-                     https, system, portal), the setup/login/notice phases, and common/ for
+  screens/           One folder per page (status, internet, vpn, clients, hotspot, guests,
+                     plugins, ssh, https, system, portal), the setup/login/notice phases, and common/ for
                      descriptions of states shared by several pages (describe.ts)
 test/
   logic/             Pure functions (logic.ts, describe.ts, the plugins' wording, Markdown)
@@ -191,7 +192,7 @@ here: the `/portal` route shows the login page screen whenever the phase is `log
 - **Reject with `FieldErrors(fields, message?)`** (`src/data/errors.ts`) to put messages next to
   inputs; `message` is shown for the whole form. Use only the keys `device.ts` lists for that
   action: a message under any other key is shown nowhere. The router's field names need mapping,
-  as the original UI does: `hotspot.ssid` becomes `ssid`, and `networkErrorField` turns
+  as the original UI does: `hotspot.ssid` becomes `ssid`, and `networkErrorKey` turns
   `networks.2.password` into the list position (key `networks.2`). Anything else is a plain
   `Error`.
 - **The loading actions** (`retry`, `reload`, `refreshStatus`) resolve either way: a failure goes
@@ -211,7 +212,7 @@ API paths are under `/api/v1` and are the original client's functions.
 | Action                                                            | Request                                                                        | Notes                                                                                                                                                          |
 | ----------------------------------------------------------------- | ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `retry`, `reload(key)`                                            | the GETs above                                                                 |                                                                                                                                                                |
-| `finishSetup(form)`                                               | POST `/setup/claim`                                                            | Check like `validateSetupForm`; answer with the `ClaimResponse`. Don't change the phase.                                                                       |
+| `finishSetup(form)`                                               | POST `/setup/claim`                                                            | Check like `checkSetupForm`; answer with the `ClaimResponse`. Don't change the phase.                                                                          |
 | `logIn(password, stayLoggedIn)`                                   | POST `/session`                                                                | `stayLoggedIn` is new (see 6).                                                                                                                                 |
 | `logOut`                                                          | DELETE `/session`                                                              |                                                                                                                                                                |
 | `checkPortal`                                                     | POST `/portal/check`                                                           | Reload `portal` now and after ~6 s.                                                                                                                            |
@@ -227,7 +228,7 @@ API paths are under `/api/v1` and are the original client's functions.
 | `setEthernetRole(role)`                                           | PUT `/settings/uplink`                                                         | The saved settings with the new role: it applies at once (the screen asks first), while unsaved list edits stay on the page.                                   |
 | `scanNearbyNetworks`                                              | POST `/uplink/scan`                                                            |                                                                                                                                                                |
 | `prepareNetwork(form, list)`                                      | none                                                                           | Check with `checkNewNetwork` and answer `toSavedNetwork(…)`, with the chosen files read by `fileToUpload` / `certificatesToUpload`. Nothing is saved yet.      |
-| `saveWifiNetworks(networks)`                                      | PUT `/settings/uplink`                                                         | With the current `ethernetRole`. A refused network: `FieldErrors({ 'networks.<index>': message })` (see `networkErrorField`).                                  |
+| `saveWifiNetworks(networks)`                                      | PUT `/settings/uplink`                                                         | With the current `ethernetRole`. A refused network: `FieldErrors({ 'networks.<index>': message })` (see `networkErrorKey`).                                    |
 | `setVpnEnabled`, `setKillSwitch`                                  | PUT `/settings/vpn`                                                            | `{ enabled, killSwitch }`, with the other one as saved.                                                                                                        |
 | `importVpnProfile({ text, fileName })`                            | POST `/settings/vpn/import` (`conf`, `name`)                                   | The screen has read the chosen file. Reject with the router's message for unsafe files (it names the line).                                                    |
 | `saveVpnDetails(profile, form)`                                   | POST `/settings/vpn/profile/save`                                              | Built by `vpnDetailsRequest`. Field keys are the form's field names.                                                                                           |
