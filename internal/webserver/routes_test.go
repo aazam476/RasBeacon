@@ -99,3 +99,44 @@ func TestEveryForwardedRouteIsDocumented(t *testing.T) {
 		}
 	}
 }
+
+// publicRoute reports whether a route may be used without logging in:
+// first-time setup, logging in itself, and the hotel login (whose notice
+// opens in a phone's "Log in to network" sheet, before any login). See
+// the "Public" part of Handler.
+func publicRoute(route string) bool {
+	method, path, _ := strings.Cut(route, " ")
+	switch {
+	case path == "/api/v1/setup", path == "/api/v1/setup/claim", path == "/api/v1/session", path == "/api/v1/captive":
+		return true
+	case path == "/api/v1/portal", strings.HasPrefix(path, "/api/v1/portal/"):
+		return method == http.MethodGet || method == http.MethodPost
+	}
+	return false
+}
+
+// Every other documented route refuses a request without a login, so a
+// new route can't be added without it by mistake.
+func TestEveryOtherRouteNeedsALogin(t *testing.T) {
+	s, rbd := newTestServer(api.ModeNormal)
+	checked := 0
+	for _, route := range documentedRoutes(t) {
+		if publicRoute(route) {
+			continue
+		}
+		method, path, _ := strings.Cut(route, " ")
+		path = strings.ReplaceAll(path, "{token}", "abc")
+		rbd.lastForwarded = ""
+		rec := request(s, method, "http://10.87.0.1"+path, "{}", map[string]string{"Content-Type": "application/json"}, nil)
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("%s without a login answered %d, want 401", route, rec.Code)
+		}
+		if rbd.lastForwarded != "" {
+			t.Errorf("%s without a login reached rbd (%s)", route, rbd.lastForwarded)
+		}
+		checked++
+	}
+	if checked < 50 {
+		t.Errorf("only %d routes checked; is docs/api.md complete?", checked)
+	}
+}
