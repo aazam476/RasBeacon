@@ -69,7 +69,9 @@ describe('error message', () => {
     // time, at least two seconds).
     await act(() => vi.advanceTimersByTimeAsync(5_000));
     expect(toast().textContent).toBe('The VPN could not start.');
-    await act(() => vi.advanceTimersByTimeAsync(6_000));
+    // Well past its ten seconds, so the fake clock also covers the exit animation (with only a
+    // second to spare, the animation had to finish in real time, which failed on a busy machine).
+    await act(() => vi.advanceTimersByTimeAsync(11_000));
     await waitFor(() => expect(toast().textContent).toBe(''));
   });
 
