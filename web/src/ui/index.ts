@@ -12,7 +12,7 @@ export { Disclosure } from './Disclosure';
 export { EditButton } from './EditButton';
 export { ErrorToastProvider } from './ErrorToast';
 export { useErrorToast } from './errorToastContext';
-export { FieldRow, FileField, PasswordField, SelectField, TextAreaField, TextField } from './Field';
+export { AmountField, FieldRow, FileField, PasswordField, SelectField, TextAreaField, TextField } from './Field';
 export { FormActions } from './FormActions';
 export { FormError, FormSuccess } from './FormMessage';
 export { Icon, type BaseIconName, type IconName } from './Icon';

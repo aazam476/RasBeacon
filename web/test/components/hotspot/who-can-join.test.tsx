@@ -75,12 +75,29 @@ describe('allowed devices', () => {
 });
 
 describe('device limit', () => {
-  it('saves the chosen limit', async () => {
+  it('saves the typed limit', async () => {
     const device = fakeDevice();
     const { user } = renderScreen(<HotspotScreen />, device);
     const row = within(await openRow(user, 'Device limit'));
-    await user.selectOptions(row.getByLabelText('At most'), '8');
+    await user.type(row.getByLabelText(/^At most/), '8');
     await user.click(row.getByRole('button', { name: 'Save' }));
     expect(device.saveAccessSettings).toHaveBeenCalledWith({ allowListOn: false, allowed: [], maxDevices: 8 });
+  });
+
+  it('checks the number while it is typed, and an empty field means no limit', async () => {
+    const device = fakeDevice((router) => {
+      router.accessSettings = { ...router.accessSettings, maxDevices: 12 };
+    });
+    const { user } = renderScreen(<HotspotScreen />, device);
+    const row = within(await openRow(user, 'Device limit'));
+    const field = row.getByLabelText<HTMLInputElement>(/^At most/);
+    expect(field.value).toBe('12');
+    await user.clear(field);
+    await user.type(field, '300');
+    expect(row.getByText('Enter a number from 1 to 231, or leave it empty for no limit.')).toBeTruthy();
+    expect(row.getByRole('button', { name: 'Save' })).toHaveProperty('disabled', true);
+    await user.clear(field);
+    await user.click(row.getByRole('button', { name: 'Save' }));
+    expect(device.saveAccessSettings).toHaveBeenCalledWith(expect.objectContaining({ maxDevices: 0 }));
   });
 });

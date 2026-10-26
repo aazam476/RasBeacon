@@ -1,18 +1,12 @@
 import { useState, type FormEvent } from 'react';
 import { useDevice } from '@/data/device';
 import type { UsageSettings } from '@/data/types';
-import { formatBytes } from '@/lib/format';
+import { readDataLimit, showDataLimit, type DataUnit } from '@/lib/limits';
 import { useForm } from '@/lib/useForm';
 import { Loaded } from '@/shell/Loaded';
-import { AlertDialog, ButtonRow, FormActions, Section, SelectField } from '@/ui';
+import { AlertDialog, AmountField, ButtonRow, FormActions, Section } from '@/ui';
 
-/** The limits to choose from, in MB (decimal, as the counts are shown). */
-const LIMITS_MB = [0, 500, 1_000, 2_000, 5_000, 10_000, 20_000, 50_000, 100_000];
-
-/** "No limit", "500 MB", "2 GB". */
-function limitLabel(limitMb: number): string {
-  return limitMb === 0 ? 'No limit' : formatBytes(limitMb * 1_000_000);
-}
+const UNITS: readonly DataUnit[] = ['GB', 'MB'];
 
 /** "October 19, 2026" (in the browser's language and order). */
 function sinceLabel(since: string | undefined): string {
@@ -37,17 +31,19 @@ export function UsageSection() {
 
 function UsageForm({ settings }: { settings: UsageSettings }) {
   const { saveUsageLimit, resetUsage } = useDevice();
-  const form = useForm({ limitMb: String(settings.limitMb) }, (values) => saveUsageLimit(Number(values.limitMb)));
+  // The limit as typed ("5" and GB), checked as it is typed; the router keeps MB.
+  const form = useForm(showDataLimit(settings.limitMb), (values) => {
+    const typed = readDataLimit(values.text, values.unit);
+    // Never reached with a mistake: Save is off while there is one (see handleSubmit).
+    return saveUsageLimit(typed.ok ? typed.value : settings.limitMb);
+  });
   const { values, setField, fieldErrors } = form;
+  const reading = readDataLimit(values.text, values.unit);
   const [resetting, setResetting] = useState(false);
-  // A limit set some other way stays in the menu.
-  const limits = LIMITS_MB.includes(settings.limitMb)
-    ? LIMITS_MB
-    : [...LIMITS_MB, settings.limitMb].sort((a, b) => a - b);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    form.submit();
+    if (reading.ok) form.submit();
   }
 
   let footer = `Counted for each Wi-Fi device since ${sinceLabel(settings.since)}. `;
@@ -59,12 +55,15 @@ function UsageForm({ settings }: { settings: UsageSettings }) {
   return (
     <Section title="Data use" footer={footer}>
       <form onSubmit={handleSubmit} noValidate className="row-group">
-        <SelectField
+        <AmountField
           label="Limit per device"
-          options={limits.map((limitMb) => ({ value: String(limitMb), label: limitLabel(limitMb) }))}
-          value={values.limitMb}
-          onChange={(limitMb) => setField('limitMb', limitMb)}
-          error={fieldErrors.limitMb}
+          placeholder="No limit"
+          value={values.text}
+          onChange={(text) => setField('text', text)}
+          unit={values.unit}
+          units={UNITS}
+          onUnitChange={(unit) => setField('unit', unit)}
+          error={(reading.ok ? undefined : reading.error) ?? fieldErrors.limitMb}
           disabled={form.pending}
         />
         {form.dirty && (
@@ -76,6 +75,7 @@ function UsageForm({ settings }: { settings: UsageSettings }) {
               busyLabel="Saving…"
               pending={form.pending}
               error={form.error}
+              disabled={!reading.ok}
             />
           </div>
         )}

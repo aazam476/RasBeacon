@@ -288,3 +288,65 @@ export function FileField({ accept, multiple = false, onChange, disabled, ...fie
     </FieldRow>
   );
 }
+
+interface AmountFieldProps<U extends string> extends FieldTextProps {
+  value: string;
+  onChange: (value: string) => void;
+  /** The unit the amount is in, chosen from a menu after it ("GB", "MB"). */
+  unit: U;
+  units: readonly U[];
+  onUnitChange: (unit: U) => void;
+  placeholder?: string;
+  disabled?: boolean;
+}
+
+/**
+ * A number with its unit, in one row: a decimal keyboard on phones, and the unit as a small menu
+ * after the number, as iOS does for amounts.
+ */
+export function AmountField<U extends string>({
+  value,
+  onChange,
+  unit,
+  units,
+  onUnitChange,
+  placeholder,
+  disabled,
+  ...field
+}: AmountFieldProps<U>) {
+  return (
+    <FieldRow {...field}>
+      {(control) => (
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            inputMode="decimal"
+            autoComplete="off"
+            value={value}
+            placeholder={placeholder}
+            disabled={disabled}
+            onChange={(event) => onChange(event.target.value)}
+            className={cn(INPUT_CLASSES, 'tabular-nums')}
+            {...control}
+          />
+          <div className="relative flex shrink-0 items-center">
+            <select
+              aria-label="Unit"
+              value={unit}
+              disabled={disabled}
+              onChange={(event) => onUnitChange(event.target.value as U)}
+              className="cursor-pointer appearance-none bg-transparent py-0.5 pr-6 text-body text-tint outline-none disabled:opacity-40"
+            >
+              {units.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+            <Icon name="unfold_more" size={18} className="pointer-events-none absolute right-0 text-tint" />
+          </div>
+        </div>
+      )}
+    </FieldRow>
+  );
+}

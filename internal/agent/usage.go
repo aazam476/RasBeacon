@@ -231,7 +231,7 @@ func (a *Agent) UsageSettings() api.UsageSettings {
 // UpdateUsageSettings saves the data limit (applied at once).
 func (a *Agent) UpdateUsageSettings(req api.UsageSettings) (api.UsageSettings, error) {
 	if req.LimitMB < 0 || req.LimitMB > config.MaxUsageLimitMB {
-		return api.UsageSettings{}, &config.ValidationError{Field: "limitMb", Message: "Choose a limit from the list."}
+		return api.UsageSettings{}, &config.ValidationError{Field: "limitMb", Message: "Enter an amount up to 1,000 GB, or leave it empty for no limit."}
 	}
 	a.mu.Lock()
 	if a.mode != api.ModeNormal {

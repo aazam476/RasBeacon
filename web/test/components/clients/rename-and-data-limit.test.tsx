@@ -40,9 +40,39 @@ describe('data limit', () => {
       router.usageSettings = { ...router.usageSettings, limitMb: 0 };
     });
     const { user } = renderScreen(<ClientsScreen />, device, '/clients');
-    await user.selectOptions(screen.getByLabelText('Limit per device'), '2000');
+    await user.type(screen.getByLabelText('Limit per device'), '2.5');
     await user.click(screen.getByRole('button', { name: 'Save' }));
-    expect(device.saveUsageLimit).toHaveBeenCalledWith(2000);
+    expect(device.saveUsageLimit).toHaveBeenCalledWith(2500); // GB to MB
     expect(screen.getByText(/When a device uses up its data, its traffic is blocked/)).toBeTruthy();
+  });
+
+  it('shows a saved limit in GB or MB, and saves in the chosen unit', async () => {
+    const device = fakeDevice((router) => {
+      router.usageSettings = { ...router.usageSettings, limitMb: 750 };
+    });
+    const { user } = renderScreen(<ClientsScreen />, device, '/clients');
+    const amount = screen.getByLabelText<HTMLInputElement>('Limit per device');
+    expect(amount.value).toBe('750');
+    expect(screen.getByLabelText<HTMLSelectElement>('Unit').value).toBe('MB');
+    await user.clear(amount);
+    await user.type(amount, '5');
+    await user.selectOptions(screen.getByLabelText('Unit'), 'GB');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(device.saveUsageLimit).toHaveBeenCalledWith(5000);
+  });
+
+  it('checks the amount while it is typed, and an empty field means no limit', async () => {
+    const device = fakeDevice((router) => {
+      router.usageSettings = { ...router.usageSettings, limitMb: 5000 };
+    });
+    const { user } = renderScreen(<ClientsScreen />, device, '/clients');
+    const amount = screen.getByLabelText<HTMLInputElement>('Limit per device');
+    await user.clear(amount);
+    await user.type(amount, 'lots');
+    expect(screen.getByText('Enter an amount up to 1,000 GB, or leave it empty for no limit.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Save' })).toHaveProperty('disabled', true);
+    await user.clear(amount);
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(device.saveUsageLimit).toHaveBeenCalledWith(0);
   });
 });

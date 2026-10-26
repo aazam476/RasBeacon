@@ -285,7 +285,8 @@ async function main() {
     await dialog().getByRole("button", { name: "Save" }).click();
     await page.getByRole("switch", { name: "Internet access for Ali's phone" }).waitFor();
     await page.getByText("Calls itself").first().waitFor();
-    await page.getByLabel("Limit per device").selectOption("2000");
+    await page.getByRole("textbox", { name: /^Limit per device/ }).fill("2");
+    await page.getByRole("combobox", { name: "Unit" }).selectOption("GB");
     const save = page.getByRole("button", { name: "Save", exact: true });
     await save.click();
     // Saved (it works without a metered connection now): the Save button goes away.

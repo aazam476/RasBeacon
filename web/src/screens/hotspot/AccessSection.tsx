@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useDevice } from '@/data/device';
 import type { AccessSettings, Client } from '@/data/types';
+import { readDeviceLimit } from '@/lib/limits';
 import { useForm } from '@/lib/useForm';
 import { Loaded } from '@/shell/Loaded';
 import {
@@ -14,13 +15,10 @@ import {
   Notice,
   Row,
   Section,
-  SelectField,
   TextAreaField,
+  TextField,
 } from '@/ui';
 import { clientName } from '../common/clientDisplay';
-
-/** The device limits offered; the router accepts any number from 1 to 231. */
-const LIMITS = [1, 2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 25, 30, 40, 50, 75, 100, 150, 200, 231];
 
 /**
  * Who may join over Wi-Fi: only listed devices, and how many at once. Few people need either, so
@@ -171,30 +169,32 @@ function AllowListForm({ settings }: { settings: AccessSettings }) {
 
 function LimitForm({ settings }: { settings: AccessSettings }) {
   const { saveAccessSettings } = useDevice();
-  const form = useForm({ maxDevices: String(settings.maxDevices) }, (values) =>
-    saveAccessSettings({ ...settings, maxDevices: Number(values.maxDevices) }),
-  );
+  // Empty means no limit; the number is checked as it is typed.
+  const form = useForm({ maxDevices: settings.maxDevices > 0 ? String(settings.maxDevices) : '' }, (values) => {
+    const typed = readDeviceLimit(values.maxDevices);
+    // Never reached with a mistake: Save is off while there is one (see handleSubmit).
+    return saveAccessSettings({ ...settings, maxDevices: typed.ok ? typed.value : settings.maxDevices });
+  });
   const { values, setField, fieldErrors } = form;
-  const limits = LIMITS.includes(settings.maxDevices) ? LIMITS : [...LIMITS, settings.maxDevices].sort((a, b) => a - b);
-  const options = [
-    { value: '0', label: 'No limit' },
-    ...limits.filter((limit) => limit > 0).map((limit) => ({ value: String(limit), label: countDevices(limit) })),
-  ];
+  const reading = readDeviceLimit(values.maxDevices);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    form.submit();
+    if (reading.ok) form.submit();
   }
 
   return (
     <form onSubmit={handleSubmit} noValidate className="row-group">
-      <SelectField
+      <TextField
         label="At most"
+        labelNote="(devices)"
+        placeholder="No limit"
+        inputMode="numeric"
+        autoComplete="off"
         hint="On your network at once. The guest network has its own limit of the same number."
-        options={options}
         value={values.maxDevices}
         onChange={(maxDevices) => setField('maxDevices', maxDevices)}
-        error={fieldErrors.maxDevices}
+        error={(reading.ok ? undefined : reading.error) ?? fieldErrors.maxDevices}
       />
       <div className="row">
         <FormActions
@@ -205,6 +205,7 @@ function LimitForm({ settings }: { settings: AccessSettings }) {
           pending={form.pending}
           error={form.error}
           success={form.saved && 'Saved.'}
+          disabled={!reading.ok}
         />
       </div>
     </form>
