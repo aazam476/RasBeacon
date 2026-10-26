@@ -275,3 +275,32 @@ func TestChannelLineAndLastLines(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+func TestChannelNumber(t *testing.T) {
+	for info, want := range map[string]int{
+		"Interface ap0\n\ttype AP\n\tchannel 40 (5200 MHz), width: 80 MHz, center1: 5210 MHz\n": 40,
+		"Interface ap0\n\tchannel 6 (2437 MHz), width: 20 MHz\n":                                6,
+		"Interface ap0\n\ttype AP\n":                                                            0,
+		"":                                                                                      0,
+	} {
+		if got := channelNumber(info); got != want {
+			t.Errorf("channelNumber(%q) = %d, want %d", info, got, want)
+		}
+	}
+}
+
+// The owner's report (A1b step 6): the settings said channel 36 while the
+// radio ran on 40. Status now says which channel is really in use.
+func TestStatus_ShowsTheChannelTheRadioReallyUses(t *testing.T) {
+	e := newClaimedEnv(t, false)
+	e.runner.outputs["systemctl is-active "+hostapdService] = "active\n"
+	e.runner.outputs["iw dev ap0 info"] = "Interface ap0\n\ttype AP\n\tchannel 40 (5200 MHz), width: 80 MHz, center1: 5210 MHz\n"
+	if got := e.agent.Status().Hotspot.ActualChannel; got != 40 {
+		t.Errorf("actual channel = %d, want 40", got)
+	}
+	// While the hotspot is off, there is none.
+	e.runner.outputs["systemctl is-active "+hostapdService] = "inactive\n"
+	if got := e.agent.Status().Hotspot.ActualChannel; got != 0 {
+		t.Errorf("actual channel = %d with the hotspot off, want 0", got)
+	}
+}

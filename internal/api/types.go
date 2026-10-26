@@ -251,12 +251,18 @@ type EthernetDiagnostics struct {
 
 // HotspotStatus summarises the running hotspot.
 type HotspotStatus struct {
-	Running   bool            `json:"running"`
-	SSID      string          `json:"ssid"`
-	Band      config.Band     `json:"band"`
-	Channel   int             `json:"channel"`
-	Security  config.Security `json:"security"`
-	Interface string          `json:"interface"`
+	Running bool        `json:"running"`
+	SSID    string      `json:"ssid"`
+	Band    config.Band `json:"band"`
+	// Channel is the saved channel (or the band's default when "auto").
+	Channel int `json:"channel"`
+	// ActualChannel is the one the radio uses right now, read from the
+	// driver; 0 when it isn't known (the hotspot is off). With 80 MHz,
+	// hostapd may move the hotspot within the same group of channels
+	// (for example from 36 to 40) when a nearby network uses one of them.
+	ActualChannel int             `json:"actualChannel,omitempty"`
+	Security      config.Security `json:"security"`
+	Interface     string          `json:"interface"`
 	// LANAddress is RasBeacon's address on the hotspot, e.g. 10.87.0.1.
 	LANAddress string `json:"lanAddress"`
 	// Metered is true when devices are told the connection is limited.

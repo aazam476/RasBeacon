@@ -155,6 +155,15 @@ describe('VPN', () => {
   });
 });
 
+describe('hotspot', () => {
+  it('shows the channel the radio really uses', () => {
+    renderStatus((status) => {
+      status.hotspot = { ...status.hotspot, band: '5GHz', channel: 36, actualChannel: 40 };
+    });
+    expect(within(section('Hotspot')).getByText(/, channel 40$/)).toBeTruthy();
+  });
+});
+
 describe('devices and networks', () => {
   it('lists a few devices and links to all of them', () => {
     renderStatus((status) => {

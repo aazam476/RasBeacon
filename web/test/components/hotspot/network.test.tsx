@@ -160,3 +160,26 @@ describe('hotspot form', () => {
     });
   });
 });
+
+// The owner's report: the settings said channel 36, the radio ran on 40. The page says so.
+describe('the channel in use', () => {
+  it('says when the radio moved to another channel than the saved one', () => {
+    renderScreen(
+      <HotspotScreen />,
+      fakeDevice((router) => {
+        router.status.hotspot = { ...router.status.hotspot, band: '5GHz', channel: 36, actualChannel: 40 };
+      }),
+    );
+    expect(screen.getByText(/Running on channel 40 now/)).toBeTruthy();
+  });
+
+  it('says nothing when it runs on the saved one', () => {
+    renderScreen(
+      <HotspotScreen />,
+      fakeDevice((router) => {
+        router.status.hotspot = { ...router.status.hotspot, channel: 36, actualChannel: 36 };
+      }),
+    );
+    expect(screen.queryByText(/Running on channel/)).toBeNull();
+  });
+});

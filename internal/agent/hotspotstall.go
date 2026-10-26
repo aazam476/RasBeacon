@@ -283,6 +283,18 @@ func channelLine(info string) string {
 	return ""
 }
 
+// channelNumber reads the channel number from `iw dev ... info`, e.g. 40
+// from "channel 40 (5200 MHz), width: 80 MHz, center1: 5210 MHz". It
+// returns 0 when there is no channel line (the interface isn't running).
+func channelNumber(info string) int {
+	fields := strings.Fields(channelLine(info))
+	if len(fields) < 2 {
+		return 0
+	}
+	n, _ := strconv.Atoi(fields[1])
+	return n
+}
+
 // lastLines returns the last n non-empty lines of text.
 func lastLines(text string, n int) []string {
 	var lines []string

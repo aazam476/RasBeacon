@@ -111,7 +111,13 @@ export interface HotspotStatus {
   running: boolean;
   ssid: string;
   band: Band;
+  /** The saved channel (or the band's default). */
   channel: number;
+  /**
+   * The channel the radio uses right now, when known. On 5 GHz it can differ from the saved one:
+   * the radio may move within the same 80 MHz group (36 → 40) when a nearby network uses it.
+   */
+  actualChannel?: number;
   security: Security;
   interface: string;
   lanAddress: string;

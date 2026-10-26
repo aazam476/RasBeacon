@@ -88,6 +88,9 @@ function HotspotForm({ settings }: { settings: HotspotSettings }) {
   const form = useForm({ ...settings, band, security, password: '' }, saveHotspotSettings);
   const { values, setField, fieldErrors } = form;
   const running = status.data?.hotspot.running;
+  // The channel the radio moved to, when it isn't the saved one (see HotspotStatus).
+  const hotspot = status.data?.hotspot;
+  const movedTo = hotspot?.actualChannel && hotspot.actualChannel !== hotspot.channel ? hotspot.actualChannel : null;
 
   const restarts = values.password !== '' || RESTARTING_FIELDS.some((field) => values[field] !== settings[field]);
   const allowed = useCountryChannels(values.country, settings.no5GHz);
@@ -145,6 +148,8 @@ function HotspotForm({ settings }: { settings: HotspotSettings }) {
           values.security === 'wpa3' && "With WPA3 only, devices older than about 2019 can't join.",
           settings.no5GHz && "This Wi-Fi adapter can't use 5 GHz.",
           settings.noWpa3 && "This Wi-Fi adapter can't run WPA3 only.",
+          movedTo &&
+            `Running on channel ${movedTo} now: the radio can move within the same group of channels when a nearby network uses its own.`,
         ]
           .filter(Boolean)
           .join(' ')}

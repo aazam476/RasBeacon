@@ -16,7 +16,11 @@ export function HotspotSection({ hotspot }: { hotspot: HotspotStatus }) {
         title="Network name"
         value={<BreakableText>{hotspot.ssid}</BreakableText>}
       />
-      <Row title="Band and channel" value={`${formatBand(hotspot.band)}, channel ${hotspot.channel}`} />
+      {/* The channel in use right now, which the radio may have moved (see HotspotStatus). */}
+      <Row
+        title="Band and channel"
+        value={`${formatBand(hotspot.band)}, channel ${hotspot.actualChannel || hotspot.channel}`}
+      />
       <Row title="Security" value={describeSecurity(hotspot.security)} />
       <Row title="Address" value={hotspot.lanAddress} />
       <Row title="Metered connection" value={describeMetered(hotspot)} />

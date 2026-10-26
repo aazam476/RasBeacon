@@ -39,6 +39,13 @@ func (a *Agent) StatusFor(viewer string) api.Status {
 
 	// Asked once: the hotspot and the guest network run in the same hostapd.
 	hostapdRunning := a.serviceIsActive(hostapdService)
+	// The channel the radio really uses, which can differ from the saved
+	// one (see api.HotspotStatus.ActualChannel). Only asked while running.
+	actualChannel := 0
+	if hostapdRunning {
+		info, _ := a.runner.Run("iw", "dev", radio.HotspotInterfaceName, "info")
+		actualChannel = channelNumber(info)
+	}
 	status := api.Status{
 		Version:       version.Version,
 		BoardModel:    a.boardModel(),
@@ -47,14 +54,15 @@ func (a *Agent) StatusFor(viewer string) api.Status {
 		Mode:          a.mode,
 		Plugins:       a.pluginSummaries(),
 		Hotspot: api.HotspotStatus{
-			Running:    hostapdRunning,
-			SSID:       h.SSID,
-			Band:       h.Band,
-			Channel:    channel,
-			Security:   a.hotspotSecurity(), // what hostapd runs
-			Interface:  radio.HotspotInterfaceName,
-			LANAddress: a.lan.Address(),
-			Metered:    h.Metered,
+			Running:       hostapdRunning,
+			SSID:          h.SSID,
+			Band:          h.Band,
+			Channel:       channel,
+			ActualChannel: actualChannel,
+			Security:      a.hotspotSecurity(), // what hostapd runs
+			Interface:     radio.HotspotInterfaceName,
+			LANAddress:    a.lan.Address(),
+			Metered:       h.Metered,
 		},
 		Guest:    a.guestStatus(hostapdRunning),
 		Uplink:   a.uplink.status,
