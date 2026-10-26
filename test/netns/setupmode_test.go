@@ -296,6 +296,14 @@ func TestSetupMode_PhoneGetsAddressAndCaptiveDNS(t *testing.T) {
 			t.Errorf("IPv6 lookup of %s should succeed with no address:\n%s", name, out)
 		}
 	}
+
+	// A phone set to its own DNS server (here 8.8.8.8) is answered by
+	// RasBeacon anyway, so its setup page still opens by itself.
+	tryInNS(phoneNS, time.Second, "ip", "route", "add", "default", "via", "10.87.0.1")
+	out, ok := tryInNS(phoneNS, 5*time.Second, "busybox", "nslookup", "-type=a", "captive.apple.com", "8.8.8.8")
+	if !ok || !strings.Contains(out, "Address: 10.87.0.1") {
+		t.Errorf("a lookup sent to another DNS server should get RasBeacon's answer in setup mode:\n%s", out)
+	}
 }
 
 func TestFirewall_HotspotSideReachesWebUIButNotSSHWhenOff(t *testing.T) {

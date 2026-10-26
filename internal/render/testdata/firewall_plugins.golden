@@ -120,6 +120,8 @@ table inet rasbeacon {
 
 	# DNS: devices that ignore RasBeacon's DNS server (some phones, smart TVs)
 	# are sent to it anyway, so every name lookup follows RasBeacon's rules.
+	# Also during first-time setup, without any uplink: then RasBeacon's
+	# answers are what make a phone open the setup page by itself.
 	chain prerouting_nat {
 		type nat hook prerouting priority dstnat;
 		iifname @lans meta l4proto { tcp, udp } th dport 53 redirect
