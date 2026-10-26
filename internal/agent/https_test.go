@@ -156,3 +156,39 @@ func TestHTTPS_TenYearCertificateIsReplacedAtStart(t *testing.T) {
 		t.Errorf("after the start: %+v, want a new certificate", s)
 	}
 }
+
+func TestHTTPS_RbwebIsRestartedAfterABootToFindTheCertificate(t *testing.T) {
+	e := newClaimedEnv(t, false)
+	if err := e.agent.UpdateHTTPSSettings(api.HTTPSSettings{Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	// A reboot: /run is empty again, and rbweb may already have started
+	// without the certificate.
+	if err := os.RemoveAll(e.paths.RunTLSDir()); err != nil {
+		t.Fatal(err)
+	}
+	e.runner.commands = nil
+	restarted := New(e.paths, e.runner)
+	restarted.afterFunc, restarted.usbRadioWait, restarted.background = e.timers.afterFunc, 0, func(func()) {}
+	if err := restarted.Start(); err != nil {
+		t.Fatal(err)
+	}
+	if !e.runner.ran("systemctl restart rbweb.service") {
+		t.Errorf("rbweb should be restarted to serve HTTPS; commands: %v", e.runner.commands)
+	}
+	if !fileExists(filepath.Join(e.paths.RunTLSDir(), "cert.pem")) {
+		t.Error("rbweb's copy of the certificate should be back")
+	}
+
+	// A start where the copy is already there (rbd restarted alone) leaves
+	// rbweb alone.
+	e.runner.commands = nil
+	again := New(e.paths, e.runner)
+	again.afterFunc, again.usbRadioWait, again.background = e.timers.afterFunc, 0, func(func()) {}
+	if err := again.Start(); err != nil {
+		t.Fatal(err)
+	}
+	if e.runner.ran("systemctl restart rbweb.service") {
+		t.Error("rbweb must not be restarted when nothing changed")
+	}
+}

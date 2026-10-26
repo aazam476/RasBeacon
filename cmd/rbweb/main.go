@@ -35,6 +35,8 @@ func main() {
 	server := webserver.New(webserver.NewRBDClient(*socket), web.Files())
 
 	// HTTPS is on when rbd has put a certificate here (see agent/https.go).
+	// rbweb looks only now, when it starts; rbd restarts it whenever the
+	// certificate appears, changes or goes away.
 	// rbd restarts rbweb whenever the setting changes.
 	certFile := filepath.Join(*tlsDir, "cert.pem")
 	keyFile := filepath.Join(*tlsDir, "key.pem")

@@ -247,16 +247,22 @@ func (a *Agent) Start() error {
 	}
 
 	// 2c. The HTTPS certificate for rbweb, if HTTPS is on, renewed first
-	//     if it runs out soon. (rbweb waits for rbd before starting, so it
-	//     finds the files.)
+	//     if it runs out soon. rbweb looks for its copy in /run/rbd/tls
+	//     only when it starts, and systemd may start it before rbd gets
+	//     here (/run is empty after every boot). So when the copy changes,
+	//     rbweb is restarted to pick it up.
 	if a.certificateDue() {
 		if err := a.generateCertificate(); err != nil {
 			slog.Error("could not make a new HTTPS certificate", "error", err)
 		}
 	}
-	if _, err := a.applyHTTPS(); err != nil {
+	if changed, err := a.applyHTTPS(); err != nil {
 		slog.Error("HTTPS could not be set up; the web UI stays on HTTP", "error", err)
 		a.warnings = append(a.warnings, "HTTPS could not be set up: "+err.Error())
+	} else if changed {
+		if err := system.ServiceRestart(a.runner, rbwebService); err != nil {
+			slog.Error("could not restart the web server for HTTPS", "error", err)
+		}
 	}
 
 	// 3. Firewall first, so the web UI is only reachable from the hotspot.
