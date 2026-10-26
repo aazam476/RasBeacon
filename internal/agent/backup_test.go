@@ -82,6 +82,14 @@ func TestBackup_RestoreBringsSettingsAndPluginsBack(t *testing.T) {
 	if !errors.As(err, &verr) || verr.Field != "backupPassword" {
 		t.Fatalf("wrong backup password: %v", err)
 	}
+	// The failed try removed the upload (it can be gigabytes); the web UI
+	// uploads it again for the next try.
+	if fileExists(e.agent.restoreUploadFile()) {
+		t.Error("a failed restore must not leave the uploaded backup behind")
+	}
+	if err := e.agent.StageRestore(bytes.NewReader(file)); err != nil {
+		t.Fatal(err)
+	}
 	result, err := e.agent.Restore(api.RestoreRequest{Password: "backup-pass-1"})
 	if err != nil {
 		t.Fatal(err)
@@ -340,5 +348,18 @@ func TestBackup_ACutOffBackupSaysSo(t *testing.T) {
 	var refused *config.ValidationError
 	if !errors.As(err, &refused) || refused.Field != "file" || !strings.Contains(refused.Message, "incomplete") {
 		t.Errorf("a cut-off backup = %v, want it called incomplete", err)
+	}
+}
+
+func TestBackup_AnUploadLeftByAnUnfinishedRestoreIsRemovedAtStart(t *testing.T) {
+	e := newClaimedEnv(t, false)
+	mustWrite(t, e.agent.restoreUploadFile(), "a large backup")
+	restarted := New(e.paths, e.runner)
+	restarted.afterFunc, restarted.usbRadioWait, restarted.background = e.timers.afterFunc, 0, func(func()) {}
+	if err := restarted.Start(); err != nil {
+		t.Fatal(err)
+	}
+	if fileExists(e.agent.restoreUploadFile()) {
+		t.Error("the leftover upload should be removed when rbd starts")
 	}
 }

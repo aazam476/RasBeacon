@@ -377,6 +377,10 @@ func (a *Agent) Restore(req api.RestoreRequest) (api.RestoreResult, error) {
 	if err != nil {
 		return api.RestoreResult{}, &config.ValidationError{Field: "file", Message: "Choose the backup file again."}
 	}
+	// The uploaded file goes whatever happens: a backup can be gigabytes,
+	// and one left behind (a wrong password, or giving up) would take that
+	// room from swap and plugins. The web UI uploads it again for each try.
+	defer os.Remove(upload)
 	defer f.Close()
 	staging := filepath.Join(a.paths.DataDir(), "restore-staging")
 	_ = os.RemoveAll(staging)
@@ -458,7 +462,6 @@ func (a *Agent) Restore(req api.RestoreRequest) (api.RestoreResult, error) {
 	if err := config.WriteJSON(a.paths.ConfigFile(), cfg, 0o644); err != nil {
 		return api.RestoreResult{}, err
 	}
-	_ = os.Remove(upload)
 	// "Stay logged in" ends everywhere: the backup's admin password may
 	// not be the one those browsers typed.
 	if err := a.forgetAllLogins(); err != nil {

@@ -222,6 +222,12 @@ func (a *Agent) Start() error {
 		}
 	}
 
+	// A backup uploaded for a restore that never finished (RasBeacon
+	// restarted in between) is only taking room.
+	if err := os.Remove(a.restoreUploadFile()); err == nil {
+		slog.Info("removed a backup left from an unfinished restore")
+	}
+
 	// 0. Don't let the clock go backwards across a reboot, and see whether
 	//    this start is the trial of an update.
 	a.applyTimeFloor()
