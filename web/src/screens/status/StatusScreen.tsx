@@ -41,7 +41,9 @@ export function StatusScreen() {
             </Notice>
           )}
           {status.warnings.length > 0 && <NoticeList tone="warning" ariaLabel="Warnings" messages={status.warnings} />}
-          <div className="flex flex-col gap-7 xl:block xl:columns-2 xl:gap-7 xl:*:mb-7 xl:*:break-inside-avoid">
+          {/* Two columns on wide screens, in rows (as on Clients): the sections side by side always
+              start at the same height. */}
+          <div className="flex flex-col gap-7 xl:grid xl:grid-cols-2 xl:items-start">
             <VpnSection vpn={status.vpn} />
             <InternetSection status={status} />
             <TrafficSection throughput={status.throughput} />
