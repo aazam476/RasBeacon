@@ -154,6 +154,10 @@ func TestHotspot_Saved5GHzRunsOn2GHzOnARadioWithout5GHz(t *testing.T) {
 	if restarted.mode != api.ModeNormal || !strings.Contains(warnings, "can't use 5 GHz") {
 		t.Errorf("mode %s, warnings %q", restarted.mode, warnings)
 	}
+	// The Status page shows where it runs, not what was saved.
+	if h := restarted.Status().Hotspot; h.Band != config.Band2GHz || h.Channel != config.DefaultChannel(config.Band2GHz) {
+		t.Errorf("status shows %s channel %d, want 2.4 GHz on its default channel", h.Band, h.Channel)
+	}
 }
 
 // The channels the Hotspot page offers come from the regulatory database:

@@ -32,9 +32,11 @@ func (a *Agent) StatusFor(viewer string) api.Status {
 	defer a.mu.Unlock()
 
 	h := a.cfg.Hotspot
-	channel := h.Channel
+	// The band and channel the hotspot runs on, which can differ from the
+	// saved ones (an adapter without 5 GHz runs a 5 GHz hotspot on 2.4).
+	band, channel := a.hotspotBand(), a.hotspotChannel()
 	if channel == 0 {
-		channel = config.DefaultChannel(h.Band)
+		channel = config.DefaultChannel(band)
 	}
 
 	// Asked once: the hotspot and the guest network run in the same hostapd.
@@ -56,7 +58,7 @@ func (a *Agent) StatusFor(viewer string) api.Status {
 		Hotspot: api.HotspotStatus{
 			Running:       hostapdRunning,
 			SSID:          h.SSID,
-			Band:          h.Band,
+			Band:          band,
 			Channel:       channel,
 			ActualChannel: actualChannel,
 			Security:      a.hotspotSecurity(), // what hostapd runs
