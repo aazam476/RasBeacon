@@ -101,8 +101,19 @@ func (a *Agent) portalCheckInterval() time.Duration {
 
 // ProbeInternet is the real captive portal check (see internal/portal).
 func ProbeInternet(ctx context.Context) portal.Result {
-	client := &http.Client{Timeout: 5 * time.Second}
-	return portal.Probe(ctx, client, portal.Checks)
+	return portal.Probe(ctx, probeClient(), portal.Checks)
+}
+
+// probeClient is the web client for one captive portal check. Each check
+// opens new connections: a connection kept open from a check made before
+// logging in still leads to the login page (the hotel redirected it when
+// it was opened), so RasBeacon would go on seeing the login page after the
+// owner had logged in.
+func probeClient() *http.Client {
+	return &http.Client{
+		Timeout:   5 * time.Second,
+		Transport: &http.Transport{Proxy: nil, DisableKeepAlives: true},
+	}
 }
 
 // RunPortalMonitor checks for captive portals in the background, using

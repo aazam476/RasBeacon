@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -181,5 +182,15 @@ func TestPortal_StoppingLoginModePutsDevicesBackIntoTheTunnel(t *testing.T) {
 	}
 	if got := e.firewallEgress(); got != `elements = { "wg0" }` {
 		t.Errorf("after stopping login mode, egress = %s, want only wg0", got)
+	}
+}
+
+// Found by the full-system test: the check reused a connection opened
+// while the hotel redirected everything, so after logging in RasBeacon
+// still saw the login page. Every check must open new connections.
+func TestProbeClient_OpensNewConnectionsEachTime(t *testing.T) {
+	transport, ok := probeClient().Transport.(*http.Transport)
+	if !ok || !transport.DisableKeepAlives {
+		t.Error("the portal check must not keep connections open between checks")
 	}
 }
