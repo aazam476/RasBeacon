@@ -163,13 +163,17 @@ func TestNormalMode_IPv6PrivateNetworkWithoutDefaultRoute(t *testing.T) {
 // dns_test.go). Two more helper modes work on IPv6 where busybox nc might not:
 // RB_GREETER=[address]:port answers every TCP connection with
 // "...-standin", and RB_DIAL=[address]:port connects and prints the answer
-// (with RB_DIAL_MARK, on a marked connection).
+// (with RB_DIAL_MARK, on a marked connection). RB_ECHO=[address]:port
+// sends back whatever each connection sends.
 func TestMain(m *testing.M) {
 	if address := os.Getenv("RB_DOH_SERVER"); address != "" {
 		serveDoH(address, os.Getenv("RB_DOH_CERT"), os.Getenv("RB_DOH_KEY"))
 	}
 	if address := os.Getenv("RB_GREETER"); address != "" {
 		greet(address)
+	}
+	if address := os.Getenv("RB_ECHO"); address != "" {
+		echo(address)
 	}
 	if address := os.Getenv("RB_DIAL"); address != "" {
 		dialer := net.Dialer{Timeout: 2 * time.Second}
@@ -215,6 +219,25 @@ func greet(address string) {
 		}
 		fmt.Fprintln(conn, "greeter-standin")
 		conn.Close()
+	}
+}
+
+// echo runs the RB_ECHO server (see TestMain) until it is stopped.
+func echo(address string) {
+	listener, err := net.Listen("tcp", address)
+	if err != nil {
+		fmt.Println("error:", err)
+		os.Exit(1)
+	}
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			continue
+		}
+		go func() {
+			io.Copy(conn, conn)
+			conn.Close()
+		}()
 	}
 }
 

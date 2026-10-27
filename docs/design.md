@@ -391,8 +391,8 @@ Direct → Up                      (healthy for the return delay: 30 s, doubling
 any → Off                        (VPN turned off)
 ```
 
-Login mode for a hotel's page (4.6) sets the tunnel aside for web and DNS
-traffic on its own, without changing the state.
+Login mode for a hotel's page (4.6) sets the tunnel aside for new web and
+DNS connections on its own, without changing the state.
 
 **What "healthy" means.** WireGuard has no connection state, so health is
 the age of the peer's latest handshake: the protocol renews its session
@@ -412,8 +412,12 @@ older than 180 s means the server stopped answering.
   change when tightening, and **after** they change when loosening.
 - When the path for devices' traffic changes, connections on the old path
   stop at once: the firewall only accepts established connections on the
-  *current* path (tested in `test/netns/portal_test.go`). Nothing has to be
-  flushed, so there is no moment where an old connection slips through.
+  *current* path, and a connection that left through the tunnel is
+  labeled and may never leave anywhere else (tested in
+  `test/netns/portal_test.go` and `routed_ipv6_test.go`; for NATed IPv4
+  the kernel also ends a connection whose way out changed, but the routed
+  IPv6 network isn't NATed). Nothing has to be flushed, so there is no
+  moment where an old connection slips through.
 
 ### 4.6 Captive portals
 
@@ -460,9 +464,10 @@ the portal's URL.
    the tunnel comes up. Connections opened during login mode stop at once,
    because the firewall only accepts established connections on the current
    path. Timeout or cancel restores the normal ruleset the same way.
-4. The notice page and the UI warn that during portal mode, web and DNS
-   traffic from **all** client devices bypasses the tunnel (decided: all
-   devices, so the login sheet can appear on whichever one is handy).
+4. The notice page and the UI warn that during portal mode, **all** client
+   devices may start web and DNS connections outside the tunnel (decided:
+   all devices, so the login sheet can appear on whichever one is handy).
+   Connections they opened through the tunnel before stay in it, and stop.
 
 **Why the hole is needed, and why it isn't the same as turning the kill switch
 off:**
@@ -475,7 +480,7 @@ off:**
 | Option | What leaves outside the tunnel | Ends |
 |---|---|---|
 | Turn the kill switch OFF by hand | **Everything**, from all devices, on all ports | Only when you remember to turn it back on |
-| **Portal mode (chosen)** | Web and DNS only (TCP 80/443, DNS) | Automatically, as soon as the login works or after 10 min |
+| **Portal mode (chosen)** | New web and DNS connections only (TCP 80/443, DNS) | Automatically, as soon as the login works or after 10 min |
 | Zero-leak remote browser (stretch) | Nothing from clients: the router itself loads the portal and shows it to you inside our UI | When you finish |
 
   Portal mode is a narrower, self-closing version of turning the kill switch

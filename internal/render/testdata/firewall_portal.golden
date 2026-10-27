@@ -91,9 +91,10 @@ table inet rasbeacon {
 		iifname "rbplug0" oifname @egress ct state established,related accept
 		iifname @egress oifname "rbplug0" ct state established,related accept
 
-		# LOGIN MODE (captive portal): for a few minutes, devices may reach
-		# the network's login page directly: web (TCP 80 and 443) and DNS
-		# only. Everything else stays blocked.
+		# LOGIN MODE (captive portal): for a few minutes, devices may start
+		# new connections straight to the network, for its login page: web
+		# (TCP 80 and 443) and DNS only. Everything else stays blocked, and
+		# connections already open through the VPN stop (see above).
 		iifname @lans oifname @egress tcp dport { 80, 443 } accept
 		iifname @lans oifname @egress meta l4proto { tcp, udp } th dport 53 accept
 	}

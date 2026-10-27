@@ -145,10 +145,10 @@ function LoginModeOffer() {
   return (
     <>
       <p className="text-subhead text-label-2">
-        Lets your devices reach the login page for 10 minutes. During that time, web and DNS traffic from all devices on
-        the hotspot goes directly to this network,{' '}
-        <strong className="font-semibold text-orange">not through the VPN</strong>. It ends by itself as soon as the
-        login works.
+        Lets your devices reach the login page for 10 minutes. During that time, all devices on the hotspot can open new
+        web and DNS connections directly to this network,{' '}
+        <strong className="font-semibold text-orange">not through the VPN</strong>, and connections already open through
+        the VPN stop. It ends by itself as soon as the login works.
       </p>
       <ActionButton
         variant="secondary"
@@ -200,8 +200,8 @@ function LoginModeOn({ status }: { status: PortalStatus }) {
       </OptionCard>
       <Notice tone="warning">
         <p>
-          While login mode is on, web and DNS traffic from all devices on the hotspot goes directly to this network, not
-          through the VPN.
+          While login mode is on, new web and DNS connections from all devices on the hotspot go directly to this
+          network, not through the VPN.
         </p>
       </Notice>
       <CheckAgain />

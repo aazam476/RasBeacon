@@ -112,8 +112,9 @@ func (a *Agent) vpnActive() bool {
 // traffic out through the uplink. In particular, before the state machine
 // has run at all, traffic is kept in the tunnel.
 //
-// Login mode (portal.go) also sends traffic outside the tunnel, limited to
-// web and DNS by the firewall.
+// Login mode (portal.go) also sends traffic outside the tunnel: the
+// firewall lets devices start only web and DNS connections there, and
+// drops whatever connections already opened through the tunnel send.
 func (a *Agent) clientsThroughTunnel() bool {
 	return a.vpnActive() && a.vpn.machine.State() != tunnel.Direct && !a.portal.loginMode
 }

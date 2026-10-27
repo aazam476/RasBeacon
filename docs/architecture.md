@@ -180,10 +180,13 @@ on, devices can't reach that page either (`internal/agent/portal.go`):
    firewall only lets reach the uplink. The notice page shows pictures of
    the page and sends taps and typing back. Devices stay in the tunnel.
    The browser closes once the login worked, or after 5 idle minutes.
-4. Or **login mode**: web and DNS traffic (only) goes directly to the
-   network for 10 minutes. It ends by itself as soon as the login works,
-   and the firewall cuts any connection still on the old path, so nothing
-   opened during login mode keeps going outside the VPN.
+4. Or **login mode**: for 10 minutes, devices may start web and DNS
+   connections (only) directly to the network. Connections opened earlier
+   through the VPN stop: the firewall labels every connection that leaves
+   through the tunnel, and drops a labeled connection's packets anywhere
+   else. Login mode ends by itself as soon as the login works, and the
+   firewall cuts any connection still on the old path, so nothing opened
+   during login mode keeps going outside the VPN.
 
 ## Device controls and the speed test
 

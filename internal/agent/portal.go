@@ -187,7 +187,7 @@ func (a *Agent) StartLoginMode() error {
 	if !a.noticeActive() {
 		return ErrWrongMode
 	}
-	slog.Warn("login mode started: devices' web and DNS traffic bypasses the VPN for a few minutes")
+	slog.Warn("login mode started: devices' new web and DNS connections bypass the VPN for a few minutes")
 	a.portal.loginMode = true
 	a.portal.loginStarted = a.now()
 	a.portal.loginUntil = a.now().Add(LoginWindow)

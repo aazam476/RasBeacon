@@ -670,6 +670,13 @@ type PortForward struct {
 // package's tests check the two agree).
 const ForwardMark = "0x5246"
 
+// TunnelLabel is the conntrack label (0 to 127, like QoSLabel) the firewall
+// puts on connections that left through the VPN tunnel. Such a connection
+// may never continue anywhere else: in login mode, or after the kill
+// switch was turned off, the routes change, and without this its next
+// packets would leave through the uplink as an "established" connection.
+const TunnelLabel = 65
+
 type pinholeData struct {
 	Protocol  string
 	Ports     string // "8080" or "27015-27030"
@@ -741,6 +748,7 @@ type firewallData struct {
 	TunnelDNS4      []string
 	TunnelDNS6      []string
 	TunnelInterface string
+	TunnelLabel     int
 	PluginBridge    string
 	// PluginBridgePorts matches the names of the plugins' ports on their
 	// bridge, such as "rbport*".
@@ -790,6 +798,7 @@ func Firewall(in FirewallInput) (string, error) {
 		SSHEnabled:        in.SSHEnabled,
 		Egress:            in.Egress,
 		TunnelInterface:   in.TunnelInterface,
+		TunnelLabel:       TunnelLabel,
 		PortalOnly:        in.PortalOnly,
 		Guest:             in.Guest,
 		GuestBridge:       GuestBridgeName,

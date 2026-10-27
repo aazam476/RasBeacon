@@ -142,6 +142,17 @@ table inet rasbeacon {
 		tcp flags syn tcp option maxseg size set rt mtu
 
 		ct state invalid drop
+{{- if .TunnelInterface}}
+
+		# Connections that went out through the VPN tunnel ("{{.TunnelInterface}}") are
+		# labeled, and may only ever continue through it. When the path
+		# changes (login mode, or the kill switch turned off while the VPN
+		# is down), the routes send their next packets to the uplink
+		# instead, where the "established" rules below would let them out
+		# to the network RasBeacon is on, on any port.
+		ct direction original oifname "{{.TunnelInterface}}" ct label set {{.TunnelLabel}}
+		ct direction original ct label {{.TunnelLabel}} oifname != "{{.TunnelInterface}}" drop
+{{- end}}
 {{- if .PausedMACs}}
 
 		# Devices whose internet access the owner paused: nothing from them
@@ -198,9 +209,10 @@ table inet rasbeacon {
 		iifname @egress oifname "{{.PluginBridge}}" ct state established,related accept
 {{- if .PortalOnly}}
 
-		# LOGIN MODE (captive portal): for a few minutes, devices may reach
-		# the network's login page directly: web (TCP 80 and 443) and DNS
-		# only. Everything else stays blocked.
+		# LOGIN MODE (captive portal): for a few minutes, devices may start
+		# new connections straight to the network, for its login page: web
+		# (TCP 80 and 443) and DNS only. Everything else stays blocked, and
+		# connections already open through the VPN stop (see above).
 		iifname @lans oifname @egress tcp dport { 80, 443 } accept
 		iifname @lans oifname @egress meta l4proto { tcp, udp } th dport 53 accept
 {{- else}}

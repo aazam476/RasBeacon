@@ -8,6 +8,7 @@ package netns
 
 import (
 	"net/netip"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -23,7 +24,11 @@ const (
 	ipv6Site      = "2001:db8:ffff::80"
 )
 
-func TestVPN_RoutedIPv6NetworkIsNotNATed(t *testing.T) {
+// buildRoutedIPv6 is buildVPNNetwork with the routed IPv6 network: the
+// VPN server routes it to RasBeacon, the phone has an address in it, and
+// the IPv6 site behind the VPN (port 8082) only accepts that network.
+func buildRoutedIPv6(t *testing.T) vpnNetwork {
+	t.Helper()
 	if !routing.KernelHasIPv6("/proc/sys/net/ipv6") {
 		t.Skip("IPv6 is switched off in this kernel")
 	}
@@ -68,7 +73,11 @@ func TestVPN_RoutedIPv6NetworkIsNotNATed(t *testing.T) {
 	inNS(t, phoneNS, "ip", "-6", "address", "add", routedPhone+"/64", "dev", "eth0", "nodad")
 	inNS(t, phoneNS, "ip", "-6", "route", "add", "default", "via", "2001:db8:1234:5678::1")
 	waitForHandshake(t)
+	return n
+}
 
+func TestVPN_RoutedIPv6NetworkIsNotNATed(t *testing.T) {
+	buildRoutedIPv6(t)
 	if !tcpConnectsTo(phoneNS, "["+ipv6Site+"]:8082") {
 		t.Fatal("the phone should reach the IPv6 site through the tunnel with its own public address")
 	}
@@ -100,5 +109,36 @@ func TestVPN_RoutedIPv6NetworkIsNotNATed(t *testing.T) {
 	inNS(t, routerNS, "nft", "-f", renderRouterRules(t, routerRules{egress: []string{routing.TunnelInterface}}))
 	if tcpConnectsTo(phoneNS, "["+ipv6Site+"]:8082") {
 		t.Error("test setup broken: the site should refuse NATed connections")
+	}
+}
+
+// Login mode with the routed IPv6 network. Connections from devices'
+// public addresses aren't NATed, so the kernel doesn't end them when the
+// routes change (it does end NATed ones): only the firewall stops their
+// next packets from leaving through the hotel's network.
+func TestLoginMode_RoutedIPv6ConnectionsDontLeaveOutsideTheVPN(t *testing.T) {
+	n := buildRoutedIPv6(t)
+	// The hotel's network has IPv6 too, with a way to the site.
+	inNS(t, upstreamNS, "ip", "-6", "address", "add", "2001:db8:99::2/64", "dev", "eth0", "nodad")
+	inNS(t, routerNS, "ip", "-6", "address", "add", "2001:db8:99::1/64", "dev", "eth0", "nodad")
+	inNS(t, routerNS, "ip", "-6", "route", "add", "default", "via", "2001:db8:99::2", "dev", "eth0")
+	startBackground(t, upstreamNS, "env", "RB_ECHO=["+ipv6Site+"]:8083", os.Args[0])
+	leaked := countPacketsOutsideTheTunnel(t, n, "8083")
+
+	conn := openEchoConnection(t, ipv6Site, "8083")
+	if !conn.echoes("through the VPN") {
+		t.Fatal("test setup broken: the echo connection through the tunnel does not work")
+	}
+	if out := leaked(); out != "" {
+		t.Fatalf("test setup broken: the connection should use the tunnel:\n%s", out)
+	}
+
+	runAllIgnoringErrors(routerNS, routing.ClientsDirect())
+	inNS(t, routerNS, "nft", "-f", renderRouterRules(t, routerRules{
+		egress: []string{"eth0"}, portalOnly: true, routedIPv6: netip.MustParsePrefix(routedNetwork),
+	}))
+	conn.echoes("in login mode")
+	if out := leaked(); out != "" {
+		t.Errorf("LEAK: a connection from a public IPv6 address opened through the VPN carried on through the uplink:\n%s", out)
 	}
 }
