@@ -24,6 +24,7 @@ import (
 	"text/template"
 
 	"rasbeacon/internal/config"
+	"rasbeacon/internal/radio"
 )
 
 //go:embed templates/*.tmpl
@@ -184,6 +185,10 @@ type HotspotInput struct {
 	// network). The radio must support two access points (see
 	// radio.MaxAPInterfaces).
 	Guest *GuestNetwork
+	// Caps is what the radio can do on this band (see radio.ParseBandCaps),
+	// so the hotspot claims its short guard intervals, LDPC, STBC and
+	// beamforming. Zero (unknown) leaves hostapd's defaults.
+	Caps radio.BandCaps
 	// GuestRadio makes this the guest network on a radio of its own:
 	// in the guests' bridge, with guests kept apart from each other.
 	GuestRadio bool
@@ -237,6 +242,14 @@ type hostapdData struct {
 	WiFi6    bool
 	WiFi5    bool
 	BSSColor int
+	// HTCapab and VHTCapab are hostapd's ht_capab and vht_capab: the
+	// channel width and what the radio can do ("" leaves them out).
+	HTCapab  string
+	VHTCapab string
+	// OpClass6 is the 6 GHz operating class (131 for 20 MHz, 133 for 80
+	// MHz), and HE6Center the center of the 80 MHz block (0 for 20 MHz).
+	OpClass6  int
+	HE6Center int
 }
 
 // Hostapd produces hostapd.conf text for the hotspot.
@@ -270,6 +283,9 @@ func Hostapd(in HotspotInput) (string, error) {
 	}
 	if in.MaxDevices < 0 || in.MaxDevices > config.MaxDevicesLimit {
 		return "", fmt.Errorf("device limit %d is out of range", in.MaxDevices)
+	}
+	if in.Band == config.Band6GHz && (in.Open || in.Security != config.SecurityWPA3) {
+		return "", fmt.Errorf("a 6 GHz hotspot must be WPA3 only")
 	}
 	if g := in.Guest; g != nil {
 		if in.Open {
@@ -305,6 +321,16 @@ func Hostapd(in HotspotInput) (string, error) {
 		WiFi5:            in.Band == config.Band5GHz && in.Standard != config.StandardWiFi4,
 		BSSColor:         bssColor(in.SSID),
 	}
+	data.HTCapab, data.VHTCapab = capabFlags(in, data.VHT80, data.HT40Direction)
+	if in.Band == config.Band6GHz {
+		// 6 GHz is Wi-Fi 6 (HE) only: no 802.11n or ac settings.
+		data.HTCapab, data.VHTCapab, data.WiFi5, data.VHT80 = "", "", false, false
+		data.WiFi6 = true
+		data.OpClass6, data.HE6Center = 131, he6Center(in.Channel)
+		if data.HE6Center != 0 {
+			data.OpClass6 = 133
+		}
+	}
 	if g := in.Guest; g != nil {
 		data.GuestInterface = GuestInterface
 		data.GuestBridge = GuestBridgeName
@@ -312,6 +338,39 @@ func Hostapd(in HotspotInput) (string, error) {
 		data.GuestSSIDForComment = commentSafe(g.SSID)
 	}
 	return execute("hostapd.conf.tmpl", data)
+}
+
+// capabFlags returns hostapd's ht_capab and vht_capab for the hotspot: on
+// an 80 MHz channel the 40 MHz direction, then what the radio can do. With
+// unknown capabilities only what every 80 MHz radio has ([SHORT-GI-40]).
+func capabFlags(in HotspotInput, vht80 bool, ht40Direction string) (ht, vht string) {
+	if vht80 && in.Band == config.Band5GHz {
+		ht = "[" + ht40Direction + "]"
+		if in.Caps.HasHT {
+			ht += radio.HTFlags(in.Caps.HT, true)
+		} else {
+			ht += "[SHORT-GI-40]"
+		}
+		if in.Caps.HasVHT && in.Standard != config.StandardWiFi4 {
+			vht = radio.VHTFlags(in.Caps.VHT)
+		}
+		return ht, vht
+	}
+	if in.Caps.HasHT {
+		ht = radio.HTFlags(in.Caps.HT, false)
+	}
+	return ht, ""
+}
+
+// he6Center returns the center channel of the 80 MHz block a 6 GHz
+// channel is in (blocks are 16 channel numbers apart, from channel 1), or
+// 0 when the block would reach past the band's last channel (233).
+func he6Center(channel int) int {
+	center := (channel-1)/16*16 + 7
+	if center+6 > 233 {
+		return 0
+	}
+	return center
 }
 
 // vhtCenterChannel returns the centre of the 80 MHz block that contains a

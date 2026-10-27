@@ -141,6 +141,7 @@ func (a *Agent) guestRadioHotspot(main render.HotspotInput) *render.HotspotInput
 	if r.HasWiFi6 {
 		guest.Standard = config.StandardWiFi6
 	}
+	guest.Caps = r.Caps[bandNumber(guest.Band)]
 	return &guest
 }
 
@@ -328,4 +329,15 @@ func hasRole(radios []radio.Radio, role radio.Role) bool {
 		}
 	}
 	return false
+}
+
+// bandNumber is iw's number for a band (radio.Band24, Band5).
+func bandNumber(band config.Band) int {
+	switch band {
+	case config.Band5GHz:
+		return radio.Band5
+	case config.Band6GHz:
+		return radio.Band6
+	}
+	return radio.Band24
 }

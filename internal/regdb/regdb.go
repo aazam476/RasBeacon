@@ -126,16 +126,3 @@ func (db DB) HotspotChannelAllowed(country string, mhz int) bool {
 	}
 	return false
 }
-
-// ChannelMHz is a Wi-Fi channel's center frequency: channels 1 to 13 are on
-// 2.4 GHz, 5 MHz apart from 2412 MHz (14, Japan's old one, is at 2484);
-// 5 GHz channels are at 5000 + 5 × n.
-func ChannelMHz(channel int) int {
-	switch {
-	case channel == 14:
-		return 2484
-	case channel < 14:
-		return 2407 + 5*channel
-	}
-	return 5000 + 5*channel
-}

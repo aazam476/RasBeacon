@@ -183,7 +183,10 @@ since their image has one copy of the system.
   set the most devices at once. Devices on Ethernet always get in.
 - **WPA3 only** for the hotspot, if all your devices support it, and
   **Wi-Fi 6** with an adapter that can run it (picked by itself; Wi-Fi 4
-  for very old devices): the **Hotspot** page.
+  for very old devices): the **Hotspot** page. With an adapter whose
+  driver allows it, and in a country that allows it (not the US yet),
+  the hotspot can also run on **6 GHz (Wi-Fi 6E)**; see
+  [docs/compatibility.md](docs/compatibility.md).
 - **Priority devices:** on the **Clients** page, turn on **Priority** for
   a work laptop or a game console, and enter your internet speed on the
   **Internet** page (the last speed test fills it in). When the connection

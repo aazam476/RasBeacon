@@ -30,7 +30,16 @@ export function applyWorstCase(demo: DemoState) {
     allowed: Array.from({ length: 40 }, (_, i) => `3a:1f:22:${i.toString(16).padStart(2, '0')}:bb:cc`),
     maxDevices: 231,
   };
-  status.uplink.wifi = { ...status.uplink.wifi, ssid: uplinkSsid, signalDbm: -91 };
+  // The fastest link there is, on the weakest signal.
+  status.uplink.wifi = {
+    ...status.uplink.wifi,
+    ssid: uplinkSsid,
+    signalDbm: -91,
+    standard: 'wifi7',
+    widthMhz: 320,
+    rxMbps: 5764.7,
+    txMbps: 2882.4,
+  };
   status.uplink.address = '100.127.254.253';
   status.uplink.gateway = '100.127.240.1';
   status.uplink.ipv6 = true;
@@ -241,6 +250,9 @@ export function applyWorstCase(demo: DemoState) {
       maxAps: 4,
       role: 'guest',
       chosen: true,
+      hasWifi6: true,
+      has6GHz: true,
+      hasWifi7: true,
     },
     {
       interface: 'wlx00c0cab1c2d3',
@@ -290,7 +302,7 @@ export function applyWorstCase(demo: DemoState) {
     },
   ];
   demo.nearbyNetworks = [
-    { ssid: uplinkSsid, signalDbm: -91, frequencyMhz: 5745, security: 'open', label: 'Open' },
+    { ssid: uplinkSsid, signalDbm: -91, frequencyMhz: 5745, security: 'open', label: 'Open', standard: 'wifi7' },
     {
       ssid: 'XFINITYWIFIHOTSPOTPUBLICGUESTNET',
       signalDbm: -30,
@@ -376,8 +388,8 @@ export function applyWorstCase(demo: DemoState) {
   router.status.clients.forEach((client, index) => {
     client.welcome = index % 3 === 0 ? 'waiting' : 'accepted';
   });
-  // A Wi-Fi 6 adapter, on Wi-Fi 4 for very old devices.
-  router.hotspotSettings = { ...router.hotspotSettings, noWifi6: false, standard: 'wifi4' };
+  // A Wi-Fi 6E adapter, on Wi-Fi 4 for very old devices (Germany allows 6 GHz hotspots).
+  router.hotspotSettings = { ...router.hotspotSettings, noWifi6: false, standard: 'wifi4', has6GHz: true };
   // MAC addresses: Wi-Fi cloned from a device still on the hotspot (the warning), Ethernet random.
   router.uplinkSettings.wifiMac = { mode: 'cloned', address: 'a4:83:e7:10:9c:20' };
   router.uplinkSettings.ethernetMac = { mode: 'random', address: '0e:3d:9a:41:c7:52' };

@@ -3,6 +3,7 @@ import { useDevice } from '@/data/device';
 import type { NearbyNetwork } from '@/data/types';
 import { cn } from '@/lib/cn';
 import { bandOfFrequency, formatDbm, signalLevel } from '@/lib/format';
+import { standardLabel } from '../common/wifiOptions';
 import { useAction } from '@/lib/useAction';
 import { BreakableText, ButtonRow, FormError, Icon, Row, Section } from '@/ui';
 import type { AddNetworkStart } from './AddNetworkSheet';
@@ -87,7 +88,13 @@ function NearbyRow({ network, state, onPick }: NearbyRowProps) {
   const detailsId = useId();
   const secured = network.security !== 'open';
   const note = { connected: 'Connected', saved: 'Saved', unsupported: 'Not supported', joinable: '' }[state];
-  const details = [note, network.label, bandOfFrequency(network.frequencyMhz), formatDbm(network.signalDbm)]
+  const details = [
+    note,
+    network.label,
+    bandOfFrequency(network.frequencyMhz),
+    network.standard && standardLabel(network.standard),
+    formatDbm(network.signalDbm),
+  ]
     .filter(Boolean)
     .join(' · ');
   const name = <BreakableText>{network.ssid}</BreakableText>;

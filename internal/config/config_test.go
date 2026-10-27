@@ -429,3 +429,39 @@ func TestMACChoice(t *testing.T) {
 		}
 	}
 }
+
+func TestChannelMHz(t *testing.T) {
+	for _, tc := range []struct {
+		band          Band
+		channel, want int
+	}{
+		{Band2GHz, 1, 2412}, {Band2GHz, 13, 2472}, {Band2GHz, 14, 2484},
+		{Band5GHz, 36, 5180}, {Band5GHz, 165, 5825},
+		{Band6GHz, 1, 5955}, {Band6GHz, 37, 6135}, {Band6GHz, 165, 6775},
+	} {
+		if got := ChannelMHz(tc.band, tc.channel); got != tc.want {
+			t.Errorf("ChannelMHz(%s, %d) = %d, want %d", tc.band, tc.channel, got, tc.want)
+		}
+	}
+}
+
+func TestHotspot_6GHzRules(t *testing.T) {
+	h := HotspotConfig{SSID: "x", Band: Band6GHz, Security: SecurityWPA3, Country: "US"}
+	if err := h.Validate(); err != nil {
+		t.Errorf("6 GHz with WPA3: %v", err)
+	}
+	if DefaultChannel(Band6GHz) != 37 || !IsAllowedChannel(Band6GHz, 229) || IsAllowedChannel(Band6GHz, 36) {
+		t.Error("6 GHz offers its preferred scanning channels")
+	}
+	for name, change := range map[string]func(*HotspotConfig){
+		"WPA2/WPA3":       func(h *HotspotConfig) { h.Security = SecurityWPA2WPA3 },
+		"Wi-Fi 4":         func(h *HotspotConfig) { h.Standard = StandardWiFi4 },
+		"a 5 GHz channel": func(h *HotspotConfig) { h.Channel = 36 },
+	} {
+		bad := h
+		change(&bad)
+		if err := bad.Validate(); err == nil {
+			t.Errorf("%s on 6 GHz should be refused", name)
+		}
+	}
+}

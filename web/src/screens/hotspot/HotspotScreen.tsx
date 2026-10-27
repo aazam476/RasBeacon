@@ -48,7 +48,11 @@ export function HotspotScreen() {
  * full two-letter code is typed. Until it answers, or if it can't, every channel RasBeacon offers;
  * a code that isn't a country comes back as `countryError`, shown under the field at once.
  */
-function useCountryChannels(country: string, no5GHz?: boolean): { channels: ChannelsByBand; countryError?: string } {
+function useCountryChannels(
+  country: string,
+  no5GHz?: boolean,
+  has6GHz?: boolean,
+): { channels: ChannelsByBand; countryError?: string } {
   const { hotspotChannels } = useDevice();
   const [answer, setAnswer] = useState<{ country: string; channels?: ChannelsByBand; error?: string } | null>(null);
   useEffect(() => {
@@ -67,7 +71,11 @@ function useCountryChannels(country: string, no5GHz?: boolean): { channels: Chan
     };
   }, [country, hotspotChannels]);
 
-  const offered = { '2.4GHz': [...HOTSPOT_CHANNELS['2.4GHz']], '5GHz': no5GHz ? [] : [...HOTSPOT_CHANNELS['5GHz']] };
+  const offered = {
+    '2.4GHz': [...HOTSPOT_CHANNELS['2.4GHz']],
+    '5GHz': no5GHz ? [] : [...HOTSPOT_CHANNELS['5GHz']],
+    '6GHz': has6GHz ? [...HOTSPOT_CHANNELS['6GHz']] : [],
+  };
   if (answer?.country !== country) return { channels: offered };
   return { channels: answer.channels ?? offered, countryError: answer.error };
 }
@@ -80,9 +88,11 @@ function countryProblem(problem: unknown): string | undefined {
 
 function HotspotForm({ settings }: { settings: HotspotSettings }) {
   const { status, saveHotspotSettings } = useDevice();
-  // A hotspot saved on 5 GHz whose radio can't use it runs on 2.4 GHz (after the adapter was
-  // swapped for another), so the form starts there.
-  const band = settings.no5GHz ? '2.4GHz' : settings.band;
+  // A hotspot saved on a band its radio can't use runs on the next one down (after the adapter
+  // was swapped for another): 6 GHz on 5 GHz, 5 GHz on 2.4 GHz. The form starts there.
+  let band = settings.band;
+  if (band === '6GHz' && !settings.has6GHz) band = '5GHz';
+  if (band === '5GHz' && settings.no5GHz) band = '2.4GHz';
   // Likewise, "WPA3 only" on a radio that can't run it runs as WPA2/WPA3.
   const security = settings.noWpa3 && settings.security === 'wpa3' ? 'wpa2-wpa3' : settings.security;
   const form = useForm({ ...settings, band, security, password: '' }, saveHotspotSettings);
@@ -93,7 +103,7 @@ function HotspotForm({ settings }: { settings: HotspotSettings }) {
   const movedTo = hotspot?.actualChannel && hotspot.actualChannel !== hotspot.channel ? hotspot.actualChannel : null;
 
   const restarts = values.password !== '' || RESTARTING_FIELDS.some((field) => values[field] !== settings[field]);
-  const allowed = useCountryChannels(values.country, settings.no5GHz);
+  const allowed = useCountryChannels(values.country, settings.no5GHz, settings.has6GHz);
   const channelOptions = [
     { value: '0', label: 'Default' },
     ...allowed.channels[values.band].map((channel) => ({ value: String(channel), label: String(channel) })),
@@ -103,7 +113,8 @@ function HotspotForm({ settings }: { settings: HotspotSettings }) {
   if (channelRefused) {
     channelOptions.push({ value: String(values.channel), label: `${values.channel} (not allowed here)` });
   }
-  const bandRefused = values.band === '5GHz' && allowed.channels['5GHz'].length === 0;
+  const bandRefused = values.band !== '2.4GHz' && allowed.channels[values.band].length === 0;
+  const sixGHz = values.band === '6GHz';
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -145,7 +156,12 @@ function HotspotForm({ settings }: { settings: HotspotSettings }) {
         title="Radio"
         footer={[
           'The country decides which channels are legal.',
-          values.security === 'wpa3' && "With WPA3 only, devices older than about 2019 can't join.",
+          sixGHz && 'Only Wi-Fi 6E devices (from about 2021) see a 6 GHz network, and it is WPA3 only.',
+          !sixGHz && values.security === 'wpa3' && "With WPA3 only, devices older than about 2019 can't join.",
+          settings.has6GHz &&
+            allowed.channels['6GHz'].length === 0 &&
+            !sixGHz &&
+            "This country doesn't allow a 6 GHz hotspot, so 6 GHz isn't offered.",
           settings.no5GHz && "This Wi-Fi adapter can't use 5 GHz.",
           settings.noWpa3 && "This Wi-Fi adapter can't run WPA3 only.",
           movedTo &&
@@ -166,9 +182,15 @@ function HotspotForm({ settings }: { settings: HotspotSettings }) {
         />
         <SelectField
           label="Band"
-          options={bandOptions(settings.no5GHz || (allowed.channels['5GHz'].length === 0 && values.band !== '5GHz'))}
+          options={bandOptions(
+            settings.no5GHz || (allowed.channels['5GHz'].length === 0 && values.band !== '5GHz'),
+            settings.has6GHz && (allowed.channels['6GHz'].length > 0 || sixGHz),
+          )}
           value={values.band}
-          error={fieldErrors.band ?? (bandRefused ? "This country doesn't allow a hotspot on 5 GHz." : undefined)}
+          error={
+            fieldErrors.band ??
+            (bandRefused ? `This country doesn't allow a hotspot on ${values.band.replace('GHz', ' GHz')}.` : undefined)
+          }
           // A channel of the old band doesn't exist on the new one, so it goes back to the default.
           onChange={(band) =>
             form.update(
@@ -176,13 +198,15 @@ function HotspotForm({ settings }: { settings: HotspotSettings }) {
                 ...current,
                 band,
                 channel: 0,
-                // Wi-Fi 5 is 5 GHz only: on 2.4 GHz the best takes its place.
+                // Wi-Fi 5 is 5 GHz only: elsewhere the best takes its place. 6 GHz is Wi-Fi 6 only.
                 standard:
-                  current.standard === 'wifi5' && band !== '5GHz'
+                  band === '6GHz' || (current.standard === 'wifi5' && band !== '5GHz')
                     ? bestStandard(band, settings.noWifi6)
                     : current.standard,
+                // 6 GHz is WPA3 only; leaving it goes back to the recommended setting.
+                security: band === '6GHz' ? 'wpa3' : current.band === '6GHz' ? 'wpa2-wpa3' : current.security,
               }),
-              ['band', 'channel', 'standard'],
+              ['band', 'channel', 'standard', 'security'],
             )
           }
         />
@@ -195,16 +219,17 @@ function HotspotForm({ settings }: { settings: HotspotSettings }) {
         />
         <SelectField
           label="Security"
-          options={securityOptions(settings.noWpa3)}
+          options={securityOptions(settings.noWpa3, sixGHz)}
           value={values.security}
           onChange={(security) => setField('security', security)}
+          hint={sixGHz ? '6 GHz networks are WPA3 only.' : undefined}
         />
         <SelectField
           label="Wi-Fi standard"
           options={standardOptions(values.band, settings.noWifi6)}
           value={values.standard ?? bestStandard(values.band, settings.noWifi6)}
           onChange={(standard) => setField('standard', standard)}
-          hint="Older devices still join a Wi-Fi 6 network, with their own standard."
+          hint={sixGHz ? undefined : 'Older devices still join a Wi-Fi 6 network, with their own standard.'}
           error={fieldErrors.standard}
         />
       </Section>

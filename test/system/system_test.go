@@ -223,7 +223,9 @@ func buildHotel(t *testing.T) {
 	// internet"; the tunnel's DNS server is the same program), and its web
 	// servers.
 	hostapdConf := filepath.Join(stateDir, "hotel-hostapd.conf")
-	os.WriteFile(hostapdConf, []byte(fmt.Sprintf("interface=%s\ndriver=nl80211\nssid=%s\nhw_mode=g\nchannel=11\n", hotelIF, hotelSSID)), 0o600)
+	// A Wi-Fi 6 access point, so RasBeacon's uplink reports the standard.
+	os.WriteFile(hostapdConf, []byte(fmt.Sprintf("interface=%s\ndriver=nl80211\nssid=%s\nhw_mode=g\nchannel=11\n"+
+		"ieee80211n=1\nieee80211ax=1\nwmm_enabled=1\n", hotelIF, hotelSSID)), 0o600)
 	startBackground(t, ns, nil, "hostapd", hostapdConf)
 	startBackground(t, ns, nil, "dnsmasq", "--keep-in-foreground", "--no-resolv", "--no-hosts",
 		"--interface="+hotelIF, "--interface=wgs", "--bind-dynamic",
@@ -471,6 +473,9 @@ type status struct {
 	Uplink struct {
 		Connected bool   `json:"connected"`
 		Interface string `json:"interface"`
+		WiFi      struct {
+			Standard string `json:"standard"`
+		} `json:"wifi"`
 		// Address is RasBeacon's address on the uplink, maybe with its
 		// network size ("192.168.50.23/24").
 		Address string `json:"address"`
@@ -579,6 +584,9 @@ func hotelLogin(t *testing.T) {
 		}
 		return s.Uplink.Connected && s.Portal.Detected, fmt.Sprintf("connected %v, login page %v", s.Uplink.Connected, s.Portal.Detected)
 	})
+	if got := rbdStatus(t).Uplink.WiFi.Standard; got != "wifi6" {
+		t.Errorf("the uplink to the hotel's Wi-Fi 6 network reports %q", got)
+	}
 
 	rbd(t, "POST", "/portal/browser/start", map[string]int{"width": 400, "height": 600}, nil)
 	waitFor(t, "the login page in the browser", time.Minute, func() (bool, string) {

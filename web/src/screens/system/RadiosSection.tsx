@@ -17,7 +17,9 @@ const TONES: Record<RadioRole, Tone> = { hotspot: 'green', uplink: 'tint', guest
 
 /** What a radio is, after its name: its driver and how many networks it can broadcast. */
 function radioDetails(radio: Radio): string {
-  return [radio.driver, radio.interface, radio.maxAps > 1 && `can broadcast ${radio.maxAps} networks`]
+  // The newest standard it can run a hotspot with (Wi-Fi 7 isn't used yet, but worth knowing).
+  const best = radio.hasWifi7 ? 'Wi-Fi 7' : radio.has6GHz ? 'Wi-Fi 6E' : radio.hasWifi6 ? 'Wi-Fi 6' : '';
+  return [radio.driver, radio.interface, best, radio.maxAps > 1 && `can broadcast ${radio.maxAps} networks`]
     .filter(Boolean)
     .join(' · ');
 }

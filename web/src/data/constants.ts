@@ -8,6 +8,8 @@ import type { Band } from './types';
 export const HOTSPOT_CHANNELS: Record<Band, readonly number[]> = {
   '2.4GHz': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
   '5GHz': [36, 40, 44, 48, 149, 153, 157, 161, 165],
+  // The "preferred scanning channels", where phones look for 6 GHz networks first.
+  '6GHz': [5, 21, 37, 53, 69, 85, 101, 117, 133, 149, 165, 181, 197, 213, 229],
 };
 
 /**

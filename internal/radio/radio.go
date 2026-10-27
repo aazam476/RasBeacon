@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -83,10 +84,22 @@ type Radio struct {
 	// HasWiFi6 is true when the radio can run a Wi-Fi 6 (802.11ax)
 	// hotspot (see SupportsWiFi6AP).
 	HasWiFi6 bool `json:"hasWifi6"`
+	// Has6GHz is true when the radio can run a hotspot on 6 GHz (Wi-Fi
+	// 6E): Wi-Fi 6 in AP mode on the 6 GHz band, which it lists channels
+	// for. Whether the country allows one is decided per country (its
+	// channels), not here: the flags iw prints follow the country set
+	// when RasBeacon started, which the owner may change.
+	Has6GHz bool `json:"has6GHz"`
+	// HasWiFi7 is true when the driver can run Wi-Fi 7 (802.11be, "EHT")
+	// in AP mode. RasBeacon doesn't run a Wi-Fi 7 hotspot yet (that needs
+	// hostapd 2.11); the System page says what the radio could do.
+	HasWiFi7 bool `json:"hasWifi7"`
 	Role     Role `json:"role"`
 	// Chosen is true when the owner chose Role (System page); false when
 	// RasBeacon did.
 	Chosen bool `json:"chosen,omitempty"`
+	// Caps is what the radio can do on each band (see ParseBandCaps).
+	Caps map[int]BandCaps `json:"-"`
 }
 
 // PhyInfoFunc returns the output of `iw phy <phy> info`. It is a parameter so
@@ -142,6 +155,9 @@ func Detect(sysClassNet string, phyInfo PhyInfoFunc) ([]Radio, error) {
 			r.Has5GHz = Supports5GHz(info)
 			r.HasWPA3 = SupportsWPA3AP(r.Driver, info)
 			r.HasWiFi6 = SupportsWiFi6AP(info)
+			r.HasWiFi7 = SupportsWiFi7AP(info)
+			r.Caps = ParseBandCaps(info)
+			r.Has6GHz = r.Caps[Band6].HEAP && len(r.Caps[Band6].Channels) > 0
 		}
 
 		radios = append(radios, r)
@@ -450,6 +466,19 @@ func SupportsWiFi6AP(iwPhyInfo string) bool {
 	return false
 }
 
+// SupportsWiFi7AP reads `iw phy <name> info` output and reports whether the
+// radio can run a Wi-Fi 7 (802.11be, "EHT") access point: like Wi-Fi 6,
+// iw lists the modes per band ("EHT Iftypes: managed, AP").
+func SupportsWiFi7AP(iwPhyInfo string) bool {
+	for _, line := range strings.Split(iwPhyInfo, "\n") {
+		modes, ok := strings.CutPrefix(strings.TrimSpace(line), "EHT Iftypes:")
+		if ok && slices.Contains(strings.Split(strings.ReplaceAll(modes, " ", ""), ","), "AP") {
+			return true
+		}
+	}
+	return false
+}
+
 // SupportsWPA3AP reads `iw phy <name> info` output and reports whether the
 // radio can run a WPA3 hotspot. WPA3 needs protected management frames,
 // which work in one of two ways:
@@ -466,31 +495,6 @@ func SupportsWPA3AP(driver, iwPhyInfo string) bool {
 		return strings.Contains(iwPhyInfo, "SAE_OFFLOAD_AP")
 	}
 	return strings.Contains(iwPhyInfo, "(00-0f-ac:6)")
-}
-
-// ChannelAllowed reads `iw phy <name> info` output and reports whether the
-// radio may run a hotspot on channel under the current country's rules.
-// iw lists every channel with what the country allows, for example:
-//
-//   - 2412 MHz [1] (20.0 dBm)
-//   - 2467 MHz [12] (disabled)
-//   - 5260 MHz [52] (20.0 dBm) (no IR, radar detection)
-//
-// "disabled" means the channel may not be used at all, and "no IR" ("no
-// initiating radiation") that the radio may not start a network on it, so
-// a hotspot can't use either. listed is false when the channel isn't in
-// the output at all, so the caller can't tell.
-func ChannelAllowed(iwPhyInfo string, channel int) (allowed, listed bool) {
-	want := fmt.Sprintf("[%d]", channel)
-	for _, line := range strings.Split(iwPhyInfo, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if !strings.HasPrefix(trimmed, "* ") || !strings.Contains(trimmed, " MHz "+want) {
-			continue
-		}
-		forbidden := strings.Contains(trimmed, "(disabled)") || strings.Contains(trimmed, "no IR")
-		return !forbidden, true
-	}
-	return false, false
 }
 
 // readTrimmed reads a small sysfs file and removes the trailing newline.

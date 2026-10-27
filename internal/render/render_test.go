@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"rasbeacon/internal/config"
+	"rasbeacon/internal/radio"
 )
 
 var update = flag.Bool("update", false, "rewrite the golden files in testdata/")
@@ -1017,5 +1018,95 @@ func TestHostapd_GuestRadio(t *testing.T) {
 		GuestRadio: true, Guest: &GuestNetwork{SSID: "x", Password: "visitors-welcome-2026", BSSID: "02:00:00:00:00:01"},
 	}); err == nil {
 		t.Error("a guest radio with a second guest network should be refused")
+	}
+}
+
+// With what the radio can do (an MT7921AU), the hotspot claims it: short
+// guard intervals, LDPC, STBC, beamforming, on 5 GHz with Wi-Fi 6 and on
+// 2.4 GHz.
+func TestHostapd_RadioCapabilities(t *testing.T) {
+	info, err := os.ReadFile("../radio/testdata/mt7921au.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bands := radio.ParseBandCaps(string(info))
+	five := HotspotInput{
+		Interface: "ap0", SSID: "RasBeacon-4F2A", Band: config.Band5GHz, Channel: 36, Country: "US",
+		Security: config.SecurityWPA2WPA3, Password: "kq7m-2xvd-h8pt-rn4w", Standard: config.StandardWiFi6,
+		Caps: bands[radio.Band5],
+	}
+	got, err := Hostapd(five)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkGolden(t, "hostapd_caps_5ghz", got)
+	for _, want := range []string{
+		"ht_capab=[HT40+][LDPC][SHORT-GI-20][SHORT-GI-40][TX-STBC][RX-STBC1][MAX-AMSDU-7935]\n",
+		"vht_capab=[MAX-MPDU-11454][RXLDPC][SHORT-GI-80][TX-STBC-2BY1][RX-STBC-1][SU-BEAMFORMEE][BF-ANTENNA-4][MU-BEAMFORMEE][MAX-A-MPDU-LEN-EXP7][RX-ANTENNA-PATTERN][TX-ANTENNA-PATTERN]\n",
+		"he_su_beamformer=1\n", "he_su_beamformee=1\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("no %q", want)
+		}
+	}
+
+	// Channel 165 can't be 80 MHz wide: 20 MHz flags only, no vht_capab.
+	narrow := five
+	narrow.Channel = 165
+	got, _ = Hostapd(narrow)
+	if !strings.Contains(got, "ht_capab=[LDPC][SHORT-GI-20][TX-STBC][RX-STBC1][MAX-AMSDU-7935]\n") || strings.Contains(got, "vht_capab") {
+		t.Errorf("channel 165:\n%s", got)
+	}
+
+	twoFour := five
+	twoFour.Band, twoFour.Channel, twoFour.Caps = config.Band2GHz, 6, bands[radio.Band24]
+	got, _ = Hostapd(twoFour)
+	checkGolden(t, "hostapd_caps_24ghz", got)
+	if !strings.Contains(got, "ht_capab=[LDPC][SHORT-GI-20][TX-STBC][RX-STBC1][MAX-AMSDU-7935]\n") ||
+		strings.Contains(got, "he_su_beamformer") || !strings.Contains(got, "he_su_beamformee=1") {
+		t.Errorf("2.4 GHz:\n%s", got)
+	}
+}
+
+// A 6 GHz hotspot: Wi-Fi 6 only, WPA3 with hash-to-element, an operating
+// class and an 80 MHz block where the channel has one; the guest network
+// on the same radio follows.
+func TestHostapd_6GHz(t *testing.T) {
+	in := HotspotInput{
+		Interface: "ap0", SSID: "RasBeacon-4F2A", Band: config.Band6GHz, Channel: 37, Country: "US",
+		Security: config.SecurityWPA3, Password: "kq7m-2xvd-h8pt-rn4w",
+		Guest: &GuestNetwork{SSID: "RasBeacon-Guests", Password: "visitors-welcome", BSSID: "52:3e:aa:12:34:56"},
+	}
+	got, err := Hostapd(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkGolden(t, "hostapd_6ghz", got)
+	for _, want := range []string{"hw_mode=a\n", "op_class=133\n", "channel=37\n", "he_oper_chwidth=1\n",
+		"he_oper_centr_freq_seg0_idx=39\n", "ieee80211ax=1\n", "wpa_key_mgmt=SAE\n", "ieee80211w=2\n"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("no %q", want)
+		}
+	}
+	if strings.Count(got, "sae_pwe=1\n") != 2 || strings.Contains(got, "sae_pwe=2") {
+		t.Error("both networks must use hash-to-element only")
+	}
+	for _, unwanted := range []string{"ieee80211n", "ieee80211ac", "ht_capab", "vht_"} {
+		if strings.Contains(got, unwanted) {
+			t.Errorf("6 GHz has no %s", unwanted)
+		}
+	}
+
+	// The last channel can't be 80 MHz wide.
+	last := in
+	last.Channel, last.Guest = 229, nil
+	if got, _ := Hostapd(last); !strings.Contains(got, "op_class=131\n") || strings.Contains(got, "he_oper_chwidth") {
+		t.Errorf("channel 229:\n%s", got)
+	}
+	// Not WPA3 only: refused.
+	wpa2 := last
+	wpa2.Security = config.SecurityWPA2WPA3
+	if _, err := Hostapd(wpa2); err == nil {
+		t.Error("a 6 GHz hotspot must be WPA3 only")
 	}
 }

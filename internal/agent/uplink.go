@@ -468,6 +468,14 @@ func (a *Agent) observeWiFi(iface string) api.WiFiUplinkStatus {
 		s.BSSID, s.FrequencyMHz, s.Channel = wpa.BSSID, wpa.FrequencyMHz, wifiChannel(wpa.FrequencyMHz)
 		poll, _ := system.WPACommand(a.runner, a.paths.WPAControlDir(), iface, "signal_poll")
 		s.SignalDBM = uplink.ParseSignalPoll(poll)
+		if out, err := a.runner.Run("iw", "dev", iface, "link"); err == nil {
+			link := uplink.ParseLink(out)
+			s.Standard, s.WidthMHz, s.RxMbps, s.TxMbps = link.Standard, link.WidthMHz, link.RxMbps, link.TxMbps
+		}
+		// What both sides agreed on beats what the rates suggest.
+		if standard := uplink.StandardOf(wpa.Generation, wpa.FrequencyMHz); standard != "" {
+			s.Standard = standard
+		}
 	case len(a.cfg.Uplink.Networks) == 0:
 		s.State = "not-configured"
 	case wpa.LoginFailed:
@@ -828,9 +836,13 @@ func (a *Agent) ScanNearby() (api.ScanResponse, error) {
 	if err != nil {
 		return api.ScanResponse{}, fmt.Errorf("reading scan results: %w", err)
 	}
+	// What each network offers (Wi-Fi 4 to 7), from the same scan.
+	dump, _ := a.runner.Run("iw", "dev", wifi, "scan", "dump")
+	standards := uplink.ScanStandards(dump)
 	networks := []uplink.NearbyNetwork{}
 	for _, n := range uplink.ParseScanResults(out) {
 		if !slices.Contains(own, n.SSID) { // RasBeacon's own networks are not uplinks
+			n.Standard = standards[n.SSID]
 			networks = append(networks, n)
 		}
 	}

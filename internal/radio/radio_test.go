@@ -265,21 +265,26 @@ func TestSupportsWPA3AP(t *testing.T) {
 	}
 }
 
-func TestChannelAllowed(t *testing.T) {
+// The channels the radio may run a hotspot on, per band, under the
+// current country's rules: not "disabled", and not "no IR" (the radio may
+// not start a network there).
+func TestBandChannels(t *testing.T) {
+	bands := ParseBandCaps(iwOutputDualBand)
 	tests := []struct {
-		channel        int
+		band, channel  int
 		allowed, known bool
 	}{
-		{1, true, true},
-		{36, true, true},
-		{12, false, true}, // disabled in this country
-		{52, false, true}, // "no IR": may not start a network
-		{149, false, false},
+		{Band24, 1, true, true},
+		{Band5, 36, true, true},
+		{Band24, 12, false, true}, // disabled in this country
+		{Band5, 52, false, true},  // "no IR": may not start a network
+		{Band5, 149, false, false},
+		{Band5, 1, false, false}, // 1 is a 2.4 GHz channel
 	}
 	for _, tt := range tests {
-		allowed, known := ChannelAllowed(iwOutputDualBand, tt.channel)
+		allowed, known := bands[tt.band].Channels[tt.channel]
 		if allowed != tt.allowed || known != tt.known {
-			t.Errorf("channel %d = allowed %v, listed %v; want %v, %v", tt.channel, allowed, known, tt.allowed, tt.known)
+			t.Errorf("band %d channel %d = allowed %v, listed %v; want %v, %v", tt.band, tt.channel, allowed, known, tt.allowed, tt.known)
 		}
 	}
 }

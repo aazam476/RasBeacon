@@ -1,6 +1,7 @@
 import { useDevice } from '@/data/device';
 import type { Status, UplinkStatus } from '@/data/types';
-import { bandOfFrequency, formatBand, formatBytes, formatSignal, keepTogether } from '@/lib/format';
+import { bandOfFrequency, formatBand, formatBytes, formatMbps, formatSignal, keepTogether } from '@/lib/format';
+import { standardLabel } from '../common/wifiOptions';
 import { phoneInUse, phoneName } from '../common/describe';
 import {
   Badge,
@@ -42,7 +43,9 @@ export function ConnectionSection({ status }: { status: Status }) {
         <Row
           leading={{ tile: 'wifi', color: 'blue' }}
           title={<BreakableText>{wifi.ssid}</BreakableText>}
-          subtitle={`${formatSignal(wifi.signalDbm)}, ${formatBand(wifi.band)}`}
+          subtitle={[formatSignal(wifi.signalDbm), formatBand(wifi.band), wifi.standard && standardLabel(wifi.standard)]
+            .filter(Boolean)
+            .join(', ')}
           trailing={<SignalIcon dbm={wifi.signalDbm} />}
         />
       ) : (
@@ -65,6 +68,18 @@ export function ConnectionSection({ status }: { status: Status }) {
           value={`${wifi.channel}${wifi.frequencyMhz !== undefined ? ` (${bandOfFrequency(wifi.frequencyMhz)})` : ''}`}
         />
       )}
+      {onWifi && wifi.standard && (
+        <Row
+          title="Wi-Fi"
+          value={`${standardLabel(wifi.standard)}${wifi.widthMhz ? `, ${wifi.widthMhz}\u00a0MHz` : ''}`}
+        />
+      )}
+      {onWifi && (wifi.rxMbps || wifi.txMbps) ? (
+        <Row
+          title="Link speed"
+          value={`↓\u00a0${formatMbps(wifi.rxMbps ?? 0)} ↑\u00a0${formatMbps(wifi.txMbps ?? 0)}`}
+        />
+      ) : null}
       {uplink.kind === 'ethernet' && ethernet.duplex && <Row title="Link" value={ethernet.duplex} />}
       {phone && (
         <Row

@@ -211,6 +211,10 @@ export function createMockRouter(): MockRouter {
           bssid: 'b4:86:55:9a:1c:40',
           channel: 36,
           frequencyMhz: 5180,
+          standard: 'wifi6',
+          widthMhz: 80,
+          rxMbps: 1200.9,
+          txMbps: 864.7,
         },
         ethernet: {
           present: true,
@@ -371,13 +375,21 @@ export function createMockRouter(): MockRouter {
     },
 
     nearbyNetworks: [
-      { ssid: 'GrandHyatt_Guest_5G', signalDbm: -54, frequencyMhz: 5180, security: 'open', label: 'Open' },
+      {
+        ssid: 'GrandHyatt_Guest_5G',
+        signalDbm: -54,
+        frequencyMhz: 5180,
+        security: 'open',
+        label: 'Open',
+        standard: 'wifi6',
+      },
       {
         ssid: 'GrandHyatt_Staff_Secure',
         signalDbm: -68,
         frequencyMhz: 5200,
         security: 'enterprise',
         label: 'WPA3-Enterprise',
+        standard: 'wifi6',
       },
       {
         ssid: 'Starbucks_WiFi_HighSpeed',
@@ -385,6 +397,7 @@ export function createMockRouter(): MockRouter {
         frequencyMhz: 2437,
         security: 'personal',
         label: 'WPA2-Personal',
+        standard: 'wifi5',
       },
       {
         ssid: 'MobileMiFi_Roaming_7A',
@@ -392,6 +405,7 @@ export function createMockRouter(): MockRouter {
         frequencyMhz: 2412,
         security: 'personal',
         label: 'WPA2-Personal',
+        standard: 'wifi4',
       },
       { ssid: 'Lobby_Display_Bridge', signalDbm: -88, frequencyMhz: 2462, security: 'other', label: 'WEP' },
     ],

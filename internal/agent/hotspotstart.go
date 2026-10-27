@@ -17,6 +17,7 @@ package agent
 //     swapped for another (hotspotBand).
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"slices"
@@ -41,6 +42,13 @@ func (a *Agent) hotspotHas5GHz() bool {
 	return r != nil && r.Has5GHz
 }
 
+// hotspotHas6GHz reports whether the hotspot's radio can run a 6 GHz
+// hotspot (radio.Radio.Has6GHz).
+func (a *Agent) hotspotHas6GHz() bool {
+	r := a.hotspotRadio()
+	return r != nil && r.Has6GHz
+}
+
 // hotspotHasWPA3 reports whether the hotspot's radio can run a WPA3-only
 // hotspot (radio.SupportsWPA3AP).
 func (a *Agent) hotspotHasWPA3() bool {
@@ -60,6 +68,9 @@ func (a *Agent) hotspotHasWiFi6() bool {
 // that can't). Like the security setting, the saved choice stays.
 func (a *Agent) hotspotStandard() config.Standard {
 	saved := a.cfg.Hotspot.Standard
+	if a.hotspotBand() == config.Band6GHz {
+		return config.StandardWiFi6 // 6 GHz is Wi-Fi 6E
+	}
 	if saved == config.StandardWiFi4 || (saved == config.StandardWiFi5 && a.hotspotBand() == config.Band5GHz) {
 		return saved
 	}
@@ -84,12 +95,17 @@ func (a *Agent) hotspotSecurity() config.Security {
 }
 
 // hotspotBand is the band hostapd uses for the saved settings: the saved
-// band, except 2.4 GHz when the radio has no 5 GHz band.
+// band, except when the radio can't use it: 6 GHz moves to 5 GHz (or 2.4
+// GHz), 5 GHz to 2.4 GHz.
 func (a *Agent) hotspotBand() config.Band {
-	if a.cfg.Hotspot.Band == config.Band5GHz && !a.hotspotHas5GHz() {
-		return config.Band2GHz
+	band := a.cfg.Hotspot.Band
+	if band == config.Band6GHz && !a.hotspotHas6GHz() {
+		band = config.Band5GHz
 	}
-	return a.cfg.Hotspot.Band
+	if band == config.Band5GHz && !a.hotspotHas5GHz() {
+		band = config.Band2GHz
+	}
+	return band
 }
 
 // hotspotChannel is the channel that goes with hotspotBand: the saved one,
@@ -127,13 +143,13 @@ func (a *Agent) loadRegulatoryDB() {
 // empty when the hotspot's radio can't use it.
 func (a *Agent) countryChannels(country string) map[config.Band][]int {
 	channels := map[config.Band][]int{}
-	for _, band := range []config.Band{config.Band2GHz, config.Band5GHz} {
+	for _, band := range []config.Band{config.Band2GHz, config.Band5GHz, config.Band6GHz} {
 		channels[band] = []int{}
-		if band == config.Band5GHz && !a.hotspotHas5GHz() {
+		if (band == config.Band5GHz && !a.hotspotHas5GHz()) || (band == config.Band6GHz && !a.hotspotHas6GHz()) {
 			continue
 		}
 		for _, channel := range config.OfferedChannels(band) {
-			if a.regdb == nil || a.regdb.HotspotChannelAllowed(country, regdb.ChannelMHz(channel)) {
+			if a.regdb == nil || a.regdb.HotspotChannelAllowed(country, config.ChannelMHz(band, channel)) {
 				channels[band] = append(channels[band], channel)
 			}
 		}
@@ -161,6 +177,9 @@ func (a *Agent) checkHotspotForRadio(h config.HotspotConfig) error {
 	if h.Band == config.Band5GHz && !a.hotspotHas5GHz() {
 		return &config.ValidationError{Field: "hotspot.band", Message: "This Wi-Fi adapter can't use 5 GHz."}
 	}
+	if h.Band == config.Band6GHz && !a.hotspotHas6GHz() {
+		return &config.ValidationError{Field: "hotspot.band", Message: "This Wi-Fi adapter can't run a hotspot on 6 GHz."}
+	}
 	if h.Security == config.SecurityWPA3 && !a.hotspotHasWPA3() {
 		return &config.ValidationError{Field: "hotspot.security", Message: "This Wi-Fi adapter can't run a WPA3-only hotspot."}
 	}
@@ -169,22 +188,23 @@ func (a *Agent) checkHotspotForRadio(h config.HotspotConfig) error {
 	}
 	allowed := a.countryChannels(h.Country)[h.Band]
 	if len(allowed) == 0 {
-		return &config.ValidationError{Field: "hotspot.band", Message: "This country doesn't allow a hotspot on 5 GHz."}
+		return &config.ValidationError{Field: "hotspot.band", Message: fmt.Sprintf("This country doesn't allow a hotspot on %s.", bandLabel(h.Band))}
 	}
 	if h.Channel != 0 && !slices.Contains(allowed, h.Channel) {
 		return &config.ValidationError{Field: "hotspot.channel", Message: "This channel isn't allowed in this country."}
 	}
 	// The radio itself may know rules the database doesn't (its driver's
-	// own limits): it marks those channels disabled.
+	// own limits): it marks those channels disabled. Its marks follow the
+	// country in force now, so they only count when that one stays.
 	r := a.hotspotRadio()
-	if r == nil || h.Channel == 0 {
+	if r == nil || h.Channel == 0 || h.Country != a.cfg.Hotspot.Country {
 		return nil // "Default" picks an allowed channel (hotspotChannel)
 	}
 	info, err := system.PhyInfo(a.runner, r.Phy)
 	if err != nil {
 		return nil // can't tell; the check after the restart still runs
 	}
-	radioAllows, listed := radio.ChannelAllowed(info, h.Channel)
+	radioAllows, listed := radio.ParseBandCaps(info)[bandNumber(h.Band)].Channels[h.Channel]
 	if listed && !radioAllows {
 		return &config.ValidationError{Field: "hotspot.channel", Message: "This channel isn't allowed in this country."}
 	}
@@ -244,11 +264,20 @@ func (a *Agent) hotspotWarnings() []string {
 		return nil
 	}
 	var warnings []string
-	if a.hotspotBand() != a.cfg.Hotspot.Band {
-		warnings = append(warnings, "The hotspot runs on 2.4 GHz: this Wi-Fi adapter can't use 5 GHz.")
+	if band := a.hotspotBand(); band != a.cfg.Hotspot.Band {
+		warnings = append(warnings, fmt.Sprintf("The hotspot runs on %s: this Wi-Fi adapter can't use %s.",
+			bandLabel(band), bandLabel(a.cfg.Hotspot.Band)))
 	}
 	if a.hotspotSecurity() != a.cfg.Hotspot.Security {
 		warnings = append(warnings, "The hotspot runs as WPA2/WPA3: this Wi-Fi adapter can't run WPA3 only.")
 	}
+	if a.hotspotFallback != "" {
+		warnings = append(warnings, a.hotspotFallback)
+	}
 	return warnings
+}
+
+// bandLabel is a band as people read it: "2.4 GHz", "5 GHz", "6 GHz".
+func bandLabel(band config.Band) string {
+	return strings.Replace(string(band), "GHz", " GHz", 1)
 }

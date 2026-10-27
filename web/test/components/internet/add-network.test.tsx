@@ -155,3 +155,24 @@ describe('nearby networks', () => {
     expect(await screen.findByText('The radio is busy.')).toBeTruthy();
   });
 });
+
+describe('nearby networks', () => {
+  it('say which Wi-Fi standard they offer', () => {
+    const device = fakeDevice((router) => {
+      router.nearbyNetworks = [
+        {
+          ssid: 'Lab 6E',
+          signalDbm: -48,
+          frequencyMhz: 6135,
+          security: 'personal',
+          label: 'WPA3-Personal',
+          standard: 'wifi6e',
+        },
+        { ssid: 'Old Café', signalDbm: -70, frequencyMhz: 2437, security: 'open', label: 'Open' },
+      ];
+    });
+    renderScreen(<InternetScreen />, device, '/internet');
+    expect(screen.getByText(/WPA3-Personal · 6 GHz · Wi-Fi 6E/)).toBeTruthy();
+    expect(screen.getByText(/Open · 2.4 GHz · -70/)).toBeTruthy();
+  });
+});

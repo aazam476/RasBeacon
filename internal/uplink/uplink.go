@@ -94,6 +94,11 @@ type WiFiStatus struct {
 	// (wrong username or password, or the server failed RasBeacon's
 	// certificate check). wpa_supplicant then waits before trying again.
 	LoginFailed bool
+	// Generation is the Wi-Fi generation both sides agreed on when joining
+	// (4 to 7; 0 when unknown), from wpa_supplicant's "wifi_generation".
+	// It is more exact than the rates, which some drivers' rate control
+	// reports in an older standard's terms.
+	Generation int
 }
 
 // Connected reports whether the Wi-Fi uplink has joined a network.
@@ -120,6 +125,8 @@ func ParseWPAStatus(out string) WiFiStatus {
 			s.KeyMgmt = value
 		case "id":
 			s.NetworkID = value
+		case "wifi_generation":
+			s.Generation, _ = strconv.Atoi(value)
 		case "Supplicant PAE state":
 			// HELD means "the last login failed, waiting before retrying".
 			s.LoginFailed = s.LoginFailed || value == "HELD"
@@ -169,6 +176,10 @@ type NearbyNetwork struct {
 	Security     string `json:"security"`
 	// Label names the exact kind of security, e.g. "WPA2/WPA3-Personal".
 	Label string `json:"label"`
+	// Standard is the newest Wi-Fi standard the network offers ("wifi7",
+	// "wifi6e", "wifi6", "wifi5", "wifi4"; "" when unknown or older), from
+	// ScanStandards.
+	Standard string `json:"standard,omitempty"`
 }
 
 // ParseScanResults reads `wpa_cli scan_results` output. Each network name
@@ -349,4 +360,140 @@ func ParseSignalPoll(out string) int {
 		}
 	}
 	return 0
+}
+
+// --- iw dev <uplink> link ---
+
+// Link is the Wi-Fi standard, channel width and speed of the uplink's
+// connection, from `iw dev <uplink> link`, which shows the rates in use:
+//
+//	freq: 5180
+//	rx bitrate: 1200.9 MBit/s 80MHz HE-MCS 11 HE-NSS 2 HE-GI 0 HE-DCM 0
+//	tx bitrate: 864.7 MBit/s 80MHz HE-MCS 8 HE-NSS 2 HE-GI 0 HE-DCM 0
+//
+// The kind of rate names the standard: MCS (Wi-Fi 4), VHT-MCS (Wi-Fi 5),
+// HE-MCS (Wi-Fi 6, or 6E on 6 GHz) and EHT-MCS (Wi-Fi 7).
+type Link struct {
+	// Standard is "wifi7", "wifi6e", "wifi6", "wifi5", "wifi4", or ""
+	// for older (802.11a/b/g) rates or when not connected.
+	Standard string
+	// WidthMHz is the channel width the rates use (20 when not given).
+	WidthMHz int
+	// RxMbps and TxMbps are the current rates, received and sent.
+	RxMbps, TxMbps float64
+}
+
+// StandardOf names the standard for a Wi-Fi generation (4 to 7) on a
+// frequency: Wi-Fi 6 on 6 GHz is "wifi6e". "" for anything else.
+func StandardOf(generation, freqMHz int) string {
+	switch {
+	case generation == 6 && freqMHz >= 5925:
+		return "wifi6e"
+	case generation >= 4 && generation <= 7:
+		return "wifi" + strconv.Itoa(generation)
+	}
+	return ""
+}
+
+// ParseLink reads `iw dev <uplink> link` output.
+func ParseLink(out string) Link {
+	var link Link
+	freq := 0
+	best := 0 // the newest standard seen in either rate
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimSpace(line)
+		if value, ok := strings.CutPrefix(line, "freq:"); ok {
+			f, _ := strconv.ParseFloat(strings.TrimSpace(value), 64)
+			freq = int(f)
+			continue
+		}
+		rate, rx := strings.CutPrefix(line, "rx bitrate:")
+		if !rx {
+			var tx bool
+			if rate, tx = strings.CutPrefix(line, "tx bitrate:"); !tx {
+				continue
+			}
+		}
+		fields := strings.Fields(rate)
+		if len(fields) == 0 {
+			continue
+		}
+		mbps, _ := strconv.ParseFloat(fields[0], 64)
+		if rx {
+			link.RxMbps = mbps
+		} else {
+			link.TxMbps = mbps
+		}
+		for _, field := range fields[1:] {
+			switch {
+			case field == "EHT-MCS":
+				best = max(best, 7)
+			case field == "HE-MCS":
+				best = max(best, 6)
+			case field == "VHT-MCS":
+				best = max(best, 5)
+			case field == "MCS":
+				best = max(best, 4)
+			case strings.HasSuffix(field, "MHz"):
+				if width, err := strconv.Atoi(strings.TrimSuffix(field, "MHz")); err == nil {
+					link.WidthMHz = max(link.WidthMHz, width)
+				}
+			}
+		}
+	}
+	link.Standard = StandardOf(best, freq)
+	if link.WidthMHz == 0 && (link.RxMbps > 0 || link.TxMbps > 0) {
+		link.WidthMHz = 20
+	}
+	return link
+}
+
+// --- iw dev <uplink> scan dump ---
+
+// ScanStandards reads `iw dev <uplink> scan dump` (the last scan's results,
+// with each access point's capabilities) and returns, by network name,
+// the newest Wi-Fi standard any of its access points offers. Each access
+// point is a block:
+//
+//	BSS aa:bb:cc:dd:ee:ff(on wlan1)
+//		freq: 5180
+//		SSID: Hotel
+//		HT capabilities:
+//		VHT capabilities:
+//		HE capabilities:
+//
+// HT is Wi-Fi 4, VHT Wi-Fi 5, HE Wi-Fi 6 (6E on 6 GHz) and EHT Wi-Fi 7.
+func ScanStandards(out string) map[string]string {
+	rank := map[string]int{"wifi4": 1, "wifi5": 2, "wifi6": 3, "wifi6e": 4, "wifi7": 5}
+	standards := map[string]string{}
+	ssid, freq, best := "", 0, 0
+	finish := func() {
+		standard := StandardOf(best, freq)
+		if ssid != "" && standard != "" && rank[standard] > rank[standards[ssid]] {
+			standards[ssid] = standard
+		}
+		ssid, freq, best = "", 0, 0
+	}
+	for _, line := range strings.Split(out, "\n") {
+		trimmed := strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(line, "BSS "):
+			finish()
+		case strings.HasPrefix(trimmed, "freq:"):
+			f, _ := strconv.ParseFloat(strings.TrimSpace(strings.TrimPrefix(trimmed, "freq:")), 64)
+			freq = int(f)
+		case strings.HasPrefix(trimmed, "SSID: "):
+			ssid = DecodeSSID(strings.TrimPrefix(trimmed, "SSID: "))
+		case strings.HasPrefix(trimmed, "EHT capabilities"):
+			best = max(best, 7)
+		case strings.HasPrefix(trimmed, "HE capabilities"):
+			best = max(best, 6)
+		case strings.HasPrefix(trimmed, "VHT capabilities"):
+			best = max(best, 5)
+		case strings.HasPrefix(trimmed, "HT capabilities"):
+			best = max(best, 4)
+		}
+	}
+	finish()
+	return standards
 }

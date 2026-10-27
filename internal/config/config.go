@@ -51,6 +51,9 @@ const (
 	Band2GHz Band = "2.4GHz"
 	// Band5GHz is faster but has shorter range.
 	Band5GHz Band = "5GHz"
+	// Band6GHz (Wi-Fi 6E) is the fastest and least crowded, with the
+	// shortest range; only Wi-Fi 6E devices see it, and it must use WPA3.
+	Band6GHz Band = "6GHz"
 )
 
 // Security is the kind of password protection the hotspot uses.
@@ -984,14 +987,20 @@ func (h HotspotConfig) Validate() error {
 	if err := ValidateSSID(h.SSID); err != nil {
 		return &ValidationError{Field: "hotspot.ssid", Message: err.Error()}
 	}
-	if h.Band != Band2GHz && h.Band != Band5GHz {
-		return &ValidationError{Field: "hotspot.band", Message: `Must be "2.4GHz" or "5GHz".`}
+	if h.Band != Band2GHz && h.Band != Band5GHz && h.Band != Band6GHz {
+		return &ValidationError{Field: "hotspot.band", Message: `Must be "2.4GHz", "5GHz" or "6GHz".`}
 	}
 	if h.Security != SecurityWPA2WPA3 && h.Security != SecurityWPA2 && h.Security != SecurityWPA3 {
 		return &ValidationError{Field: "hotspot.security", Message: `Must be "wpa2-wpa3", "wpa2" or "wpa3".`}
 	}
 	if h.Channel != 0 && !IsAllowedChannel(h.Band, h.Channel) {
 		return &ValidationError{Field: "hotspot.channel", Message: "This channel is not offered for this band."}
+	}
+	if h.Band == Band6GHz && h.Security != SecurityWPA3 {
+		return &ValidationError{Field: "hotspot.security", Message: "A 6 GHz hotspot must be WPA3 only."}
+	}
+	if h.Band == Band6GHz && h.Standard != "" && h.Standard != StandardWiFi6 {
+		return &ValidationError{Field: "hotspot.standard", Message: "A 6 GHz hotspot runs Wi-Fi 6."}
 	}
 	switch h.Standard {
 	case "", StandardWiFi6, StandardWiFi4:
@@ -1043,9 +1052,13 @@ func ValidateWiFiPassword(password string) error {
 // allowedChannels lists the channels RasBeacon offers per band. For 5 GHz we
 // only offer channels that need no radar detection ("non-DFS"), because USB
 // Wi-Fi adapters are not verified to handle radar detection correctly.
+//
+// For 6 GHz we offer the "preferred scanning channels" (PSC): phones look
+// for 6 GHz networks there first, so a hotspot on one is found quickly.
 var allowedChannels = map[Band][]int{
 	Band2GHz: {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11},
 	Band5GHz: {36, 40, 44, 48, 149, 153, 157, 161, 165},
+	Band6GHz: {5, 21, 37, 53, 69, 85, 101, 117, 133, 149, 165, 181, 197, 213, 229},
 }
 
 // OfferedChannels lists the channels RasBeacon offers for band, before a
@@ -1064,10 +1077,27 @@ func IsAllowedChannel(band Band, channel int) bool {
 
 // DefaultChannel is used when HotspotConfig.Channel is 0.
 func DefaultChannel(band Band) int {
-	if band == Band5GHz {
+	switch band {
+	case Band5GHz:
 		return 36
+	case Band6GHz:
+		return 37
 	}
 	return 6
+}
+
+// ChannelMHz is a channel's center frequency in band (6 GHz numbers its
+// channels from 5950 MHz, so its numbers repeat 2.4 and 5 GHz ones).
+func ChannelMHz(band Band, channel int) int {
+	switch {
+	case band == Band6GHz:
+		return 5950 + 5*channel
+	case channel == 14:
+		return 2484
+	case channel < 14:
+		return 2407 + 5*channel
+	}
+	return 5000 + 5*channel
 }
 
 // Clone returns a copy of c that can be changed without affecting c. A plain

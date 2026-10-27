@@ -15,7 +15,7 @@ export type Mode =
   | 'normal' // setup is done, the hotspot is running
   | 'no-radio'; // no Wi-Fi radio that can run a hotspot
 
-export type Band = '2.4GHz' | '5GHz';
+export type Band = '2.4GHz' | '5GHz' | '6GHz';
 
 /** "wpa2-wpa3" lets new devices use WPA3; "wpa2" is for old devices. */
 export type Security = 'wpa2-wpa3' | 'wpa2' | 'wpa3';
@@ -69,10 +69,10 @@ export interface ClaimResponse {
 
 // --- Status (GET /api/v1/status) -------------------------------------------------------------
 
-/** One Wi-Fi radio found in the router. */
 /** What a Wi-Fi radio does. */
 export type RadioRole = 'hotspot' | 'uplink' | 'guest' | 'unused';
 
+/** One Wi-Fi radio found in the router. */
 export interface Radio {
   interface: string;
   /** The radio's own MAC address: how RasBeacon remembers it (names change). */
@@ -87,6 +87,10 @@ export interface Radio {
   role: RadioRole;
   /** The owner chose this role (System page); otherwise RasBeacon did. */
   chosen?: boolean;
+  /** What it can run as a hotspot: Wi-Fi 6, 6 GHz (Wi-Fi 6E), Wi-Fi 7 (not used yet). */
+  hasWifi6?: boolean;
+  has6GHz?: boolean;
+  hasWifi7?: boolean;
 }
 
 /** One device connected to the hotspot or the guest network. */
@@ -178,7 +182,15 @@ export interface WiFiUplinkStatus {
   bssid?: string;
   channel?: number;
   frequencyMhz?: number;
+  /** The connection's Wi-Fi standard, channel width and current rates each way. */
+  standard?: UplinkStandard;
+  widthMhz?: number;
+  rxMbps?: number;
+  txMbps?: number;
 }
+
+/** The Wi-Fi standard of a connection or of a nearby network. */
+export type UplinkStandard = 'wifi7' | 'wifi6e' | 'wifi6' | 'wifi5' | 'wifi4';
 
 export type EthernetRole = 'uplink' | 'client-port';
 
@@ -449,6 +461,8 @@ export interface HotspotSettings {
   standard?: WiFiStandard;
   /** Read-only: the hotspot's radio can't run Wi-Fi 6, so it isn't offered. */
   noWifi6?: boolean;
+  /** Read-only: the hotspot's radio can run a 6 GHz (Wi-Fi 6E) hotspot, so the band is offered. */
+  has6GHz?: boolean;
 }
 
 /** A Wi-Fi standard the hotspot can run: 802.11ax, 802.11ac (5 GHz only) or 802.11n. */
@@ -691,6 +705,8 @@ export interface NearbyNetwork {
   security: 'open' | 'personal' | 'enterprise' | 'other';
   /** The exact kind, e.g. "WPA2/WPA3-Enterprise". */
   label: string;
+  /** The newest Wi-Fi standard it offers, when known. */
+  standard?: UplinkStandard;
 }
 
 /**

@@ -118,10 +118,25 @@ func TestReadings_WiFiAccessPoint(t *testing.T) {
 	e.fakeUplink("wlan0", "192.168.4.20", "24", false)
 	e.runner.outputs["wpa_cli -p "+e.paths.WPAControlDir()+" -i wlan0 status"] =
 		"bssid=aa:bb:cc:dd:ee:ff\nwpa_state=COMPLETED\nssid=Hotel\nfreq=5180\nkey_mgmt=WPA2-PSK\n"
+	e.runner.outputs["iw dev wlan0 link"] = "\tfreq: 5180\n\trx bitrate: 1200.9 MBit/s 80MHz HE-MCS 11 HE-NSS 2\n" +
+		"\ttx bitrate: 864.7 MBit/s 80MHz HE-MCS 8 HE-NSS 2\n"
 	e.check()
 	w := e.agent.Status().Uplink.WiFi
 	if w.BSSID != "aa:bb:cc:dd:ee:ff" || w.FrequencyMHz != 5180 || w.Channel != 36 {
 		t.Errorf("wifi = %+v", w)
+	}
+	if w.Standard != "wifi6" || w.WidthMHz != 80 || w.RxMbps != 1200.9 || w.TxMbps != 864.7 {
+		t.Errorf("the connection's standard and rates = %+v", w)
+	}
+
+	// wpa_supplicant's agreed generation wins over the rates (here plain
+	// 802.11n rates on a Wi-Fi 6E connection).
+	e.runner.outputs["wpa_cli -p "+e.paths.WPAControlDir()+" -i wlan0 status"] =
+		"bssid=aa:bb:cc:dd:ee:ff\nwpa_state=COMPLETED\nssid=Hotel\nfreq=6135\nkey_mgmt=SAE\nwifi_generation=6\n"
+	e.runner.outputs["iw dev wlan0 link"] = "\tfreq: 6135\n\trx bitrate: 65.0 MBit/s MCS 7\n"
+	e.check()
+	if w := e.agent.Status().Uplink.WiFi; w.Standard != "wifi6e" || w.RxMbps != 65 {
+		t.Errorf("with wifi_generation: %+v", w)
 	}
 	if wifiChannel(2437) != 6 || wifiChannel(2484) != 14 || wifiChannel(5975) != 5 {
 		t.Error("channel numbers")

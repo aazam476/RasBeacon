@@ -91,7 +91,7 @@ describe('hotspot form', () => {
 
   // The channels come from the router's regulatory database, for the country typed.
   describe('channels by country', () => {
-    const japan = { '2.4GHz': [1, 6, 11], '5GHz': [36, 40, 44, 48] };
+    const japan = { '2.4GHz': [1, 6, 11], '5GHz': [36, 40, 44, 48], '6GHz': [] };
 
     it('offers only the channels the country allows', async () => {
       const device = fakeDevice(undefined, { hotspotChannels: async () => japan });
@@ -137,7 +137,7 @@ describe('hotspot form', () => {
         (router) => {
           router.hotspotSettings = { ...router.hotspotSettings, band: '5GHz', channel: 0 };
         },
-        { hotspotChannels: async () => ({ '2.4GHz': [1, 6, 11], '5GHz': [] }) },
+        { hotspotChannels: async () => ({ '2.4GHz': [1, 6, 11], '5GHz': [], '6GHz': [] }) },
       );
       const { user } = renderScreen(<HotspotScreen />, device, '/hotspot');
       expect(await screen.findByText("This country doesn't allow a hotspot on 5 GHz.")).toBeTruthy();

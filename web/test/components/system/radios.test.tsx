@@ -88,6 +88,17 @@ describe('Wi-Fi radios', () => {
     expect(await sheet.findByText(/isn’t plugged in any more/)).toBeTruthy();
   });
 
+  it('says the newest standard each radio can run a hotspot with', () => {
+    renderSystem((router) => {
+      withSecondAdapter(router);
+      Object.assign(router.status.radios[2], { hasWifi6: true, has6GHz: true });
+      Object.assign(router.status.radios[1], { hasWifi6: true, hasWifi7: true });
+    });
+    const radios = within(section('Wi-Fi radios'));
+    expect(radios.getByText(/mt7921u · wlan2 · Wi-Fi 6E/)).toBeTruthy();
+    expect(radios.getByText(/Wi-Fi 7 · can broadcast 2 networks/)).toBeTruthy();
+  });
+
   it('can’t be changed with one radio', () => {
     renderSystem((router) => (router.status.radios = [router.status.radios[1]]));
     expect(screen.queryByRole('button', { name: 'Change what each radio does' })).toBeNull();

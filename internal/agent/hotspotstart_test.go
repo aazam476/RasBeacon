@@ -168,8 +168,9 @@ func TestHotspot_Saved5GHzRunsOn2GHzOnARadioWithout5GHz(t *testing.T) {
 func TestHotspot_ChannelsFollowTheCountry(t *testing.T) {
 	e := newClaimedEnv(t, false)
 	for country, want := range map[string]map[config.Band][]int{
-		"US": {config.Band2GHz: {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}, config.Band5GHz: {36, 40, 44, 48, 149, 153, 157, 161, 165}},
-		"JP": {config.Band2GHz: {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}, config.Band5GHz: {36, 40, 44, 48}},
+		// This adapter can't run a 6 GHz hotspot: no 6 GHz channels.
+		"US": {config.Band2GHz: {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}, config.Band5GHz: {36, 40, 44, 48, 149, 153, 157, 161, 165}, config.Band6GHz: {}},
+		"JP": {config.Band2GHz: {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}, config.Band5GHz: {36, 40, 44, 48}, config.Band6GHz: {}},
 	} {
 		got, err := e.agent.HotspotChannels(api.HotspotChannelsRequest{Country: country})
 		if err != nil || !reflect.DeepEqual(got.Channels, want) {

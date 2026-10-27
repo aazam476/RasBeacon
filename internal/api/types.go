@@ -361,6 +361,13 @@ type WiFiUplinkStatus struct {
 	BSSID        string `json:"bssid,omitempty"`
 	Channel      int    `json:"channel,omitempty"`
 	FrequencyMHz int    `json:"frequencyMhz,omitempty"`
+	// Standard is the Wi-Fi standard of the connection: "wifi7",
+	// "wifi6e", "wifi6", "wifi5" or "wifi4" ("" for older ones), with
+	// the channel width and the current rates each way.
+	Standard string  `json:"standard,omitempty"`
+	WidthMHz int     `json:"widthMhz,omitempty"`
+	RxMbps   float64 `json:"rxMbps,omitempty"`
+	TxMbps   float64 `json:"txMbps,omitempty"`
 }
 
 // EthernetUplinkStatus describes the Ethernet port.
@@ -722,6 +729,9 @@ type HotspotSettings struct {
 	// NoWiFi6 is true when the hotspot's radio can't run Wi-Fi 6, so the
 	// page doesn't offer it. Read-only.
 	NoWiFi6 bool `json:"noWifi6,omitempty"`
+	// Has6GHz is true when the hotspot's radio can run a 6 GHz (Wi-Fi 6E)
+	// hotspot, so the page offers the band. Read-only.
+	Has6GHz bool `json:"has6GHz,omitempty"`
 }
 
 // HotspotChannelsRequest asks which channels a country allows (POST

@@ -351,12 +351,16 @@ func TestScanNearby_HidesOwnHotspot(t *testing.T) {
 		"bssid / frequency / signal level / flags / ssid\n" +
 			"aa:00:00:00:00:01\t2437\t-30\t[WPA2-PSK-CCMP][SAE-CCMP][ESS]\tAli's Travel Wi-Fi\n" +
 			"aa:00:00:00:00:02\t2412\t-60\t[ESS]\tHotel Guest\n"
+	e.runner.outputs["iw dev wlan0 scan dump"] = "BSS aa:00:00:00:00:02(on wlan0)\n\tfreq: 2412\n\tSSID: Hotel Guest\n\tHT capabilities:\n\tHE capabilities:\n"
 	resp, err := e.agent.ScanNearby()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(resp.Networks) != 1 || resp.Networks[0].SSID != "Hotel Guest" {
 		t.Errorf("got %+v, want only Hotel Guest", resp.Networks)
+	}
+	if resp.Networks[0].Standard != "wifi6" {
+		t.Errorf("the hotel offers Wi-Fi 6: %+v", resp.Networks[0])
 	}
 }
 
@@ -369,12 +373,16 @@ func TestScanNearby_HidesAndRefusesTheGuestNetworkToo(t *testing.T) {
 		"bssid / frequency / signal level / flags / ssid\n" +
 			"52:3e:aa:12:34:56\t2437\t-30\t[WPA2-PSK-CCMP][ESS]\tAli's Guests\n" +
 			"aa:00:00:00:00:02\t2412\t-60\t[ESS]\tHotel Guest\n"
+	e.runner.outputs["iw dev wlan0 scan dump"] = "BSS aa:00:00:00:00:02(on wlan0)\n\tfreq: 2412\n\tSSID: Hotel Guest\n\tHT capabilities:\n\tHE capabilities:\n"
 	resp, err := e.agent.ScanNearby()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(resp.Networks) != 1 || resp.Networks[0].SSID != "Hotel Guest" {
 		t.Errorf("got %+v, want only Hotel Guest", resp.Networks)
+	}
+	if resp.Networks[0].Standard != "wifi6" {
+		t.Errorf("the hotel offers Wi-Fi 6: %+v", resp.Networks[0])
 	}
 
 	// Saving either of RasBeacon's own networks as the uplink is refused.

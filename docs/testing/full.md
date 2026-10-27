@@ -102,6 +102,11 @@ first if you want them; everything else works from the web pages alone.
    networks now".
 4. Unplug Ethernet. **Expect:** within about 20 s Status shows
    *Connected to Wi-Fi "…"* with signal and band; websites load.
+   **Wi-Fi standard (new):** Internet → the connection shows *Wi-Fi*
+   (like *Wi-Fi 6, 80 MHz* for a Wi-Fi 6 router and adapter, *Wi-Fi 5* for
+   a Wi-Fi 5 router) and *Link speed*; the nearby networks list names each
+   network's standard. With a 6E adapter and a 6 GHz router, it can join
+   on 6 GHz and shows *Wi-Fi 6E*.
 5. Plug Ethernet back in. **Expect:** it switches back to Ethernet. Unplug
    it again for the next sections.
 6. **WPA-Enterprise (if you can, e.g. eduroam):** connect RasBeacon to any
@@ -416,6 +421,16 @@ Keep the VPN on with the kill switch.
    devices**, **Save**: phones still join (a Wi-Fi analyzer app shows no
    802.11ac/ax). Choose the recommended one again. With a Wi-Fi 6 adapter,
    check a Wi-Fi 5 laptop and a Wi-Fi 4 device still join.
+   **Wi-Fi 6E hotspot (new, needs a 6E adapter such as an MT7921AU, in a
+   country that allows 6 GHz hotspots, such as `DE`, `GB` or `JP`; not the
+   US):** Band → **6 GHz**. **Expect:** Security shows only *WPA3 only* and
+   the standard *Wi-Fi 6E*; **Save**: a 6E phone or laptop sees the network
+   on 6 GHz and joins it (a Wi-Fi analyzer app shows channel 37 or the one
+   picked, 802.11ax). Devices without 6E don't see it. Country `US`: the
+   Band list has no 6 GHz. Switch back to 5 GHz: Security returns to
+   *WPA2/WPA3*. Status shows no warning about the adapter's features
+   (*SSH:* `grep -E "ht_capab|vht_capab|he_su" /run/rbd/hostapd.conf`
+   lists the adapter's own features).
 4. **Allowed devices (new):** *Who can join* → *Allowed devices* → turn on
    **Only allow these devices**. **Expect:** a warning that the device
    you're using isn't on the list, with **Add this device**; **Save**
@@ -478,6 +493,8 @@ Keep the VPN on with the kill switch.
     choose **Hotspot** for the built-in Wi-Fi: the sheet warns it holds
     about 8 devices; save, **don't** press Keep, and wait 3 minutes:
     RasBeacon goes back to the adapter by itself.
+    System → *Wi-Fi radios*: each radio's details name the newest standard
+    it can run (*Wi-Fi 6E* for an MT7921AU).
 
 ## 13. Plugins (new)
 
@@ -716,7 +733,7 @@ Board (Pi 4/5/3B/3B+/Zero 2 W) / RAM:     Adapter:          Card size:          
 1  First boot: setup network after __ s; opened by itself iPhone/Android:
 2  Setup + login (mismatch caught, wrong password refused, stay logged in):
 3  Storage shows full card (__ GB): / swap row 2 GB: / 4 GB, Off, 2 GB save: / SSH swapon+swappiness:
-4  Ethernet: / scan lists networks: / Wi-Fi uplink + switch: / eduroam: / hotspot move kept working 15 min: / renew, disconnect: / phone over USB (Android, iPhone, modem: which): / ModemManager modem (wrong PIN tried once, connects): / cloned and random MAC (Wi-Fi, Ethernet):
+4  Ethernet: / scan lists networks: / Wi-Fi uplink + switch: / uplink standard + link speed shown: / eduroam: / hotspot move kept working 15 min: / renew, disconnect: / phone over USB (Android, iPhone, modem: which): / ModemManager modem (wrong PIN tried once, connects): / cloned and random MAC (Wi-Fi, Ethernet):
 5  dns.google saved as full address: / leak test shows Google: / rbdoh running: / Cloudflare+1.1.1.1: / bad entry refused: / plain only, rbdoh stopped: / back to network's:
 6  Count + this device: / traffic rates: / pause + reboot-proof: / disconnect: / flush lease: / rename pencil: / data limit without metered: / fixed address: / port forward from uplink side + hotspot, with VPN: / IPv6 pinhole: / priority device ping idle __ ms, busy __ ms, laptop busy __ ms:
 7  Laptop on client port gets address+internet: / listed with cable icon, no Disconnect: / leaves list: / safety warning: / USB Ethernet for devices + not used on a router:
@@ -724,7 +741,7 @@ Board (Pi 4/5/3B/3B+/Zero 2 W) / RAM:     Adapter:          Card size:          
 9  Speed test: down __ up __ ping __ location __, took __ s / speed.cloudflare.com: down __ up __
 10 Login page notice: / zero-leak login worked, tap delay __ s: / no leak: / login mode:
 11 SSH: / pages OK phone+laptop+dark: / rounded focus outline: / readings: / stay logged in: / unsaved bar:
-12 Hotspot password check + 5 GHz: / UK refused, GB saves: / JP channels end at 48: / show password (no admin password): / WPA3 only: / Wi-Fi standard (6 if the adapter can, 4 for old devices): / allowed devices + lockout warning: / device limit: / metered: / guests isolated: / welcome page + code + ask again: / guest radio of its own + keep + goes back by itself: / rbd restart with guests, uplink not guest0: / IPv6: / HTTPS fingerprint + redirect: / iPhone Safari accepts the certificate:
+12 Hotspot password check + 5 GHz: / UK refused, GB saves: / JP channels end at 48: / show password (no admin password): / WPA3 only: / Wi-Fi standard (6 if the adapter can, 4 for old devices): / 6 GHz hotspot (country __), 6E device joins, none in US: / radio details show standard: / allowed devices + lockout warning: / device limit: / metered: / guests isolated: / welcome page + code + ask again: / guest radio of its own + keep + goes back by itself: / rbd restart with guests, uplink not guest0: / IPv6: / HTTPS fingerprint + redirect: / iPhone Safari accepts the certificate:
 13 Plugins: catalog install AdGuard: / isolation: / ports: / Samba: / crash stop: / changed byte refused: / image with another plugin's name refused, AdGuard unchanged: / kept data asked about: / rbport + bridge table:
 14 Version before __ / renamed image refused: / changed byte refused: / update installed, settings kept, took __ min: / rollback: / check schedule + Check now: / ntfy test + new-version notice:
 15 Power cuts x3: / reboot dialog: / shut down + power on: / rename to travel-pi.lan: / long run __ devices __ min, drops: / memory: / diagnostics clean:

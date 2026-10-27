@@ -113,6 +113,10 @@ const SetupWindow = 30 * time.Minute
 // "success" page before its connection drops.
 const switchDelay = 5 * time.Second
 
+// hostapdSettle is how long hostapd gets to start before rbd checks
+// whether it refused its configuration (see startHostapd).
+const hostapdSettle = 3 * time.Second
+
 // Agent holds all of rbd's state. Create it with New and call Start once.
 type Agent struct {
 	// restoring is held while a backup is uploaded or restored, so two
@@ -150,6 +154,9 @@ type Agent struct {
 	appliedPinholes string
 	// qos is the priority devices' queues (see qos.go).
 	qos qosState
+	// hotspotFallback says why the hotspot runs with simpler settings
+	// than it should ("" when it doesn't; see startHostapd).
+	hotspotFallback string
 	// radioRolesDeadline is when new radio roles that weren't kept go
 	// back (zero: nothing waits; see radioroles.go).
 	radioRolesDeadline time.Time
@@ -638,6 +645,9 @@ func (a *Agent) ownerHotspot() (render.HotspotInput, error) {
 		Standard:   a.hotspotStandard(),
 		Guest:      a.guestHostapd(),
 	}
+	if r := a.hotspotRadio(); r != nil {
+		hotspot.Caps = r.Caps[bandNumber(hotspot.Band)]
+	}
 	if a.cfg.Access.AllowListOn {
 		list := strings.Join(a.cfg.Access.Allowed, "\n") + "\n"
 		if err := config.WriteFileAtomic(a.paths.HostapdAcceptFile(), []byte(list), 0o600); err != nil {
@@ -651,22 +661,74 @@ func (a *Agent) ownerHotspot() (render.HotspotInput, error) {
 // applyHotspotAndDHCP writes hostapd.conf and dnsmasq.conf and restarts both
 // programs. captive=true makes every DNS name point at RasBeacon (setup mode).
 func (a *Agent) applyHotspotAndDHCP(hotspot render.HotspotInput, captive bool) error {
-	hostapdConf, err := render.Hostapd(hotspot)
-	if err != nil {
-		return err
-	}
-	// hostapd.conf contains the Wi-Fi password, so only root may read it.
-	if err := config.WriteFileAtomic(a.paths.HostapdConfig(), []byte(hostapdConf), 0o600); err != nil {
-		return err
-	}
 	// The same hostapd runs the guest network's radio, if it has its own.
 	if err := a.writeGuestRadioConfig(hotspot); err != nil {
 		return err
 	}
-	if err := system.ServiceRestart(a.runner, hostapdService); err != nil {
-		return fmt.Errorf("starting the hotspot: %w", err)
+	if err := a.startHostapd(hotspot); err != nil {
+		return err
 	}
 	return a.applyDHCP(captive)
+}
+
+// startHostapd writes hostapd.conf and restarts hostapd. When hostapd
+// refuses the radio's Wi-Fi 6 or 5 settings (a driver that reports more
+// than it can do), it tries again without its extra capabilities, then as
+// Wi-Fi 4, rather than leave the owner without a hotspot; hotspotWarnings
+// says so.
+func (a *Agent) startHostapd(hotspot render.HotspotInput) error {
+	a.hotspotFallback = ""
+	attempts := []struct {
+		input render.HotspotInput
+		note  string
+	}{{input: hotspot}}
+	if hotspot.Caps.Known() {
+		plain := hotspot
+		plain.Caps = radio.BandCaps{}
+		attempts = append(attempts, struct {
+			input render.HotspotInput
+			note  string
+		}{plain, "The hotspot runs without some of its adapter's Wi-Fi features: hostapd refused them."})
+	}
+	if hotspot.Standard != config.StandardWiFi4 {
+		oldest := hotspot
+		oldest.Caps, oldest.Standard = radio.BandCaps{}, config.StandardWiFi4
+		attempts = append(attempts, struct {
+			input render.HotspotInput
+			note  string
+		}{oldest, "The hotspot runs as Wi-Fi 4: hostapd refused this adapter's Wi-Fi 5 and 6 settings."})
+	}
+	for i, attempt := range attempts {
+		conf, err := render.Hostapd(attempt.input)
+		if err != nil {
+			return err
+		}
+		// hostapd.conf contains the Wi-Fi password, so only root may read it.
+		if err := config.WriteFileAtomic(a.paths.HostapdConfig(), []byte(conf), 0o600); err != nil {
+			return err
+		}
+		if err := system.ServiceRestart(a.runner, hostapdService); err != nil {
+			return fmt.Errorf("starting the hotspot: %w", err)
+		}
+		a.hotspotFallback = attempt.note
+		if i == len(attempts)-1 || !a.hostapdRefused() {
+			return nil
+		}
+		slog.Warn("hostapd refused the hotspot's settings; trying simpler ones", "attempt", i+1)
+	}
+	return nil
+}
+
+// hostapdRefused reports whether hostapd stopped right after starting
+// (systemd then restarts it, or gave up): it refused its configuration.
+func (a *Agent) hostapdRefused() bool {
+	a.sleep(hostapdSettle)
+	state, _ := a.runner.Run("systemctl", "is-active", hostapdService)
+	switch strings.TrimSpace(state) {
+	case "activating", "failed":
+		return true
+	}
+	return false
 }
 
 // applyDHCP writes dnsmasq.conf for the current hotspot network and uplink,

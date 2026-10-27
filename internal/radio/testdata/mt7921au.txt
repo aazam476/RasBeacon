@@ -1,0 +1,84 @@
+Wiphy phy1
+	wiphy index: 1
+	max # scan SSIDs: 4
+	Supported Ciphers:
+		* WEP40 (00-0f-ac:1)
+		* CCMP-128 (00-0f-ac:4)
+		* CMAC (00-0f-ac:6)
+	Available Antennas: TX 0x3 RX 0x3
+	Supported interface modes:
+		 * managed
+		 * AP
+		 * AP/VLAN
+		 * monitor
+	Band 1:
+		Capabilities: 0x9ff
+			RX LDPC
+			HT20/HT40
+			SM Power Save disabled
+			RX Greenfield
+			RX HT20 SGI
+			RX HT40 SGI
+			TX STBC
+			RX STBC 1-stream
+			Max AMSDU length: 7935 bytes
+			No DSSS/CCK HT40
+		Maximum RX AMPDU length 65535 bytes (exponent: 0x003)
+		Minimum RX AMPDU time spacing: No restriction (0x00)
+		HE Iftypes: managed
+			HE MAC Capabilities (0x08011a000040):
+				+HTC HE Supported
+			HE PHY Capabilities: (0x2270ce120dc0b306...):
+				HE40/2.4GHz
+				SU Beamformee
+				MU Beamformer
+		HE Iftypes: AP
+			HE MAC Capabilities (0x00011a000040):
+				+HTC HE Supported
+			HE PHY Capabilities: (0x2270ce120dc0b306...):
+				HE40/2.4GHz
+				SU Beamformee
+		Frequencies:
+			* 2412 MHz [1] (20.0 dBm)
+			* 2437 MHz [6] (20.0 dBm)
+	Band 2:
+		Capabilities: 0x9ff
+			RX LDPC
+			HT20/HT40
+			RX HT20 SGI
+			RX HT40 SGI
+			TX STBC
+			RX STBC 1-stream
+			Max AMSDU length: 7935 bytes
+		VHT Capabilities (0x339071b2):
+			Max MPDU length: 11454
+			Supported Channel Width: neither 160 nor 80+80
+			RX LDPC
+			short GI (80 MHz)
+			TX STBC
+			SU Beamformee
+			MU Beamformee
+			RX antenna pattern consistency
+			TX antenna pattern consistency
+		HE Iftypes: AP
+			HE MAC Capabilities (0x00011a000040):
+				+HTC HE Supported
+			HE PHY Capabilities: (0x4470ce120dc0b306...):
+				HE40/HE80/5GHz
+				SU Beamformer
+				SU Beamformee
+		Frequencies:
+			* 5180 MHz [36] (23.0 dBm)
+			* 5260 MHz [52] (23.0 dBm) (no IR, radar detection)
+	Band 4:
+		HE Iftypes: AP
+			HE MAC Capabilities (0x00011a000040):
+				+HTC HE Supported
+			HE PHY Capabilities: (0x4470ce120dc0b306...):
+				HE40/HE80/5GHz
+				SU Beamformee
+		Frequencies:
+			* 5955 MHz [1] (no IR)
+			* 6135 MHz [37] (23.0 dBm)
+	Supported commands:
+		 * new_interface

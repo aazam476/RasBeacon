@@ -81,6 +81,12 @@ RasBeacon runs the best standard the hotspot's adapter can (it reads what
 the driver allows: `iw phy`, "HE Iftypes: … AP"), and the Hotspot page only
 offers those. Older devices still join a Wi-Fi 6 network.
 
+The hotspot also claims exactly the 802.11n/ac/ax features the driver
+reports for the band (short guard intervals, LDPC, STBC, beamforming,
+larger frames), so devices use the fastest rates both sides support. If
+hostapd still refuses them, RasBeacon starts the hotspot without them, then
+as Wi-Fi 4, and the Status page says so.
+
 | Adapter | Best hotspot standard |
 |---|---|
 | MT7921AU adapters (e.g. Alfa AWUS036AXML) | Wi-Fi 6 on 2.4 and 5 GHz |
@@ -88,10 +94,47 @@ offers those. Older devices still join a Wi-Fi 6 network.
 | TP-Link Archer T3U/T4U (rtw88) | Wi-Fi 5 on 5 GHz, Wi-Fi 4 on 2.4 GHz |
 | Built-in Wi-Fi (Pi 4/5, 3B+) | Wi-Fi 5 on 5 GHz; Wi-Fi 4 on 2.4 GHz (Zero 2 W and 3B: 2.4 GHz only) |
 
-**Wi-Fi 6E (6 GHz) and Wi-Fi 7 are not offered.** Linux's MT7921AU and
-MT7925 drivers don't allow an access point on 6 GHz (the channels are
-"no IR"), and no USB adapter runs a Wi-Fi 7 access point on Linux yet. They
-come when an adapter that can is available.
+**Wi-Fi 6E (6 GHz)** is offered when two things allow it:
+
+- the adapter: its driver must list Wi-Fi 6 in AP mode on the 6 GHz band,
+  with its channels (`iw phy`, "Band 4"). The
+  System page shows "Wi-Fi 6E" next to such an adapter. Whether the
+  MT7921AU driver on the Pi's kernel allows it isn't confirmed yet:
+  report what you find.
+- the country: Linux's regulatory database lets a radio start a 6 GHz
+  network in much of Europe, the UK, Japan and Canada (in Europe and the UK
+  only up to 6425 MHz), but **not in the US**, where the whole band is
+  marked "no IR" until Linux supports the FCC's rules for it. RasBeacon
+  offers 6 GHz only where it is allowed.
+  If the Wi-Fi network RasBeacon joins for the internet announces a
+  country, Linux allows only what both countries allow, so a hotel
+  announcing "US" rules out a 6 GHz hotspot even when RasBeacon is set to
+  another country.
+
+A 6 GHz hotspot is WPA3 only (with hash-to-element), runs Wi-Fi 6 on a
+"preferred scanning channel" (5, 21, 37 …) at 80 MHz where it fits, and is
+seen only by Wi-Fi 6E devices (from about 2021). The guest network on the
+same radio follows; a guest radio of its own stays on 2.4 GHz.
+
+**Wi-Fi 7 isn't offered for the hotspot.** It needs hostapd 2.11 or newer
+(Debian 13 ships 2.10) and an adapter whose Linux driver runs a Wi-Fi 7
+access point, which no USB adapter does on the Pi's kernel yet. The System
+page shows "Wi-Fi 7" for an adapter whose driver lists it.
+
+## Wi-Fi standards on the uplink
+
+The uplink joins whatever the adapter and the network both support; the
+Internet page shows the standard in use (from the rates: Wi-Fi 4 to 7, and
+6E on 6 GHz), the channel width and the link speed both ways, and the scan
+list shows what each network offers.
+
+- **6 GHz networks (Wi-Fi 6E)** need an uplink adapter with 6 GHz (USB;
+  the Pi's built-in Wi-Fi is 2.4 and 5 GHz only), and are WPA3 only.
+  RasBeacon allows both WPA3 password methods (`sae_pwe=2`), which 6 GHz
+  needs.
+- **Wi-Fi 7 networks** are joined with one link by a Wi-Fi 7 adapter (the
+  driver handles it). Using several links at once (MLO) needs
+  wpa_supplicant 2.11, not in Debian 13.
 
 ## USB Ethernet adapters (extra wired ports for devices)
 

@@ -150,5 +150,8 @@ export function demoHotspotChannels(country: string): ChannelsByBand {
   });
   if (problem.country) throw new FieldErrors({ country: problem.country });
   const fiveGHz = HOTSPOT_CHANNELS['5GHz'].filter((channel) => country !== 'JP' || channel < 149);
-  return { '2.4GHz': [...HOTSPOT_CHANNELS['2.4GHz']], '5GHz': fiveGHz };
+  // As Linux's regulatory database has it: no 6 GHz access point in the US; Europe, the UK and
+  // Japan allow the lower part of the band (up to 6425 MHz).
+  const sixGHz = country === 'US' ? [] : HOTSPOT_CHANNELS['6GHz'].filter((channel) => 5950 + 5 * channel <= 6415);
+  return { '2.4GHz': [...HOTSPOT_CHANNELS['2.4GHz']], '5GHz': fiveGHz, '6GHz': sixGHz };
 }

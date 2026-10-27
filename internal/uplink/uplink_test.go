@@ -57,6 +57,20 @@ func TestParseWPAStatus_Connected(t *testing.T) {
 	}
 }
 
+func TestParseWPAStatus_Generation(t *testing.T) {
+	if s := ParseWPAStatus("wpa_state=COMPLETED\nfreq=2437\nwifi_generation=5\n"); s.Generation != 5 {
+		t.Errorf("generation = %d", s.Generation)
+	}
+	for _, c := range []struct {
+		generation, freq int
+		want             string
+	}{{4, 2437, "wifi4"}, {5, 5180, "wifi5"}, {6, 5180, "wifi6"}, {6, 6135, "wifi6e"}, {7, 6135, "wifi7"}, {0, 5180, ""}, {3, 2437, ""}} {
+		if got := StandardOf(c.generation, c.freq); got != c.want {
+			t.Errorf("StandardOf(%d, %d) = %q, want %q", c.generation, c.freq, got, c.want)
+		}
+	}
+}
+
 func TestParseWPAStatus_Scanning(t *testing.T) {
 	s := ParseWPAStatus("wpa_state=SCANNING\n")
 	if s.Connected() {
@@ -145,5 +159,61 @@ func TestParseTempDisabled(t *testing.T) {
 	got := ParseTempDisabled(out)
 	if len(got) != 1 || got[0] != "eduroam" {
 		t.Errorf("got %v", got)
+	}
+}
+
+func TestParseLink(t *testing.T) {
+	for name, tc := range map[string]struct {
+		out  string
+		want Link
+	}{
+		"Wi-Fi 6 at 80 MHz": {
+			"Connected to 3a:1f:22:aa:bb:cc (on wlan1)\n\tSSID: Hotel\n\tfreq: 5180\n\tsignal: -52 dBm\n" +
+				"\trx bitrate: 1200.9 MBit/s 80MHz HE-MCS 11 HE-NSS 2 HE-GI 0 HE-DCM 0\n" +
+				"\ttx bitrate: 864.7 MBit/s 80MHz HE-MCS 8 HE-NSS 2 HE-GI 0 HE-DCM 0\n",
+			Link{Standard: "wifi6", WidthMHz: 80, RxMbps: 1200.9, TxMbps: 864.7},
+		},
+		"Wi-Fi 6E": {
+			"\tfreq: 6135.0\n\trx bitrate: 2401.9 MBit/s 160MHz HE-MCS 11 HE-NSS 2\n\ttx bitrate: 6.0 MBit/s\n",
+			Link{Standard: "wifi6e", WidthMHz: 160, RxMbps: 2401.9, TxMbps: 6},
+		},
+		"Wi-Fi 7": {
+			"\tfreq: 6115\n\trx bitrate: 2882.3 MBit/s 160MHz EHT-MCS 13 EHT-NSS 2 EHT-GI 0\n",
+			Link{Standard: "wifi7", WidthMHz: 160, RxMbps: 2882.3},
+		},
+		"Wi-Fi 5, one way at 40 MHz": {
+			"\tfreq: 5745\n\trx bitrate: 433.3 MBit/s VHT-MCS 9 80MHz short GI VHT-NSS 1\n\ttx bitrate: 200.0 MBit/s MCS 7 40MHz short GI\n",
+			Link{Standard: "wifi5", WidthMHz: 80, RxMbps: 433.3, TxMbps: 200},
+		},
+		"Wi-Fi 4 at 20 MHz": {
+			"\tfreq: 2437\n\trx bitrate: 72.2 MBit/s MCS 7 short GI\n",
+			Link{Standard: "wifi4", WidthMHz: 20, RxMbps: 72.2},
+		},
+		"802.11g":       {"\tfreq: 2412\n\trx bitrate: 54.0 MBit/s\n", Link{WidthMHz: 20, RxMbps: 54}},
+		"not connected": {"Not connected.\n", Link{}},
+	} {
+		if got := ParseLink(tc.out); got != tc.want {
+			t.Errorf("%s: %+v, want %+v", name, got, tc.want)
+		}
+	}
+}
+
+func TestScanStandards(t *testing.T) {
+	dump := "BSS 3a:1f:22:aa:bb:01(on wlan1)\n\tfreq: 2437\n\tSSID: Hotel\n\tHT capabilities:\n\t\tCapabilities: 0x1ad\n" +
+		"BSS 3a:1f:22:aa:bb:02(on wlan1)\n\tfreq: 5180.0\n\tSSID: Hotel\n\tHT capabilities:\n\tVHT capabilities:\n\tHE capabilities:\n" +
+		"BSS 3a:1f:22:aa:bb:03(on wlan1)\n\tfreq: 6135\n\tSSID: Lab\n\tHE capabilities:\n" +
+		"BSS 3a:1f:22:aa:bb:04(on wlan1)\n\tfreq: 6135\n\tSSID: Lab 7\n\tHE capabilities:\n\tEHT capabilities:\n" +
+		"BSS 3a:1f:22:aa:bb:05(on wlan1)\n\tfreq: 5745\n\tSSID: Café\\x20Two\n\tVHT capabilities:\n" +
+		"BSS 3a:1f:22:aa:bb:06(on wlan1)\n\tfreq: 2412\n\tSSID: Old\n" +
+		"BSS 3a:1f:22:aa:bb:07(on wlan1)\n\tfreq: 2412\n\tSSID: \n\tHT capabilities:\n"
+	got := ScanStandards(dump)
+	want := map[string]string{"Hotel": "wifi6", "Lab": "wifi6e", "Lab 7": "wifi7", "Café Two": "wifi5"}
+	if len(got) != len(want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	for ssid, standard := range want {
+		if got[ssid] != standard {
+			t.Errorf("%s: %q, want %q", ssid, got[ssid], standard)
+		}
 	}
 }

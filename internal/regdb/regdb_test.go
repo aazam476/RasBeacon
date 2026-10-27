@@ -79,16 +79,12 @@ func TestHotspotChannelAllowed(t *testing.T) {
 		{"FR", 36, false}, // the world rules have no 5 GHz
 	}
 	for _, tt := range tests {
-		if got := db.HotspotChannelAllowed(tt.country, ChannelMHz(tt.channel)); got != tt.want {
-			t.Errorf("%s channel %d = %v, want %v", tt.country, tt.channel, got, tt.want)
+		mhz := 2407 + 5*tt.channel // 2.4 GHz
+		if tt.channel > 14 {
+			mhz = 5000 + 5*tt.channel // 5 GHz
 		}
-	}
-}
-
-func TestChannelMHz(t *testing.T) {
-	for channel, mhz := range map[int]int{1: 2412, 13: 2472, 14: 2484, 36: 5180, 165: 5825} {
-		if got := ChannelMHz(channel); got != mhz {
-			t.Errorf("ChannelMHz(%d) = %d, want %d", channel, got, mhz)
+		if got := db.HotspotChannelAllowed(tt.country, mhz); got != tt.want {
+			t.Errorf("%s channel %d = %v, want %v", tt.country, tt.channel, got, tt.want)
 		}
 	}
 }
@@ -137,7 +133,11 @@ func TestParse_TheRealDatabase(t *testing.T) {
 		{"DE", 52, false}, // radar detection
 	}
 	for _, tt := range tests {
-		if got := db.HotspotChannelAllowed(tt.country, ChannelMHz(tt.channel)); got != tt.want {
+		mhz := 2407 + 5*tt.channel // 2.4 GHz
+		if tt.channel > 14 {
+			mhz = 5000 + 5*tt.channel // 5 GHz
+		}
+		if got := db.HotspotChannelAllowed(tt.country, mhz); got != tt.want {
 			t.Errorf("%s channel %d = %v, want %v", tt.country, tt.channel, got, tt.want)
 		}
 	}

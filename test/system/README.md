@@ -18,7 +18,7 @@ their own network namespaces:
 
 | Namespace | Radio | What it is |
 | --- | --- | --- |
-| `hotel` | `wlan2` | An open hotel Wi-Fi ("Grand Hotel") with DHCP and DNS, a login page that every web request goes to until the terms are accepted, "the internet" (`203.0.113.1`, which tells each visitor its address on `/whoami`), and a WireGuard server. |
+| `hotel` | `wlan2` | An open hotel Wi-Fi ("Grand Hotel", Wi-Fi 6) with DHCP and DNS, a login page that every web request goes to until the terms are accepted, "the internet" (`203.0.113.1`, which tells each visitor its address on `/whoami`), and a WireGuard server. |
 | `phone1` | `wlan3` | The owner's phone. |
 | `phone2` | `wlan4` | A guest's phone. |
 | `phone3` | `wlan5` | A phone that isn't on the allow list, and later joins with WPA3. |
@@ -33,7 +33,8 @@ stops the run):
    Wi-Fi 6 by itself (the simulated radios can).
 2. RasBeacon joins the hotel's Wi-Fi, notices the login page, and the owner
    accepts the terms in RasBeacon's own login browser. The phone then
-   reaches the internet, which sees RasBeacon's hotel address.
+   reaches the internet, which sees RasBeacon's hotel address. The
+   Internet page says the hotel's network runs Wi-Fi 6.
 3. With the VPN on, the internet sees the phone come from the tunnel. When
    the VPN server stops, the kill switch keeps the phone off the internet.
 4. A guest phone reaches the internet, but not RasBeacon's settings page or
@@ -53,6 +54,11 @@ stops the run):
     it `guest0`, with its own hostapd file), a guest joins it and reaches
     the internet, and the change is kept; a later change goes back with
     **Go back**.
+
+A 6 GHz (Wi-Fi 6E) hotspot isn't covered here: all the simulated radios
+share one kernel, and once a phone has joined a network announcing "US"
+(whose rules allow no 6 GHz hotspot) Linux keeps to those rules. The unit
+tests and docs/testing/full.md cover it.
 
 Settings are changed through `rbd`'s API socket, as `rbweb` does; the
 phones only use the networks (and, in step 1, the setup page's API). Every

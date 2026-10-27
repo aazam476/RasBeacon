@@ -129,3 +129,25 @@ describe('Ethernet port', () => {
     expect(device.rescanEthernetPort).toHaveBeenCalled();
   });
 });
+
+describe('the Wi-Fi connection’s standard and speed', () => {
+  it('shows the standard, width and link speed', () => {
+    renderInternet((uplink) => {
+      Object.assign(uplink, { kind: 'wifi', connected: true });
+      Object.assign(uplink.wifi, { standard: 'wifi6e', widthMhz: 160, rxMbps: 2401.9, txMbps: 6 });
+    });
+    expect(screen.getByText('Wi-Fi 6E, 160 MHz')).toBeTruthy();
+    expect(screen.getByText('↓ 2402 Mbps ↑ 6.0 Mbps')).toBeTruthy();
+    expect(screen.getByText(/5 GHz, Wi-Fi 6E$/)).toBeTruthy();
+  });
+
+  it('leaves them out when the router doesn’t know them', () => {
+    renderInternet((uplink) => {
+      Object.assign(uplink, { kind: 'wifi', connected: true });
+      Object.assign(uplink.wifi, { standard: undefined, widthMhz: undefined, rxMbps: undefined, txMbps: undefined });
+    });
+    const connection = within(section('Connection'));
+    expect(connection.queryByText('Link speed')).toBeNull();
+    expect(connection.queryByText(/Wi-Fi \d/)).toBeNull();
+  });
+});

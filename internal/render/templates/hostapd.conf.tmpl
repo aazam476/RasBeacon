@@ -33,7 +33,22 @@ utf8_ssid=1
 # ieee80211d=1 announces the country to connecting devices.
 country_code={{.Country}}
 ieee80211d=1
-{{- if eq .Band "5GHz"}}
+{{- if eq .Band "6GHz"}}
+# 6 GHz (Wi-Fi 6E): fast and uncrowded, with the shortest range; only
+# Wi-Fi 6E devices see it. Channel {{.Channel}} is a "preferred scanning
+# channel", where devices look for 6 GHz networks first. op_class names the
+# 6 GHz band and the channel width.
+hw_mode=a
+op_class={{.OpClass6}}
+channel={{.Channel}}
+{{- if .HE6Center}}
+# 80 MHz wide, centred on channel {{.HE6Center}}.
+he_oper_chwidth=1
+he_oper_centr_freq_seg0_idx={{.HE6Center}}
+{{- else}}
+# Channel {{.Channel}} can't be part of an 80 MHz block, so it uses 20 MHz.
+{{- end}}
+{{- else if eq .Band "5GHz"}}
 # 5 GHz: faster, shorter range. Channel {{.Channel}} needs no radar detection.
 hw_mode=a
 channel={{.Channel}}
@@ -48,10 +63,14 @@ ieee80211ac=1
 # Use 80 MHz wide channels (802.11ac) centred on channel {{.VHTCenterChannel}}.
 # {{.HT40Direction}} says whether the 40 MHz partner channel is above (+) or
 # below (-) channel {{.Channel}}.
-ht_capab=[{{.HT40Direction}}][SHORT-GI-40]
+ht_capab={{.HTCapab}}
 {{- if .WiFi5}}
 vht_oper_chwidth=1
 vht_oper_centr_freq_seg0_idx={{.VHTCenterChannel}}
+{{- if .VHTCapab}}
+# What this radio can do with 802.11ac, as its driver reports it.
+vht_capab={{.VHTCapab}}
+{{- end}}
 {{- end}}
 {{- if .WiFi6}}
 he_oper_chwidth=1
@@ -61,19 +80,42 @@ he_oper_centr_freq_seg0_idx={{.VHTCenterChannel}}
 # Channel {{.Channel}} cannot be combined into a wider channel, so it uses
 # 20 MHz.
 vht_oper_chwidth=0
+{{- if .HTCapab}}
+# What this radio can do with 802.11n, as its driver reports it.
+ht_capab={{.HTCapab}}
+{{- end}}
 {{- end}}
 {{- else}}
 # 2.4 GHz: longer range and supported by every device.
 hw_mode=g
 channel={{.Channel}}
 ieee80211n=1
+{{- if .HTCapab}}
+# What this radio can do with 802.11n (20 MHz), as its driver reports it.
+ht_capab={{.HTCapab}}
+{{- end}}
 {{- end}}
 {{- if .WiFi6}}
+{{- if eq .Band "6GHz"}}
+# Wi-Fi 6 (802.11ax), the only standard 6 GHz has. The "BSS color"
+# ({{.BSSColor}}) tells this network's signals from a neighbor's on the same
+# channel.
+{{- else}}
 # Wi-Fi 6 (802.11ax): faster with many devices at once. Older devices
 # still join with Wi-Fi 4 or 5. The "BSS color" ({{.BSSColor}}) tells this
 # network's signals from a neighbor's on the same channel.
+{{- end}}
 ieee80211ax=1
 he_bss_color={{.BSSColor}}
+{{- if .Caps.HESUBeamformer}}
+he_su_beamformer=1
+{{- end}}
+{{- if .Caps.HESUBeamformee}}
+he_su_beamformee=1
+{{- end}}
+{{- if .Caps.HEMUBeamformer}}
+he_mu_beamformer=1
+{{- end}}
 {{- end}}
 # WMM (Wi-Fi Multimedia) is required for Wi-Fi 4/5 speeds.
 wmm_enabled=1
@@ -118,7 +160,12 @@ sae_pwe=2
 # Management Frames are required (2).
 wpa_key_mgmt=SAE
 ieee80211w=2
+{{- if eq .Band "6GHz"}}
+# 6 GHz allows only the hash-to-element password method.
+sae_pwe=1
+{{- else}}
 sae_pwe=2
+{{- end}}
 {{- else}}
 # WPA2 only: a compatibility setting for old devices.
 wpa_key_mgmt=WPA-PSK
@@ -166,7 +213,7 @@ sae_pwe=2
 {{- else if eq .Security "wpa3"}}
 wpa_key_mgmt=SAE
 ieee80211w=2
-sae_pwe=2
+sae_pwe={{if eq .Band "6GHz"}}1{{else}}2{{end}}
 {{- else}}
 wpa_key_mgmt=WPA-PSK
 ieee80211w=0
