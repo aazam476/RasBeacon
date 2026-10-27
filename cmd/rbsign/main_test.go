@@ -217,7 +217,8 @@ func TestPluginKeygenSignAndCheck(t *testing.T) {
 func TestPluginSignAndCheckFailures(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing.rba")
 	code, _, stderr := rbsign(t, nil, "plugin-sign", "-in", missing, "-out", missing+".signed")
-	if code != 1 || !strings.Contains(stderr, "RASBEACON_PLUGIN_SIGNING_KEY") {
+	// Named as a signing key, not an update's: the plugin key is a separate one.
+	if code != 1 || !strings.Contains(stderr, "RASBEACON_PLUGIN_SIGNING_KEY") || strings.Contains(stderr, "update") {
 		t.Errorf("without a key: exit %d, %q", code, stderr)
 	}
 	_, out, _ := rbsign(t, nil, "plugin-keygen")

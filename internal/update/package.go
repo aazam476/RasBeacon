@@ -259,11 +259,12 @@ func Pack(out io.Writer, bundle io.ReadSeeker, board, newVersion, minFrom string
 	return t.Close()
 }
 
-// ParsePublicKey reads a public key file's text (base64, 32 bytes).
+// ParsePublicKey reads a public key file's text (base64, 32 bytes). Update
+// and plugin signing keys are both Ed25519 keys written this way.
 func ParsePublicKey(text string) (ed25519.PublicKey, error) {
 	data, err := base64.StdEncoding.DecodeString(strings.TrimSpace(text))
 	if err != nil || len(data) != ed25519.PublicKeySize {
-		return nil, errors.New("not an update signing public key")
+		return nil, errors.New("not a signing public key (base64 of 32 bytes)")
 	}
 	return ed25519.PublicKey(data), nil
 }
@@ -272,7 +273,7 @@ func ParsePublicKey(text string) (ed25519.PublicKey, error) {
 func ParsePrivateKey(text string) (ed25519.PrivateKey, error) {
 	data, err := base64.StdEncoding.DecodeString(strings.TrimSpace(text))
 	if err != nil || len(data) != ed25519.SeedSize {
-		return nil, errors.New("not an update signing private key")
+		return nil, errors.New("not a signing private key (base64 of a 32-byte seed)")
 	}
 	return ed25519.NewKeyFromSeed(data), nil
 }
