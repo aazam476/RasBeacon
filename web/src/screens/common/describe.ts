@@ -1,5 +1,5 @@
-// Router states in words, shared by the Status, Internet and VPN pages. The sentences come from
-// the original UI; its browser test looks for some of them.
+// Router states in words, shared by the Status, Internet and VPN pages. The browser walkthrough
+// (test/e2e) looks for some of them, so change those there too.
 import type {
   EthernetUplinkStatus,
   HotspotStatus,

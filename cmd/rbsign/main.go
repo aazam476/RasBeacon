@@ -116,7 +116,7 @@ func keygen(stdout io.Writer) error {
 	return nil
 }
 
-// pack makes a signed update file from a RAUC bundle.
+// pack makes a signed update file from rpi-image-gen's update bundle.
 func pack(args []string, env func(string) string, stdout io.Writer) error {
 	flags := flag.NewFlagSet("pack", flag.ContinueOnError)
 	board := flags.String("board", "", "board the update is for: rpi64 (the Pi 4 and Pi 5 image)")

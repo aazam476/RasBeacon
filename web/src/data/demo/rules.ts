@@ -1,7 +1,7 @@
 /*
  * The demo's stand-in for the router's input checks, so the demo can show the error states. They
- * follow the original UI's shared/validation.ts and the checks in its hooks; the real provider
- * should use those (and the router re-checks everything anyway).
+ * follow the router's (internal/config) and the real provider's (data/real/logic.ts); the router
+ * re-checks everything anyway.
  */
 import { HOTSPOT_CHANNELS } from '../constants';
 import { FieldErrors } from '../errors';

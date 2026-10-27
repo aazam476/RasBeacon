@@ -112,7 +112,7 @@ export function Pages() {
         <Route path="plugins/:id" element={<PluginScreen />} />
         <Route path="more" element={<MoreScreen />} />
       </Route>
-      {/* The original UI's addresses (/#hotspot, /#portal, …) match the routes by themselves, except
+      {/* Addresses from before this UI (/#hotspot, /#portal, …) match the routes by themselves, except
           /#guest; anything unknown, /#status included, goes to Status. */}
       <Route path="guest" element={<Navigate to="/guests" replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />

@@ -10,7 +10,7 @@ function scenarioHref(id: string | null, route: string): string {
 
 /**
  * The demo's table of contents (`/#/demo`): every state of every screen, filled with sample
- * data, like the original UI's gallery. Part of the demo only.
+ * data, to look through every one. Part of the demo only.
  */
 export function DemoIndex() {
   useDocumentTitle('Demo states');

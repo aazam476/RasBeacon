@@ -19,12 +19,21 @@
 //	guest.go           the guest network
 //	access.go          who may join: the allow list and the device limit
 //	clients.go         pausing, disconnecting and forgetting devices
+//	fixedaddress.go    devices that always get the same address
 //	usage.go           device names and the data each one uses
+//	qos.go             priority devices, first when the connection is busy
+//	welcome.go         the welcome page (the owner's own captive portal)
+//	lanports.go        extra wired ports (USB Ethernet adapters) for devices
+//	radioroles.go      which Wi-Fi radio runs the hotspot, internet and guests
 //	qr.go              the QR codes for joining the hotspot
 //
 //	The internet side:
 //	uplink.go          the connection to the internet (Ethernet, Wi-Fi)
 //	uplinkcontrols.go  the Internet page's buttons (disconnect, renew, ...)
+//	phoneuplink.go     internet from a phone or modem over USB
+//	modem.go           mobile broadband modems (through ModemManager)
+//	macaddress.go      the MAC address each uplink shows its network
+//	portforward.go     port forwarding to devices and plugins
 //	enterprise.go      certificates for eduroam and other Enterprise networks
 //	servercert.go      trusting an Enterprise login server on first connect
 //	dns.go             the owner's DNS servers, plain and DNS-over-HTTPS

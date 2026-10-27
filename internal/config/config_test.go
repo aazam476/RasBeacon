@@ -164,7 +164,7 @@ func TestReadJSON_MissingFileReturnsErrNotFound(t *testing.T) {
 }
 
 func TestFillDefaults_OldConfigGetsEthernetUplink(t *testing.T) {
-	// A config.json written by milestone 1 has no "ethernet" section.
+	// A config.json from the first versions has no "ethernet" section.
 	var cfg Config
 	cfg.FillDefaults()
 	if cfg.Ethernet.Role != EthernetUplink {

@@ -292,8 +292,10 @@ export interface PortalStatus {
   browsing: boolean;
 }
 
-/** Where the WireGuard tunnel is. */
-/** `blocked`: the VPN is off but the kill switch is on, so devices have no internet. */
+/**
+ * Where the WireGuard tunnel is. `blocked`: the VPN is off but the kill switch is on, so devices
+ * have no internet.
+ */
 export type VPNState = 'off' | 'connecting' | 'up' | 'down' | 'direct' | 'blocked';
 
 export interface VPNStatus {
@@ -575,8 +577,8 @@ export interface PortForwardingSettings {
 }
 
 /**
- * GET/PUT /api/v1/settings/usage: a data limit per device that applies while the connection is
- * marked metered.
+ * GET/PUT /api/v1/settings/usage: a data limit per device, counted on the hotspot whether or not the
+ * connection is marked metered.
  */
 export interface UsageSettings {
   /** 0 = no limit. */
@@ -603,7 +605,6 @@ export interface QoSSettings {
   problem?: string;
 }
 
-/** POST /api/v1/wifi-qr: a QR code phones scan to join a network. */
 /** The channels a country allows a hotspot on, by band (POST /settings/hotspot/channels). */
 export type ChannelsByBand = Record<Band, number[]>;
 
@@ -611,6 +612,7 @@ export interface HotspotChannelsResponse {
   channels: ChannelsByBand;
 }
 
+/** POST /api/v1/wifi-qr: a QR code phones scan to join a network. */
 export interface WiFiQR {
   ssid: string;
   /** An SVG image, black on white. */
@@ -962,7 +964,6 @@ export interface PluginPreview {
   keptData?: PluginKeptData;
 }
 
-/** The owner's choices in the install sheet or on a plugin's page. */
 /**
  * Data kept from an earlier install with the same ID that doesn't come back by itself (it wasn't
  * signed with the same key): the install sheet asks. `name` is the earlier plugin's, `keyId` its
@@ -973,6 +974,7 @@ export interface PluginKeptData {
   keyId?: string;
 }
 
+/** The owner's choices in the install sheet or on a plugin's page. */
 export interface PluginChoices {
   /** By port key ("tcp/3000"). */
   ports: Record<string, number>;

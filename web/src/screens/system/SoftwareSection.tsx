@@ -238,7 +238,6 @@ function NotificationsForm({ settings }: { settings: UpdateSettings }) {
   );
 }
 
-/** A link to a release's page on GitHub, where its files are. */
 /**
  * An installed update that RasBeacon hasn't restarted into yet (the restart failed, or the power
  * went off first): why, and the restart that finishes it, asked first like Reboot.
@@ -275,6 +274,7 @@ function RestartPendingNotice({ message }: { message?: string }) {
   );
 }
 
+/** A link to a release's page on GitHub, where its files are. */
 function ReleaseLink({ url }: { url: string }) {
   return (
     <a href={url} target="_blank" rel="noreferrer" className={buttonClasses('secondary', 'sm')}>

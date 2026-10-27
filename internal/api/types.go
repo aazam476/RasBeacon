@@ -1173,7 +1173,8 @@ type PluginLogLine struct {
 	Text string `json:"text"`
 }
 
-// PluginSourcesRequest sets the extra catalog sources.
+// PluginSourcesRequest sets the catalog's sources (the built-in one too,
+// which the owner may remove).
 type PluginSourcesRequest struct {
 	Sources []string `json:"sources"`
 }

@@ -180,8 +180,8 @@ function messageOf(error: unknown): string {
 
 /**
  * The real router, through its API (api.ts). It implements every action in device.ts as
- * README.md ("Connecting the real router") describes, with the logic of the original UI
- * (logic.ts).
+ * README.md ("Connecting the real router") describes, with its pure logic kept apart in
+ * logic.ts.
  */
 export function RealDeviceProvider({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();

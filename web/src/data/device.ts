@@ -184,7 +184,7 @@ export interface DeviceActions {
   closePortalBrowser: () => Promise<void>;
   /**
    * A finger or mouse went down / up on the picture. The provider decides whether that was a tap
-   * or a swipe and where on the page it was (browserGestures.ts in the original UI).
+   * or a swipe and where on the page it was (classifyGesture in data/real/logic.ts).
    */
   portalPointerDown: (spot: PointerSpot) => void;
   portalPointerUp: (spot: PointerSpot, box: PictureBox) => void;

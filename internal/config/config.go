@@ -34,7 +34,7 @@ import (
 // release changes the file layout, so newer code can upgrade older files
 // (see FillDefaults).
 //
-//	1: milestones 1 to 3
+//	1: the first versions, before the VPN
 //	2: adds the VPN section, with the kill switch on by default
 //	3: the VPN keeps several WireGuard profiles (see MoveVPNIntoProfile)
 //	4: v0.2.0. The kill switch with the VPN off now blocks devices, so it
