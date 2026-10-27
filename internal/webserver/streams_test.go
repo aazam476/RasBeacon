@@ -4,6 +4,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -175,7 +176,14 @@ func TestRBDUnreachable_FailsClosed(t *testing.T) {
 }
 
 func TestRBDClient_TalksOverTheUnixSocket(t *testing.T) {
-	socket := filepath.Join(t.TempDir(), "rbd.sock")
+	// A short folder: macOS limits socket paths to 104 characters, and
+	// t.TempDir() is often longer there.
+	dir, err := os.MkdirTemp("/tmp", "rb")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	socket := filepath.Join(dir, "rbd.sock")
 	listener, err := net.Listen("unix", socket)
 	if err != nil {
 		t.Skip("no Unix sockets here:", err)

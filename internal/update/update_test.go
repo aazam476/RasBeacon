@@ -75,7 +75,7 @@ func TestWriteSparse_RefusesTooBigOrBroken(t *testing.T) {
 		{"a block size that isn't a multiple of 4", header(func(h *sparseHeader) { h.BlockSize = 18 }), "not a sparse image"},
 		// rbd would set aside a gigabyte for one block, before the image's
 		// checksum could be checked.
-		{"one 1 GB block", header(func(h *sparseHeader) { h.BlockSize, h.TotalBlocks = 1 << 30, 0 }), "block size"},
+		{"one 1 GB block", header(func(h *sparseHeader) { h.BlockSize, h.TotalBlocks = 1<<30, 0 }), "block size"},
 		{"bigger than the partition", makeSparse()[:28], "bigger than the partition"},
 		{"a chunk past the end", header(same, chunkHeader{Type: chunkDontCare, Blocks: 5, TotalSize: 12}), "past the end"},
 		{"a raw chunk of the wrong size", header(same, chunkHeader{Type: chunkRaw, Blocks: 1, TotalSize: 12}), "wrong size"},
