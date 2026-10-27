@@ -562,8 +562,8 @@ tunnel health check plus a portal probe, and the flow repeats.
        so the password doesn't sit in plain text on the card.
 3. **Claim-once:** the first client to set the admin password (at least 10
    characters, checked against a small built-in list of common passwords)
-   claims the device. The setup network then shuts down and the configured
-   hotspot starts.
+   claims the device. Any later claim is refused, also in the seconds before
+   the setup network shuts down and the configured hotspot starts.
 4. **Setup window:** the setup network closes 30 min after boot if nobody has
    claimed the device, and reopens on the next power cycle. After claiming,
    the setup network never returns unless you factory reset.
@@ -643,7 +643,7 @@ The Pi 5's power button is left at its default behavior.
 - **Golden-file tests** for every generated config: hostapd, wpa_supplicant
   (every security type, including the Enterprise must-have-CA rule and the
   domain-match mapping), dnsmasq, nftables per state, WireGuard.
-- **wg-quick parser:** table tests plus a Go fuzz target.
+- **wg-quick parser:** table tests of accepted and refused files.
 - **State machine:** driven by scripted events and a fake clock (flapping,
   return-delay doubling, falling back to `Direct`, turning off).
 - **Redaction:** diagnostics export contains no secret from a fixture config
@@ -652,31 +652,34 @@ The Pi 5's power button is left at its default behavior.
 ### 8.2 Network-namespace integration (CI, stock `ubuntu-24.04` runners with sudo)
 
 ```
-[client ns] --veth "ap0"-- [router ns: real nft ruleset, policy routing, dnsmasq, wg0, rbd]
-                                   --veth "eth0"-- [uplink ns: NAT GW, DNS, HTTP portal emulator, tcpdump]
-                                                        -- [vpn ns: WireGuard peer, DNS, echo/HTTP]
+[phone ns] --veth "ap0"-- [router ns: rbd's own nft ruleset, policy routing, dnsmasq, wg0]
+                                 --veth "eth0"-- [upstream ns: the hotel's DNS and pages, the WireGuard server]
 ```
 
-`rbd` runs with a `--sim` flag that replaces hostapd and wpa_supplicant with
-veth links. Each test captures packets on the uplink veth and **asserts that
-no client-sourced packet other than WireGuard UDP to the endpoint appears**
-(the leak test):
-- Boot: traffic generated before `rbd` starts is dropped.
-- KS ON, tunnel healthy: traffic goes via `wg0`; client DNS reaches the vpn ns
-  only.
-- KS ON, tunnel blocked at the uplink: client TCP, UDP, DNS and ICMP are all
-  dropped; nothing leaks.
-- KS OFF, tunnel blocked: fallback to direct after hysteresis; returns after
-  30 s of health.
-- Uplink change (swap uplink ns addressing): no leak during the swap;
-  endpoint re-resolved.
-- Mode switch ON↔OFF and config reimport during active traffic: no leak.
-- Portal: emulator redirects until "login", pass-through allows only
-  80/443/53, the ruleset is restored before the tunnel is up, and the timeout
-  path works.
-- IPv6: with kill switch ON, client IPv6 goes only via `wg0`. With no v6 path, RAs carry lifetime 0. In `DIRECT` mode, NAT66 goes via the uplink. A tunnel without IPv6 never lets client v6 reach the uplink.
-- MSS: SYNs through `wg0` carry the clamped MSS.
-- Time: NTP blocked plus HTTP Date fallback; the tunnel waits.
+The tests (`test/netns/`) build these namespaces and load what rbd renders
+for each state (the firewall, the routing rules, dnsmasq's file, the
+WireGuard tunnel), then check from the phone's side what gets through, and
+from upstream what arrives outside the tunnel (the leak checks):
+- setup mode: DHCP, DNS and the setup page only;
+- the VPN: devices use the tunnel; with the kill switch on, a stopped server
+  or a deleted tunnel lets nothing out; with it off, devices fall back to the
+  uplink;
+- login mode: only new web and DNS connections reach the hotel's network,
+  connections on the old path stop, and ones opened through the tunnel never
+  carry on outside it (also for the routed IPv6 network, which isn't NATed);
+- guests: the internet only, also through the VPN with its kill switch;
+- plugins: only what their permissions allow, and the internet only through
+  the VPN;
+- DNS (plain and DNS-over-HTTPS), the routed IPv6 network and its pinholes,
+  port forwarding, fixed addresses, priority queues, the welcome page, the
+  wired ports and the Ethernet uplink.
+
+RasBeacon booting under systemd (the early firewall first, then rbd and
+rbweb) is covered by the full-system test (`test/system/`, all of RasBeacon
+in a virtual machine with simulated Wi-Fi). The clock, MSS clamping and
+switching between a Wi-Fi and an Ethernet uplink have no automated test
+yet: the hardware test plan (`docs/testing/full.md`, sections 4 and 8)
+checks them by hand.
 
 ### 8.3 Wi-Fi simulation with `mac80211_hwsim`, where the runner kernel provides it
 - hostapd AP ↔ wpa_supplicant STA for WPA2-PSK, WPA3-SAE and transition mode.
@@ -787,7 +790,8 @@ wins.
   the build, lint, format check, unit tests and the end-to-end test.
 - **Ready for the v2 mobile app:**
   - The API is versioned under `/api/v1` and documented in `docs/api.md`.
-  - The API accepts a token login alongside the browser's cookie sessions.
+  - A future app could log in with API tokens next to the browser's cookie
+    sessions (not built: sessions are enough for the web UI).
   - All rules live in `rbd`/`rbweb`, so the web UI and a future app behave
     identically.
 
@@ -850,7 +854,7 @@ wins.
 - **Reset button:** GPIO 17 via the `gpio-key` overlay (KEY_RESTART), 10 s
   hold.
 - **Not built:** API tokens for a future app (sessions are enough for the
-  web UI), and the zero-leak remote-browser portal login.
+  web UI).
 - **Source code:** each release lists its packages with source versions;
   see `docs/source-code.md`.
 
@@ -977,6 +981,6 @@ wins.
 - Q1b: project name **RasBeacon**. It avoids the "Raspberry Pi" trademark in
   the name; the image is described as based on Debian and Raspberry Pi OS
   packages.
-- Q10/Q10b: hotspot subnet **`10.87.0.0/24`** (guest `10.87.8.0/24`), with
+- Q10/Q10b: hotspot subnet **`10.87.0.0/24`** (guest `10.87.1.0/24`), with
   fallback to `10.88.0.0/24` if the uplink or tunnel overlaps.
 
