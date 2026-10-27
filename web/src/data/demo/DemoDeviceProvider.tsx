@@ -62,8 +62,9 @@ function applyUsageLimit(d: DemoState) {
   d.router.usageSettings.devicesPaused = paused;
 }
 
-/** The demo state as last shown, for actions that answer from it (plugin previews). */
-let currentDemo: DemoState = createDemoState();
+/** The demo state as last shown, for actions that answer from it (plugin previews). Set by the
+ * provider once it renders: making it here would run the demo in the router's own build too. */
+let currentDemo!: DemoState;
 
 /** A new name for a plugin file waiting in the install sheet. */
 let stagingCount = 0;
