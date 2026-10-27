@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useDevice } from '@/data/device';
+import { errorText } from '@/data/errors';
 import type { PluginDrive, PluginPort, PluginSetting } from '@/data/types';
 import { formatBytes } from '@/lib/format';
 import { FormSwitchRow, PasswordField, Section, SelectField, TextField } from '@/ui';
@@ -173,7 +174,7 @@ function DriveField({ level, optional, value, onChange, error }: DriveFieldProps
     let open = true;
     pluginDrives()
       .then((list) => open && setDrives(list))
-      .catch((reason: unknown) => open && setProblem(reason instanceof Error ? reason.message : String(reason)));
+      .catch((reason: unknown) => open && setProblem(errorText(reason)));
     return () => {
       open = false;
     };

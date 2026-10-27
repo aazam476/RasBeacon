@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useDevice } from '@/data/device';
+import { errorText } from '@/data/errors';
 import type { Status, UpdateReflash, UpdateSettings } from '@/data/types';
 import { useForm } from '@/lib/useForm';
 import { Loaded } from '@/shell/Loaded';
@@ -133,7 +134,7 @@ function UpdateCheckRows({ status }: { status: Status }) {
         onChange={(hours) => {
           setError(null);
           saveUpdateSettings({ notifyUrl: updateSettings.data?.notifyUrl ?? '', checkHours: Number(hours) }).catch(
-            (problem: unknown) => setError(problem instanceof Error ? problem.message : String(problem)),
+            (problem: unknown) => setError(errorText(problem)),
           );
         }}
       />

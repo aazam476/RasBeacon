@@ -1,11 +1,12 @@
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useDevice } from '@/data/device';
+import { errorText } from '@/data/errors';
 import type { PluginPreview, PluginsState } from '@/data/types';
 import { Loaded } from '@/shell/Loaded';
 import { ButtonRow, FormError, Icon, LinkRow, Section } from '@/ui';
 import { InstallSheet } from './InstallSheet';
-import { STATE_LABELS, errorText, toneText } from './pluginDisplay';
+import { STATE_LABELS, toneText } from './pluginDisplay';
 
 /**
  * Plugins: the installed ones (each opens its page), and where to get more: RasBeacon's catalog

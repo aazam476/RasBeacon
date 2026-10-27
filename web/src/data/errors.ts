@@ -16,3 +16,12 @@ export class FieldErrors extends Error {
     this.fields = fields;
   }
 }
+
+/**
+ * What went wrong, in words, for a screen that shows one message: a field's message (a refused
+ * setting's error has no message of its own), or the error's.
+ */
+export function errorText(problem: unknown): string {
+  if (problem instanceof FieldErrors) return Object.values(problem.fields)[0] ?? problem.message;
+  return problem instanceof Error ? problem.message : String(problem);
+}

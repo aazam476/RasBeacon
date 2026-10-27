@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useDevice } from '@/data/device';
+import { errorText } from '@/data/errors';
 import type { PluginCatalog, PluginCatalogEntry, PluginPreview } from '@/data/types';
 import { formatBytes } from '@/lib/format';
 import { usePageTitle } from '@/shell/navigation';
 import { ActivityIndicator, Button, ButtonRow, FormError, IconButton, Notice, Row, Section, TextField } from '@/ui';
 import { InstallSheet } from './InstallSheet';
 import { NEEDS_INTERNET } from '../common/describe';
-import { errorText } from './pluginDisplay';
 
 /** "8 Oct, 14:05": when the catalog was last checked. */
 function checkedLabel(iso: string | undefined): string {

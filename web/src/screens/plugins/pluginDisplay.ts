@@ -1,4 +1,3 @@
-import { FieldErrors } from '@/data/errors';
 import type { BaseIconName, Tone } from '@/ui';
 import type { Plugin, PluginChoices, PluginPort, PluginSetting, PluginState } from '@/data/types';
 
@@ -100,10 +99,4 @@ export function numberNote(setting: Pick<PluginSetting, 'unit' | 'min' | 'max'>)
 /** "Version 1.2 · by RasBeacon" */
 export function byline(plugin: Pick<Plugin, 'version' | 'author'>): string {
   return plugin.author ? `Version ${plugin.version} · by ${plugin.author}` : `Version ${plugin.version}`;
-}
-
-/** What went wrong, in words: a field's message, or the error's. */
-export function errorText(problem: unknown): string {
-  if (problem instanceof FieldErrors) return Object.values(problem.fields)[0] ?? problem.message;
-  return problem instanceof Error ? problem.message : String(problem);
 }

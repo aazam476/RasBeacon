@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router';
 import { useDevice } from '@/data/device';
+import { errorText } from '@/data/errors';
 import type { Plugin, PluginLogLine, PluginPreview } from '@/data/types';
 import { formatBytes, formatClockTime } from '@/lib/format';
 import { useForm } from '@/lib/useForm';
@@ -35,7 +36,6 @@ import {
   sourceLabel,
   splitMetric,
   STATE_LABELS,
-  errorText,
 } from './pluginDisplay';
 
 /** One plugin: how it is doing, opening it, its settings, log, updates and removal. */

@@ -1,6 +1,7 @@
 // System page: how often to look for updates, Check now, and notifications.
 import { screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import { FieldErrors } from '@/data/errors';
 import { SystemScreen } from '@/screens/system/SystemScreen';
 import { fakeDevice, renderScreen } from '../render';
 
@@ -12,6 +13,16 @@ describe('updates', () => {
     const { user } = renderScreen(<SystemScreen />, device);
     await user.selectOptions(screen.getByLabelText('Check for new versions'), '24');
     expect(device.saveUpdateSettings).toHaveBeenCalledWith({ checkHours: 24, notifyUrl: 'https://ntfy.sh/rasbeacon' });
+  });
+
+  // A refused setting's error has no message of its own, only its field's.
+  it('says why the router refused the schedule', async () => {
+    const device = fakeDevice(undefined, {
+      saveUpdateSettings: () => Promise.reject(new FieldErrors({ checkHours: 'Choose one of the listed times.' })),
+    });
+    const { user } = renderScreen(<SystemScreen />, device);
+    await user.selectOptions(screen.getByLabelText('Check for new versions'), '24');
+    expect(await screen.findByText('Choose one of the listed times.')).toBeTruthy();
   });
 
   it('checks now', async () => {

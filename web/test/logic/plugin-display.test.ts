@@ -1,8 +1,8 @@
 // How the plugin pages show metrics, settings and errors.
 import { describe, expect, it } from 'vitest';
-import { FieldErrors } from '@/data/errors';
+import { FieldErrors, errorText } from '@/data/errors';
 import type { PluginPort, PluginSetting } from '@/data/types';
-import { choicesOf, draftOf, errorText, numberNote, splitMetric, toneText } from '@/screens/plugins/pluginDisplay';
+import { choicesOf, draftOf, numberNote, splitMetric, toneText } from '@/screens/plugins/pluginDisplay';
 
 describe('metrics', () => {
   it('splits a number from its unit at the non-breaking space only', () => {
