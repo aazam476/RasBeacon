@@ -481,14 +481,19 @@ func (a *Agent) observeWiFi(iface string) api.WiFiUplinkStatus {
 	case wpa.LoginFailed:
 		s.State = "login-failed"
 		s.SSID = wpa.SSID
-	case len(a.tempDisabledNetworks(iface)) > 0:
-		// A saved network rejected the login and is paused.
-		s.State = "login-failed"
-		s.SSID = a.tempDisabledNetworks(iface)[0]
-	case wpa.State == "SCANNING" || wpa.State == "DISCONNECTED" || wpa.State == "INACTIVE":
-		s.State = "searching"
 	default:
-		s.State = "connecting"
+		// Asked only here: it is one more question to wpa_supplicant.
+		paused := a.tempDisabledNetworks(iface)
+		switch {
+		case len(paused) > 0:
+			// A saved network rejected the login and is paused.
+			s.State = "login-failed"
+			s.SSID = paused[0]
+		case wpa.State == "SCANNING" || wpa.State == "DISCONNECTED" || wpa.State == "INACTIVE":
+			s.State = "searching"
+		default:
+			s.State = "connecting"
+		}
 	}
 	return s
 }
