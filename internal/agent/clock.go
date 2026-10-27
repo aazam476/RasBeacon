@@ -116,15 +116,24 @@ func (a *Agent) checkClock(w *clockWatch, now time.Time) {
 	connectedFor := a.now().Sub(a.uplink.connectedSince)
 	open := a.portal.result.State == portal.Open
 	a.mu.Unlock()
-	if !connected || !open || connectedFor < ntpGrace || now.Sub(w.lastSet) < time.Hour || a.ntpSynchronized() {
+	if !connected || !open || connectedFor < ntpGrace {
+		return
+	}
+	if a.ntpSynchronized() {
+		a.setClockUnsure(false)
+		return
+	}
+	if now.Sub(w.lastSet) < time.Hour {
 		return
 	}
 
 	agreed, ok := clock.AgreedTime(w.fetch(), a.timeFloor())
 	if !ok {
 		slog.Warn("NTP is not working and web servers did not agree on the time")
+		a.setClockUnsure(true)
 		return
 	}
+	a.setClockUnsure(false)
 	w.lastSet = now
 	if difference := agreed.Sub(now); difference > 30*time.Second || difference < -30*time.Second {
 		slog.Warn("NTP is not working; setting the clock from web servers", "time", agreed.UTC(), "change", difference)
@@ -148,4 +157,24 @@ func fetchDates(client *http.Client) []time.Time {
 	}
 	wg.Wait()
 	return samples
+}
+
+// setClockUnsure notes whether the clock could be set from the internet,
+// for the warning on the Status page (clockWarnings).
+func (a *Agent) setClockUnsure(unsure bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.clockUnsure = unsure
+}
+
+// clockWarnings warns when neither NTP nor web servers could set the
+// clock on a network that otherwise works. The clock then runs from the
+// last saved time, which never goes back (it keeps the VPN's handshakes
+// valid): if that time was wrong, secure websites and the VPN may fail
+// until the clock is set. The caller holds a.mu.
+func (a *Agent) clockWarnings() []string {
+	if !a.clockUnsure {
+		return nil
+	}
+	return []string{fmt.Sprintf("RasBeacon couldn't set its clock from the internet (it reads %s UTC). If that's wrong, secure websites and the VPN may not work: try another network, where the clock is set by itself.", a.now().UTC().Format("Jan 2, 2006 15:04"))}
 }

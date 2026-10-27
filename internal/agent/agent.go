@@ -206,6 +206,9 @@ type Agent struct {
 	// ledBlinking is set once the setup.txt error blink started (it runs
 	// until RasBeacon restarts).
 	ledBlinking bool
+	// clockUnsure is set while neither NTP nor web servers could set the
+	// clock (see clockWarnings).
+	clockUnsure bool
 
 	// webGroup is rbweb's group ID (-1 = unknown), for the HTTPS key copy.
 	webGroup int

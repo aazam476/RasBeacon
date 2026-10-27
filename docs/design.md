@@ -514,6 +514,9 @@ tunnel health check plus a portal probe, and the flow repeats.
   that would check the dates is the one being set; plain HTTP would let a
   network with a login page answer with any time. It accepts a time only
   when at least 2 agree within 5 s and the time is at or after the floor.
+  When neither works, the Status page warns, with the time RasBeacon reads:
+  a floor that was wrong (in the future) would otherwise go unnoticed while
+  secure websites and the VPN fail.
 - **Tunnel dependency:** WireGuard servers reject handshakes whose
   timestamp isn't newer than the last one they accepted, so the clock must
   never go back: the time floor applied at boot sees to that, and the tunnel

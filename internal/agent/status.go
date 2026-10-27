@@ -75,7 +75,7 @@ func (a *Agent) StatusFor(viewer string) api.Status {
 		Radios:            a.radios,
 		RadioRolesPending: a.radioRolesSecondsLeft(),
 		Clients:           a.connectedClients(),
-		Warnings:          slices.Concat(a.warnings, a.vpnWarnings(), a.uplinkWarnings(), a.enterpriseWarnings(), a.serverCertWarnings(), a.guestWarnings(), a.hotspotWarnings()),
+		Warnings:          slices.Concat(a.warnings, a.vpnWarnings(), a.uplinkWarnings(), a.enterpriseWarnings(), a.serverCertWarnings(), a.guestWarnings(), a.hotspotWarnings(), a.clockWarnings()),
 
 		Throughput:          a.readings.traffic,
 		System:              a.systemStats(),

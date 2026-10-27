@@ -98,6 +98,29 @@ func TestClock_LeftAloneWhen(t *testing.T) {
 	}
 }
 
+// When neither NTP nor web servers can set the clock, the Status page says
+// so; once one of them can, the warning goes.
+func TestClock_WarnsWhenTheClockCantBeSet(t *testing.T) {
+	now := time.Now()
+	// Web servers that don't agree on the time.
+	e, watch := clockEnv(t, now.Add(time.Hour), now.Add(-5*time.Hour))
+	warned := func() bool {
+		return strings.Contains(strings.Join(e.agent.Status().Warnings, " "), "couldn't set its clock")
+	}
+	if warned() {
+		t.Fatal("no warning before the clock was checked")
+	}
+	e.agent.checkClock(watch, now)
+	if !warned() {
+		t.Errorf("warnings = %q, want the clock warning", e.agent.Status().Warnings)
+	}
+	e.runner.outputs["timedatectl show --property=NTPSynchronized --value"] = "yes\n"
+	e.agent.checkClock(watch, now.Add(time.Minute))
+	if warned() {
+		t.Error("once NTP set the clock, the warning goes")
+	}
+}
+
 func TestClock_SavesTheTimeFloorRegularly(t *testing.T) {
 	e, watch := clockEnv(t)
 	e.agent.mu.Lock()
