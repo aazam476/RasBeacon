@@ -297,6 +297,8 @@ export const setClientInternetAccess = (mac: string, allowed: boolean) =>
   request<void>('POST', '/clients/internet-access', { body: { mac, allowed } });
 export const renameClient = (mac: string, name: string) =>
   request<void>('POST', '/clients/name', { body: { mac, name } });
+export const setFixedAddress = (mac: string, address: string) =>
+  request<void>('POST', '/clients/fixed-address', { body: { mac, address } });
 
 export const getUsageSettings = () => request<UsageSettings>('GET', '/settings/usage');
 export const putUsageSettings = (limitMb: number) =>

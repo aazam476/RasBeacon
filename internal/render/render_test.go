@@ -810,3 +810,22 @@ func TestHostapd_AllowListAndDeviceLimit(t *testing.T) {
 		t.Error("a limit above the DHCP range was accepted")
 	}
 }
+
+// Fixed addresses become dhcp-host lines; one outside the hotspot's network
+// or RasBeacon's own address is refused.
+func TestDnsmasq_FixedAddresses(t *testing.T) {
+	in := DnsmasqInput{LAN: DefaultLAN, LeaseFile: "x", FixedAddresses: []FixedAddress{{MAC: "3A:1F:22:AA:BB:CC", IP: "10.87.0.50"}}}
+	got, err := Dnsmasq(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "dhcp-host=3a:1f:22:aa:bb:cc,10.87.0.50\n") {
+		t.Errorf("no dhcp-host line:\n%s", got)
+	}
+	for _, bad := range []FixedAddress{{"3a:1f:22:aa:bb:cc", "192.168.1.5"}, {"3a:1f:22:aa:bb:cc", "10.87.0.1"}, {"nonsense", "10.87.0.50"}} {
+		in.FixedAddresses = []FixedAddress{bad}
+		if _, err := Dnsmasq(in); err == nil {
+			t.Errorf("%+v accepted", bad)
+		}
+	}
+}

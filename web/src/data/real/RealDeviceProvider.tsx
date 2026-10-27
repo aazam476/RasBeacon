@@ -593,6 +593,10 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
         await attempt(() => api.renameClient(mac, name), sameNames('name'));
         await refreshStatus();
       },
+      setFixedAddress: async (mac, address) => {
+        await attempt(() => api.setFixedAddress(mac, address), sameNames('address'));
+        await refreshStatus();
+      },
       saveUsageLimit: async (limitMb) => {
         store('usageSettings', await attempt(() => api.putUsageSettings(limitMb), sameNames('limitMb')));
         await refreshStatus();

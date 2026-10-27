@@ -39,6 +39,10 @@ dhcp-range=set:guest,{{.GuestDHCPStart}},{{.GuestDHCPEnd}},{{.GuestNetmask}},1h
 dhcp-option=tag:guest,option:router,{{.GuestAddress}}
 dhcp-option=tag:guest,option:dns-server,{{.GuestAddress}}
 {{- end}}
+{{- range .FixedAddresses}}
+# The owner chose that this device always gets this address.
+dhcp-host={{.MAC}},{{.IP}}
+{{- end}}
 # Answer DHCP requests immediately even for devices we have not seen before.
 dhcp-authoritative
 {{- if .Metered}}

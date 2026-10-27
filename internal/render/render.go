@@ -327,6 +327,12 @@ var PluginSubnet = netip.MustParsePrefix("10.89.0.0/24")
 
 // --- dnsmasq (DHCP and DNS) ---
 
+// FixedAddress is one device that always gets the same address.
+type FixedAddress struct {
+	MAC string // "3a:1f:22:aa:bb:cc"
+	IP  string // "10.87.0.50"
+}
+
 // DnsmasqInput is everything needed to write dnsmasq.conf.
 type DnsmasqInput struct {
 	LAN       LAN
@@ -359,9 +365,13 @@ type DnsmasqInput struct {
 	// Plugins makes dnsmasq answer plugins' DNS questions too, on the
 	// plugins' network (PluginBridge must exist). Ignored when Captive.
 	Plugins bool
+	// FixedAddresses are devices that always get the same address
+	// (dnsmasq's dhcp-host). Each must be inside LAN.
+	FixedAddresses []FixedAddress
 }
 
 type dnsmasqData struct {
+	FixedAddresses   []FixedAddress
 	Metered          bool
 	GuestBridge      string
 	GuestAddress     string
@@ -433,6 +443,16 @@ func Dnsmasq(in DnsmasqInput) (string, error) {
 		if n, err := strconv.Atoi(port); hasPort && (err != nil || n < 1 || n > 65535) {
 			return "", fmt.Errorf("upstream DNS server %q has no valid port", server)
 		}
+	}
+	// Fixed addresses: only devices on the hotspot's own network (not the
+	// guests'), and never RasBeacon's own address.
+	for _, f := range in.FixedAddresses {
+		mac, err := net.ParseMAC(f.MAC)
+		ip, ipErr := netip.ParseAddr(f.IP)
+		if err != nil || ipErr != nil || !in.LAN.Prefix.Masked().Contains(ip) || ip == in.LAN.Prefix.Addr() {
+			return "", fmt.Errorf("invalid fixed address %s for %s", f.IP, f.MAC)
+		}
+		data.FixedAddresses = append(data.FixedAddresses, FixedAddress{MAC: mac.String(), IP: ip.String()})
 	}
 	return execute("dnsmasq.conf.tmpl", data)
 }

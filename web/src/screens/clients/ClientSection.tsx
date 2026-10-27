@@ -1,17 +1,20 @@
 import { useState } from 'react';
 import { useDevice } from '@/data/device';
 import { cn } from '@/lib/cn';
-import { Badge, BreakableText, ButtonRow, EditButton, RenameSheet, Switch } from '@/ui';
+import { Badge, BreakableText, ButtonRow, EditButton, RenameSheet, SheetRow, Switch } from '@/ui';
 import { clientDetails, clientName, networkName, type NetworkClient } from '../common/clientDisplay';
+import { FixedAddressSheet } from './FixedAddressSheet';
 
 /**
  * One device as a group: its name (renamed with the pencil beside it) and network with the
- * switch for its internet access, its readings, and disconnecting it (or, while paused, flushing its lease). A device
+ * switch for its internet access, its readings, its fixed address (hotspot devices), and
+ * disconnecting it (or, while paused, flushing its lease). A device
  * paused by the data limit stays paused until the counts are reset or the limit is raised.
  */
 export function ClientSection({ client }: { client: NetworkClient }) {
   const { setClientInternetAccess, disconnectClient, flushClientLease, renameClient } = useDevice();
   const [renaming, setRenaming] = useState(false);
+  const [fixingAddress, setFixingAddress] = useState(false);
   const paused = !client.internetAccess;
   const name = clientName(client);
 
@@ -57,6 +60,10 @@ export function ClientSection({ client }: { client: NetworkClient }) {
           </div>
         ))}
       </dl>
+      {/* Guests' addresses come from their own network and aren't kept. */}
+      {client.network === 'hotspot' && (
+        <SheetRow title="Fixed address" value={client.fixedAddress ?? 'Off'} onClick={() => setFixingAddress(true)} />
+      )}
       {paused ? (
         // The keys give each button its own request state.
         <ButtonRow key="flush" tone="danger" action={() => flushClientLease(client.mac)} busyLabel="Flushing…">
@@ -70,6 +77,7 @@ export function ClientSection({ client }: { client: NetworkClient }) {
           </ButtonRow>
         )
       )}
+      {fixingAddress && <FixedAddressSheet client={client} onClose={() => setFixingAddress(false)} />}
       {renaming && (
         <RenameSheet
           title="Rename device"

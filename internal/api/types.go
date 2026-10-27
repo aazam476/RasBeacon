@@ -735,6 +735,13 @@ type ClientNameRequest struct {
 	Name string `json:"name"`
 }
 
+// ClientFixedAddressRequest makes a device always get Address on the
+// hotspot (POST /clients/fixed-address); an empty Address removes it.
+type ClientFixedAddressRequest struct {
+	MAC     string `json:"mac"`
+	Address string `json:"address"`
+}
+
 // WiFiQRRequest asks for a QR code to join a network (POST /wifi-qr):
 // "hotspot" or "guest". Being logged in is enough.
 type WiFiQRRequest struct {

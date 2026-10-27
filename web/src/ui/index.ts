@@ -21,7 +21,17 @@ export { IconTile, type TileColor } from './IconTile';
 export { Markdown } from './Markdown';
 export { Meter } from './Meter';
 export { Notice, NoticeList, type NoticeTone } from './Notice';
-export { ButtonRow, FormSwitchRow, LinkRow, Row, RowText, Section, SwitchRow, type RowLeading } from './Section';
+export {
+  ButtonRow,
+  FormSwitchRow,
+  LinkRow,
+  Row,
+  RowText,
+  Section,
+  SheetRow,
+  SwitchRow,
+  type RowLeading,
+} from './Section';
 export { RenameSheet } from './RenameSheet';
 export { Sheet } from './Sheet';
 export { SignalIcon } from './SignalIcon';

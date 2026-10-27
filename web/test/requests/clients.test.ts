@@ -36,6 +36,13 @@ describe('clients', () => {
       path: '/clients/name',
       body: { mac, name: "Ali's phone" },
     },
+    {
+      name: 'gives a device a fixed address',
+      call: () => api.setFixedAddress(mac, '10.87.0.50'),
+      method: 'POST',
+      path: '/clients/fixed-address',
+      body: { mac, address: '10.87.0.50' },
+    },
   ]);
 });
 

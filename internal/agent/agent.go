@@ -666,6 +666,7 @@ func (a *Agent) applyDHCP(captive bool) error {
 		IPv6DefaultRoute: a.devicesHaveIPv6Internet(),
 		Guest:            a.guestLAN(),
 		Metered:          a.cfg.Hotspot.Metered,
+		FixedAddresses:   a.fixedAddresses(),
 	}
 	if a.noticeActive() {
 		input.NoticeHostnames = portal.ProbeHostnames

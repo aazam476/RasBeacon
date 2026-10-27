@@ -249,6 +249,51 @@ export function LinkRow({
   );
 }
 
+interface SheetRowProps {
+  /** What it opens, e.g. "Fixed address". */
+  title: ReactNode;
+  /** The state on the right, e.g. "Off" or "10.87.0.50". */
+  value?: ReactNode;
+  leading?: RowLeading;
+  /** Opens the sheet. */
+  onClick: () => void;
+  className?: string;
+}
+
+/**
+ * A row that opens a sheet over the page, with a chevron like a row that opens a page
+ * (`LinkRow`): its name in the label color and its state on the right. The row's name is its
+ * title; the value is read as its description.
+ */
+export function SheetRow({ title, value, leading, onClick, className }: SheetRowProps) {
+  const id = useId();
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-labelledby={`${id}-title`}
+      aria-describedby={hasValue(value) ? `${id}-value` : undefined}
+      aria-haspopup="dialog"
+      className={cn('row row-pressable w-full text-left', className)}
+    >
+      <Leading leading={leading} />
+      {/* The title and value share the line while they fit; with large text the value moves
+          under the title (to the right), rather than squeezing it a letter wide. */}
+      <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3">
+        <span id={`${id}-title`} className="min-w-0 grow text-body wrap-break-word text-label">
+          {title}
+        </span>
+        {hasValue(value) && (
+          <span id={`${id}-value`} className="ml-auto min-w-0 text-right text-body wrap-break-word text-label-2">
+            {value}
+          </span>
+        )}
+      </span>
+      <Icon name="chevron_right" size={20} className="-mr-1 shrink-0 text-label-3 lg:size-4" />
+    </button>
+  );
+}
+
 interface ButtonRowProps {
   /** A device action (the row shows the indicator while it runs; failures go to the toast)… */
   action?: () => Promise<void>;
@@ -385,10 +430,19 @@ export function FormSwitchRow({
   const id = useId();
 
   return (
-    <div className={cn('row flex-col items-stretch gap-2', className)}>
-      <label className={cn('flex items-center gap-3 lg:gap-2.5', disabled ? 'cursor-not-allowed' : 'cursor-pointer')}>
-        <Leading leading={leading} />
-        <span className="min-w-0 flex-1">
+    // As SwitchRow: with very large text on a narrow row the icon goes and the switch moves under
+    // its label.
+    <div className={cn('row @container flex-col items-stretch gap-2', className)}>
+      <label
+        className={cn(
+          'flex flex-wrap items-center gap-3 lg:gap-2.5',
+          disabled ? 'cursor-not-allowed' : 'cursor-pointer',
+        )}
+      >
+        <span className="contents @max-[14rem]:hidden">
+          <Leading leading={leading} />
+        </span>
+        <span className="min-w-0 flex-1 @max-[14rem]:basis-full">
           <span id={`${id}-label`} className="block text-body wrap-break-word text-label">
             {label}
             {labelNote && <span className="text-label-2"> {labelNote}</span>}

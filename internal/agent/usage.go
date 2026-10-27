@@ -173,6 +173,7 @@ func (a *Agent) applyUsageLimit() {
 func (a *Agent) setUsage(c *stations.Station) {
 	a.loadUsage()
 	c.Name = a.cfg.Clients.Names[c.MAC]
+	c.FixedAddress = a.cfg.Clients.FixedAddresses[c.MAC]
 	total := a.usage.file.Devices[c.MAC]
 	c.DownBytes, c.UpBytes = total[0], total[1]
 	if slices.Contains(a.usage.overLimit, c.MAC) {

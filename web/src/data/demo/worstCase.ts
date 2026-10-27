@@ -107,6 +107,8 @@ export function applyWorstCase(demo: DemoState) {
     internetAccess: index !== 1 && index !== 9,
     pausedSeconds: index === 1 ? 2_592_000 : index === 9 ? 30 : undefined,
     isThisDevice: index === 3,
+    // A fixed address the longest it can be, and one on a device that has no address yet.
+    fixedAddress: index === 0 ? '192.168.8.254' : index === 6 ? '192.168.8.200' : undefined,
   }));
   // The last two are on the Ethernet client port: no band, no measured traffic.
   clients.push(

@@ -267,6 +267,8 @@ export interface DeviceActions {
   flushClientLease: (mac: string) => Promise<void>;
   /** Name a device; "" goes back to the name it sends. Field key: name. */
   renameClient: (mac: string, name: string) => Promise<void>;
+  /** The address a device always gets on the hotspot; "" lets it get any. Field key: address. */
+  setFixedAddress: (mac: string, address: string) => Promise<void>;
   /** The data limit per device, in MB (0 = none). Field key: limitMb. */
   saveUsageLimit: (limitMb: number) => Promise<void>;
   /** Start counting data use again from zero (the screen has already asked). */

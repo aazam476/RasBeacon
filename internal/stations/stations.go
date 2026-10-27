@@ -49,6 +49,9 @@ type Station struct {
 	Wired bool `json:"wired,omitempty"`
 	// Name is the owner's name for the device ("" if none).
 	Name string `json:"name,omitempty"`
+	// FixedAddress is the address it always gets, when the owner chose one
+	// ("Always use this address"); "" otherwise.
+	FixedAddress string `json:"fixedAddress,omitempty"`
 	// DownBytes and UpBytes are the data it used since the counters were
 	// reset (Wi-Fi devices only; the radio counts them).
 	DownBytes uint64 `json:"downBytes"`

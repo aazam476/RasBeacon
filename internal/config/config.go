@@ -237,6 +237,10 @@ type ClientsConfig struct {
 	// UsageLimitMB pauses a device that has used this much data (down and
 	// up) since the counters were last reset. 0 is no limit.
 	UsageLimitMB int `json:"usageLimitMb,omitempty"`
+	// FixedAddresses are the devices that always get the same address on
+	// the hotspot ("Always use this address"), by MAC address (lower case):
+	// "10.87.0.50".
+	FixedAddresses map[string]string `json:"fixedAddresses,omitempty"`
 }
 
 // MaxDeviceNameLength keeps device names to one line on a phone.
@@ -906,6 +910,7 @@ func (c Config) Clone() Config {
 	}
 	c.Clients.Paused = maps.Clone(c.Clients.Paused)
 	c.Clients.Names = maps.Clone(c.Clients.Names)
+	c.Clients.FixedAddresses = maps.Clone(c.Clients.FixedAddresses)
 	c.DNS.Servers = slices.Clone(c.DNS.Servers)
 	c.DNS.DoH = slices.Clone(c.DNS.DoH)
 	c.Plugins.Sources = slices.Clone(c.Plugins.Sources)

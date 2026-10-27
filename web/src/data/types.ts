@@ -100,6 +100,8 @@ export interface Client {
   wired?: boolean;
   /** The owner's name for the device; the screens prefer it over `hostname`. */
   name?: string;
+  /** The address it always gets on the hotspot, when the owner chose one ("Always use this address"). */
+  fixedAddress?: string;
   /** Data used since the counters were reset (Wi-Fi devices; 0 for wired ones). */
   downBytes: number;
   upBytes: number;

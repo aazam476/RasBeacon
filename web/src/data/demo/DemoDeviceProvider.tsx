@@ -8,6 +8,7 @@ import {
   type DeviceState,
   type Loadable,
 } from '../device';
+import { fixedAddressProblem } from '@/lib/fixedAddress';
 import { FieldErrors } from '../errors';
 import type { Plugin, PluginChoices, PluginPreview, SavedNetwork, VPNProfile } from '../types';
 import { DemoIndex } from './DemoIndex';
@@ -607,6 +608,22 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
           const { status } = d.router;
           for (const client of [...status.clients, ...status.guest.clients]) {
             if (client.mac === mac) client.name = trimmed || undefined;
+          }
+        });
+      },
+      setFixedAddress: async (mac, address) => {
+        await wait(600);
+        // The same rules as the router (internal/agent/fixedaddress.go), for the default network.
+        const problem = fixedAddressProblem(
+          address,
+          mac,
+          currentDemo.router.status.clients,
+          currentDemo.router.status.hotspot.lanAddress,
+        );
+        if (problem) throw new FieldErrors({ address: problem });
+        change((d) => {
+          for (const client of d.router.status.clients) {
+            if (client.mac === mac) client.fixedAddress = address || undefined;
           }
         });
       },

@@ -66,6 +66,9 @@ func (a *Agent) Handler() http.Handler {
 		return a.SetClientInternetAccess(req.MAC, req.Allowed)
 	}))
 	mux.HandleFunc("POST /clients/name", do(func(req api.ClientNameRequest) error { return a.SetClientName(req.MAC, req.Name) }))
+	mux.HandleFunc("POST /clients/fixed-address", do(func(req api.ClientFixedAddressRequest) error {
+		return a.SetFixedAddress(req.MAC, req.Address)
+	}))
 	mux.HandleFunc("POST /clients/disconnect", do(func(req api.ClientRequest) error { return a.DisconnectClient(req.MAC) }))
 	mux.HandleFunc("POST /clients/flush-lease", do(func(req api.ClientRequest) error { return a.FlushClientLease(req.MAC) }))
 	mux.HandleFunc("GET /settings/usage", view(a.UsageSettings))

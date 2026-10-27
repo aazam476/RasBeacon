@@ -695,6 +695,7 @@ var forwardedRoutes = map[string]string{
 	"POST /api/v1/wifi-qr":                           "/wifi-qr",
 	"POST /api/v1/settings/hotspot/channels":         "/settings/hotspot/channels",
 	"POST /api/v1/clients/name":                      "/clients/name",
+	"POST /api/v1/clients/fixed-address":             "/clients/fixed-address",
 	"GET /api/v1/settings/usage":                     "/settings/usage",
 	"PUT /api/v1/settings/usage":                     "/settings/usage",
 	"POST /api/v1/clients/usage/reset":               "/clients/usage/reset",

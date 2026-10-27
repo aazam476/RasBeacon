@@ -163,6 +163,8 @@ type routerSettings struct {
 	Guest bool
 	// PausedMACs are devices whose internet access is paused.
 	PausedMACs []string
+	// FixedAddresses are devices that always get the same address.
+	FixedAddresses []render.FixedAddress
 }
 
 // startRouter applies rbd's firewall and starts dnsmasq with rbd's config,
@@ -188,7 +190,7 @@ func startRouter(t *testing.T, settings routerSettings) (leaseFile string) {
 	inNS(t, routerNS, "nft", "-f", rulesFile)
 
 	leaseFile = filepath.Join(dir, "dnsmasq.leases")
-	dnsmasqInput := render.DnsmasqInput{LAN: render.DefaultLAN, LeaseFile: leaseFile, Captive: !settings.Normal}
+	dnsmasqInput := render.DnsmasqInput{LAN: render.DefaultLAN, LeaseFile: leaseFile, Captive: !settings.Normal, FixedAddresses: settings.FixedAddresses}
 	if settings.Normal {
 		dnsmasqInput.Upstream = []string{settings.UpstreamDNS}
 	}
