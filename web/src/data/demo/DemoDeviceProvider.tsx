@@ -588,6 +588,13 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
           if (form.privateKey.trim()) profile.publicKey = randomKey();
         });
       },
+      removeVpnPresharedKey: async ({ name }) => {
+        await wait(800);
+        change((d) => {
+          const profile = d.router.vpnSettings.profiles.find((candidate) => candidate.name === name);
+          if (profile) profile.hasPresharedKey = false;
+        });
+      },
       generateVpnKey: async (profileName) => {
         await wait(900);
         change((d) => {

@@ -36,6 +36,7 @@ import type {
   QoSSettings,
   RadioRole,
   VPNDetailsForm,
+  VPNProfile,
   VPNSettings,
   WelcomeSettings,
   ModemSettings,
@@ -274,6 +275,8 @@ export interface DeviceActions {
   saveVpnDetails: (profile: string, form: VPNDetailsForm) => Promise<void>;
   /** Make a new key pair for one profile (the screen has already asked for confirmation). */
   generateVpnKey: (profile: string) => Promise<void>;
+  /** Delete one profile's saved preshared key, keeping the rest (the screen has asked first). */
+  removeVpnPresharedKey: (profile: VPNProfile) => Promise<void>;
 
   // --- Hotspot and guests ------------------------------------------------------------------
 

@@ -102,6 +102,7 @@ function ServerDetailsForm({ profile }: { profile: VPNProfile }) {
         placeholder={profile.hasPresharedKey ? 'Unchanged' : 'None'}
         {...field('presharedKey')}
       />
+      {profile.hasPresharedKey && <RemovePresharedKey profile={profile} />}
       <PasswordField
         label="New private key"
         labelNote="(empty = keep)"
@@ -120,6 +121,34 @@ function ServerDetailsForm({ profile }: { profile: VPNProfile }) {
         />
       </div>
     </form>
+  );
+}
+
+/** Deletes the saved preshared key, once the owner confirmed (the server must stop using it too). */
+function RemovePresharedKey({ profile }: { profile: VPNProfile }) {
+  const { removeVpnPresharedKey } = useDevice();
+  const [confirming, setConfirming] = useState(false);
+  return (
+    <>
+      <ButtonRow tone="danger" onClick={() => setConfirming(true)}>
+        Remove the saved preshared key
+      </ButtonRow>
+      {confirming && (
+        <AlertDialog
+          title="Remove the preshared key?"
+          tone="danger"
+          confirmLabel="Remove"
+          busyLabel="Removing…"
+          onConfirm={() => removeVpnPresharedKey(profile)}
+          onClose={() => setConfirming(false)}
+        >
+          <p>
+            Remove the preshared key of <span className="font-mono wrap-anywhere">{profile.name}</span>? Remove it on
+            the WireGuard server too, or the VPN stops working.
+          </p>
+        </AlertDialog>
+      )}
+    </>
   );
 }
 

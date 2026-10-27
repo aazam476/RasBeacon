@@ -594,6 +594,9 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
         );
       },
       generateVpnKey: (profile) => vpnChange(() => api.vpnProfileAction('generate-key', profile)),
+      // The other details are sent as saved; empty keys keep the saved ones.
+      removeVpnPresharedKey: (profile) =>
+        vpnChange(() => api.saveVPNProfile({ ...profile, privateKey: '', presharedKey: '', removePresharedKey: true })),
 
       saveHotspotSettings: async (settings) => {
         const saved = await attempt(() => api.putHotspotSettings(settings), {

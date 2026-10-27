@@ -273,6 +273,17 @@ describe('VPN', () => {
       body: { conf: '[Interface]\n', name: 'home.conf' },
     },
     {
+      name: 'removes a profile’s preshared key, sending its other details as saved',
+      run: (d) => d.removeVpnPresharedKey(d.vpnSettings.data!.profiles[0]),
+      sends: ['POST /settings/vpn/profile/save'],
+      body: expect.objectContaining({
+        removePresharedKey: true,
+        presharedKey: '',
+        privateKey: '',
+        endpoint: expect.any(String),
+      }),
+    },
+    {
       name: 'saves a profile’s server details as typed, trimmed',
       run: (d) =>
         d.saveVpnDetails('Home', {

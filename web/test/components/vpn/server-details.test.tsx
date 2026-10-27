@@ -21,6 +21,29 @@ describe('server details', () => {
     expect(await row.findByText('Saved.')).toBeTruthy();
   });
 
+  it('removes the saved preshared key after warning, and offers it only when one is saved', async () => {
+    const device = fakeDevice((router) => {
+      router.vpnSettings.profiles[0].hasPresharedKey = true;
+    });
+    const { user } = renderScreen(<VpnScreen />, device, '/vpn');
+    const row = within(await openRow(user, 'Server details (advanced)'));
+    await user.click(row.getByRole('button', { name: 'Remove the saved preshared key' }));
+    const alert = within(screen.getByRole('dialog', { name: 'Remove the preshared key?' }));
+    await user.click(alert.getByRole('button', { name: 'Remove' }));
+    expect(device.removeVpnPresharedKey).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'hotel-tunnel-01.conf', hasPresharedKey: true }),
+    );
+  });
+
+  it('offers no removal without a preshared key', async () => {
+    const device = fakeDevice((router) => {
+      router.vpnSettings.profiles[0].hasPresharedKey = false;
+    });
+    const { user } = renderScreen(<VpnScreen />, device, '/vpn');
+    const row = within(await openRow(user, 'Server details (advanced)'));
+    expect(row.queryByRole('button', { name: 'Remove the saved preshared key' })).toBeNull();
+  });
+
   it('offers all traffic as the allowed IPs when the file had none', async () => {
     const device = fakeDevice((router) => {
       router.vpnSettings.profiles[0].allowedIps = [];
