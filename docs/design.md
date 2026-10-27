@@ -61,12 +61,14 @@ compatibility table records the result.
     runner with QEMU user emulation, which is slower. Nothing in the code or
     workflows hard-codes the repository name, so the move is a plain push.
 - **Release artifacts:**
-  - `rasbeacon-<board>-<ver>.img.xz`, one per board: flash with Raspberry
-    Pi Imager ("Use custom") or balenaEtcher.
-  - `rasbeacon-<board>-<ver>.rbupdate`: the signed update (Pi 4/5; the file
-    carries its own Ed25519 signature, see section 9).
+  - `rasbeacon-<ver>.img.xz` (Pi 4 and 5) and
+    `rasbeacon-pi3-zero2w-<ver>.img.xz` (Pi 3 and Zero 2 W): flash with
+    Raspberry Pi Imager ("Use custom") or balenaEtcher.
+  - `rasbeacon-<ver>.rbupdate`: the signed update (Pi 4/5 only; the file
+    carries its own Ed25519 signature, see section 9), with
+    `rasbeacon-<ver>.update.json` (its version and `minFromVersion`).
   - `SHA256SUMS`.
-  - `rasbeacon-<board>-<ver>.packages.txt`: every package in the image with
+  - `<image name>-<ver>.packages.txt`: every package in each image with
     its source package and version, for the GPL/LGPL sources (section 10).
 
   Every feature is in the single image. There are no variants.

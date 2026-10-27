@@ -23,10 +23,11 @@ This file lists what, and what redistributing the images requires.
 | React, React DOM, React Router (in the web UI) | npm | MIT |
 | Tailwind CSS base styles (in the web UI's built CSS) | npm | MIT |
 | Material Symbols Rounded icon shapes (SVG paths in `web/src/ui/icons.ts`, in the web UI) | fonts.google.com/icons (github.com/google/material-design-icons) | Apache-2.0 |
-| golang.org/x/crypto (in rbd and rbweb) | Go module | BSD-3-Clause |
+| golang.org/x/crypto (bcrypt, SSH key checks; in rbd) | Go module | BSD-3-Clause |
+| golang.org/x/sys (used by golang.org/x/crypto; in rbd) | Go module | BSD-3-Clause |
 | rsc.io/qr 0.2.0 (QR codes, in rbd) | Go module | BSD-3-Clause |
 | Cloudflare speed test library 1.14.1 (in rbd, run in the headless browser) | github.com/cloudflare/speedtest (npm `@cloudflare/speedtest`) | MIT (`internal/speedtest/cloudflare/LICENSE`) |
-| Go standard library (in rbd and rbweb) | go.dev | BSD-3-Clause |
+| Go standard library (in rbd, rbweb and rbdoh) | go.dev | BSD-3-Clause |
 | Wi-Fi regulatory database (`wireless-regdb` package in the images; a copy in `internal/regdb/testdata/` for the tests) | git.kernel.org wireless-regdb | ISC |
 
 The build tools (rpi-image-gen, Vite, TypeScript, Tailwind CSS, oxlint,
@@ -36,7 +37,8 @@ are used to build or test RasBeacon. They are not shipped in the images.
 ## Obligations when redistributing the images
 
 1. **Corresponding source for GPL and LGPL packages.** Each release
-   includes `rasbeacon-<board>-<version>.packages.txt`, which lists every
+   includes `rasbeacon-<version>.packages.txt` (Pi 4 and 5) and
+   `rasbeacon-pi3-zero2w-<version>.packages.txt`, which list every
    package in the image with its source package and exact version. The
    sources are in the public Debian and Raspberry Pi archives at those
    versions (snapshot.debian.org keeps every version), and a written offer

@@ -307,7 +307,8 @@ The VPN stays **off** for this section.
    from the VPN server's address (not your home address); *SSH:*
    `rasbeacon-doh` is active and `ip rule` lists a `uidrange` rule for the
    `rbdoh` user. With plain `9.9.9.9` instead: the leak test shows Quad9,
-   and `ip route show table 51820` has a route for 9.9.9.9 via `wg0`. Break
+   and `ip route show 9.9.9.9` (the main table, which dnsmasq's own lookups
+   use) shows `9.9.9.9 dev wg0`. Break
    the tunnel with the kill switch on: no lookups leak (the leak test
    doesn't load at all). Turn the switch off and empty the DNS box again.
 4. **Kill switch on:** break the tunnel (stop the server, or change the

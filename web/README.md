@@ -29,7 +29,7 @@ Both layouts use the same addresses, so resizing the window keeps you on the sam
 | `/#/more`                                                    | The phone's More page                                                               |
 | `/#/portal`                                                  | The hotel login page screen; opens without logging in                               |
 
-The original UI's addresses still work: `/#portal` (where the router sends phones), `/#hotspot`,
+Addresses from before this UI still work: `/#portal` (where the router sends phones), `/#hotspot`,
 `/#guest` and the others (`src/App.tsx`).
 
 ```bash
@@ -129,7 +129,7 @@ on the device) and `DemoDeviceProvider` (`npm run demo`). `App.tsx` picks one by
   It sits inside `<HashRouter>` and uses `useLocation()` to load what the open page needs.
 - `api.ts` has one function per API route (`docs/api.md`), the CSRF token, `ApiError` and a time
   limit on every request.
-- `logic.ts` is the logic from the original UI, kept pure and unit-tested (`test/logic/logic.test.ts`):
+- `logic.ts` is the real provider's pure logic, kept apart from React and unit-tested (`test/logic/logic.test.ts`):
   `decidePhase`, the input checks, reading the add-network form's files (`fileToUpload`,
   `certificatesToUpload`), the VPN details form (`splitList`, `vpnDetailsRequest`), taps and
   swipes on the login page picture (`classifyGesture`, `pageSizeFor`), and turning the router's
@@ -191,8 +191,8 @@ here: the `/portal` route shows the login page screen whenever the phase is `log
   `src/ui/ErrorToast.tsx`). The demo's "every change fails" state shows both.
 - **Reject with `FieldErrors(fields, message?)`** (`src/data/errors.ts`) to put messages next to
   inputs; `message` is shown for the whole form. Use only the keys `device.ts` lists for that
-  action: a message under any other key is shown nowhere. The router's field names need mapping,
-  as the original UI does: `hotspot.ssid` becomes `ssid`, and `networkErrorKey` turns
+  action: a message under any other key is shown nowhere. The router's field names need mapping
+  (the real provider's `attempt` does it): `hotspot.ssid` becomes `ssid`, and `networkErrorKey` turns
   `networks.2.password` into the list position (key `networks.2`). Anything else is a plain
   `Error`.
 - **The loading actions** (`retry`, `reload`, `refreshStatus`) resolve either way: a failure goes
@@ -216,7 +216,7 @@ API paths are under `/api/v1` and are the original client's functions.
 | `logIn(password, stayLoggedIn)`                                   | POST `/session`                                                                | `stayLoggedIn` is new (see 6).                                                                                                                                 |
 | `logOut`                                                          | DELETE `/session`                                                              |                                                                                                                                                                |
 | `checkPortal`                                                     | POST `/portal/check`                                                           | Reload `portal` now and after ~6 s.                                                                                                                            |
-| `startLoginMode`                                                  | POST `/portal/start`                                                           | Then, after 2 seconds, `window.location.assign(loginUrl \|\| FALLBACK_LOGIN_URL)`, as the original does (the screen also shows an "Open the login page" link). |
+| `startLoginMode`                                                  | POST `/portal/start`                                                           | Then, after 2 seconds, `openAddress(loginPageAddress(loginUrl))` (`lib/navigate.ts`; the screen also shows an "Open the login page" link). |
 | `extendLoginMode`, `stopLoginMode`                                | POST `/portal/extend`, `/portal/stop`                                          |                                                                                                                                                                |
 | `openPortalBrowser`                                               | POST `/portal/browser/start`                                                   | Body: `pageSizeFor(innerWidth, innerHeight)`. Then reload `portal`.                                                                                            |
 | `closePortalBrowser`                                              | POST `/portal/browser/stop`                                                    |                                                                                                                                                                |
@@ -233,6 +233,7 @@ API paths are under `/api/v1` and are the original client's functions.
 | `importVpnProfile({ text, fileName })`                            | POST `/settings/vpn/import` (`conf`, `name`)                                   | The screen has read the chosen file. Reject with the router's message for unsafe files (it names the line).                                                    |
 | `saveVpnDetails(profile, form)`                                   | POST `/settings/vpn/profile/save`                                              | Built by `vpnDetailsRequest`. Field keys are the form's field names.                                                                                           |
 | `generateVpnKey(profile)`                                         | POST `/settings/vpn/profile/generate-key`                                      | The screen has asked for confirmation.                                                                                                                         |
+| `removeVpnPresharedKey(profile)`                                  | POST `/settings/vpn/profile/save`                                              | The profile as saved, with `removePresharedKey: true` and empty keys. The screen has asked for confirmation.                                                   |
 | `setActiveVpnProfile(name)`, `removeVpnProfile(name)`             | POST `/settings/vpn/profile/activate`, `/remove`                               |                                                                                                                                                                |
 | `renameVpnProfile(name, newName)`                                 | POST `/settings/vpn/profile/rename`                                            | Field key: `name` (the router's `newName`).                                                                                                                    |
 | `disconnectUplink`, `renewDhcpLease`, `rescanEthernetPort`        | POST `/uplink/disconnect`, `/uplink/renew`, `/uplink/ethernet/scan`            | Then the status is loaded again.                                                                                                                               |
@@ -399,8 +400,9 @@ checkboxes, links) so that keyboards and screen readers work without extra code.
 
 **Accessibility**
 
-- axe-core finds nothing on any page or demo state, in light and dark, at phone and desktop
-  widths, with sheets, alerts, field errors and toasts open.
+- Pages and demo states were checked with axe-core, in light and dark, at phone and desktop
+  widths, with sheets, alerts, field errors and toasts open. Nothing runs it automatically yet:
+  check a changed page again with the browser extension.
 - Every input has a visible label; errors and progress are announced; the focus is always
   visible, stays inside open dialogs and returns to what opened them; Escape and Android's back
   gesture close dialogs (not while their action runs); small controls have 44px touch areas.

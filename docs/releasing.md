@@ -19,8 +19,9 @@ offered as updates.
 
 To try out a version before releasing it, give it a label:
 `v0.2.0-beta.1`. Publish it as a GitHub **pre-release** (tick *Set as a
-pre-release*): devices' update check reads the latest release, which never
-includes pre-releases, so nobody is offered a test version by surprise.
+pre-release*): devices' update check reads the newest 30 releases and
+leaves pre-releases (and drafts) out, so nobody is offered a test version by
+surprise.
 
 Plugins follow along: the plugins repository's release tags start with the
 RasBeacon version they're made for (`v0.1.0`, `v0.1.1`, … for RasBeacon
