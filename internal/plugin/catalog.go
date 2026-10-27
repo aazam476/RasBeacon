@@ -269,7 +269,10 @@ func getBytes(client *http.Client, url string, limit int64) ([]byte, error) {
 
 // NewerVersion reports whether version a is newer than b, comparing the
 // numbers in them in order ("1.10.2" > "1.9"); other text is compared as
-// text.
+// text. When one is the other with more parts, more numbers are a later
+// version ("1.0.1" > "1.0", a packaging revision "1.0-2" > "1.0"), but a
+// word starts a pre-release, which comes before the release ("1.0-beta.1"
+// < "1.0").
 func NewerVersion(a, b string) bool {
 	pa, pb := versionParts(a), versionParts(b)
 	for i := 0; i < len(pa) && i < len(pb); i++ {
@@ -282,7 +285,19 @@ func NewerVersion(a, b string) bool {
 			return pa[i] > pb[i]
 		}
 	}
-	return len(pa) > len(pb)
+	switch {
+	case len(pa) > len(pb):
+		return isNumber(pa[len(pb)])
+	case len(pb) > len(pa):
+		return !isNumber(pb[len(pa)])
+	}
+	return false
+}
+
+// isNumber reports whether a version part is a number.
+func isNumber(part string) bool {
+	_, err := strconv.Atoi(part)
+	return err == nil
 }
 
 // versionParts cuts "v1.10.2-1" into "1", "10", "2", "1".

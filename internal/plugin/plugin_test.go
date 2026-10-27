@@ -286,6 +286,9 @@ func TestNewerVersion(t *testing.T) {
 	}{
 		{"1.10.0", "1.9.9", true}, {"v0.107.57-2", "0.107.57-1", true}, {"1.0", "1.0", false},
 		{"1.0.1", "1.0", true}, {"1.0", "1.0.1", false}, {"2.0-beta", "2.0-alpha", true},
+		// A pre-release comes before its release; a packaging revision after.
+		{"1.0.0-beta.1", "1.0.0", false}, {"1.0.0", "1.0.0-beta.1", true}, {"1.0.0-rc.1", "0.9.9", true},
+		{"1.0.0-2", "1.0.0", true}, {"1.0.0", "1.0.0-2", false},
 	}
 	for _, c := range cases {
 		if got := NewerVersion(c.a, c.b); got != c.want {
