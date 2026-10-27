@@ -354,11 +354,7 @@ func TestBackup_ACutOffBackupSaysSo(t *testing.T) {
 func TestBackup_AnUploadLeftByAnUnfinishedRestoreIsRemovedAtStart(t *testing.T) {
 	e := newClaimedEnv(t, false)
 	mustWrite(t, e.agent.restoreUploadFile(), "a large backup")
-	restarted := New(e.paths, e.runner)
-	restarted.afterFunc, restarted.usbRadioWait, restarted.background = e.timers.afterFunc, 0, func(func()) {}
-	if err := restarted.Start(); err != nil {
-		t.Fatal(err)
-	}
+	e.restart()
 	if fileExists(e.agent.restoreUploadFile()) {
 		t.Error("the leftover upload should be removed when rbd starts")
 	}

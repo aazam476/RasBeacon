@@ -53,22 +53,6 @@ func newRadiosEnv(t *testing.T) *testEnv {
 	return e
 }
 
-// restartRBD starts a new rbd on the same device, as systemd does after
-// "systemctl restart rbd.service".
-func (e *testEnv) restartRBD() *Agent {
-	e.t.Helper()
-	restarted := New(e.paths, e.runner)
-	restarted.usbRadioWait = 0
-	restarted.afterFunc = e.timers.afterFunc
-	restarted.background = func(func()) {}
-	restarted.now = e.agent.now
-	if err := restarted.Start(); err != nil {
-		e.t.Fatal(err)
-	}
-	e.agent = restarted
-	return restarted
-}
-
 // roleOf is the role a radio got, by its own address.
 func roleOf(a *Agent, mac string) (radio.Role, string) {
 	for _, r := range a.radios {
@@ -108,7 +92,7 @@ func TestRadioRoles_GuestRadioThenKeep(t *testing.T) {
 		t.Fatal("rbd should restart with the new roles")
 	}
 
-	a := e.restartRBD()
+	a := e.restart()
 	if err := a.UpdateGuestSettings(guestOn); err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +143,7 @@ func TestRadioRoles_NotKeptGoesBack(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.timers.runAll()
-	a := e.restartRBD()
+	a := e.restart()
 	if role, iface := roleOf(a, builtInMAC); role != radio.RoleHotspot || iface != radio.HotspotInterfaceName {
 		t.Fatalf("the built-in radio: %s as %s", role, iface)
 	}
@@ -178,7 +162,7 @@ func TestRadioRoles_NotKeptGoesBack(t *testing.T) {
 	if _, err := os.Stat(e.paths.RadioRolesPendingFile()); !errors.Is(err, os.ErrNotExist) {
 		t.Error("nothing should wait any more")
 	}
-	a = e.restartRBD()
+	a = e.restart()
 	if role, iface := roleOf(a, usbMAC); role != radio.RoleHotspot || iface != radio.HotspotInterfaceName {
 		t.Errorf("back to the adapter: %s as %s", role, iface)
 	}

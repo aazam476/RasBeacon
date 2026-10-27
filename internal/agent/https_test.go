@@ -146,11 +146,7 @@ func TestHTTPS_TenYearCertificateIsReplacedAtStart(t *testing.T) {
 	mustWrite(t, e.agent.tlsCertFile(), string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})))
 	mustWrite(t, e.agent.tlsKeyFile(), string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})))
 
-	restarted := New(e.paths, e.runner)
-	restarted.afterFunc, restarted.usbRadioWait, restarted.background = e.timers.afterFunc, 0, func(func()) {}
-	if err := restarted.Start(); err != nil {
-		t.Fatal(err)
-	}
+	restarted := e.restart()
 	s := restarted.HTTPSSettings()
 	if s.Subject == "RasBeacon 0.1" || !s.Enabled {
 		t.Errorf("after the start: %+v, want a new certificate", s)
@@ -168,11 +164,7 @@ func TestHTTPS_RbwebIsRestartedAfterABootToFindTheCertificate(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.runner.commands = nil
-	restarted := New(e.paths, e.runner)
-	restarted.afterFunc, restarted.usbRadioWait, restarted.background = e.timers.afterFunc, 0, func(func()) {}
-	if err := restarted.Start(); err != nil {
-		t.Fatal(err)
-	}
+	e.restart()
 	if !e.runner.ran("systemctl restart rbweb.service") {
 		t.Errorf("rbweb should be restarted to serve HTTPS; commands: %v", e.runner.commands)
 	}
@@ -183,11 +175,7 @@ func TestHTTPS_RbwebIsRestartedAfterABootToFindTheCertificate(t *testing.T) {
 	// A start where the copy is already there (rbd restarted alone) leaves
 	// rbweb alone.
 	e.runner.commands = nil
-	again := New(e.paths, e.runner)
-	again.afterFunc, again.usbRadioWait, again.background = e.timers.afterFunc, 0, func(func()) {}
-	if err := again.Start(); err != nil {
-		t.Fatal(err)
-	}
+	e.restart()
 	if e.runner.ran("systemctl restart rbweb.service") {
 		t.Error("rbweb must not be restarted when nothing changed")
 	}

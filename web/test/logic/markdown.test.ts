@@ -71,13 +71,14 @@ describe('parseInline', () => {
     expect(parseInline('\\*not italic\\*')).toEqual([{ kind: 'text', text: '*not italic*' }]);
   });
 
-  // A 64 KB README of marks that are never closed: one pass over the line, not one per mark
-  // (that took seconds and froze the plugin page).
+  // A 256 KB README of marks that are never closed: one pass over the line, not one per mark (a
+  // 64 KB one took seconds and froze the plugin page; this one would take a minute). One pass takes
+  // milliseconds, so the limit leaves a slow, busy test machine plenty of room.
   it.each(['[', '`', '**', '*a ', '_a ', '[a]('])('reads a line full of unclosed "%s" quickly', (mark) => {
-    const line = mark.repeat(Math.ceil(64_000 / mark.length));
+    const line = mark.repeat(Math.ceil(256_000 / mark.length));
     const start = performance.now();
     const parsed = parseInline(line);
-    expect(performance.now() - start).toBeLessThan(500);
+    expect(performance.now() - start).toBeLessThan(3000);
     expect(parsed.map((part) => (part.kind === 'text' ? part.text : '')).join('')).toBe(line);
   });
 

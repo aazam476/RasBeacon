@@ -46,16 +46,19 @@ func keyEvent(code uint16, value int32) []byte {
 func TestWatch_OnlyALongPressCounts(t *testing.T) {
 	reader, writer := io.Pipe()
 	fired := make(chan struct{}, 1)
-	go Watch(reader, KeyRestart, 100*time.Millisecond, func() { fired <- struct{}{} })
+	// The hold is long next to the time between two writes: a pipe's
+	// Write waits until Watch has read it, so the release below is read
+	// microseconds after the press, even on a slow, busy test machine.
+	const hold = 300 * time.Millisecond
+	go Watch(reader, KeyRestart, hold, func() { fired <- struct{}{} })
 
 	// A short press: nothing happens.
 	writer.Write(keyEvent(KeyRestart, 1))
-	time.Sleep(20 * time.Millisecond)
 	writer.Write(keyEvent(KeyRestart, 0))
 	select {
 	case <-fired:
 		t.Fatal("a short press must not trigger")
-	case <-time.After(200 * time.Millisecond):
+	case <-time.After(2 * hold):
 	}
 
 	// Another key held: nothing happens.
@@ -63,14 +66,14 @@ func TestWatch_OnlyALongPressCounts(t *testing.T) {
 	select {
 	case <-fired:
 		t.Fatal("other keys must not trigger")
-	case <-time.After(200 * time.Millisecond):
+	case <-time.After(2 * hold):
 	}
 
 	// A long press triggers.
 	writer.Write(keyEvent(KeyRestart, 1))
 	select {
 	case <-fired:
-	case <-time.After(time.Second):
+	case <-time.After(10 * hold):
 		t.Fatal("a long press should trigger")
 	}
 	writer.Close()

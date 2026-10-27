@@ -14,8 +14,9 @@ what it covers.
 | [Hardware](#hardware) | what only a Raspberry Pi can show: radios, USB adapters, real networks | [full.md](full.md) | by hand |
 
 `make test` runs the first two, `make lint` the formatting and static
-checks. CI runs all but the hardware tests on every push and prints how
-much of the code the unit tests run (`go test -cover ./...` and
+checks. CI runs all but the hardware tests on every push, the Go tests
+with the race detector (`-race`), and prints how much of the code the
+unit tests run (`go test -cover ./...` and
 `npm run coverage`).
 
 ### Coverage minimums
@@ -80,7 +81,11 @@ they run on.
   that records each command instead of running it (and answers with
   `outputs`), and fake timers (`e.timers.runAll()`) for things that
   happen later. `newClaimedEnv` is the same after first-time setup,
-  `newPluginEnv` with Podman faked too.
+  `newPluginEnv` with Podman faked too. `e.restart()` is rbd starting
+  again on the same device (a reboot, a crash, an update): a new agent
+  with the same files and the same fakes. Build a second agent only
+  through it (or `e.newAgent()`), never with `New` alone, which would
+  wait, look up names and start loops for real.
   - Area files: `vpn_test.go`, `access_test.go`, `backup_test.go`, …
   - `server_test.go` checks rbd's HTTP routes themselves: every route
     refuses a body it can't read, what a settings page reads can be saved

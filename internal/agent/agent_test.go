@@ -251,11 +251,14 @@ func (e *testEnv) newAgent() *Agent {
 }
 
 // restart is rbd starting again on the same device (after a reboot, a
-// crash or an update): a new agent with the same files and fakes replaces
-// e.agent (with fresh timers in e.timers), and starts.
+// crash, an update or "systemctl restart rbd.service"): a new agent with
+// the same files, fakes and clock replaces e.agent (with fresh timers in
+// e.timers: the old process's are gone), and starts.
 func (e *testEnv) restart() *Agent {
 	e.t.Helper()
+	now := e.agent.now
 	e.agent = e.newAgent()
+	e.agent.now = now
 	e.start()
 	return e.agent
 }
@@ -483,13 +486,7 @@ func TestReboot_AfterClaim_StartsInNormalMode(t *testing.T) {
 	e.timers.runAll()
 
 	// Simulate a reboot: a new agent reading the same disk.
-	restarted := New(e.paths, e.runner)
-	restarted.afterFunc = e.timers.afterFunc
-	restarted.usbRadioWait = 0
-	restarted.background = func(func()) {} // no loops left running after the test
-	if err := restarted.Start(); err != nil {
-		t.Fatal(err)
-	}
+	restarted := e.restart()
 	if mode := restarted.SetupState().Mode; mode != api.ModeNormal {
 		t.Errorf("after reboot mode = %q, want normal", mode)
 	}
@@ -504,13 +501,7 @@ func TestFactoryResetFile_WipesSettingsAtBoot(t *testing.T) {
 	e.timers.runAll()
 
 	mustWrite(t, e.paths.FactoryResetFile(), "")
-	restarted := New(e.paths, e.runner)
-	restarted.afterFunc = e.timers.afterFunc
-	restarted.usbRadioWait = 0
-	restarted.background = func(func()) {} // no loops left running after the test
-	if err := restarted.Start(); err != nil {
-		t.Fatal(err)
-	}
+	restarted := e.restart()
 	if state := restarted.SetupState(); state.Claimed || state.Mode != api.ModeSetup {
 		t.Errorf("after factory reset the device should be unclaimed in setup mode, got %+v", state)
 	}

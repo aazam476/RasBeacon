@@ -141,14 +141,8 @@ func TestHotspot_Saved5GHzRunsOn2GHzOnARadioWithout5GHz(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	restarted := New(e.paths, e.runner)
-	restarted.usbRadioWait = 0
-	restarted.afterFunc = e.timers.afterFunc
-	restarted.background = func(func()) {}
 	e.runner.outputs["iw phy phy1 info"] = iwInfoWithAP
-	if err := restarted.Start(); err != nil {
-		t.Fatal(err)
-	}
+	restarted := e.restart()
 	hostapd := e.readFile(e.paths.HostapdConfig())
 	if !strings.Contains(hostapd, "hw_mode=g") || strings.Contains(hostapd, "channel=44") {
 		t.Errorf("hostapd should run on 2.4 GHz's default channel:\n%s", hostapd)
@@ -287,11 +281,7 @@ func TestHotspot_SavedWPA3OnlyRunsAsWPA2WPA3OnARadioWithoutIt(t *testing.T) {
 
 	// The adapter is swapped for one without the cipher.
 	e.runner.outputs["iw phy phy1 info"] = iwInfoDualBand
-	restarted := New(e.paths, e.runner)
-	restarted.afterFunc, restarted.usbRadioWait, restarted.background = e.timers.afterFunc, 0, func(func()) {}
-	if err := restarted.Start(); err != nil {
-		t.Fatal(err)
-	}
+	restarted := e.restart()
 	if hostapd := e.readFile(e.paths.HostapdConfig()); strings.Contains(hostapd, "wpa_key_mgmt=SAE\n") {
 		t.Errorf("hostapd must not run WPA3 only on this radio:\n%s", hostapd)
 	}
@@ -326,13 +316,7 @@ func TestHotspot_WiFiStandard(t *testing.T) {
 
 	// A Wi-Fi 6 adapter: the best by itself, without choosing.
 	e.runner.outputs["iw phy phy1 info"] = iwInfoWiFi6
-	restarted := New(e.paths, e.runner)
-	restarted.usbRadioWait = 0
-	restarted.afterFunc = e.timers.afterFunc
-	restarted.background = func(func()) {}
-	if err := restarted.Start(); err != nil {
-		t.Fatal(err)
-	}
+	restarted := e.restart()
 	if !strings.Contains(e.readFile(e.paths.HostapdConfig()), "ieee80211ax=1") || restarted.Status().Hotspot.Standard != config.StandardWiFi6 {
 		t.Error("a Wi-Fi 6 adapter should run Wi-Fi 6")
 	}

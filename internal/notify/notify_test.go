@@ -33,13 +33,39 @@ func TestSend_ReportsRefusals(t *testing.T) {
 	}
 }
 
+// recorder is an HTTP client's transport that answers 204 to every
+// request and keeps the last one, so a test can send to any address
+// (discord.com, say) without the network.
+type recorder struct {
+	req  *http.Request
+	body string
+}
+
+func (r *recorder) RoundTrip(req *http.Request) (*http.Response, error) {
+	data, _ := io.ReadAll(req.Body)
+	r.req, r.body = req, string(data)
+	return &http.Response{StatusCode: http.StatusNoContent, Body: io.NopCloser(strings.NewReader("")), Request: req}, nil
+}
+
 func TestDiscordGetsJSON(t *testing.T) {
 	if !isDiscord("https://discord.com/api/webhooks/123/abc") || isDiscord("https://ntfy.sh/api/webhooks") {
 		t.Error("only Discord's webhook addresses are Discord's")
 	}
-	body, _ := json.Marshal(map[string]string{"content": "x"})
-	if !strings.Contains(string(body), `"content"`) {
-		t.Fail()
+	rec := &recorder{}
+	err := Send(context.Background(), &http.Client{Transport: rec}, "https://discord.com/api/webhooks/123/abc",
+		"RasBeacon v0.3.0", "A new version is out.", "https://example.com/v0.3.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.req.Header.Get("Content-Type") != "application/json" || rec.req.Header.Get("Title") != "" {
+		t.Errorf("headers %v, want JSON without ntfy's headers", rec.req.Header)
+	}
+	var message map[string]string
+	if err := json.Unmarshal([]byte(rec.body), &message); err != nil {
+		t.Fatalf("Discord needs JSON: %q (%v)", rec.body, err)
+	}
+	if want := "**RasBeacon v0.3.0**\nA new version is out.\nhttps://example.com/v0.3.0"; message["content"] != want || len(message) != 1 {
+		t.Errorf("message = %q, want {content: %q}", message, want)
 	}
 }
 

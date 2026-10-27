@@ -14,6 +14,8 @@ function openApp(hash = '') {
 describe('app', () => {
   afterEach(() => {
     window.location.hash = '';
+    // Also after a failed test, so the next ones don't run on a fake clock.
+    vi.useRealTimers();
   });
 
   it('shows the Status page once logged in', async () => {
@@ -69,7 +71,6 @@ describe('app', () => {
     const before = sent.filter((r) => r.path === '/status').length;
     await vi.advanceTimersByTimeAsync(10_000);
     await waitFor(() => expect(sent.filter((r) => r.path === '/status').length).toBeGreaterThan(before));
-    vi.useRealTimers();
   });
 
   it('the demo build runs on the demo router, without any network', async () => {
