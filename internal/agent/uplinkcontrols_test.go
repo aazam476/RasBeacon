@@ -2,6 +2,7 @@ package agent
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"rasbeacon/internal/config"
@@ -30,6 +31,14 @@ func TestUplinkControls_WiFi(t *testing.T) {
 	if !e.runner.ran("networkctl renew wlan0") {
 		t.Errorf("commands: %v", e.runner.commands)
 	}
+
+	// wpa_supplicant using no saved network (or not answering): the
+	// error says so, without a stray "<nil>".
+	e.runner.outputs[wpa+"status"] = "wpa_state=SCANNING\n"
+	if err := e.agent.DisconnectUplink(); err == nil || strings.Contains(err.Error(), "<nil>") || !strings.Contains(err.Error(), "isn't using any saved network") {
+		t.Errorf("got %v", err)
+	}
+	e.runner.outputs[wpa+"status"] = "bssid=aa:bb:cc:dd:ee:ff\nid=1\nwpa_state=COMPLETED\nssid=Hotel\nfreq=5180\n"
 
 	// Disconnecting pauses the network in use, and lets it back later.
 	e.timers.pending = nil

@@ -11,6 +11,7 @@ package agent
 //     been plugged in).
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -56,8 +57,11 @@ func (a *Agent) DisconnectUplink() error {
 		iface := status.Interface
 		out, err := system.WPACommand(a.runner, a.paths.WPAControlDir(), iface, "status")
 		id := uplink.ParseWPAStatus(out).NetworkID
-		if err != nil || id == "" {
-			return fmt.Errorf("asking wpa_supplicant which network is in use: %v", err)
+		switch {
+		case err != nil:
+			return fmt.Errorf("asking wpa_supplicant which network is in use: %w", err)
+		case id == "":
+			return errors.New("wpa_supplicant isn't using any saved network")
 		}
 		if _, err := system.WPACommand(a.runner, a.paths.WPAControlDir(), iface, "disable_network", id); err != nil {
 			return fmt.Errorf("leaving the Wi-Fi network: %w", err)
