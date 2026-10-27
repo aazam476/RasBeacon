@@ -148,12 +148,14 @@ type Agent struct {
 	// (as text), so the uplink monitor notices a device's new address (see
 	// refreshPinholes).
 	appliedPinholes string
-	portal          portalState
-	readings        readingsState
-	speedtest       speedtestState
-	update          updateState
-	usage           usageState
-	plugins         pluginsState
+	// welcome is the welcome page's accepted devices (see welcome.go).
+	welcome   welcomeState
+	portal    portalState
+	readings  readingsState
+	speedtest speedtestState
+	update    updateState
+	usage     usageState
+	plugins   pluginsState
 	// hotspotCheck is the hotspot's regular self-check (hotspotcheck.go).
 	hotspotCheck hotspotCheckState
 	// serverCert remembers Enterprise login servers (servercert.go).
@@ -746,6 +748,7 @@ func (a *Agent) applyFirewall() error {
 		input.Uplinks = a.uplinkInterfaces()
 		input.PortForwards = a.portForwards()
 		input.Pinholes = a.pinholes()
+		input.Welcome = a.welcomeRule()
 		a.appliedPinholes = fmt.Sprint(input.Pinholes)
 		if g := a.guestLAN(); g != nil {
 			input.GuestAddress = g.Prefix.Addr()

@@ -40,6 +40,23 @@ table inet rasbeacon {
 		type ifname
 		elements = { "{{.Bridge}}"{{if .Guest}}, "{{.GuestBridge}}"{{end}} }
 	}
+{{- if .Welcome}}
+
+	# The welcome page (your own captive portal) is on these networks...
+	set welcome_lans {
+		type ifname
+		elements = { {{range $i, $name := .Welcome.Interfaces}}{{if $i}}, {{end}}"{{$name}}"{{end}} }
+	}
+	# ... and these devices accepted it. Each is asked again when its
+	# "timeout" runs out (nftables removes it by itself).
+	set welcome_ok {
+		type ether_addr
+		flags timeout
+{{- if .Welcome.Accepted}}
+		elements = { {{range $i, $e := .Welcome.Accepted}}{{if $i}}, {{end}}{{$e}}{{end}} }
+{{- end}}
+	}
+{{- end}}
 
 	# INPUT: packets addressed to RasBeacon itself.
 	chain input {
@@ -69,6 +86,10 @@ table inet rasbeacon {
 		iifname "{{.Bridge}}" meta l4proto { tcp, udp } th dport 53 accept
 		# Web UI (HTTP and HTTPS). Only reachable from the hotspot side.
 		iifname "{{.Bridge}}" tcp dport { 80, 443 } accept
+{{- if .Welcome}}
+		# The welcome page (rbweb), on the networks that show it.
+		iifname @welcome_lans tcp dport {{.Welcome.Port}} accept
+{{- end}}
 {{- if .SSHEnabled}}
 		# SSH was turned on in the web UI (hotspot side only).
 		iifname "{{.Bridge}}" tcp dport 22 accept
@@ -138,6 +159,13 @@ table inet rasbeacon {
 		oifname @lans ip6 daddr { {{range $i, $a := .PausedIPv6}}{{if $i}}, {{end}}{{$a}}{{end}} } drop
 {{- end}}
 
+{{- if .Welcome}}
+
+		# The welcome page: devices that haven't accepted it yet get nothing
+		# through RasBeacon (their web requests show the page instead, see
+		# prerouting_nat).
+		iifname @welcome_lans ether saddr != @welcome_ok reject
+{{- end}}
 {{- if .PortForwards}}
 
 		# Port forwarding: connections from the internet to the ports you
@@ -200,6 +228,12 @@ table inet rasbeacon {
 	chain prerouting_nat {
 		type nat hook prerouting priority dstnat;
 		iifname @lans meta l4proto { tcp, udp } th dport 53 redirect
+{{- if .Welcome}}
+		# The welcome page: a device that hasn't accepted it yet sees it for
+		# every web address (so phones open it by themselves), except
+		# RasBeacon's own, so these settings stay reachable.
+		iifname @welcome_lans ether saddr != @welcome_ok ip daddr != { {{range $i, $a := .Welcome.OwnAddresses}}{{if $i}}, {{end}}{{$a}}{{end}} } tcp dport 80 redirect to :{{.Welcome.Port}}
+{{- end}}
 	}
 {{- if .Egress}}
 

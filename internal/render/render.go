@@ -513,6 +513,32 @@ type FirewallInput struct {
 	// IPv6 address (in RoutedIPv6) on a port, without NAT. They arrive
 	// through the tunnel, the only way RoutedIPv6 reaches RasBeacon.
 	Pinholes []Pinhole
+	// Welcome, when set, holds devices on some networks at the welcome
+	// page (the owner's own captive portal) until they accept it.
+	Welcome *WelcomeRule
+}
+
+// WelcomePort is where rbweb serves the welcome page. Web requests from
+// devices that haven't accepted it are sent there.
+const WelcomePort = 2050
+
+// WelcomeRule is the welcome page in the firewall.
+type WelcomeRule struct {
+	// Interfaces are the networks it is on (the hotspot's and/or the
+	// guests' bridge).
+	Interfaces []string
+	// Accepted are the devices that may pass.
+	Accepted []WelcomeDevice
+	// OwnAddresses are RasBeacon's addresses, which devices still reach
+	// (the settings page, DNS).
+	OwnAddresses []netip.Addr
+}
+
+// WelcomeDevice is a device that accepted the welcome page.
+type WelcomeDevice struct {
+	MAC string
+	// Seconds until it is asked again (0: not until the owner asks).
+	Seconds int
 }
 
 // Pinhole is one port opened to a device's public IPv6 addresses.
@@ -629,6 +655,15 @@ type firewallData struct {
 	ForwardMark  string
 	// IPv6 pinholes (see FirewallInput.Pinholes).
 	Pinholes []pinholeData
+	// The welcome page (see FirewallInput.Welcome).
+	Welcome *welcomeData
+}
+
+type welcomeData struct {
+	Interfaces   []string
+	Accepted     []string // "aa:bb:cc:dd:ee:ff" or "aa:bb:cc:dd:ee:ff timeout 3600s"
+	OwnAddresses []string
+	Port         int
 }
 
 // Firewall produces the nftables ruleset.
@@ -732,6 +767,9 @@ func Firewall(in FirewallInput) (string, error) {
 	if err := addPinholes(&data, in); err != nil {
 		return "", err
 	}
+	if err := addWelcome(&data, in); err != nil {
+		return "", err
+	}
 	return execute("firewall.nft.tmpl", data)
 }
 
@@ -811,6 +849,43 @@ func addPinholes(data *firewallData, in FirewallInput) error {
 			data.Pinholes = append(data.Pinholes, d)
 		}
 	}
+	return nil
+}
+
+// addWelcome checks the welcome page's rule and puts it in data.
+func addWelcome(data *firewallData, in FirewallInput) error {
+	w := in.Welcome
+	if w == nil || len(w.Interfaces) == 0 {
+		return nil
+	}
+	d := &welcomeData{Port: WelcomePort}
+	for _, name := range w.Interfaces {
+		if !isInterfaceName(name) {
+			return fmt.Errorf("invalid interface name %q", name)
+		}
+		d.Interfaces = append(d.Interfaces, name)
+	}
+	for _, device := range w.Accepted {
+		hw, err := net.ParseMAC(device.MAC)
+		if err != nil || len(hw) != 6 || device.Seconds < 0 {
+			return fmt.Errorf("invalid welcome device %+v", device)
+		}
+		element := hw.String()
+		if device.Seconds > 0 {
+			element += " timeout " + strconv.Itoa(device.Seconds) + "s"
+		}
+		d.Accepted = append(d.Accepted, element)
+	}
+	for _, addr := range w.OwnAddresses {
+		if !addr.Is4() {
+			return fmt.Errorf("invalid address %v", addr)
+		}
+		d.OwnAddresses = append(d.OwnAddresses, addr.String())
+	}
+	if len(d.OwnAddresses) == 0 {
+		return fmt.Errorf("the welcome page needs RasBeacon's addresses")
+	}
+	data.Welcome = d
 	return nil
 }
 

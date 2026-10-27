@@ -35,6 +35,7 @@ import type {
   UsageSettings,
   VPNDetailsForm,
   VPNSettings,
+  WelcomeSettings,
   WiFiQR,
 } from './types';
 
@@ -71,6 +72,7 @@ export type DataKey =
   | 'sshSettings'
   | 'dnsSettings'
   | 'portForwarding'
+  | 'welcomeSettings'
   | 'swapSettings'
   | 'updateSettings'
   | 'accessSettings'
@@ -109,6 +111,7 @@ export interface DeviceState {
   sshSettings: Loadable<SSHSettings>;
   dnsSettings: Loadable<DNSSettings>;
   portForwarding: Loadable<PortForwardingSettings>;
+  welcomeSettings: Loadable<WelcomeSettings>;
   swapSettings: Loadable<SwapSettings>;
   updateSettings: Loadable<UpdateSettings>;
   accessSettings: Loadable<AccessSettings>;
@@ -267,6 +270,13 @@ export interface DeviceActions {
   hotspotChannels: (country: string) => Promise<ChannelsByBand>;
   /** A QR code to join a network: the hotspot or the guest network. */
   wifiQr: (network: 'hotspot' | 'guest') => Promise<WiFiQR>;
+  /**
+   * Save the welcome page (the owner's captive portal). Field keys: networks, title, message,
+   * terms, accessCode, askAgainHours, color, logo, customPage.
+   */
+  saveWelcomeSettings: (settings: WelcomeSettings) => Promise<void>;
+  /** Clients page: ask the device to accept the welcome page again. */
+  resetWelcome: (mac: string) => Promise<void>;
   /** Field keys: enabled, ssid, password. */
   saveGuestSettings: (settings: GuestSettings) => Promise<void>;
 

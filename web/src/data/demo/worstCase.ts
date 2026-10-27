@@ -311,6 +311,23 @@ export function applyWorstCase(demo: DemoState) {
     { name: 'enx3c18a0b1c2d3', cablePlugged: true, connected: false, foreignDhcpServer: '192.168.178.1' },
     { name: 'eth1', cablePlugged: false, connected: false },
   ];
+  // The welcome page on both networks, with the longest title and long rules; some devices
+  // accepted it, some not yet.
+  router.welcomeSettings = {
+    ...router.welcomeSettings,
+    enabled: true,
+    networks: 'both',
+    title: 'Willkommen im Ferienhaus Sonnenblick am See'.slice(0, 60),
+    message: 'WLAN für Gäste. Bitte lesen Sie die Hausordnung.',
+    terms: 'Keine illegalen Downloads. '.repeat(40).trim(),
+    accessCode: 'SONNENBLICK-2026-SEEBLICK',
+    askAgainHours: 168,
+    includeWired: true,
+    accepted: 7,
+  };
+  router.status.clients.forEach((client, index) => {
+    client.welcome = index % 3 === 0 ? 'waiting' : 'accepted';
+  });
   // Port forwarding: the longest name, a risky port, a range, a plugin with a long name, and a
   // device that has left (shown by its MAC address). The uplink's shared address adds the notice.
   router.portForwardingRules = [

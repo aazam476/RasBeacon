@@ -187,6 +187,10 @@ since their image has one copy of the system.
   Home), file sharing (Samba) or the Argon ONE V2 case's fan. Each runs on
   its own with only the permissions you allow, and reaches the internet
   through the VPN. See [docs/plugins.md](docs/plugins.md).
+- **A welcome page** for visitors (your own captive portal): Guests →
+  **Welcome page**. Devices see your message and house rules, and type an
+  access code if you set one, before they get the internet. You can upload
+  a logo or a page of your own.
 - **Your own DNS servers**, also through the VPN: the **Internet** page.
 - **Share the Wi-Fi with a QR code:** the **Hotspot** and **Guests** pages.
 - **Name your devices, see their data use** and set a data limit per

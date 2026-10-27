@@ -9,6 +9,7 @@ import {
   type Loadable,
 } from '../device';
 import { fixedAddressProblem } from '@/lib/fixedAddress';
+import { welcomeProblems } from '@/lib/welcome';
 import { FieldErrors } from '../errors';
 import type { Plugin, PluginChoices, PluginPreview, SavedNetwork, VPNProfile } from '../types';
 import { DemoIndex } from './DemoIndex';
@@ -685,6 +686,33 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
         const saved = checkPortForwarding(currentDemo.router, rules);
         change((d) => void (d.router.portForwardingRules = saved));
       },
+      saveWelcomeSettings: async (settings) => {
+        await wait(800);
+        const problems = welcomeProblems(settings);
+        if (Object.keys(problems).length > 0) throw new FieldErrors(problems as Record<string, string>);
+        change((d) => {
+          d.router.welcomeSettings = {
+            ...settings,
+            title: settings.title.trim(),
+            accepted: d.router.welcomeSettings.accepted,
+          };
+          // Devices on the page's networks show whether they accepted it.
+          const on = (guest: boolean) =>
+            settings.enabled && (settings.networks === 'both' || settings.networks === (guest ? 'guest' : 'hotspot'));
+          for (const client of d.router.status.clients)
+            client.welcome = on(false) ? (client.welcome ?? 'waiting') : undefined;
+          for (const client of d.router.status.guest.clients)
+            client.welcome = on(true) ? (client.welcome ?? 'waiting') : undefined;
+        });
+      },
+      resetWelcome: async (mac) => {
+        await wait(600);
+        change((d) => {
+          for (const client of [...d.router.status.clients, ...d.router.status.guest.clients]) {
+            if (client.mac === mac && client.welcome) client.welcome = 'waiting';
+          }
+        });
+      },
       saveSshSettings: async (settings) => {
         await wait(900);
         if (settings.enabled && settings.authorizedKeys.trim() === '') {
@@ -1066,6 +1094,7 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
       sshSettings: loadable('sshSettings', router.sshSettings),
       dnsSettings: loadable('dnsSettings', router.dnsSettings),
       portForwarding: loadable('portForwarding', portForwardingView(router)),
+      welcomeSettings: loadable('welcomeSettings', router.welcomeSettings),
       swapSettings: loadable('swapSettings', router.swapSettings),
       updateSettings: loadable('updateSettings', router.updateSettings),
       accessSettings: loadable('accessSettings', router.accessSettings),

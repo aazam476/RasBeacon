@@ -59,6 +59,9 @@ type Station struct {
 	// LimitReached is true while it is paused for using more than the data
 	// limit on a metered connection.
 	LimitReached bool `json:"limitReached,omitempty"`
+	// Welcome is "waiting" while the device hasn't accepted the welcome
+	// page yet, "accepted" once it has, and "" where there is no page.
+	Welcome string `json:"welcome,omitempty"`
 
 	// RxBytes and TxBytes are the radio's byte counters for the device
 	// (Tx is towards it), used to work out the rates.

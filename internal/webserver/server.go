@@ -615,10 +615,11 @@ func (s *Server) handleUI(w http.ResponseWriter, r *http.Request) {
 
 // --- Small helpers ---
 
-// readBody reads a request body of at most 64 KiB. On failure it writes a
-// 400 response and returns false.
+// readBody reads a request body of at most 512 KiB (the welcome page's
+// settings, with a logo and a page of the owner's own, are the biggest). On
+// failure it writes a 400 response and returns false.
 func readBody(w http.ResponseWriter, r *http.Request) ([]byte, bool) {
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 64*1024))
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 512*1024))
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, api.ErrorResponse{Error: "request body too large or unreadable"})
 		return nil, false
@@ -696,6 +697,9 @@ var forwardedRoutes = map[string]string{
 	"POST /api/v1/settings/hotspot/channels":         "/settings/hotspot/channels",
 	"POST /api/v1/clients/name":                      "/clients/name",
 	"POST /api/v1/clients/fixed-address":             "/clients/fixed-address",
+	"GET /api/v1/settings/welcome":                   "/settings/welcome",
+	"PUT /api/v1/settings/welcome":                   "/settings/welcome",
+	"POST /api/v1/clients/welcome-reset":             "/clients/welcome-reset",
 	"GET /api/v1/settings/port-forwarding":           "/settings/port-forwarding",
 	"PUT /api/v1/settings/port-forwarding":           "/settings/port-forwarding",
 	"GET /api/v1/settings/usage":                     "/settings/usage",

@@ -30,6 +30,7 @@ import type {
   UsageSettings,
   PluginsState,
   VPNSettings,
+  WelcomeSettings,
 } from '../types';
 import * as api from './api';
 import { ApiError } from './api';
@@ -59,6 +60,7 @@ interface DataTypes {
   sshSettings: SSHSettings;
   dnsSettings: DNSSettings;
   portForwarding: PortForwardingSettings;
+  welcomeSettings: WelcomeSettings;
   swapSettings: SwapSettings;
   updateSettings: UpdateSettings;
   accessSettings: AccessSettings;
@@ -79,6 +81,7 @@ const LOADERS: { [K in DataKey]: () => Promise<DataTypes[K]> } = {
   sshSettings: api.getSSHSettings,
   dnsSettings: api.getDNSSettings,
   portForwarding: api.getPortForwarding,
+  welcomeSettings: api.getWelcomeSettings,
   swapSettings: api.getSwapSettings,
   updateSettings: api.getUpdateSettings,
   accessSettings: api.getAccessSettings,
@@ -98,6 +101,7 @@ const NO_DATA: AllData = {
   sshSettings: NOTHING,
   dnsSettings: NOTHING,
   portForwarding: NOTHING,
+  welcomeSettings: NOTHING,
   swapSettings: NOTHING,
   updateSettings: NOTHING,
   accessSettings: NOTHING,
@@ -116,6 +120,7 @@ const SETTINGS: DataKey[] = [
   'sshSettings',
   'dnsSettings',
   'portForwarding',
+  'welcomeSettings',
   'swapSettings',
   'updateSettings',
   'accessSettings',
@@ -130,7 +135,8 @@ const PAGE_DATA: Record<string, DataKey[]> = {
   '/internet/port-forwarding': ['portForwarding', 'status'],
   '/vpn': ['vpnSettings', 'status'],
   '/hotspot': ['hotspotSettings', 'accessSettings', 'status'],
-  '/guests': ['guestSettings'],
+  '/guests': ['guestSettings', 'welcomeSettings'],
+  '/guests/welcome': ['welcomeSettings', 'guestSettings'],
   '/clients': ['status', 'usageSettings'],
   '/ssh': ['sshSettings'],
   '/https': ['httpsSettings'],
@@ -579,6 +585,28 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
       wifiQr: (network) => attempt(() => api.wifiQr(network)),
       hotspotChannels: async (country) =>
         (await attempt(() => api.getHotspotChannels(country), { 'hotspot.country': 'country' })).channels,
+      saveWelcomeSettings: async (settings) => {
+        const saved = await attempt(
+          () => api.putWelcomeSettings(settings),
+          sameNames(
+            'networks',
+            'title',
+            'message',
+            'terms',
+            'accessCode',
+            'askAgainHours',
+            'color',
+            'logo',
+            'customPage',
+          ),
+        );
+        store('welcomeSettings', saved);
+        await refreshStatus();
+      },
+      resetWelcome: async (mac) => {
+        await attempt(() => api.resetWelcome(mac));
+        await refreshStatus();
+      },
       saveGuestSettings: async (settings) => {
         const problems = checkGuestForm(settings);
         if (Object.keys(problems).length > 0) throw new FieldErrors(problems);

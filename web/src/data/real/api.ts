@@ -8,6 +8,7 @@ import type {
   AccessSettings,
   ClaimResponse,
   DNSSettings,
+  WelcomeSettings,
   PortForwardingSettings,
   PortForwardRule,
   GuestSettings,
@@ -284,6 +285,12 @@ export const getPortForwarding = () => request<PortForwardingSettings>('GET', '/
 /** Reloading the firewall takes a moment. */
 export const putPortForwarding = (rules: PortForwardRule[]) =>
   request<PortForwardingSettings>('PUT', '/settings/port-forwarding', { body: { rules }, timeoutMs: 30_000 });
+
+export const getWelcomeSettings = () => request<WelcomeSettings>('GET', '/settings/welcome');
+/** Reloading the firewall takes a moment. */
+export const putWelcomeSettings = (settings: WelcomeSettings) =>
+  request<WelcomeSettings>('PUT', '/settings/welcome', { body: settings, timeoutMs: 30_000 });
+export const resetWelcome = (mac: string) => request<void>('POST', '/clients/welcome-reset', { body: { mac } });
 
 export const getVPNSettings = () => request<VPNSettings>('GET', '/settings/vpn');
 export const putVPNSwitches = (switches: { enabled: boolean; killSwitch: boolean }) =>

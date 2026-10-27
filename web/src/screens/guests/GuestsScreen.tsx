@@ -11,6 +11,7 @@ import {
   FormError,
   FormSwitchRow,
   Icon,
+  LinkRow,
   Notice,
   PasswordField,
   Row,
@@ -38,6 +39,7 @@ export function GuestsScreen() {
           )}
           <GuestForm settings={settings} />
           {status.data?.guest.enabled && <GuestNow guest={status.data.guest} />}
+          <WelcomeLink />
           <Reach />
         </>
       )}
@@ -158,6 +160,22 @@ function Reach() {
           }
         />
       ))}
+    </Section>
+  );
+}
+
+/** The way to the welcome page (your own captive portal), with whether it is on. */
+function WelcomeLink() {
+  const { welcomeSettings } = useDevice();
+  const enabled = welcomeSettings.data?.enabled;
+  return (
+    <Section footer="A page visitors see before they get the internet: your message, house rules, an access code.">
+      <LinkRow
+        to="/guests/welcome"
+        leading={{ icon: 'article' }}
+        title="Welcome page"
+        value={enabled === undefined ? undefined : enabled ? 'On' : 'Off'}
+      />
     </Section>
   );
 }

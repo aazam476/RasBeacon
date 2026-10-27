@@ -108,6 +108,11 @@ export interface Client {
    * and it can't be disconnected from here (it can be paused).
    */
   wired?: boolean;
+  /**
+   * The welcome page: `waiting` until the device accepts it, then `accepted`; absent where there
+   * is no welcome page.
+   */
+  welcome?: 'waiting' | 'accepted';
   /** The owner's name for the device; the screens prefer it over `hostname`. */
   name?: string;
   /** The address it always gets on the hotspot, when the owner chose one ("Always use this address"). */
@@ -948,4 +953,36 @@ export interface LANPortStatus {
   connected: boolean;
   /** Set when a DHCP server answered on the port, so it was kept off the hotspot network. */
   foreignDhcpServer?: string;
+}
+
+/** Where the welcome page is shown. */
+export type WelcomeNetworks = 'hotspot' | 'guest' | 'both';
+
+/**
+ * GET/PUT /api/v1/settings/welcome: the welcome page, the owner's own captive portal. Until a
+ * device on `networks` accepts it, its web requests show the page and it gets no internet.
+ */
+export interface WelcomeSettings {
+  enabled: boolean;
+  networks: WelcomeNetworks;
+  /** 1 to 60 characters. */
+  title: string;
+  /** Up to 1,000 characters; "" for none. */
+  message: string;
+  /** House rules or terms (up to 10,000 characters); with them the page has an "I agree" box. */
+  terms: string;
+  /** 4 to 32 characters; "" for no code. */
+  accessCode: string;
+  /** How long an acceptance lasts; 0 until the owner asks again on the Clients page. */
+  askAgainHours: number;
+  /** Also show it to devices on wired ports (otherwise they are let through). */
+  includeWired: boolean;
+  /** The page's color, like "#0c8a9c". */
+  color: string;
+  /** A PNG or JPEG data: URL (up to about 100 KB); "" for none. */
+  logo: string;
+  /** A page of the owner's own (HTML, up to 64 KB) shown instead; "" for the built-in one. */
+  customPage: string;
+  /** Read-only: how many devices may use the internet now. */
+  accepted: number;
 }

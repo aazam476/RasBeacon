@@ -20,6 +20,7 @@ import (
 	"net"
 	"net/netip"
 	"net/url"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -96,6 +97,9 @@ type Config struct {
 	// PortForwarding lets devices on the internet reach a device or a
 	// plugin on the hotspot (Internet page → Port forwarding).
 	PortForwarding PortForwardingConfig `json:"portForwarding"`
+	// Welcome is the owner's own captive portal: a page devices see before
+	// they get the internet (Guests page → Welcome page).
+	Welcome WelcomeConfig `json:"welcome"`
 }
 
 // PluginsConfig is the installed plugins and where the catalog looks for
@@ -784,8 +788,9 @@ func DefaultConfig(identity Identity) Config {
 			Country:  "US",
 		},
 		Guest:    GuestConfig{SSID: GuestSSIDFor("RasBeacon-" + identity.ShortID)},
-		SSH:      SSHConfig{Enabled: false},
 		Ethernet: EthernetConfig{Role: EthernetUplink},
+		SSH:      SSHConfig{Enabled: false},
+		Welcome:  DefaultWelcome(),
 		VPN:      VPNConfig{KillSwitch: true},
 	}
 }
@@ -1131,4 +1136,98 @@ type PortForwardRule struct {
 	IPv6 bool `json:"ipv6,omitempty"`
 	// Enabled rules are in the firewall; others are kept for later.
 	Enabled bool `json:"enabled"`
+}
+
+// Which networks the welcome page is shown on.
+const (
+	WelcomeOnHotspot = "hotspot"
+	WelcomeOnGuest   = "guest"
+	WelcomeOnBoth    = "both"
+)
+
+// Limits for the welcome page's content.
+const (
+	maxWelcomeTitle   = 60
+	maxWelcomeMessage = 1000
+	maxWelcomeTerms   = 10000
+	// MaxWelcomeLogo is the largest logo, as a data: URL (about 100 KB of
+	// picture).
+	MaxWelcomeLogo = 140_000
+	// MaxWelcomePage is the largest page of the owner's own.
+	MaxWelcomePage = 64_000
+)
+
+// WelcomeConfig is the welcome page (the owner's own captive portal): until
+// a device accepts it, its web requests show the page and nothing else
+// reaches the internet.
+type WelcomeConfig struct {
+	Enabled bool `json:"enabled"`
+	// Networks is WelcomeOnHotspot, WelcomeOnGuest or WelcomeOnBoth.
+	Networks string `json:"networks"`
+	// Title, Message and Terms are the page's text. With Terms, the page
+	// has an "I agree" box.
+	Title   string `json:"title"`
+	Message string `json:"message,omitempty"`
+	Terms   string `json:"terms,omitempty"`
+	// AccessCode, when set, must be typed to get in (shared with guests,
+	// for example on a card in the room).
+	AccessCode string `json:"accessCode,omitempty"`
+	// AskAgainHours is how long an acceptance lasts (0: until the owner
+	// asks again from the Clients page).
+	AskAgainHours int `json:"askAgainHours"`
+	// IncludeWired also shows the page to devices on wired ports;
+	// otherwise they are let through.
+	IncludeWired bool `json:"includeWired,omitempty"`
+	// Color is the page's accent color ("#0c8a9c").
+	Color string `json:"color,omitempty"`
+	// Logo is a PNG or JPEG picture as a data: URL ("" for none).
+	Logo string `json:"logo,omitempty"`
+	// CustomPage is a page of the owner's own (HTML) shown instead of the
+	// built-in one ("" for none). It is served sandboxed, and accepts by
+	// sending a form to /accept.
+	CustomPage string `json:"customPage,omitempty"`
+}
+
+var (
+	welcomeColor = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
+	welcomeLogo  = regexp.MustCompile(`^data:image/(png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$`)
+)
+
+// Validate checks the welcome page's settings.
+func (w WelcomeConfig) Validate() error {
+	invalid := func(field, message string) error { return &ValidationError{Field: field, Message: message} }
+	switch {
+	case w.Networks != WelcomeOnHotspot && w.Networks != WelcomeOnGuest && w.Networks != WelcomeOnBoth:
+		return invalid("networks", "Choose your hotspot, the guest network or both.")
+	case strings.TrimSpace(w.Title) == "" || utf8.RuneCountInString(w.Title) > maxWelcomeTitle:
+		return invalid("title", fmt.Sprintf("Give the page a title of up to %d characters.", maxWelcomeTitle))
+	case utf8.RuneCountInString(w.Message) > maxWelcomeMessage:
+		return invalid("message", fmt.Sprintf("Use at most %d characters.", maxWelcomeMessage))
+	case utf8.RuneCountInString(w.Terms) > maxWelcomeTerms:
+		return invalid("terms", fmt.Sprintf("Use at most %d characters.", maxWelcomeTerms))
+	case w.AccessCode != "" && (utf8.RuneCountInString(w.AccessCode) < 4 || utf8.RuneCountInString(w.AccessCode) > 32):
+		return invalid("accessCode", "Use 4 to 32 characters, or leave it empty for no code.")
+	case w.AskAgainHours < 0 || w.AskAgainHours > 24*90:
+		return invalid("askAgainHours", "Choose how often to ask again.")
+	case w.Color != "" && !welcomeColor.MatchString(w.Color):
+		return invalid("color", "Choose a color like #0c8a9c.")
+	case w.Logo != "" && (len(w.Logo) > MaxWelcomeLogo || !welcomeLogo.MatchString(w.Logo)):
+		return invalid("logo", "Use a PNG or JPEG picture of up to 100 KB.")
+	case len(w.CustomPage) > MaxWelcomePage:
+		return invalid("customPage", "Use a page of up to 64 KB.")
+	case w.CustomPage != "" && !utf8.ValidString(w.CustomPage):
+		return invalid("customPage", "The page must be text (UTF-8).")
+	}
+	return nil
+}
+
+// DefaultWelcome is the welcome page before the owner changes it.
+func DefaultWelcome() WelcomeConfig {
+	return WelcomeConfig{
+		Networks:      WelcomeOnGuest,
+		Title:         "Welcome",
+		Message:       "Please read and accept the house rules to use the internet.",
+		AskAgainHours: 24,
+		Color:         "#0c8a9c",
+	}
 }

@@ -279,6 +279,7 @@ func (a *Agent) RunUplinkMonitor() {
 		a.checkLANPorts()
 		a.checkHotspot()
 		a.refreshPinholes()
+		a.refreshWelcome()
 		a.renewCertificateIfDue()
 		a.sampleReadings()
 		a.mu.Unlock()

@@ -125,6 +125,12 @@ func (p Paths) RememberedLoginsFile() string {
 // regularly so the clock never goes backwards across a reboot.
 func (p Paths) ClockFile() string { return filepath.Join(p.DataDir(), "clock") }
 
+// WelcomeAcceptedFile is the devices that accepted the welcome page, and
+// until when.
+func (p Paths) WelcomeAcceptedFile() string {
+	return filepath.Join(p.DataDir(), "welcome-accepted.json")
+}
+
 // UsageFile keeps each device's data use since the counters were reset.
 func (p Paths) UsageFile() string { return filepath.Join(p.DataDir(), "usage.json") }
 

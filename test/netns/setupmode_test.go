@@ -172,6 +172,8 @@ type routerSettings struct {
 	// PortForwards are port forwarding rules (normal mode only; the
 	// uplink is "eth0").
 	PortForwards []render.PortForward
+	// Welcome is the welcome page (normal mode only).
+	Welcome *render.WelcomeRule
 }
 
 // startRouter applies rbd's firewall and starts dnsmasq with rbd's config,
@@ -189,6 +191,7 @@ func startRouter(t *testing.T, settings routerSettings) (leaseFile string) {
 		firewall.Egress = []string{"eth0"}
 		firewall.Uplinks = []string{"eth0"}
 		firewall.PortForwards = settings.PortForwards
+		firewall.Welcome = settings.Welcome
 		firewall.LANAddress = render.DefaultLAN.Prefix.Addr()
 	}
 	rules, err := render.Firewall(firewall)

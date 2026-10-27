@@ -2,6 +2,7 @@ import type {
   AccessSettings,
   Client,
   DNSSettings,
+  WelcomeSettings,
   PortForwardRule,
   GuestSettings,
   HotspotSettings,
@@ -35,6 +36,7 @@ export interface MockRouter {
   dnsSettings: DNSSettings;
   /** The port forwarding rules as saved (portForwarding.ts fills in the rest of the page). */
   portForwardingRules: PortForwardRule[];
+  welcomeSettings: WelcomeSettings;
   swapSettings: SwapSettings;
   updateSettings: UpdateSettings;
   accessSettings: AccessSettings;
@@ -427,6 +429,20 @@ export function createMockRouter(): MockRouter {
     },
 
     dnsSettings: { servers: [], withVpn: false },
+    welcomeSettings: {
+      enabled: false,
+      networks: 'guest',
+      title: 'Welcome',
+      message: 'Please read and accept the house rules to use the internet.',
+      terms: '',
+      accessCode: '',
+      askAgainHours: 24,
+      includeWired: false,
+      color: '#0c8a9c',
+      logo: '',
+      customPage: '',
+      accepted: 0,
+    },
     portForwardingRules: [
       {
         id: 'pf-minecraft',

@@ -397,6 +397,15 @@ Keep the VPN on with the kill switch.
    shows the same uplink as before (the built-in Wi-Fi or Ethernet, never
    `guest0`), phones on both networks have internet again, and
    `journalctl -u rbd -b | grep -i uplink` names no `guest0`.
+   **Welcome page (new):** Guests → **Welcome page** → **Show a welcome
+   page**, *Show it on* **Guest network**, house rules `Be kind`, access
+   code `4711`, **Save**. Phone B (forget and rejoin the guest network):
+   **Expect** the phone opens the page by itself (or any `http://` website
+   shows it); nothing else loads. A wrong code says so; ticking *I agree*
+   with `4711` says *You're connected* and websites load. Clients shows
+   phone B *Accepted*; **Ask again** brings the page back at once. Upload a
+   logo: the page shows it. Phone A on the hotspot never sees the page.
+   Turn it off at the end.
 8. **Public IPv6 (if your WireGuard server routes a /64 to RasBeacon, and
    its `.conf` gives RasBeacon an IPv6 address and `::/0`):** VPN →
    *Server details* → *Public IPv6 network* → the /64 (like
@@ -658,7 +667,7 @@ Board (Pi 4/5/3B/3B+/Zero 2 W) / RAM:     Adapter:          Card size:          
 9  Speed test: down __ up __ ping __ location __, took __ s / speed.cloudflare.com: down __ up __
 10 Login page notice: / zero-leak login worked, tap delay __ s: / no leak: / login mode:
 11 SSH: / pages OK phone+laptop+dark: / rounded focus outline: / readings: / stay logged in: / unsaved bar:
-12 Hotspot password check + 5 GHz: / UK refused, GB saves: / JP channels end at 48: / show password (no admin password): / WPA3 only: / allowed devices + lockout warning: / device limit: / metered: / guests isolated: / rbd restart with guests, uplink not guest0: / IPv6: / HTTPS fingerprint + redirect: / iPhone Safari accepts the certificate:
+12 Hotspot password check + 5 GHz: / UK refused, GB saves: / JP channels end at 48: / show password (no admin password): / WPA3 only: / allowed devices + lockout warning: / device limit: / metered: / guests isolated: / welcome page + code + ask again: rbd restart with guests, uplink not guest0: / IPv6: / HTTPS fingerprint + redirect: / iPhone Safari accepts the certificate:
 13 Plugins: catalog install AdGuard: / isolation: / ports: / Samba: / crash stop: / changed byte refused: / image with another plugin's name refused, AdGuard unchanged: / kept data asked about: / rbport + bridge table:
 14 Version before __ / renamed image refused: / changed byte refused: / update installed, settings kept, took __ min: / rollback: / check schedule + Check now: / ntfy test + new-version notice:
 15 Power cuts x3: / reboot dialog: / shut down + power on: / rename to travel-pi.lan: / long run __ devices __ min, drops: / memory: / diagnostics clean:

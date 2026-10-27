@@ -24,6 +24,8 @@ var rbdOnlyRoutes = []string{
 	"POST /plugins/upload", "POST /plugins/catalog", "POST /plugins/catalog/download", "POST /plugins/update",
 	"POST /plugins/start", "POST /plugins/stop", "POST /plugins/remove", "PUT /plugins/settings",
 	"GET /system/backup/{token}", "POST /system/restore/upload", "POST /system/restore",
+	// The welcome page's own server (see WelcomeHandler).
+	"GET /welcome/page", "POST /welcome/accept",
 }
 
 // Every route rbd offers must be reachable through rbweb: a settings page

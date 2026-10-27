@@ -6,6 +6,7 @@
 //
 //   { name: 'renames a device', run: (d) => d.renameClient('3a:…', 'Phone'),
 //     sends: ['POST /clients/name'], body: { mac: '3a:…', name: 'Phone' } },
+import { createMockRouter } from '@/data/demo/mockData';
 import { act, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { Device } from '@/data/device';
@@ -131,6 +132,19 @@ describe('Internet', () => {
       body: { rules: [{ id: '', name: 'Web', protocol: 'tcp', outsidePort: 80, plugin: 'samba', enabled: true }] },
       answer: { body: { rules: [], reachability: 'offline' } },
       then: (d) => expect(d.portForwarding.data).toEqual({ rules: [], reachability: 'offline' }),
+    },
+    {
+      name: 'the welcome page is saved and kept as the router answers',
+      run: (d) => d.saveWelcomeSettings({ ...createMockRouter().welcomeSettings, enabled: true }),
+      sends: ['PUT /settings/welcome'],
+      answer: { body: { ...createMockRouter().welcomeSettings, enabled: true, accepted: 2 } },
+      then: (d) => expect(d.welcomeSettings.data?.accepted).toBe(2),
+    },
+    {
+      name: 'a device is asked to accept the welcome page again',
+      run: (d) => d.resetWelcome('3a:1f:22:aa:bb:cc'),
+      sends: ['POST /clients/welcome-reset'],
+      body: { mac: '3a:1f:22:aa:bb:cc' },
     },
     {
       name: 'the speed test result shows in the status',

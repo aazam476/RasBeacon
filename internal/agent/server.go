@@ -111,6 +111,15 @@ func (a *Agent) Handler() http.Handler {
 	}))
 	mux.HandleFunc("GET /settings/port-forwarding", view(a.PortForwardingSettings))
 	mux.HandleFunc("PUT /settings/port-forwarding", save(a.UpdatePortForwarding, a.PortForwardingSettings))
+	mux.HandleFunc("GET /settings/welcome", view(a.WelcomeSettings))
+	mux.HandleFunc("PUT /settings/welcome", save(a.UpdateWelcomeSettings, a.WelcomeSettings))
+	// The welcome page itself (rbweb's welcome server, not the settings
+	// pages): what to show the device at ?ip=, and its "I agree".
+	mux.HandleFunc("GET /welcome/page", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, a.WelcomePage(r.URL.Query().Get("ip")))
+	})
+	mux.HandleFunc("POST /welcome/accept", do(a.AcceptWelcome))
+	mux.HandleFunc("POST /clients/welcome-reset", do(func(req api.ClientRequest) error { return a.ResetWelcome(req.MAC) }))
 	mux.HandleFunc("GET /settings/dns", view(a.DNSSettings))
 	mux.HandleFunc("PUT /settings/dns", save(a.UpdateDNSSettings, a.DNSSettings))
 
@@ -407,10 +416,15 @@ func (a *Agent) ListenUnix(socketPath string, group int) error {
 	return http.Serve(listener, a.Handler())
 }
 
+// maxRequestBody is the largest JSON request: the welcome page's settings,
+// with a logo and a page of the owner's own (see config.MaxWelcomeLogo and
+// config.MaxWelcomePage), are the biggest.
+const maxRequestBody = 512 * 1024
+
 // readJSON decodes the request body into target. On failure it writes a 400
 // response and returns false.
 func readJSON(w http.ResponseWriter, r *http.Request, target any) bool {
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64*1024))
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxRequestBody))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(target); err != nil {
 		writeJSON(w, http.StatusBadRequest, api.ErrorResponse{Error: "invalid request: " + err.Error()})

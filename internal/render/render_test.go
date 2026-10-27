@@ -891,3 +891,58 @@ func TestFirewall_PortForwardsAndPinholes(t *testing.T) {
 		}
 	}
 }
+
+func TestFirewall_WelcomePage(t *testing.T) {
+	in := FirewallInput{
+		Egress: []string{"wlan1"}, Guest: true,
+		Welcome: &WelcomeRule{
+			Interfaces: []string{"br-guest"},
+			Accepted: []WelcomeDevice{
+				{MAC: "3A:1F:22:AA:BB:CC", Seconds: 3600},
+				{MAC: "3a:1f:22:aa:bb:dd"},
+			},
+			OwnAddresses: []netip.Addr{netip.MustParseAddr("10.87.0.1"), netip.MustParseAddr("10.87.1.1")},
+		},
+	}
+	got, err := Firewall(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkGolden(t, "firewall_welcome", got)
+	for _, want := range []string{
+		`elements = { "br-guest" }`,
+		"elements = { 3a:1f:22:aa:bb:cc timeout 3600s, 3a:1f:22:aa:bb:dd }",
+		"iifname @welcome_lans tcp dport 2050 accept",
+		"iifname @welcome_lans ether saddr != @welcome_ok reject",
+		"iifname @welcome_lans ether saddr != @welcome_ok ip daddr != { 10.87.0.1, 10.87.1.1 } tcp dport 80 redirect to :2050",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("no %q", want)
+		}
+	}
+	// The page's port must be open before the guests' "reject everything".
+	if strings.Index(got, "tcp dport 2050 accept") > strings.Index(got, `iifname "br-guest" reject`) {
+		t.Error("guests must reach the welcome page")
+	}
+	// Nobody has accepted yet: an empty set.
+	none := in
+	none.Welcome = &WelcomeRule{Interfaces: []string{"br-lan"}, OwnAddresses: in.Welcome.OwnAddresses}
+	if _, err := Firewall(none); err != nil {
+		t.Fatal(err)
+	}
+
+	bad := map[string]*WelcomeRule{
+		"interface":  {Interfaces: []string{"br lan"}, OwnAddresses: in.Welcome.OwnAddresses},
+		"MAC":        {Interfaces: []string{"br-lan"}, Accepted: []WelcomeDevice{{MAC: "nope"}}, OwnAddresses: in.Welcome.OwnAddresses},
+		"seconds":    {Interfaces: []string{"br-lan"}, Accepted: []WelcomeDevice{{MAC: "3a:1f:22:aa:bb:cc", Seconds: -1}}, OwnAddresses: in.Welcome.OwnAddresses},
+		"address":    {Interfaces: []string{"br-lan"}, OwnAddresses: []netip.Addr{netip.MustParseAddr("fd00::1")}},
+		"no address": {Interfaces: []string{"br-lan"}},
+	}
+	for name, rule := range bad {
+		f := in
+		f.Welcome = rule
+		if _, err := Firewall(f); err == nil {
+			t.Errorf("%s: should be refused", name)
+		}
+	}
+}

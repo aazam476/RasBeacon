@@ -1,7 +1,7 @@
 // The Internet page: saved networks, nearby networks, the uplink buttons, DNS and the speed test.
 import { describe } from 'vitest';
 import * as api from '@/data/real/api';
-import type { DNSSettings, PortForwardRule, UplinkSettings } from '@/data/types';
+import type { DNSSettings, PortForwardRule, UplinkSettings, WelcomeSettings } from '@/data/types';
 import { testRequests } from './helpers';
 
 const uplink: UplinkSettings = {
@@ -72,6 +72,40 @@ describe('port forwarding', () => {
       method: 'PUT',
       path: '/settings/port-forwarding',
       body: { rules: [rule] },
+    },
+  ]);
+});
+
+describe('welcome page', () => {
+  const settings: WelcomeSettings = {
+    enabled: true,
+    networks: 'guest',
+    title: 'Welcome',
+    message: '',
+    terms: 'Be kind.',
+    accessCode: '4711',
+    askAgainHours: 24,
+    includeWired: false,
+    color: '#0c8a9c',
+    logo: '',
+    customPage: '',
+    accepted: 0,
+  };
+  testRequests([
+    { name: 'reads its settings', call: api.getWelcomeSettings, method: 'GET', path: '/settings/welcome' },
+    {
+      name: 'saves them',
+      call: () => api.putWelcomeSettings(settings),
+      method: 'PUT',
+      path: '/settings/welcome',
+      body: settings,
+    },
+    {
+      name: 'asks a device again',
+      call: () => api.resetWelcome('3a:1f:22:aa:bb:cc'),
+      method: 'POST',
+      path: '/clients/welcome-reset',
+      body: { mac: '3a:1f:22:aa:bb:cc' },
     },
   ]);
 });

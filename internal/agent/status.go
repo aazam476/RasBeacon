@@ -90,9 +90,11 @@ func (a *Agent) StatusFor(viewer string) api.Status {
 		status.Warnings = []string{}
 	}
 	for i := range status.Clients {
+		a.setWelcome(&status.Clients[i], false)
 		status.Clients[i].IsThisDevice = viewer != "" && status.Clients[i].IP == viewer
 	}
 	for i := range status.Guest.Clients {
+		a.setWelcome(&status.Guest.Clients[i], true)
 		status.Guest.Clients[i].IsThisDevice = viewer != "" && status.Guest.Clients[i].IP == viewer
 	}
 	return status

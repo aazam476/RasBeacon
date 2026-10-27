@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useDevice } from '@/data/device';
 import { cn } from '@/lib/cn';
-import { Badge, BreakableText, ButtonRow, EditButton, RenameSheet, SheetRow, Switch } from '@/ui';
+import { Badge, BreakableText, ButtonRow, EditButton, RenameSheet, Row, SheetRow, Switch } from '@/ui';
 import { clientDetails, clientName, networkName, type NetworkClient } from '../common/clientDisplay';
 import { FixedAddressSheet } from './FixedAddressSheet';
 
@@ -12,7 +12,7 @@ import { FixedAddressSheet } from './FixedAddressSheet';
  * paused by the data limit stays paused until the counts are reset or the limit is raised.
  */
 export function ClientSection({ client }: { client: NetworkClient }) {
-  const { setClientInternetAccess, disconnectClient, flushClientLease, renameClient } = useDevice();
+  const { setClientInternetAccess, disconnectClient, flushClientLease, renameClient, resetWelcome } = useDevice();
   const [renaming, setRenaming] = useState(false);
   const [fixingAddress, setFixingAddress] = useState(false);
   const paused = !client.internetAccess;
@@ -63,6 +63,15 @@ export function ClientSection({ client }: { client: NetworkClient }) {
       {/* Guests' addresses come from their own network and aren't kept. */}
       {client.network === 'hotspot' && (
         <SheetRow title="Fixed address" value={client.fixedAddress ?? 'Off'} onClick={() => setFixingAddress(true)} />
+      )}
+      {/* The welcome page (your own captive portal), on networks that have one. */}
+      {client.welcome && (
+        <Row title="Welcome page" value={client.welcome === 'accepted' ? 'Accepted' : 'Not accepted yet'} />
+      )}
+      {client.welcome === 'accepted' && (
+        <ButtonRow key="ask-again" action={() => resetWelcome(client.mac)} busyLabel="Asking…">
+          Ask again
+        </ButtonRow>
       )}
       {paused ? (
         // The keys give each button its own request state.

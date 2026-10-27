@@ -1197,3 +1197,50 @@ type PortForwardRule struct {
 	// the port on (with IPv6): those it used lately.
 	IPv6Addresses []string `json:"ipv6Addresses,omitempty"`
 }
+
+// WelcomeSettings is the Welcome page settings (GET and PUT
+// /settings/welcome): the owner's own captive portal (see
+// config.WelcomeConfig for each field).
+type WelcomeSettings struct {
+	Enabled       bool   `json:"enabled"`
+	Networks      string `json:"networks"`
+	Title         string `json:"title"`
+	Message       string `json:"message"`
+	Terms         string `json:"terms"`
+	AccessCode    string `json:"accessCode"`
+	AskAgainHours int    `json:"askAgainHours"`
+	IncludeWired  bool   `json:"includeWired"`
+	Color         string `json:"color"`
+	// Logo is a data: URL ("" for none).
+	Logo string `json:"logo"`
+	// CustomPage is the owner's own HTML page ("" for the built-in one).
+	CustomPage string `json:"customPage"`
+	// Accepted is how many devices have accepted the page and may use the
+	// internet now (read only).
+	Accepted int `json:"accepted"`
+}
+
+// WelcomePage is what rbweb shows a device on the welcome page (GET
+// /welcome/page?ip=...): the page's text, or the owner's own page, and
+// whether this device already accepted it.
+type WelcomePage struct {
+	// Active is false when the device doesn't need to accept anything (the
+	// page is off, or not on its network).
+	Active   bool   `json:"active"`
+	Accepted bool   `json:"accepted"`
+	Title    string `json:"title"`
+	Message  string `json:"message,omitempty"`
+	Terms    string `json:"terms,omitempty"`
+	NeedCode bool   `json:"needCode,omitempty"`
+	Color    string `json:"color,omitempty"`
+	Logo     string `json:"logo,omitempty"`
+	// CustomPage is the owner's own page, shown as it is.
+	CustomPage string `json:"customPage,omitempty"`
+}
+
+// WelcomeAcceptRequest is a device accepting the welcome page (POST
+// /welcome/accept), sent by rbweb with the device's address.
+type WelcomeAcceptRequest struct {
+	IP   string `json:"ip"`
+	Code string `json:"code,omitempty"`
+}

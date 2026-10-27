@@ -42,6 +42,7 @@ export function fakeRbweb(options: { loggedIn?: boolean; answers?: Record<string
     '/settings/ssh': router.sshSettings,
     '/settings/dns': router.dnsSettings,
     '/settings/port-forwarding': portForwardingView(router),
+    '/settings/welcome': router.welcomeSettings,
     '/settings/swap': router.swapSettings,
     '/settings/updates': router.updateSettings,
     '/settings/access': router.accessSettings,

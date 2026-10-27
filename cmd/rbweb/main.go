@@ -26,6 +26,7 @@ func main() {
 	listen := flag.String("listen", ":80", "address and port to listen on")
 	listenHTTPS := flag.String("listen-https", ":443", "address and port for HTTPS (used when HTTPS is on)")
 	socket := flag.String("rbd-socket", paths.Default().APISocket(), "rbd's API socket")
+	listenWelcome := flag.String("listen-welcome", ":2050", "address and port for the welcome page (the owner's captive portal)")
 	tlsDir := flag.String("tls-dir", paths.Default().RunTLSDir(), "where rbd puts the HTTPS certificate (cert.pem, key.pem)")
 	flag.Parse()
 
@@ -51,6 +52,14 @@ func main() {
 			}
 		}()
 	}
+
+	// The welcome page has a server of its own (see webserver/welcome.go).
+	go func() {
+		if err := newHTTPServer(*listenWelcome, server.WelcomeHandler()).ListenAndServe(); err != nil {
+			slog.Error("welcome page server stopped", "error", err)
+			os.Exit(1)
+		}
+	}()
 
 	if err := newHTTPServer(*listen, server.Handler()).ListenAndServe(); err != nil {
 		slog.Error("web server stopped", "error", err)
