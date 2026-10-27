@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"encoding/hex"
 	"errors"
 	"os"
 	"path/filepath"
@@ -103,7 +104,7 @@ func TestRadioRoles_GuestRadioThenKeep(t *testing.T) {
 		t.Errorf("the first adapter: %s as %s", role, iface)
 	}
 	guestConf := e.readFile(e.paths.HostapdGuestConfig())
-	for _, want := range []string{"interface=guest0", "bridge=br-guest", "ap_isolate=1", "channel=11\n", "ssid2=" + hexOf("Ali's Guests")} {
+	for _, want := range []string{"interface=guest0", "bridge=br-guest", "ap_isolate=1", "channel=11\n", "ssid2=" + hex.EncodeToString([]byte("Ali's Guests"))} {
 		if !strings.Contains(guestConf, want) {
 			t.Errorf("the guest radio's file lacks %q", want)
 		}

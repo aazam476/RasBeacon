@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"encoding/hex"
 	"errors"
 	"path/filepath"
 	"slices"
@@ -45,7 +46,7 @@ func TestGuest_TurningOnAddsSecondNetwork(t *testing.T) {
 	}
 
 	hostapd := e.readFile(e.paths.HostapdConfig())
-	for _, want := range []string{"bss=guest0", "bssid=52:3e:aa:12:34:56", "bridge=br-guest", "ssid2=" + hexOf("Ali's Guests"), "ap_isolate=1"} {
+	for _, want := range []string{"bss=guest0", "bssid=52:3e:aa:12:34:56", "bridge=br-guest", "ssid2=" + hex.EncodeToString([]byte("Ali's Guests")), "ap_isolate=1"} {
 		if !strings.Contains(hostapd, want) {
 			t.Errorf("hostapd.conf lacks %q", want)
 		}

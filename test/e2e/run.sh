@@ -48,7 +48,14 @@ if [ ! -S "$work/device/run/rbd/api.sock" ]; then
   echo "rbd didn't start:"; tail -n 50 "$work/rbd.log"; exit 1
 fi
 "$repo_root/build/rbweb" -listen 127.0.0.1:8080 -rbd-socket "$work/device/run/rbd/api.sock" >"$work/rbweb.log" 2>&1 &
-sleep 1
+# And for rbweb to listen (up to 10 s): bash opens a TCP connection itself.
+for _ in $(seq 20); do
+  (exec 3<>/dev/tcp/127.0.0.1/8080) 2>/dev/null && break
+  sleep 0.5
+done
+if ! (exec 3<>/dev/tcp/127.0.0.1/8080) 2>/dev/null; then
+  echo "rbweb didn't start:"; tail -n 50 "$work/rbweb.log"; exit 1
+fi
 
 cd "$repo_root/test/e2e"
 [ -d node_modules ] || npm ci --no-audit --no-fund

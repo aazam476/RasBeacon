@@ -8,6 +8,7 @@ package agent
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -317,7 +318,7 @@ func TestFirstBoot_NoSetupTxt_StartsOpenSetupNetwork(t *testing.T) {
 	if strings.Contains(hostapd, "wpa=") {
 		t.Error("setup network without setup.txt must be open")
 	}
-	if !strings.Contains(hostapd, "ssid2="+hexOf("RasBeacon-Setup-"+state.DeviceShortID)) {
+	if !strings.Contains(hostapd, "ssid2="+hex.EncodeToString([]byte("RasBeacon-Setup-"+state.DeviceShortID))) {
 		t.Error("setup network should be named RasBeacon-Setup-XXXX")
 	}
 	if !strings.Contains(e.readFile(e.paths.DnsmasqConfig()), "address=/#/10.87.0.1") {
@@ -603,16 +604,6 @@ func TestHTTP_ClaimWithBadInputReturns400AndField(t *testing.T) {
 	if resp.Field != "adminPassword" {
 		t.Errorf("error should name the adminPassword field, got %+v", resp)
 	}
-}
-
-// hexOf returns the hexadecimal form of s, as used by hostapd's ssid2=.
-func hexOf(s string) string {
-	const digits = "0123456789abcdef"
-	out := make([]byte, 0, len(s)*2)
-	for i := 0; i < len(s); i++ {
-		out = append(out, digits[s[i]>>4], digits[s[i]&15])
-	}
-	return string(out)
 }
 
 // The owner's report (A1b step 7): eight VPN switch presses in two minutes
