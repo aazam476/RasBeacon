@@ -5,6 +5,9 @@ Description=RasBeacon hotspot (hostapd)
 After=rbd.service
 
 [Service]
-ExecStart=/usr/sbin/hostapd /run/rbd/hostapd.conf
+# GUEST_CONF names the guest network's own file when it has a radio of its
+# own (rbd writes hostapd.env); one hostapd then runs both radios.
+EnvironmentFile=-/run/rbd/hostapd.env
+ExecStart=/usr/sbin/hostapd /run/rbd/hostapd.conf $GUEST_CONF
 Restart=on-failure
 RestartSec=2

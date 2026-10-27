@@ -1,7 +1,8 @@
 package agent
 
 // This file handles the guest network: a second Wi-Fi network name on the
-// hotspot radio, for visitors.
+// hotspot radio, for visitors (or on a radio of its own, when the owner
+// chose one; see radioroles.go).
 //
 // Guests get their own network (render.LAN.Guest, e.g. 10.87.1.0/24) on
 // their own bridge (br-guest). They use the internet exactly like your
@@ -29,6 +30,9 @@ import (
 // guestSupported reports whether the hotspot radio can run the guest
 // network next to the main one.
 func (a *Agent) guestSupported() bool {
+	if a.guestRadio() != nil {
+		return true // a radio of its own
+	}
 	hotspot := a.hotspotRadio()
 	return hotspot != nil && hotspot.MaxAPs >= 2
 }
@@ -48,8 +52,8 @@ func (a *Agent) guestActive() bool {
 // guestHostapd returns the guest network's part of hostapd.conf, or nil
 // when it is off.
 func (a *Agent) guestHostapd() *render.GuestNetwork {
-	if !a.guestWanted() {
-		return nil
+	if !a.guestWanted() || a.guestRadio() != nil {
+		return nil // off, or on a radio of its own (guestRadioHotspot)
 	}
 	bssid, err := render.GuestBSSID(a.readSysNet(radio.HotspotInterfaceName, "address"))
 	if err != nil {
@@ -105,7 +109,8 @@ func (a *Agent) guestWarnings() []string {
 	}
 	if !a.guestSupported() {
 		return []string{"The guest network is turned on, but this Wi-Fi adapter can only broadcast one network, " +
-			"so it is off. An adapter with a MediaTek chip (for example MT7612U) can run both."}
+			"so it is off. An adapter with a MediaTek chip (for example MT7612U) can run both, or a second adapter " +
+			"can run the guest network on its own (System → Wi-Fi radios)."}
 	}
 	return []string{"The guest network is turned on but has no password yet: set one on the Guest network page."}
 }

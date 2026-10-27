@@ -35,6 +35,7 @@ import type {
   UplinkSettings,
   UsageSettings,
   QoSSettings,
+  RadioRole,
   VPNProfile,
   VPNSettings,
   WiFiQR,
@@ -319,6 +320,12 @@ export const renameClient = (mac: string, name: string) =>
   request<void>('POST', '/clients/name', { body: { mac, name } });
 export const setFixedAddress = (mac: string, address: string) =>
   request<void>('POST', '/clients/fixed-address', { body: { mac, address } });
+
+/** Radio MAC address to its role; radios left out are automatic. */
+export const putRadioRoles = (roles: Record<string, RadioRole>) =>
+  request<void>('PUT', '/settings/radios', { body: { roles } });
+export const keepRadioRoles = () => request<void>('POST', '/settings/radios/keep');
+export const revertRadioRoles = () => request<void>('POST', '/settings/radios/revert');
 
 export const setClientPriority = (mac: string, priority: boolean) =>
   request<void>('POST', '/clients/priority', { body: { mac, priority } });

@@ -737,6 +737,20 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
         // Back on the new version, or on the old one with the reason in status.update.message.
         await loadStartup();
       },
+      saveRadioRoles: async (roles) => {
+        await attempt(() => api.putRadioRoles(roles), sameNames('roles'));
+        await waitForRestart();
+        await loadStartup();
+      },
+      keepRadioRoles: async () => {
+        await attempt(api.keepRadioRoles);
+        await refreshStatus();
+      },
+      revertRadioRoles: async () => {
+        await attempt(api.revertRadioRoles);
+        await waitForRestart();
+        await loadStartup();
+      },
       shutDown: async () => {
         await attempt(api.shutDown);
         setPoweredOff(true);

@@ -184,6 +184,9 @@ type HotspotInput struct {
 	// network). The radio must support two access points (see
 	// radio.MaxAPInterfaces).
 	Guest *GuestNetwork
+	// GuestRadio makes this the guest network on a radio of its own:
+	// in the guests' bridge, with guests kept apart from each other.
+	GuestRadio bool
 }
 
 // GuestNetwork is the guest network's part of hostapd.conf. It uses the
@@ -283,9 +286,16 @@ func Hostapd(in HotspotInput) (string, error) {
 		}
 	}
 
+	if in.GuestRadio && in.Guest != nil {
+		return "", fmt.Errorf("a guest radio has no second guest network")
+	}
+	bridge := BridgeName
+	if in.GuestRadio {
+		bridge = GuestBridgeName
+	}
 	data := hostapdData{
 		HotspotInput:     in,
-		Bridge:           BridgeName,
+		Bridge:           bridge,
 		SSIDHex:          hex.EncodeToString([]byte(in.SSID)),
 		SSIDForComment:   commentSafe(in.SSID),
 		VHTCenterChannel: vhtCenterChannel(in.Channel),

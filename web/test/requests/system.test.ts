@@ -55,6 +55,15 @@ describe('device', () => {
       body: { hostname: 'travel-pi' },
     },
     { name: 'reboots', call: api.reboot, method: 'POST', path: '/system/reboot' },
+    {
+      name: 'sets what each radio does',
+      call: () => api.putRadioRoles({ '00:0e:8e:00:00:03': 'guest' }),
+      method: 'PUT',
+      path: '/settings/radios',
+      body: { roles: { '00:0e:8e:00:00:03': 'guest' } },
+    },
+    { name: 'keeps the radios’ new jobs', call: api.keepRadioRoles, method: 'POST', path: '/settings/radios/keep' },
+    { name: 'goes back to the old jobs', call: api.revertRadioRoles, method: 'POST', path: '/settings/radios/revert' },
     { name: 'shuts down', call: api.shutDown, method: 'POST', path: '/system/shutdown' },
     {
       name: 'changes the admin password',

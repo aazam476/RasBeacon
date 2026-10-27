@@ -11,9 +11,10 @@ simulated Wi-Fi radios (`mac80211_hwsim`).
 ## The world it builds
 
 Everything runs in one virtual machine, a Debian trixie system with the
-image's packages. At boot, before `rbd` starts, the test makes six simulated
-radios. RasBeacon keeps two (`wlan0` runs the hotspot, `wlan1` joins the
-hotel); the others move into their own network namespaces:
+image's packages. At boot, before `rbd` starts, the test makes seven
+simulated radios. RasBeacon keeps three (`wlan0` runs the hotspot, `wlan1`
+joins the hotel, `wlan6` is spare until scenario 11); the others move into
+their own network namespaces:
 
 | Namespace | Radio | What it is |
 | --- | --- | --- |
@@ -48,6 +49,10 @@ stops the run):
 10. A priority device and the internet speeds set up the queues (the real
     kernel's `htb`, `ifb` and `fq_codel`) and the firewall's priority rules;
     they go away with the last priority device.
+11. The spare radio gets the guest network (RasBeacon restarts and renames
+    it `guest0`, with its own hostapd file), a guest joins it and reaches
+    the internet, and the change is kept; a later change goes back with
+    **Go back**.
 
 Settings are changed through `rbd`'s API socket, as `rbweb` does; the
 phones only use the networks (and, in step 1, the setup page's API). Every

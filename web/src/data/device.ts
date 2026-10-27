@@ -34,6 +34,7 @@ import type {
   UplinkSettings,
   UsageSettings,
   QoSSettings,
+  RadioRole,
   VPNDetailsForm,
   VPNSettings,
   WelcomeSettings,
@@ -344,6 +345,15 @@ export interface DeviceActions {
   saveSwapSettings: (sizeGb: number) => Promise<void>;
   /** Resolves once the router answers again after restarting. */
   reboot: () => Promise<void>;
+  /**
+   * What each Wi-Fi radio does, by its MAC address (left out: automatic). RasBeacon restarts;
+   * resolves once it answers again. The change then waits to be kept. Field key: roles.
+   */
+  saveRadioRoles: (roles: Record<string, RadioRole>) => Promise<void>;
+  /** Keep the new radio roles (status.radioRolesPending). */
+  keepRadioRoles: () => Promise<void>;
+  /** Go back to the radio roles from before the change; RasBeacon restarts. */
+  revertRadioRoles: () => Promise<void>;
   /** Turn RasBeacon off; afterwards the phase is the `off` notice. */
   shutDown: () => Promise<void>;
   /**

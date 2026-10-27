@@ -33,13 +33,15 @@ import (
 	"time"
 )
 
-// The simulated world. RasBeacon keeps the first two radios (wlan0 runs
-// the hotspot, wlan1 joins the hotel); the others move into the hotel's
-// and the phones' network namespaces.
+// The simulated world. RasBeacon keeps three radios (wlan0 runs the
+// hotspot, wlan1 joins the hotel, and wlan6 is spare until scenario 11
+// gives it the guest network); the others move into the hotel's and the
+// phones' network namespaces.
 const (
 	stateDir  = "/run/rasbeacon-test" // keys and files TestWorld leaves for TestScenarios
 	hotelNS   = "hotel"
 	hotelIF   = "wlan2"
+	spareIF   = "wlan6" // RasBeacon's third radio
 	hotelSSID = "Grand Hotel"
 	// hotelLAN is the hotel's own address on its Wi-Fi, where its login
 	// page is; internetIP stands for the whole internet (every name the
@@ -130,7 +132,7 @@ func waitFor(t *testing.T, what string, timeout time.Duration, check func() (boo
 
 // TestWorld builds the simulated world. It runs as a systemd service
 // before rbd starts (see units/rasbeacon-test-world.service), so RasBeacon
-// only ever sees its own two radios.
+// only ever sees its own three radios.
 func TestWorld(t *testing.T) {
 	if os.Getenv("INVOCATION_ID") == "" || os.Getuid() != 0 {
 		t.Skip("runs only inside the full-system test's virtual machine (see README.md)")
@@ -139,11 +141,11 @@ func TestWorld(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Six simulated radios: wlan0 to wlan5.
-	run(t, "", "modprobe", "mac80211_hwsim", "radios=6")
+	// Seven simulated radios: wlan0 to wlan6.
+	run(t, "", "modprobe", "mac80211_hwsim", "radios=7")
 	waitFor(t, "the simulated radios", 30*time.Second, func() (bool, string) {
-		_, err := os.Stat("/sys/class/net/wlan5")
-		return err == nil, "no wlan5 yet"
+		_, err := os.Stat("/sys/class/net/" + spareIF)
+		return err == nil, "no " + spareIF + " yet"
 	})
 
 	// The hotel and the phones each get a namespace and one radio. A radio
@@ -514,6 +516,7 @@ func TestScenarios(t *testing.T) {
 		{"8 the self-check repairs the hotspot", selfCheck},
 		{"9 the Wi-Fi uplink joins with a cloned MAC address", clonedMAC},
 		{"10 priority devices get their queues", priorityDevices},
+		{"11 the guest network gets a radio of its own", guestRadio},
 	}
 	for _, step := range steps {
 		if !t.Run(step.name, step.run) {
@@ -593,10 +596,16 @@ func hotelLogin(t *testing.T) {
 	})
 	// The page is one big button: a click in the middle accepts.
 	rbd(t, "POST", "/portal/browser/input", map[string]any{"action": "click", "x": 200, "y": 300}, nil)
+	// RasBeacon may notice the login worked and close its browser before
+	// the hotel's page shows: either counts.
 	waitFor(t, "the hotel's welcome page", time.Minute, func() (bool, string) {
 		var frame struct{ URL, Title string }
 		tryRBD("GET", "/portal/browser/frame?after=0", nil, &frame)
-		return frame.Title == "Connected", frame.URL + " " + frame.Title
+		var portal struct {
+			Detected bool `json:"detected"`
+		}
+		err := tryRBD("GET", "/portal", nil, &portal)
+		return frame.Title == "Connected" || (err == nil && !portal.Detected), frame.URL + " " + frame.Title
 	})
 	waitFor(t, "the login page to go away", time.Minute, func() (bool, string) {
 		tryRBD("POST", "/portal/check", nil, nil)
@@ -754,6 +763,15 @@ func clonedMAC(t *testing.T) {
 	if !strings.Contains(out, cloned) {
 		t.Errorf("wlan1 should have the cloned address: %s", out)
 	}
+	// The Pi's own address again: the hotel knows it (its login was
+	// accepted for it), so the later scenarios have the internet.
+	settings["wifiMac"] = map[string]any{"mode": ""}
+	rbd(t, "PUT", "/settings/uplink", settings, nil)
+	waitFor(t, "the uplink with the Pi's own address", 2*time.Minute, func() (bool, string) {
+		out, _ := tryRun("", "ip", "-o", "link", "show", "wlan1")
+		s := rbdStatus(t)
+		return !strings.Contains(out, cloned) && s.Uplink.Connected, strings.TrimSpace(out)
+	})
 }
 
 // priorityDevices checks that the real kernel takes RasBeacon's queues (the
@@ -780,4 +798,94 @@ func priorityDevices(t *testing.T) {
 	if out, _ := tryRun("", "tc", "qdisc", "show"); strings.Contains(out, "htb") {
 		t.Errorf("the queues should be gone:\n%s", out)
 	}
+}
+
+// radioRoles reads what each of RasBeacon's radios does, by interface, and
+// how many seconds are left to keep new roles.
+func radioRoles(t *testing.T) (map[string]string, map[string]string, int) {
+	var s struct {
+		Radios []struct {
+			Interface, MAC, Role string
+		} `json:"radios"`
+		Pending int `json:"radioRolesPending"`
+	}
+	if err := tryRBD("GET", "/status", nil, &s); err != nil {
+		return nil, nil, 0
+	}
+	roles, macs := map[string]string{}, map[string]string{}
+	for _, r := range s.Radios {
+		roles[r.Interface] = r.Role
+		macs[r.Interface] = r.MAC
+	}
+	return roles, macs, s.Pending
+}
+
+// waitForRoles waits until rbd restarted with the guest network on its
+// own radio (guest0) or not, and new roles waiting to be kept (or not).
+func waitForRoles(t *testing.T, guestRadio, pending bool) {
+	t.Helper()
+	waitFor(t, "rbd with the new radio roles", 3*time.Minute, func() (bool, string) {
+		roles, _, left := radioRoles(t)
+		return (roles["guest0"] == "guest") == guestRadio && (left > 0) == pending, fmt.Sprintf("%v, %d s left", roles, left)
+	})
+}
+
+// 11. The spare radio runs the guest network on its own (the change is
+// kept), a guest joins it; then a change that isn't wanted goes back.
+func guestRadio(t *testing.T) {
+	_, macs, _ := radioRoles(t)
+	spare := macs[spareIF]
+	if spare == "" {
+		t.Fatalf("no %s among RasBeacon's radios: %v", spareIF, macs)
+	}
+	rbd(t, "PUT", "/settings/radios", map[string]any{"roles": map[string]string{spare: "guest"}}, nil)
+	waitForRoles(t, true, true)
+	hotspotPhy, _ := os.ReadFile("/sys/class/net/ap0/phy80211/name")
+	guestPhy, _ := os.ReadFile("/sys/class/net/guest0/phy80211/name")
+	if len(guestPhy) == 0 || string(guestPhy) == string(hotspotPhy) {
+		t.Errorf("guest0 should be a radio of its own: %q, the hotspot's is %q", guestPhy, hotspotPhy)
+	}
+
+	guest := phones[1]
+	defer func() {
+		if t.Failed() { // what the radios and the phone saw
+			out, _ := tryRun("", "iw", "dev", "guest0", "info")
+			conf, _ := os.ReadFile("/run/rbd/hostapd-guest.conf")
+			scan, _ := tryRun(guest.ns, "iw", "dev", guest.iface, "scan")
+			bridges, _ := tryRun("", "bridge", "link")
+			stations, _ := tryRun("", "iw", "dev", "guest0", "station", "dump")
+			neighbors, _ := tryRun(guest.ns, "ip", "neigh")
+			vpn, _ := tryRun("", "wg", "show")
+			t.Logf("guest0:\n%s\nits hostapd file:\n%s\nthe guest phone's scan:\n%s\nbridges:\n%s\nstations:\n%s\nthe phone's neighbors:\n%s\nVPN:\n%s",
+				out, conf, scan, bridges, stations, neighbors, vpn)
+		}
+	}()
+	guest.leave()
+	// The guest network follows the hotspot's security: WPA3 only since 6.
+	guest.join(t, guestSSID, guestPassword, true)
+	address := guest.connected(t)
+	if strings.HasPrefix(address, "10.87.0.") {
+		t.Errorf("the guest got %s, an address on the main hotspot's network", address)
+	}
+	gateway := address[:strings.LastIndex(address, ".")] + ".1"
+	waitFor(t, "the guest to reach RasBeacon", 30*time.Second, func() (bool, string) {
+		out, err := tryRun(guest.ns, "busybox", "ping", "-c", "1", "-W", "2", gateway)
+		return err == nil, strings.TrimSpace(out)
+	})
+	// After the restart, the VPN (with its kill switch, from 3) connects
+	// again before guests reach the internet.
+	waitFor(t, "the guest to reach the internet", 2*time.Minute, func() (bool, string) {
+		code, body := guest.fetch("GET", "http://"+internetIP+"/whoami", "")
+		return code == http.StatusOK, fmt.Sprintf("%d %s", code, body)
+	})
+	rbd(t, "POST", "/settings/radios/keep", nil, nil)
+	if _, _, left := radioRoles(t); left != 0 {
+		t.Errorf("kept roles should not wait any more (%d s left)", left)
+	}
+
+	// Back to automatic, then Go back: the guest radio returns.
+	rbd(t, "PUT", "/settings/radios", map[string]any{"roles": map[string]string{}}, nil)
+	waitForRoles(t, false, true)
+	rbd(t, "POST", "/settings/radios/revert", nil, nil)
+	waitForRoles(t, true, false)
 }

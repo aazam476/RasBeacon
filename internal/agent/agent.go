@@ -150,6 +150,9 @@ type Agent struct {
 	appliedPinholes string
 	// qos is the priority devices' queues (see qos.go).
 	qos qosState
+	// radioRolesDeadline is when new radio roles that weren't kept go
+	// back (zero: nothing waits; see radioroles.go).
+	radioRolesDeadline time.Time
 	// welcome is the welcome page's accepted devices (see welcome.go).
 	welcome welcomeState
 	// modem is the mobile broadband modem (see modem.go).
@@ -354,6 +357,7 @@ func (a *Agent) Start() error {
 		// hotspot or guest change) leaves them running.
 		a.background(a.startPlugins)
 		a.scheduleConfirmation() // only does something on an update's trial
+		a.watchRadioRoles()      // only does something after a change of radio roles
 		return nil
 	}
 	return a.startSetupMode()
@@ -473,21 +477,22 @@ func (a *Agent) setUpRadios() error {
 	if err != nil {
 		return err
 	}
+	// Each radio is known by its own address (one the uplink set for
+	// itself doesn't count; see macaddress.go).
+	for i := range detected {
+		if mac := a.permanentMAC(detected[i].Interface); mac != "" {
+			detected[i].MAC = mac
+		}
+	}
 	var warnings []string
-	a.radios, warnings = radio.AssignRoles(detected)
+	a.radios, warnings = radio.AssignRoles(detected, a.radioChoices())
 	a.warnings = append(a.warnings, warnings...)
 
-	hotspot := a.hotspotRadio()
-	if hotspot == nil {
+	if a.hotspotRadio() == nil {
 		return errors.New("no radio can run the hotspot")
 	}
-	if hotspot.Interface != radio.HotspotInterfaceName {
-		slog.Info("renaming hotspot radio", "from", hotspot.Interface, "to", radio.HotspotInterfaceName,
-			"driver", hotspot.Driver, "usbId", hotspot.USBID)
-		if err := system.RenameLink(a.runner, hotspot.Interface, radio.HotspotInterfaceName); err != nil {
-			return err
-		}
-		hotspot.Interface = radio.HotspotInterfaceName
+	if err := a.nameRadios(); err != nil {
+		return err
 	}
 
 	if err := system.SetRegulatoryCountry(a.runner, a.cfg.Hotspot.Country); err != nil {
@@ -525,12 +530,7 @@ func (a *Agent) waitForRadios() ([]radio.Radio, error) {
 
 // hotspotRadio returns the radio with the hotspot role, or nil.
 func (a *Agent) hotspotRadio() *radio.Radio {
-	for i := range a.radios {
-		if a.radios[i].Role == radio.RoleHotspot {
-			return &a.radios[i]
-		}
-	}
-	return nil
+	return a.radioWithRole(radio.RoleHotspot)
 }
 
 // startSetupMode brings up the first-boot setup network.
@@ -598,7 +598,7 @@ func (a *Agent) startNormalMode() error {
 	}
 	// The guest network's bridge must exist before hostapd starts, and
 	// the plugins' before dnsmasq does (it answers plugins' DNS).
-	a.applyGuestBridge(hotspot.Guest != nil)
+	a.applyGuestBridge(a.guestWanted())
 	a.pluginBridge = a.ensurePluginNetwork()
 	// The VPN first, so DNS for devices goes to the VPN from the start.
 	if err := a.applyVPNConfig(); err != nil {
@@ -657,6 +657,10 @@ func (a *Agent) applyHotspotAndDHCP(hotspot render.HotspotInput, captive bool) e
 	}
 	// hostapd.conf contains the Wi-Fi password, so only root may read it.
 	if err := config.WriteFileAtomic(a.paths.HostapdConfig(), []byte(hostapdConf), 0o600); err != nil {
+		return err
+	}
+	// The same hostapd runs the guest network's radio, if it has its own.
+	if err := a.writeGuestRadioConfig(hotspot); err != nil {
 		return err
 	}
 	if err := system.ServiceRestart(a.runner, hostapdService); err != nil {

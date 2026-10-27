@@ -70,8 +70,13 @@ export interface ClaimResponse {
 // --- Status (GET /api/v1/status) -------------------------------------------------------------
 
 /** One Wi-Fi radio found in the router. */
+/** What a Wi-Fi radio does. */
+export type RadioRole = 'hotspot' | 'uplink' | 'guest' | 'unused';
+
 export interface Radio {
   interface: string;
+  /** The radio's own MAC address: how RasBeacon remembers it (names change). */
+  mac: string;
   phy: string;
   driver: string;
   isUsb: boolean;
@@ -79,7 +84,9 @@ export interface Radio {
   supportsAp: boolean;
   /** How many networks the radio can broadcast at once (2+ for the guest network). */
   maxAps: number;
-  role: 'hotspot' | 'uplink' | 'unused';
+  role: RadioRole;
+  /** The owner chose this role (System page); otherwise RasBeacon did. */
+  chosen?: boolean;
 }
 
 /** One device connected to the hotspot or the guest network. */
@@ -394,6 +401,8 @@ export interface Status {
   portal: PortalStatus;
   update: UpdateStatus;
   radios: Radio[];
+  /** Seconds left to keep new radio roles before RasBeacon goes back to the previous ones. */
+  radioRolesPending?: number;
   /** Devices on the hotspot (the guest network's devices are in `guest.clients`). */
   clients: Client[];
   guest: GuestStatus;

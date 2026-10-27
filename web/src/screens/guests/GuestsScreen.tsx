@@ -33,7 +33,8 @@ export function GuestsScreen() {
             <Notice tone="warning" role="alert" title="This adapter can't run a guest network">
               <p>
                 This Wi-Fi adapter can only broadcast one network, so it can&apos;t run a guest network. An adapter with
-                a MediaTek chip (for example MT7612U) can.
+                a MediaTek chip (for example MT7612U) can, or a second adapter can run the guest network on its own
+                (System → Wi-Fi radios).
               </p>
             </Notice>
           )}

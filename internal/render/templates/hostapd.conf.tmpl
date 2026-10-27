@@ -7,9 +7,14 @@
 
 # --- Which radio, and how rbd talks to hostapd ---
 interface={{.Interface}}
+{{- if .GuestRadio}}
+# This radio runs the guest network on its own. It goes into the guests'
+# bridge, which holds RasBeacon's guest-side address.
+{{- else}}
 # Put the hotspot into the "br-lan" bridge. The bridge holds the hotspot's
 # IP address, so Wi-Fi clients (and, later, a wired client port) share one
 # network.
+{{- end}}
 bridge={{.Bridge}}
 driver=nl80211
 # rbd and the status page read connected devices through this socket.
@@ -74,8 +79,13 @@ he_bss_color={{.BSSColor}}
 wmm_enabled=1
 
 # --- Who can connect ---
+{{- if .GuestRadio}}
+# This radio runs only the guest network: guests can't talk to each other.
+ap_isolate=1
+{{- else}}
 # Devices on the hotspot may talk to each other (AirPlay, printers, ...).
 ap_isolate=0
+{{- end}}
 auth_algs=1
 {{- if .AcceptMACFile}}
 # Only the devices on the owner's list may join (Settings: Hotspot, Allowed

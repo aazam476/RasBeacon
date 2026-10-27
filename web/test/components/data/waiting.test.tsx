@@ -106,6 +106,27 @@ describe('rebooting', () => {
   });
 });
 
+describe('radio roles', () => {
+  it('changing them and going back wait for the restart the same way', async () => {
+    const { sent } = fakeRbweb();
+    const device = renderProvider();
+    await waitFor(() => expect(device().status.data).toBeDefined());
+    let done = 0;
+    void device()
+      .saveRadioRoles({ '00:0e:8e:00:00:03': 'guest' })
+      .then(() => done++);
+    await wait(100_000);
+    await waitFor(() => expect(done).toBe(1));
+    expect(sent.find((r) => r.path === '/settings/radios')?.body).toEqual({ roles: { '00:0e:8e:00:00:03': 'guest' } });
+    void device()
+      .revertRadioRoles()
+      .then(() => done++);
+    await wait(100_000);
+    await waitFor(() => expect(done).toBe(2));
+    expect(count(sent, 'POST /settings/radios/revert')).toBe(1);
+  });
+});
+
 describe('factory reset', () => {
   it('forgets everything, waits for the setup network, then shows setup', async () => {
     const { answers } = fakeRbweb();

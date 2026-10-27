@@ -1,3 +1,4 @@
+import type { RadioChoice } from '@/lib/radios';
 import type {
   AccessSettings,
   Client,
@@ -46,6 +47,8 @@ export interface MockRouter {
   usageSettings: UsageSettings;
   /** The connection's speeds as saved (qosView fills in the rest from the devices). */
   qosSpeeds: { uploadKbps: number; downloadKbps: number };
+  /** The radio roles to go back to while new ones wait to be kept. */
+  radioRolesBefore?: Record<string, RadioChoice>;
   plugins: PluginsState;
   /** Data kept when a plugin was removed, by plugin ID, that its next install asks about. */
   keptPluginData: Record<string, PluginKeptData>;
@@ -244,6 +247,7 @@ export function createMockRouter(): MockRouter {
       radios: [
         {
           interface: 'wlan0',
+          mac: 'b8:27:eb:3c:41:02',
           phy: 'phy0',
           driver: 'brcmfmac',
           isUsb: false,
@@ -253,7 +257,8 @@ export function createMockRouter(): MockRouter {
           role: 'uplink',
         },
         {
-          interface: 'wlan1',
+          interface: 'ap0',
+          mac: '00:0e:8e:7a:12:34',
           phy: 'phy1',
           driver: 'mt76x2u',
           isUsb: true,

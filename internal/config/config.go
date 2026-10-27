@@ -108,6 +108,17 @@ type Config struct {
 	// connection is busy (Clients page, and the speeds on the Internet
 	// page).
 	QoS QoSConfig `json:"qos"`
+	// Radios is which Wi-Fi radio does what, when the owner chose
+	// (System page → Wi-Fi radios).
+	Radios RadiosConfig `json:"radios"`
+}
+
+// RadiosConfig holds the owner's choices of what each Wi-Fi radio does.
+type RadiosConfig struct {
+	// Roles maps a radio's own MAC address (lower case) to its job:
+	// "hotspot", "uplink", "guest" or "unused" (radio.Role). Radios not
+	// listed get their job automatically.
+	Roles map[string]string `json:"roles,omitempty"`
 }
 
 // QoSConfig is "quality of service": which devices go first, and how fast
@@ -1078,6 +1089,7 @@ func (c Config) Clone() Config {
 	c.Clients.FixedAddresses = maps.Clone(c.Clients.FixedAddresses)
 	c.PortForwarding.Rules = slices.Clone(c.PortForwarding.Rules)
 	c.QoS.Priority = slices.Clone(c.QoS.Priority)
+	c.Radios.Roles = maps.Clone(c.Radios.Roles)
 	c.DNS.Servers = slices.Clone(c.DNS.Servers)
 	c.DNS.DoH = slices.Clone(c.DNS.DoH)
 	c.Plugins.Sources = slices.Clone(c.Plugins.Sources)

@@ -167,7 +167,13 @@ since their image has one copy of the system.
   internet (through your VPN, if it is on) but can't reach your devices,
   each other, or the settings. It needs a USB adapter that can broadcast
   two networks at once (MediaTek MT7612U adapters can; the page tells you
-  if yours can't).
+  if yours can't), or a second USB adapter for the guest network alone.
+- **Which radio does what:** RasBeacon picks by itself, but on the
+  **System** page (*Wi-Fi radios* → *Change what each radio does*) you can
+  choose which radio runs the hotspot, which joins Wi-Fi networks, and give
+  the guest network a radio of its own. RasBeacon restarts with the new
+  jobs and goes back to the old ones after 3 minutes unless you press
+  **Keep**, in case you can't reach it any more.
 - **Metered connection** (on a phone's hotspot or a paid plan): tick it on
   the **Hotspot** page. Android devices then hold back big downloads; on
   iPhones and Macs turn on *Low Data Mode* for the hotspot in Wi-Fi

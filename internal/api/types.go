@@ -122,15 +122,18 @@ type Status struct {
 	UptimeSeconds int    `json:"uptimeSeconds"`
 	Mode          Mode   `json:"mode"`
 	// Plugins are the installed plugins and their state.
-	Plugins []PluginSummary    `json:"plugins"`
-	Hotspot HotspotStatus      `json:"hotspot"`
-	Uplink  UplinkStatus       `json:"uplink"`
-	VPN     VPNStatus          `json:"vpn"`
-	Portal  PortalStatus       `json:"portal"`
-	Update  UpdateStatus       `json:"update"`
-	Radios  []radio.Radio      `json:"radios"`
-	Clients []stations.Station `json:"clients"`
-	Guest   GuestStatus        `json:"guest"`
+	Plugins []PluginSummary `json:"plugins"`
+	Hotspot HotspotStatus   `json:"hotspot"`
+	Uplink  UplinkStatus    `json:"uplink"`
+	VPN     VPNStatus       `json:"vpn"`
+	Portal  PortalStatus    `json:"portal"`
+	Update  UpdateStatus    `json:"update"`
+	Radios  []radio.Radio   `json:"radios"`
+	// RadioRolesPending is the seconds left to keep new radio roles before
+	// RasBeacon goes back to the previous ones (0: nothing waits).
+	RadioRolesPending int                `json:"radioRolesPending,omitempty"`
+	Clients           []stations.Station `json:"clients"`
+	Guest             GuestStatus        `json:"guest"`
 	// Warnings are problems the owner should know about, in plain words.
 	Warnings []string `json:"warnings"`
 
@@ -809,6 +812,13 @@ type UsageSettings struct {
 	Since string `json:"since,omitempty"`
 	// DevicesPaused is how many devices the limit pauses now; read-only.
 	DevicesPaused int `json:"devicesPaused"`
+}
+
+// RadioRolesRequest sets what each Wi-Fi radio does (PUT /settings/radios):
+// a radio's own MAC address to "hotspot", "uplink", "guest" or "unused".
+// Radios left out get their job automatically.
+type RadioRolesRequest struct {
+	Roles map[string]string `json:"roles"`
 }
 
 // ClientPriorityRequest makes a device a priority device or an ordinary

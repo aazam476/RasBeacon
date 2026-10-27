@@ -10,9 +10,10 @@ import {
 } from '../device';
 import { fixedAddressProblem } from '@/lib/fixedAddress';
 import { MAX_PRIORITY_DEVICES, speedProblem } from '@/lib/qos';
+import { assignRoles, rolesProblem, savedChoices, type RadioChoice } from '@/lib/radios';
 import { welcomeProblems } from '@/lib/welcome';
 import { FieldErrors } from '../errors';
-import type { MACChoice, Plugin, PluginChoices, PluginPreview, SavedNetwork, VPNProfile } from '../types';
+import type { MACChoice, Plugin, PluginChoices, PluginPreview, Radio, SavedNetwork, VPNProfile } from '../types';
 import { DemoIndex } from './DemoIndex';
 import { DemoTag } from './DemoTag';
 import { StressToggle } from './StressToggle';
@@ -912,6 +913,33 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
           Object.assign(d.router.status.update, { restartPending: false, message: `Updated to ${installed}.` });
         });
       },
+      saveRadioRoles: async (roles) => {
+        await wait(900);
+        const { radios } = currentDemo.router.status;
+        const problem = rolesProblem(radios, roles);
+        if (problem) throw new FieldErrors({ roles: problem });
+        await wait(3000); // RasBeacon restarts
+        change((d) => {
+          d.router.radioRolesBefore ??= savedChoices(d.router.status.radios);
+          setRadioRoles(d.router.status.radios, roles);
+          d.router.status.radioRolesPending = 180;
+        });
+      },
+      keepRadioRoles: async () => {
+        await wait(500);
+        change((d) => {
+          d.router.radioRolesBefore = undefined;
+          d.router.status.radioRolesPending = undefined;
+        });
+      },
+      revertRadioRoles: async () => {
+        await wait(3000);
+        change((d) => {
+          setRadioRoles(d.router.status.radios, d.router.radioRolesBefore ?? {});
+          d.router.radioRolesBefore = undefined;
+          d.router.status.radioRolesPending = undefined;
+        });
+      },
       shutDown: async () => {
         await wait(1500);
         change((d) => void (d.phase = { kind: 'notice', notice: 'off' }));
@@ -1216,6 +1244,15 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
       <StressToggle />
     </DeviceContext>
   );
+}
+
+/** Gives the radios the roles for these choices, as the router does after its restart. */
+function setRadioRoles(radios: Radio[], choices: Record<string, RadioChoice>) {
+  const roles = assignRoles(radios, choices);
+  for (const radio of radios) {
+    radio.role = roles[radio.mac];
+    radio.chosen = (choices[radio.mac] ?? 'auto') !== 'auto' || undefined;
+  }
 }
 
 /** A random, locally administered unicast MAC address, as the router makes one. */

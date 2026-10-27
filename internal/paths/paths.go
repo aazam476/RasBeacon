@@ -125,6 +125,12 @@ func (p Paths) RememberedLoginsFile() string {
 // regularly so the clock never goes backwards across a reboot.
 func (p Paths) ClockFile() string { return filepath.Join(p.DataDir(), "clock") }
 
+// RadioRolesPendingFile holds the radio roles from before the owner's last
+// change, until the owner keeps the new ones (or RasBeacon goes back).
+func (p Paths) RadioRolesPendingFile() string {
+	return filepath.Join(p.DataDir(), "radio-roles-pending.json")
+}
+
 // WelcomeAcceptedFile is the devices that accepted the welcome page, and
 // until when.
 func (p Paths) WelcomeAcceptedFile() string {
@@ -180,6 +186,14 @@ func (p Paths) APISocket() string { return filepath.Join(p.RunDir(), "api.sock")
 
 // HostapdConfig is the generated hostapd (hotspot) configuration.
 func (p Paths) HostapdConfig() string { return filepath.Join(p.RunDir(), "hostapd.conf") }
+
+// HostapdGuestConfig is the guest network's hostapd configuration, when it
+// runs on a radio of its own (the same hostapd runs both files).
+func (p Paths) HostapdGuestConfig() string { return filepath.Join(p.RunDir(), "hostapd-guest.conf") }
+
+// HostapdEnv tells rasbeacon-hostapd.service which files to run
+// (GUEST_CONF: the guest radio's file, or nothing).
+func (p Paths) HostapdEnv() string { return filepath.Join(p.RunDir(), "hostapd.env") }
 
 // HostapdAcceptFile lists the devices allowed on the hotspot, when the
 // owner turned the allow list on.

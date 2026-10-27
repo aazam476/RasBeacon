@@ -29,6 +29,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -40,6 +41,10 @@ const (
 	RoleHotspot Role = "hotspot"
 	// RoleUplink joins the upstream network (hotel, eduroam, ...).
 	RoleUplink Role = "uplink"
+	// RoleGuest broadcasts the guest network on a radio of its own (only
+	// when the owner chooses it; otherwise the guest network shares the
+	// hotspot's radio).
+	RoleGuest Role = "guest"
 	// RoleUnused means the radio was found but has no job.
 	RoleUnused Role = "unused"
 )
@@ -48,12 +53,20 @@ const (
 // other part of RasBeacon can refer to it without guessing.
 const HotspotInterfaceName = "ap0"
 
+// GuestInterfaceName is the guest network's interface: a second network
+// hostapd adds on the hotspot's radio, or a radio of its own renamed to it.
+const GuestInterfaceName = "guest0"
+
 // Radio describes one Wi-Fi interface.
 type Radio struct {
 	Interface string `json:"interface"` // Linux interface name, e.g. "wlan1"
-	Phy       string `json:"phy"`       // radio name, e.g. "phy1"
-	Driver    string `json:"driver"`    // e.g. "brcmfmac" (built-in) or "rtw88_8822bu"
-	IsUSB     bool   `json:"isUsb"`
+	// MAC is the radio's own (permanent) address. It names the radio for
+	// the owner's role choices, because interface names change between
+	// boots and USB ports.
+	MAC    string `json:"mac"`
+	Phy    string `json:"phy"`    // radio name, e.g. "phy1"
+	Driver string `json:"driver"` // e.g. "brcmfmac" (built-in) or "rtw88_8822bu"
+	IsUSB  bool   `json:"isUsb"`
 	// USBID is "vendor:product" as shown by lsusb, e.g. "2357:012d" for a
 	// TP-Link Archer T3U. Empty for built-in radios.
 	USBID      string `json:"usbId"`
@@ -71,6 +84,9 @@ type Radio struct {
 	// hotspot (see SupportsWiFi6AP).
 	HasWiFi6 bool `json:"hasWifi6"`
 	Role     Role `json:"role"`
+	// Chosen is true when the owner chose Role (System page); false when
+	// RasBeacon did.
+	Chosen bool `json:"chosen,omitempty"`
 }
 
 // PhyInfoFunc returns the output of `iw phy <phy> info`. It is a parameter so
@@ -97,8 +113,10 @@ func Detect(sysClassNet string, phyInfo PhyInfoFunc) ([]Radio, error) {
 			continue
 		}
 
+		mac, _ := readTrimmed(filepath.Join(ifaceDir, "address"))
 		r := Radio{
 			Interface: name,
+			MAC:       mac,
 			Phy:       phyName,
 			Driver:    linkBaseName(filepath.Join(ifaceDir, "device", "driver")),
 			Role:      RoleUnused,
@@ -150,53 +168,128 @@ func onePerRadio(radios []Radio) []Radio {
 	return kept
 }
 
-// AssignRoles decides which radio runs the hotspot and which joins the uplink.
+// AssignRoles decides what each radio does: the owner's choices first
+// (chosen, by radio MAC address; nil for none), then automatically for the
+// rest.
 //
-// Rules, in order:
+// The owner's choices are kept where they can work: a hotspot or guest
+// radio must be able to run a hotspot, and each role goes to one radio.
+// A choice for a radio that isn't plugged in is skipped with a warning, and
+// its role is chosen automatically. Then, for roles nobody chose:
 //  1. Hotspot: the first USB radio that supports AP mode.
-//  2. If there is no such USB radio, fall back to a built-in radio that
-//     supports AP mode, so you can still reach the setup page. The returned
-//     warning explains the ~8 client limit.
-//  3. Uplink: the first remaining radio (normally the built-in one).
+//  2. If there is no such USB radio, a built-in radio that supports AP
+//     mode, so you can still reach the setup page. The returned warning
+//     explains the ~8 client limit.
+//  3. Uplink: the first radio left that has no chosen role (normally the
+//     built-in one).
 //
-// It returns the radios with roles filled in, plus human-readable warnings.
-func AssignRoles(radios []Radio) ([]Radio, []string) {
+// The guest role is never chosen automatically. It returns the radios with
+// roles filled in, plus human-readable warnings.
+func AssignRoles(radios []Radio, chosen map[string]Role) ([]Radio, []string) {
 	result := make([]Radio, len(radios))
 	copy(result, radios)
 	var warnings []string
-
-	hotspotIndex := -1
+	// decided marks radios whose role the owner chose (unused included).
+	decided := make([]bool, len(result))
+	taken := map[Role]bool{}
+	present := map[string]bool{}
+	for i := range result {
+		result[i].Role = RoleUnused
+		present[result[i].MAC] = true
+	}
 	for i, r := range result {
-		if r.IsUSB && r.SupportsAP {
-			hotspotIndex = i
+		role, ok := chosen[r.MAC]
+		if !ok || r.MAC == "" {
+			continue
+		}
+		switch {
+		case role == RoleUnused:
+		case (role == RoleHotspot || role == RoleGuest) && !r.SupportsAP:
+			warnings = append(warnings, fmt.Sprintf("The radio %s can't run a hotspot, so RasBeacon chose its job by itself.", r.Interface))
+			continue
+		case taken[role] || (role != RoleHotspot && role != RoleGuest && role != RoleUplink):
+			continue // another radio has it already (or an unknown role)
+		}
+		result[i].Role = role
+		result[i].Chosen = true
+		decided[i] = true
+		if role != RoleUnused {
+			taken[role] = true
+		}
+	}
+	for mac := range chosen {
+		if !present[mac] {
+			warnings = append(warnings, "A Wi-Fi adapter you chose a job for isn't plugged in, so RasBeacon chose the jobs by itself.")
 			break
 		}
 	}
-	if hotspotIndex == -1 {
-		for i, r := range result {
-			if r.SupportsAP {
+
+	// The automatic choices go through the radios in a steady order (see
+	// autoOrder), not by interface name, which changes when radios are
+	// renamed.
+	order := autoOrder(result)
+	if !taken[RoleHotspot] {
+		hotspotIndex := -1
+		for _, i := range order {
+			if r := result[i]; !decided[i] && r.IsUSB && r.SupportsAP {
 				hotspotIndex = i
-				warnings = append(warnings,
-					"No USB Wi-Fi adapter found, so the built-in Wi-Fi is running the hotspot. "+
-						"It can only hold about 8 devices and cannot also join an upstream network. "+
-						"Plug in a supported USB adapter and reboot.")
+				break
+			}
+		}
+		if hotspotIndex == -1 {
+			for _, i := range order {
+				if r := result[i]; !decided[i] && r.SupportsAP {
+					hotspotIndex = i
+					warnings = append(warnings,
+						"No USB Wi-Fi adapter found, so the built-in Wi-Fi is running the hotspot. "+
+							"It can only hold about 8 devices and cannot also join an upstream network. "+
+							"Plug in a supported USB adapter and reboot.")
+					break
+				}
+			}
+		}
+		if hotspotIndex == -1 {
+			warnings = append(warnings, "No Wi-Fi radio that can run a hotspot was found.")
+			return result, warnings
+		}
+		result[hotspotIndex].Role = RoleHotspot
+		decided[hotspotIndex] = true
+	}
+
+	if !taken[RoleUplink] {
+		for _, i := range order {
+			if !decided[i] {
+				result[i].Role = RoleUplink
 				break
 			}
 		}
 	}
-	if hotspotIndex == -1 {
-		warnings = append(warnings, "No Wi-Fi radio that can run a hotspot was found.")
-		return result, warnings
-	}
-	result[hotspotIndex].Role = RoleHotspot
-
-	for i := range result {
-		if i != hotspotIndex {
-			result[i].Role = RoleUplink
-			break
-		}
-	}
 	return result, warnings
+}
+
+// autoOrder lists the radios' positions in the order automatic choices
+// consider them: the radio running the hotspot now (named ap0) first, so a
+// restart keeps it, then by phy number, the order the kernel found them in.
+func autoOrder(radios []Radio) []int {
+	order := make([]int, len(radios))
+	for i := range order {
+		order[i] = i
+	}
+	phyNumber := func(r Radio) int {
+		n, err := strconv.Atoi(strings.TrimPrefix(r.Phy, "phy"))
+		if err != nil {
+			return 1 << 30 // unknown: last
+		}
+		return n
+	}
+	sort.SliceStable(order, func(a, b int) bool {
+		ra, rb := radios[order[a]], radios[order[b]]
+		if (ra.Interface == HotspotInterfaceName) != (rb.Interface == HotspotInterfaceName) {
+			return ra.Interface == HotspotInterfaceName
+		}
+		return phyNumber(ra) < phyNumber(rb)
+	})
+	return order
 }
 
 // SupportsAPMode reads `iw phy <name> info` output and reports whether "AP"

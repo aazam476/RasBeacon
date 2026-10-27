@@ -231,7 +231,20 @@ export function applyWorstCase(demo: DemoState) {
   status.radios = [
     ...status.radios,
     {
+      interface: 'guest0',
+      mac: '00:0a:52:09:f1:7e',
+      phy: 'phy3',
+      driver: 'mt7921u',
+      isUsb: true,
+      usbId: '0e8d:7961',
+      supportsAp: true,
+      maxAps: 4,
+      role: 'guest',
+      chosen: true,
+    },
+    {
       interface: 'wlx00c0cab1c2d3',
+      mac: '00:c0:ca:b1:c2:d3',
       phy: 'phy2',
       driver: 'rtl88x2bu (Realtek RTL8812BU, out-of-tree)',
       isUsb: true,
@@ -241,6 +254,10 @@ export function applyWorstCase(demo: DemoState) {
       role: 'unused',
     },
   ];
+
+  // New radio roles that wait to be kept.
+  status.radioRolesPending = 179;
+  router.radioRolesBefore = {};
 
   router.uplinkSettings.networks = [
     { id: 'n1', ssid: uplinkSsid, security: 'open', hidden: false, hasPassword: false },

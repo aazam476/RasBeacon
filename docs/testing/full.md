@@ -468,6 +468,16 @@ Keep the VPN on with the kill switch.
    warning (the certificate is valid for 820 days, under Apple's 825-day
    limit), and *Valid until* is about 27 months away.
    Turn it off again if you prefer.
+10. **Which radio does what (new, needs two USB adapters, or one plus the
+    built-in Wi-Fi):** System → *Wi-Fi radios* → **Change what each radio
+    does**: give the second adapter **Guest network**, **Save and
+    restart**. **Expect:** after about a minute the page asks *Keep the
+    radios' new jobs?*; the guest network shows on its own channel (a
+    Wi-Fi scanner app shows it on another channel than the hotspot); a
+    phone on it reaches the internet but not your devices. **Keep**. Then
+    choose **Hotspot** for the built-in Wi-Fi: the sheet warns it holds
+    about 8 devices; save, **don't** press Keep, and wait 3 minutes:
+    RasBeacon goes back to the adapter by itself.
 
 ## 13. Plugins (new)
 
@@ -714,7 +724,7 @@ Board (Pi 4/5/3B/3B+/Zero 2 W) / RAM:     Adapter:          Card size:          
 9  Speed test: down __ up __ ping __ location __, took __ s / speed.cloudflare.com: down __ up __
 10 Login page notice: / zero-leak login worked, tap delay __ s: / no leak: / login mode:
 11 SSH: / pages OK phone+laptop+dark: / rounded focus outline: / readings: / stay logged in: / unsaved bar:
-12 Hotspot password check + 5 GHz: / UK refused, GB saves: / JP channels end at 48: / show password (no admin password): / WPA3 only: / Wi-Fi standard (6 if the adapter can, 4 for old devices): / allowed devices + lockout warning: / device limit: / metered: / guests isolated: / welcome page + code + ask again: / rbd restart with guests, uplink not guest0: / IPv6: / HTTPS fingerprint + redirect: / iPhone Safari accepts the certificate:
+12 Hotspot password check + 5 GHz: / UK refused, GB saves: / JP channels end at 48: / show password (no admin password): / WPA3 only: / Wi-Fi standard (6 if the adapter can, 4 for old devices): / allowed devices + lockout warning: / device limit: / metered: / guests isolated: / welcome page + code + ask again: / guest radio of its own + keep + goes back by itself: / rbd restart with guests, uplink not guest0: / IPv6: / HTTPS fingerprint + redirect: / iPhone Safari accepts the certificate:
 13 Plugins: catalog install AdGuard: / isolation: / ports: / Samba: / crash stop: / changed byte refused: / image with another plugin's name refused, AdGuard unchanged: / kept data asked about: / rbport + bridge table:
 14 Version before __ / renamed image refused: / changed byte refused: / update installed, settings kept, took __ min: / rollback: / check schedule + Check now: / ntfy test + new-version notice:
 15 Power cuts x3: / reboot dialog: / shut down + power on: / rename to travel-pi.lan: / long run __ devices __ min, drops: / memory: / diagnostics clean:

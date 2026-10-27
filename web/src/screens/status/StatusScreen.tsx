@@ -8,6 +8,7 @@ import { HardwareSection } from './HardwareSection';
 import { InternetSection } from './InternetSection';
 import { PluginsSection } from './PluginsSection';
 import { DevicesSection, GuestSection, HotspotSection } from './NetworkSections';
+import { RadioRolesNotice } from '../system/RadiosSection';
 import { StatusHero } from './StatusHero';
 import { TrafficSection } from './TrafficSection';
 import { VpnSection } from './VpnSection';
@@ -40,6 +41,7 @@ export function StatusScreen() {
               <p>{describeWiFiState('login-failed')}</p>
             </Notice>
           )}
+          <RadioRolesNotice secondsLeft={status.radioRolesPending} />
           {status.warnings.length > 0 && <NoticeList tone="warning" ariaLabel="Warnings" messages={status.warnings} />}
           {/* Two columns on wide screens, in rows (as on Clients): the sections side by side always
               start at the same height. */}

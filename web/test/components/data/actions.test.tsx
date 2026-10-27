@@ -351,6 +351,7 @@ describe('clients', () => {
       then: (d) => expect(d.usageSettings.data).toEqual({ limitMb: 500, since: '2026-10-19T00:00:00Z' }),
     },
     { name: 'resets the counts', run: (d) => d.resetUsage(), sends: ['POST /clients/usage/reset'] },
+    { name: 'the radios’ new jobs are kept', run: (d) => d.keepRadioRoles(), sends: ['POST /settings/radios/keep'] },
     {
       name: 'a priority device is saved, then the count of them read again',
       run: (d) => d.setClientPriority('3a:1f:22:aa:bb:cc', true),

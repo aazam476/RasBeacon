@@ -136,7 +136,7 @@ func TestDetect_ARadioWithTwoInterfacesIsOneRadio(t *testing.T) {
 	if strings.Join(names, " ") != "ap0 wlan0" {
 		t.Fatalf("radios = %v, want ap0 and wlan0 (guest0 is ap0's radio)", names)
 	}
-	assigned, _ := AssignRoles(radios)
+	assigned, _ := AssignRoles(radios, nil)
 	if assigned[0].Role != RoleHotspot || assigned[1].Role != RoleUplink {
 		t.Errorf("roles = %+v", assigned)
 	}
@@ -147,7 +147,7 @@ func TestAssignRoles_USBAdapterRunsHotspot(t *testing.T) {
 		{Interface: "wlan0", Driver: "brcmfmac", SupportsAP: true},
 		{Interface: "wlan1", Driver: "rtw88_8822bu", IsUSB: true, SupportsAP: true},
 	}
-	got, warnings := AssignRoles(radios)
+	got, warnings := AssignRoles(radios, nil)
 
 	if got[1].Role != RoleHotspot {
 		t.Errorf("USB radio role = %q, want hotspot", got[1].Role)
@@ -162,7 +162,7 @@ func TestAssignRoles_USBAdapterRunsHotspot(t *testing.T) {
 
 func TestAssignRoles_NoUSBAdapterFallsBackWithWarning(t *testing.T) {
 	radios := []Radio{{Interface: "wlan0", Driver: "brcmfmac", SupportsAP: true}}
-	got, warnings := AssignRoles(radios)
+	got, warnings := AssignRoles(radios, nil)
 
 	if got[0].Role != RoleHotspot {
 		t.Errorf("built-in radio should run the hotspot as a fallback, got %q", got[0].Role)
@@ -174,7 +174,7 @@ func TestAssignRoles_NoUSBAdapterFallsBackWithWarning(t *testing.T) {
 
 func TestAssignRoles_NoAPCapableRadio(t *testing.T) {
 	radios := []Radio{{Interface: "wlan0", SupportsAP: false}}
-	got, warnings := AssignRoles(radios)
+	got, warnings := AssignRoles(radios, nil)
 	if got[0].Role == RoleHotspot {
 		t.Error("a radio without AP support must not be given the hotspot role")
 	}
@@ -300,6 +300,68 @@ func TestSupportsWiFi6AP(t *testing.T) {
 	} {
 		if got := SupportsWiFi6AP(tc.info); got != tc.want {
 			t.Errorf("%s: got %v, want %v", name, got, tc.want)
+		}
+	}
+}
+
+func TestAssignRoles_OwnersChoices(t *testing.T) {
+	builtIn := Radio{Interface: "wlan0", MAC: "b8:27:eb:00:00:01", Driver: "brcmfmac", SupportsAP: true}
+	usbA := Radio{Interface: "wlan1", MAC: "00:c0:ca:00:00:02", IsUSB: true, SupportsAP: true}
+	usbB := Radio{Interface: "wlan2", MAC: "00:c0:ca:00:00:03", IsUSB: true, SupportsAP: true}
+	noAP := Radio{Interface: "wlan3", MAC: "00:c0:ca:00:00:04", IsUSB: true}
+	roles := func(radios []Radio) string {
+		var parts []string
+		for _, r := range radios {
+			parts = append(parts, r.Interface+"="+string(r.Role))
+		}
+		return strings.Join(parts, " ")
+	}
+
+	for name, tc := range map[string]struct {
+		radios   []Radio
+		chosen   map[string]Role
+		want     string
+		warnings int
+	}{
+		"automatic": {
+			radios: []Radio{builtIn, usbA, usbB}, want: "wlan0=uplink wlan1=hotspot wlan2=unused",
+		},
+		"the second adapter runs the hotspot, the first the guest network": {
+			radios: []Radio{builtIn, usbA, usbB},
+			chosen: map[string]Role{usbB.MAC: RoleHotspot, usbA.MAC: RoleGuest},
+			want:   "wlan0=uplink wlan1=guest wlan2=hotspot",
+		},
+		"the built-in radio runs the hotspot, an adapter joins the internet": {
+			radios: []Radio{builtIn, usbA},
+			chosen: map[string]Role{builtIn.MAC: RoleHotspot, usbA.MAC: RoleUplink},
+			want:   "wlan0=hotspot wlan1=uplink",
+		},
+		"a radio set to unused is left alone": {
+			radios: []Radio{builtIn, usbA},
+			chosen: map[string]Role{builtIn.MAC: RoleUnused},
+			want:   "wlan0=unused wlan1=hotspot",
+		},
+		"a radio that can't run a hotspot can't be the hotspot": {
+			radios:   []Radio{builtIn, usbA, noAP},
+			chosen:   map[string]Role{noAP.MAC: RoleHotspot},
+			want:     "wlan0=uplink wlan1=hotspot wlan3=unused",
+			warnings: 1,
+		},
+		"two hotspots: the first one counts": {
+			radios: []Radio{builtIn, usbA, usbB},
+			chosen: map[string]Role{usbA.MAC: RoleHotspot, usbB.MAC: RoleHotspot},
+			want:   "wlan0=uplink wlan1=hotspot wlan2=unused",
+		},
+		"an adapter that isn't plugged in": {
+			radios:   []Radio{builtIn, usbA},
+			chosen:   map[string]Role{usbB.MAC: RoleHotspot, usbA.MAC: "something"},
+			want:     "wlan0=uplink wlan1=hotspot",
+			warnings: 1,
+		},
+	} {
+		got, warnings := AssignRoles(tc.radios, tc.chosen)
+		if roles(got) != tc.want || len(warnings) != tc.warnings {
+			t.Errorf("%s: got %s (warnings %v), want %s", name, roles(got), warnings, tc.want)
 		}
 	}
 }

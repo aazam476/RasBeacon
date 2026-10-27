@@ -995,3 +995,27 @@ func TestNetworkd_UplinkWithMAC(t *testing.T) {
 		t.Error("a bad address must be refused")
 	}
 }
+
+// The guest network on a radio of its own: its own file, in the guests'
+// bridge, guests kept apart.
+func TestHostapd_GuestRadio(t *testing.T) {
+	got, err := Hostapd(HotspotInput{
+		Interface: "guest0", SSID: "RasBeacon-Guests", Band: config.Band2GHz, Channel: 6,
+		Country: "US", Security: config.SecurityWPA2WPA3, Password: "visitors-welcome-2026", GuestRadio: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkGolden(t, "hostapd_guest_radio", got)
+	for _, want := range []string{"interface=guest0\n", "bridge=br-guest\n", "ap_isolate=1\n", "channel=6\n"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("no %q", want)
+		}
+	}
+	if _, err := Hostapd(HotspotInput{
+		Interface: "guest0", SSID: "G", Band: config.Band2GHz, Country: "US", Password: "visitors-welcome-2026",
+		GuestRadio: true, Guest: &GuestNetwork{SSID: "x", Password: "visitors-welcome-2026", BSSID: "02:00:00:00:00:01"},
+	}); err == nil {
+		t.Error("a guest radio with a second guest network should be refused")
+	}
+}

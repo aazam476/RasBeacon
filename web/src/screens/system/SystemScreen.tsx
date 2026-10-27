@@ -3,11 +3,12 @@ import type { Status } from '@/data/types';
 import { formatDuration } from '@/lib/format';
 import { Loaded } from '@/shell/Loaded';
 import { useState } from 'react';
-import { Badge, EditButton, Icon, Meter, RenameSheet, Row, Section, type Tone } from '@/ui';
+import { EditButton, Icon, Meter, RenameSheet, Row, Section } from '@/ui';
 import { getResourceMetrics } from '../common/resourceMetrics';
 import { AdminPasswordSection } from './AdminPasswordSection';
 import { BackupSection } from './BackupSection';
 import { FactoryResetSection, RebootSection, ShutdownSection } from './RestartSections';
+import { RadioRolesNotice, RadiosSection } from './RadiosSection';
 import { SoftwareSection } from './SoftwareSection';
 import { StorageSection } from './StorageSection';
 import { SwapSection } from './SwapSection';
@@ -20,6 +21,7 @@ export function SystemScreen() {
     <Loaded data={status} what="the system status" onRetry={refreshStatus}>
       {(status) => (
         <>
+          <RadioRolesNotice secondsLeft={status.radioRolesPending} />
           <SoftwareSection status={status} />
           <HardwareSection status={status} />
           <StorageSection storage={status.storage} />
@@ -98,35 +100,6 @@ function AboutSection({ status }: { status: Status }) {
           onClose={() => setRenaming(false)}
         />
       )}
-    </Section>
-  );
-}
-
-const ROLES: Record<Status['radios'][number]['role'], { label: string; tone: Tone }> = {
-  hotspot: { label: 'Hotspot', tone: 'green' },
-  uplink: { label: 'Internet', tone: 'tint' },
-  unused: { label: 'Unused', tone: 'gray' },
-};
-
-/** The Wi-Fi radios RasBeacon found and what each one does. */
-function RadiosSection({ status }: { status: Status }) {
-  return (
-    <Section title="Wi-Fi radios">
-      {status.radios.map((radio) => (
-        <Row
-          key={radio.interface}
-          leading={{ icon: 'wifi' }}
-          title={<span className="font-mono">{radio.interface}</span>}
-          subtitle={[
-            radio.driver,
-            radio.isUsb ? `USB ${radio.usbId}` : 'built-in',
-            radio.maxAps > 1 && `can broadcast ${radio.maxAps} networks`,
-          ]
-            .filter(Boolean)
-            .join(' · ')}
-          trailing={<Badge tone={ROLES[radio.role].tone}>{ROLES[radio.role].label}</Badge>}
-        />
-      ))}
     </Section>
   );
 }

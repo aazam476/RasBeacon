@@ -74,6 +74,9 @@ func (a *Agent) Handler() http.Handler {
 	mux.HandleFunc("POST /clients/priority", do(func(req api.ClientPriorityRequest) error {
 		return a.SetClientPriority(req.MAC, req.Priority)
 	}))
+	mux.HandleFunc("PUT /settings/radios", do(func(req api.RadioRolesRequest) error { return a.UpdateRadioRoles(req.Roles) }))
+	mux.HandleFunc("POST /settings/radios/keep", act(a.KeepRadioRoles))
+	mux.HandleFunc("POST /settings/radios/revert", act(a.RevertRadioRoles))
 	mux.HandleFunc("GET /settings/qos", view(a.QoSSettings))
 	mux.HandleFunc("PUT /settings/qos", call(a.UpdateQoSSettings))
 	mux.HandleFunc("GET /settings/usage", view(a.UsageSettings))
