@@ -181,6 +181,40 @@ func TestVPN_KillSwitchOff_FallsBackToUplinkAndReturns(t *testing.T) {
 	}
 }
 
+// Renaming the profile in use changes nothing the tunnel uses: with the
+// kill switch off and the server down, devices stay on the uplink instead
+// of waiting in a broken tunnel while the state machine starts again.
+func TestVPN_RenamingKeepsTheTunnelAsItIs(t *testing.T) {
+	e, c := newVPNEnv(t, false)
+	e.setHandshake(c.now)
+	e.check()
+	e.checkFor(c, 3*time.Minute+45*time.Second)
+	if got := e.agent.Status().VPN.State; got != "direct" {
+		t.Fatalf("test setup broken: state = %s, want direct", got)
+	}
+	e.runner.commands = nil
+	if err := e.agent.RenameVPNProfile("home.conf", "Home"); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.agent.Status().VPN.State; got != "direct" {
+		t.Errorf("after renaming, state = %s, want still direct", got)
+	}
+	if got := e.firewallEgress(); got != `elements = { "wlan0" }` {
+		t.Errorf("after renaming, egress = %s, want the uplink still", got)
+	}
+	if e.runner.ran("ip link delete dev wg0") {
+		t.Error("renaming must not take the tunnel down")
+	}
+
+	// A change the tunnel uses (here the kill switch) still starts again.
+	if err := e.agent.SetVPNSwitches(api.VPNSwitches{Enabled: true, KillSwitch: true}); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.firewallEgress(); got != `elements = { "wg0" }` {
+		t.Errorf("with the kill switch on, egress = %s, want only wg0", got)
+	}
+}
+
 func TestVPN_TurningOffRemovesTheTunnel(t *testing.T) {
 	e, _ := newVPNEnv(t, true)
 	if err := e.agent.SetVPNSwitches(api.VPNSwitches{Enabled: false, KillSwitch: true}); err != nil {

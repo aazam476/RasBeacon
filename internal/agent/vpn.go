@@ -27,6 +27,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net"
@@ -808,6 +809,20 @@ func checkProfile(p config.VPNProfile, keys config.WireGuardKeys) (configured bo
 	return configured, nil
 }
 
+// tunnelSettings is what the tunnel and its state machine depend on: the
+// two switches, and the profile in use (by its settings, not its name)
+// with its keys.
+func tunnelSettings(cfg config.Config, secrets config.Secrets) string {
+	profile, _ := cfg.VPN.Profile(cfg.VPN.Active)
+	profile.Name = ""
+	data, _ := json.Marshal(struct {
+		Enabled, KillSwitch bool
+		Profile             config.VPNProfile
+		Keys                any
+	}{cfg.VPN.Enabled, cfg.VPN.KillSwitch, profile, secrets.WireGuardKeys[cfg.VPN.Active]})
+	return string(data)
+}
+
 // saveVPN checks, saves and applies new VPN settings. changed is the
 // profile that was edited ("" for none), which is checked too even if it
 // isn't in use.
@@ -836,7 +851,16 @@ func (a *Agent) saveVPN(newCfg config.Config, newSecrets config.Secrets, changed
 		return err
 	}
 	previous := a.cfg.VPN.Active
+	unchanged := tunnelSettings(a.cfg, a.secrets) == tunnelSettings(newCfg, newSecrets)
 	a.cfg, a.secrets = newCfg, newSecrets
+	if unchanged {
+		// Nothing the tunnel uses changed (a profile renamed, another one
+		// edited): the tunnel and its state stay as they are. Starting the
+		// state machine again would keep devices in a tunnel that isn't
+		// working for the return delay (with the kill switch off).
+		slog.Info("VPN settings saved; the tunnel's own settings are unchanged", "profile", newCfg.VPN.Active)
+		return nil
+	}
 	if previous != newCfg.VPN.Active {
 		// Another server: start from a fresh tunnel, so nothing of the old
 		// profile (addresses, routes to its DNS servers) stays behind. The
