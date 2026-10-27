@@ -127,6 +127,37 @@ jobs:
           sudo vng --run "$kernel" --user root --memory 2G --exec \
             "modprobe mac80211_hwsim radios=2 && cd '$GITHUB_WORKSPACE/test/hwsim' && RASBEACON_REQUIRE_HWSIM=1 '$RUNNER_TEMP/hwsim.test' -test.v -test.count=1"
 
+  system:
+    name: Full-system test (whole RasBeacon in a virtual machine)
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-24.04
+    # Not a required check yet: it becomes one after about 20 clean runs in a
+    # row (docs/testing/README.md).
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Install mmdebstrap and QEMU
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends mmdebstrap qemu-system-x86 e2fsprogs
+          sudo chmod 666 /dev/kvm
+      # A Debian system with the image's packages, programs and services,
+      # plus the test (see test/system/README.md).
+      - name: Build the virtual machine
+        run: sudo env "PATH=$PATH" GOCACHE="$(go env GOCACHE)" GOMODCACHE="$(go env GOMODCACHE)" sh test/system/build-vm.sh "$RUNNER_TEMP/vm"
+      - name: Run the test
+        run: sh test/system/run-vm.sh "$RUNNER_TEMP/vm"
+      - name: Keep the console log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: system-test-console
+          path: ${{ runner.temp }}/vm/console.log
+          if-no-files-found: ignore
+
   e2e:
     name: Browser end-to-end test (simulated device, ${{ matrix.viewport }})
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository

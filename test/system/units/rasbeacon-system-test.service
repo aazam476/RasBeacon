@@ -1,0 +1,20 @@
+# Full-system test: runs the scenarios once RasBeacon is up, prints the
+# result on the console (the CI job reads it there), then turns the machine
+# off.
+[Unit]
+Description=RasBeacon full-system test: the scenarios
+After=rbd.service rbweb.service rasbeacon-test-world.service
+Requires=rasbeacon-test-world.service
+
+[Service]
+Type=oneshot
+Environment=RASBEACON_SYSTEM_TEST=1
+# On a failure, the services' logs follow on the console, to see why.
+ExecStart=/bin/sh -c '/usr/local/bin/rasbeacon-system.test -test.run=^TestScenarios$ -test.v -test.timeout=20m && echo "RASBEACON SYSTEM TEST: PASS" || { echo "RASBEACON SYSTEM TEST: FAIL"; journalctl -b --no-pager -o short-monotonic -n 600 -u rbd -u rbweb -u rasbeacon-hostapd -u rasbeacon-dnsmasq -u "rasbeacon-wpa@*" -u rasbeacon-firewall-early; systemctl --no-pager --failed; }'
+ExecStartPost=/usr/bin/systemctl poweroff
+StandardOutput=journal+console
+StandardError=journal+console
+TimeoutStartSec=25min
+
+[Install]
+WantedBy=multi-user.target

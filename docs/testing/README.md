@@ -10,6 +10,7 @@ what it covers.
 | [Back end](#back-end) | rbd, rbweb and their packages, with fake commands and files | `internal/*/…_test.go`, `test/netns/`, `test/hwsim/` | `go test ./...` |
 | [Front end](#front-end) | the web UI: its logic, the requests it sends, and its screens | `web/test/` | `cd web && npm test` |
 | [End to end](#end-to-end) | the whole product in a browser, on a phone-sized and a desktop-sized screen | `test/e2e/` | `make e2e` |
+| [Full system](#full-system) | the whole of RasBeacon under systemd, with a simulated hotel, VPN server and phones | `test/system/` | in a virtual machine |
 | [Hardware](#hardware) | what only a Raspberry Pi can show: radios, USB adapters, real networks | [full.md](full.md) | by hand |
 
 `make test` runs the first two, `make lint` the formatting and static
@@ -231,6 +232,17 @@ await step("the guest network can be turned on", async () => {
   // …
 });
 ```
+
+## Full system
+
+[`test/system/`](../../test/system/README.md) runs the whole of RasBeacon:
+the real `rbd` and `rbweb` under systemd, with hostapd, wpa_supplicant,
+dnsmasq, nftables and WireGuard, in a Debian virtual machine with simulated
+radios. A simulated hotel (with a login page and a WireGuard server) and
+three phones go through setting RasBeacon up, logging into the hotel, the
+VPN and its kill switch, guests, the allow list, WPA3, an `rbd` restart and
+the hotspot self-check. CI runs it in the `system` job; it needs KVM to run
+at a useful speed.
 
 ## Hardware
 

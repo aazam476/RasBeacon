@@ -1,0 +1,19 @@
+# Full-system test: builds the simulated world before rbd starts (see
+# test/system/README.md): five simulated Wi-Fi radios, of which RasBeacon
+# keeps two and the hotel and three phones get the others, each in its own
+# network namespace.
+[Unit]
+Description=RasBeacon full-system test: the simulated world
+Before=rbd.service
+DefaultDependencies=no
+After=systemd-modules-load.service local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/rasbeacon-system.test -test.run=^TestWorld$ -test.v
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=rbd.service
