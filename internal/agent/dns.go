@@ -113,14 +113,15 @@ func (a *Agent) ownDNSInUse() bool {
 // ownDNSThroughTunnel lists the owner's plain DNS servers that must be
 // reached through the tunnel while it carries devices' traffic: all of them
 // with "also while the VPN is on", except plugins' (they are on RasBeacon
-// itself).
+// itself) and ones on the hotspot or guest network (a Pi-hole plugged into
+// RasBeacon, say), which the tunnel can't reach.
 func (a *Agent) ownDNSThroughTunnel() []netip.Addr {
 	if !a.cfg.DNS.WithVPN {
 		return nil
 	}
 	var out []netip.Addr
 	for _, s := range a.cfg.DNS.Servers {
-		if !render.PluginSubnet.Contains(s) {
+		if !render.PluginSubnet.Contains(s) && !a.lan.Prefix.Contains(s) && !a.lan.Guest().Prefix.Contains(s) {
 			out = append(out, s)
 		}
 	}

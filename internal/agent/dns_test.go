@@ -176,6 +176,18 @@ func TestDNS_AlsoWhileTheVPNIsOn(t *testing.T) {
 		t.Errorf("settings = %+v", s)
 	}
 
+	// A DNS server on the hotspot itself (a Pi-hole on RasBeacon's Wi-Fi
+	// or wired port) is reached there, not through the tunnel.
+	if err := e.agent.UpdateDNSSettings(api.DNSSettings{Servers: []string{"10.87.0.50", "9.9.9.9"}, WithVPN: true}); err != nil {
+		t.Fatal(err)
+	}
+	if e.runner.ran("ip route replace 10.87.0.50/32 dev wg0") {
+		t.Error("a DNS server on the hotspot must not be sent into the tunnel")
+	}
+	if rules := e.readFile(e.paths.FirewallRules()); strings.Contains(rules, "10.87.0.50") {
+		t.Errorf("the firewall must not keep the hotspot's DNS server inside the tunnel:\n%s", rules)
+	}
+
 	// Switched off again: the VPN's own DNS.
 	if err := e.agent.UpdateDNSSettings(api.DNSSettings{Servers: []string{"9.9.9.9"}}); err != nil {
 		t.Fatal(err)
