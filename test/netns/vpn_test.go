@@ -185,6 +185,8 @@ type routerRules struct {
 	upstreamDNS []string
 	portalOnly  bool
 	routedIPv6  netip.Prefix
+	// portForwards are port forwarding rules (the uplink is "eth0").
+	portForwards []render.PortForward
 }
 
 // renderRouterRules writes rbd's firewall for r to a file and returns its
@@ -197,6 +199,9 @@ func renderRouterRules(t *testing.T, r routerRules) string {
 		TunnelDNS:       []netip.Addr{netip.MustParseAddr(vpnServerAddress)},
 		PortalOnly:      r.portalOnly,
 		RoutedIPv6:      r.routedIPv6,
+		Uplinks:         []string{"eth0"},
+		LANAddress:      render.DefaultLAN.Prefix.Addr(),
+		PortForwards:    r.portForwards,
 	})
 	if err != nil {
 		t.Fatal(err)

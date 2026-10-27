@@ -1135,3 +1135,39 @@ type RestoreResult struct {
 	// plugins).
 	Plugins bool `json:"plugins"`
 }
+
+// PortForwardingSettings is the Port forwarding page (GET and PUT
+// /settings/port-forwarding). A PUT sends the whole list of rules.
+type PortForwardingSettings struct {
+	Rules []PortForwardRule `json:"rules"`
+	// OutsideAddress is RasBeacon's address on the uplink ("" while it
+	// isn't connected), where the forwarded ports are reached (read only).
+	OutsideAddress string `json:"outsideAddress,omitempty"`
+	// Reachability says whether devices on the internet can reach that
+	// address (read only): "public"; "private" (RasBeacon is behind another
+	// router, which must forward the ports to OutsideAddress first);
+	// "shared" (carrier-grade NAT: many customers share one address, so
+	// they can't); or "offline".
+	Reachability string `json:"reachability,omitempty"`
+}
+
+// PortForwardRule is one rule (see config.PortForwardRule). Target,
+// Address and Warning are filled in by rbd and ignored in a PUT.
+type PortForwardRule struct {
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	Protocol       string `json:"protocol"`
+	OutsidePort    int    `json:"outsidePort"`
+	OutsidePortEnd int    `json:"outsidePortEnd,omitempty"`
+	MAC            string `json:"mac,omitempty"`
+	Plugin         string `json:"plugin,omitempty"`
+	InsidePort     int    `json:"insidePort,omitempty"`
+	Enabled        bool   `json:"enabled"`
+	// Target is the device's or plugin's name.
+	Target string `json:"target,omitempty"`
+	// Address is where the connections go; "" when the device has no fixed
+	// address (the rule then does nothing).
+	Address string `json:"address,omitempty"`
+	// Warning names a risk, such as a port often attacked.
+	Warning string `json:"warning,omitempty"`
+}

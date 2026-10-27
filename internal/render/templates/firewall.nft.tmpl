@@ -26,6 +26,13 @@ table inet rasbeacon {
 		elements = { {{range $i, $name := .Egress}}{{if $i}}, {{end}}"{{$name}}"{{end}} }
 	}
 {{end}}
+{{- if .PortForwards}}
+	# The uplinks (Ethernet, Wi-Fi): where port forwarding listens.
+	set uplinks {
+		type ifname
+		elements = { {{range $i, $name := .Uplinks}}{{if $i}}, {{end}}"{{$name}}"{{end}} }
+	}
+{{end}}
 	# The networks devices connect to: your hotspot ("{{.Bridge}}"){{if .Guest}}
 	# and the guest network ("{{.GuestBridge}}"){{end}}. Both may reach the
 	# internet the same way; only yours may reach RasBeacon's settings.
@@ -131,6 +138,19 @@ table inet rasbeacon {
 		oifname @lans ip6 daddr { {{range $i, $a := .PausedIPv6}}{{if $i}}, {{end}}{{$a}}{{end}} } drop
 {{- end}}
 
+{{- if .PortForwards}}
+
+		# Port forwarding: connections from the internet to the ports you
+		# forwarded (see port_forwards below) reach their device or plugin,
+		# and the answers go back the way they came, also while devices' own
+		# traffic goes through the VPN. Devices on your hotspot may use
+		# RasBeacon's outside address for them too.
+		iifname @uplinks oifname { "{{.Bridge}}", "{{.PluginBridge}}" } ct status dnat ct mark {{.ForwardMark}} accept
+		iifname { "{{.Bridge}}", "{{.PluginBridge}}" } oifname @uplinks ct mark {{.ForwardMark}} ct state established,related accept
+		iifname "{{.Bridge}}" oifname { "{{.Bridge}}", "{{.PluginBridge}}" } ct status dnat accept
+		iifname { "{{.Bridge}}", "{{.PluginBridge}}" } oifname "{{.Bridge}}" ct status dnat ct state established,related accept
+{{- end}}
+
 		# Connections devices already started may continue, but only on the
 		# current path. When the path changes (for example from login mode
 		# back to the VPN), connections on the old path stop at once instead
@@ -185,7 +205,33 @@ table inet rasbeacon {
 		# unchanged ("accept" here means "no NAT").
 		oifname "{{.TunnelInterface}}" ip6 saddr {{.RoutedIPv6}} accept
 {{- end}}
+{{- if .PortForwards}}
+		# A device reaching another through RasBeacon's outside address
+		# (forwarded back in): the answer must come back through RasBeacon
+		# too, so it looks as if RasBeacon asked.
+		iifname "{{.Bridge}}" oifname { "{{.Bridge}}", "{{.PluginBridge}}" } ct status dnat masquerade
+{{- end}}
 		oifname @egress masquerade
+	}
+{{- end}}
+{{- if .PortForwards}}
+
+	# Port forwarding: connections from the internet to these ports go to
+	# a device on your hotspot (at its fixed address) or a plugin. Each one
+	# is marked ({{.ForwardMark}}) so its answers can be told apart below.
+	chain port_forwards {
+		type nat hook prerouting priority dstnat;
+{{- range .PortForwards}}
+		iifname @uplinks {{.Protocol}} dport {{.Ports}} ct mark set {{$.ForwardMark}} dnat ip to {{.Target}}
+		iifname "{{$.Bridge}}" fib daddr type local ip daddr != { {{range $i, $a := $.OwnAddresses}}{{if $i}}, {{end}}{{$a}}{{end}} } {{.Protocol}} dport {{.Ports}} dnat ip to {{.Target}}
+{{- end}}
+	}
+
+	# The answers of forwarded connections carry the mark, so a routing
+	# rule sends them back out of the uplink, not into the VPN tunnel.
+	chain forward_answers {
+		type filter hook prerouting priority mangle;
+		iifname { "{{.Bridge}}", "{{.PluginBridge}}" } ct mark {{.ForwardMark}} meta mark set {{.ForwardMark}}
 	}
 {{- end}}
 

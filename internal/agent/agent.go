@@ -75,6 +75,7 @@ import (
 	"net/http"
 	"net/netip"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -700,9 +701,29 @@ func (a *Agent) applyDHCP(captive bool) error {
 	return nil
 }
 
+// bridgeNetfilterOff makes sure frames passing through the hotspot's
+// bridge aren't sent through the IP firewall as well. That happens when
+// the kernel's br_netfilter module is loaded (container tools load it) and
+// breaks port forwarding between two devices on the hotspot ("hairpin"):
+// the bridge would have to send the forwarded frame back out of the port
+// it came in on, which it refuses. RasBeacon's rules don't need it: the
+// plugins' isolation has its own bridge table (see the firewall). Without
+// the module there is nothing to do.
+func (a *Agent) bridgeNetfilterOff() {
+	for _, name := range []string{"bridge-nf-call-iptables", "bridge-nf-call-ip6tables", "bridge-nf-call-arptables"} {
+		path := filepath.Join(a.paths.ProcSysNetBridge(), name)
+		if current, err := os.ReadFile(path); err == nil && strings.TrimSpace(string(current)) != "0" {
+			if err := os.WriteFile(path, []byte("0\n"), 0o644); err != nil {
+				slog.Warn("could not turn off bridge filtering", "setting", name, "error", err)
+			}
+		}
+	}
+}
+
 // applyFirewall writes and loads the firewall rules for the current
 // settings.
 func (a *Agent) applyFirewall() error {
+	a.bridgeNetfilterOff()
 	input := render.FirewallInput{
 		SSHEnabled:      a.cfg.SSH.Enabled,
 		Egress:          a.egressInterfaces(),
@@ -718,6 +739,11 @@ func (a *Agent) applyFirewall() error {
 	if a.mode == api.ModeNormal {
 		input.Plugins = a.pluginRules()
 		input.LANAddress = a.lan.Prefix.Addr()
+		input.Uplinks = a.uplinkInterfaces()
+		input.PortForwards = a.portForwards()
+		if g := a.guestLAN(); g != nil {
+			input.GuestAddress = g.Prefix.Addr()
+		}
 	}
 	if a.browser.uid > 0 {
 		input.Browser = &render.BrowserRule{UID: a.browser.uid, Uplinks: a.uplinkInterfaces()}

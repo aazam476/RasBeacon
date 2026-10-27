@@ -499,8 +499,39 @@ type FirewallInput struct {
 	// may reach, and its ports on RasBeacon.
 	Plugins []PluginRule
 	// LANAddress is RasBeacon's address on the hotspot, where devices reach
-	// plugins' ports. Needed with Plugins.
+	// plugins' ports. Needed with Plugins and PortForwards.
 	LANAddress netip.Addr
+	// GuestAddress is RasBeacon's address on the guest network (with Guest).
+	GuestAddress netip.Addr
+	// Uplinks are the interfaces RasBeacon reaches the internet through
+	// without the VPN (Ethernet, Wi-Fi). Port forwarding listens there.
+	Uplinks []string
+	// PortForwards send connections from the internet, arriving on the
+	// uplinks, to a device on the hotspot or a plugin.
+	PortForwards []PortForward
+}
+
+// PortForward is one port forwarding rule as the firewall needs it.
+type PortForward struct {
+	// Protocol is "tcp" or "udp" (a rule for both becomes two).
+	Protocol string
+	// From and To are the outside ports (the same for a single port).
+	From, To int
+	// Address is where they go: a device on the hotspot or a plugin.
+	Address netip.Addr
+	// InsidePort is the port there; 0 keeps the outside port(s).
+	InsidePort int
+}
+
+// ForwardMark marks connections that came in by port forwarding, so their
+// replies go back out of the uplink (see routing.ForwardMark; the routing
+// package's tests check the two agree).
+const ForwardMark = "0x5246"
+
+type portForwardData struct {
+	Protocol string
+	Ports    string // "8080" or "27015-27030"
+	Target   string // "10.87.0.50:80" or "10.87.0.50" (ports kept)
 }
 
 // PluginRule is one plugin's place in the firewall.
@@ -571,6 +602,11 @@ type firewallData struct {
 	PluginLAN         []string
 	PluginPorts       []pluginPortData
 	LANAddress        string
+	// Port forwarding (see FirewallInput.PortForwards).
+	Uplinks      []string
+	PortForwards []portForwardData
+	OwnAddresses []string
+	ForwardMark  string
 }
 
 // Firewall produces the nftables ruleset.
@@ -668,7 +704,57 @@ func Firewall(in FirewallInput) (string, error) {
 			data.TunnelDNS6 = append(data.TunnelDNS6, dns.String())
 		}
 	}
+	if err := addPortForwards(&data, in); err != nil {
+		return "", err
+	}
 	return execute("firewall.nft.tmpl", data)
+}
+
+// addPortForwards checks the port forwarding rules and puts them in data.
+// Without an uplink (or without the hotspot's address) there is nothing to
+// forward from, so the rules are left out.
+func addPortForwards(data *firewallData, in FirewallInput) error {
+	if len(in.PortForwards) == 0 || len(in.Uplinks) == 0 || len(in.Egress) == 0 {
+		return nil
+	}
+	if !in.LANAddress.IsValid() {
+		return fmt.Errorf("port forwarding needs RasBeacon's hotspot address")
+	}
+	for _, name := range in.Uplinks {
+		if !isInterfaceName(name) {
+			return fmt.Errorf("invalid interface name %q", name)
+		}
+	}
+	data.Uplinks = in.Uplinks
+	data.ForwardMark = ForwardMark
+	// RasBeacon's own addresses on the hotspot side keep their services
+	// (the settings page on port 80, for example), whatever is forwarded.
+	data.OwnAddresses = []string{in.LANAddress.String()}
+	if in.Guest && in.GuestAddress.IsValid() {
+		data.OwnAddresses = append(data.OwnAddresses, in.GuestAddress.String())
+	}
+	data.LANAddress = in.LANAddress.String()
+	for _, f := range in.PortForwards {
+		if f.Protocol != "tcp" && f.Protocol != "udp" {
+			return fmt.Errorf("invalid protocol %q", f.Protocol)
+		}
+		if f.From < 1 || f.To < f.From || f.To > 65535 || f.InsidePort < 0 || f.InsidePort > 65535 ||
+			(f.InsidePort != 0 && f.To != f.From) {
+			return fmt.Errorf("invalid ports %d-%d to %d", f.From, f.To, f.InsidePort)
+		}
+		if !f.Address.Is4() {
+			return fmt.Errorf("invalid forwarding address %v", f.Address)
+		}
+		d := portForwardData{Protocol: f.Protocol, Ports: strconv.Itoa(f.From), Target: f.Address.String()}
+		if f.To != f.From {
+			d.Ports += "-" + strconv.Itoa(f.To)
+		}
+		if f.InsidePort != 0 {
+			d.Target += ":" + strconv.Itoa(f.InsidePort)
+		}
+		data.PortForwards = append(data.PortForwards, d)
+	}
+	return nil
 }
 
 // isInterfaceName reports whether name is a safe Linux interface name

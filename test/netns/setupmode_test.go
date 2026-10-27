@@ -130,6 +130,10 @@ func buildNetwork(t *testing.T) {
 	inNS(t, routerNS, "ip", "address", "add", "10.99.0.1/24", "dev", "eth0")
 	// Forwarding is on at the kernel level, so only the firewall stops it.
 	inNS(t, routerNS, "sysctl", "-q", "-w", "net.ipv4.ip_forward=1")
+	// As rbd does (see agent.bridgeNetfilterOff): frames within the
+	// hotspot's bridge don't go through the IP firewall, even where the
+	// br_netfilter module is loaded (it is on GitHub's runners).
+	tryInNS(routerNS, time.Second, "sysctl", "-q", "-w", "net.bridge.bridge-nf-call-iptables=0", "net.bridge.bridge-nf-call-ip6tables=0")
 
 	// Upstream side.
 	inNS(t, upstreamNS, "ip", "address", "add", "10.99.0.2/24", "dev", "eth0")
@@ -165,6 +169,9 @@ type routerSettings struct {
 	PausedMACs []string
 	// FixedAddresses are devices that always get the same address.
 	FixedAddresses []render.FixedAddress
+	// PortForwards are port forwarding rules (normal mode only; the
+	// uplink is "eth0").
+	PortForwards []render.PortForward
 }
 
 // startRouter applies rbd's firewall and starts dnsmasq with rbd's config,
@@ -180,6 +187,9 @@ func startRouter(t *testing.T, settings routerSettings) (leaseFile string) {
 	firewall := render.FirewallInput{SSHEnabled: settings.SSHEnabled, Guest: settings.Guest, PausedMACs: settings.PausedMACs}
 	if settings.Normal {
 		firewall.Egress = []string{"eth0"}
+		firewall.Uplinks = []string{"eth0"}
+		firewall.PortForwards = settings.PortForwards
+		firewall.LANAddress = render.DefaultLAN.Prefix.Addr()
 	}
 	rules, err := render.Firewall(firewall)
 	if err != nil {

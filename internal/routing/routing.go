@@ -151,6 +151,16 @@ const PluginMark = "0x5242"
 
 const pluginMarkPriority = "111"
 
+// ForwardMark marks the replies of connections that came in by port
+// forwarding (see the firewall's port_forwards chain): they go back out of
+// the uplink they came in on, through the main table, also while devices'
+// own traffic goes through the tunnel.
+const ForwardMark = "0x5246"
+
+// forwardRulePriority comes before the rules that send devices' traffic
+// into the tunnel (100 and up).
+const forwardRulePriority = "99"
+
 // ClientsThroughTunnel returns the commands that send devices' traffic
 // (arriving on LANInterfaces), plugins' traffic and RasBeacon's downloads
 // for plugins to table 51820. Run ClientsDirect first so the rules are
@@ -165,6 +175,7 @@ func ClientsThroughTunnel(kernelIPv6 bool) [][]string {
 		}
 	}
 	return append(cmds,
+		[]string{"ip", "-4", "rule", "add", "priority", forwardRulePriority, "fwmark", ForwardMark, "lookup", "main"},
 		[]string{"ip", "-4", "rule", "add", "priority", strconv.Itoa(pluginRulePriority), "iif", PluginInterface,
 			"lookup", "main", "suppress_prefixlength", "0"},
 		[]string{"ip", "-4", "rule", "add", "priority", strconv.Itoa(pluginRulePriority + 1), "iif", PluginInterface,
@@ -186,6 +197,7 @@ func ClientsDirect() [][]string {
 		)
 	}
 	return append(cmds,
+		[]string{"ip", "-4", "rule", "delete", "priority", forwardRulePriority},
 		[]string{"ip", "-4", "rule", "delete", "priority", strconv.Itoa(pluginRulePriority)},
 		[]string{"ip", "-4", "rule", "delete", "priority", strconv.Itoa(pluginRulePriority + 1)},
 		[]string{"ip", "-4", "rule", "delete", "priority", pluginMarkPriority},

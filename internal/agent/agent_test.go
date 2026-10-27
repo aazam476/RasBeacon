@@ -615,3 +615,21 @@ func TestApplyDHCP_RestartsDnsmasqOnlyWhenSomethingChanged(t *testing.T) {
 		t.Errorf("a stopped dnsmasq must be started again; restarts = %d", got)
 	}
 }
+
+// Where the kernel's br_netfilter module is loaded, rbd switches off its
+// filtering of bridged frames (see bridgeNetfilterOff); without it there
+// is nothing to change.
+func TestBridgeNetfilterOff(t *testing.T) {
+	e := newClaimedEnv(t, false)
+	dir := e.paths.ProcSysNetBridge()
+	e.agent.bridgeNetfilterOff() // no module: no files, nothing happens
+	for _, name := range []string{"bridge-nf-call-iptables", "bridge-nf-call-ip6tables", "bridge-nf-call-arptables"} {
+		mustWrite(t, filepath.Join(dir, name), "1\n")
+	}
+	e.agent.bridgeNetfilterOff()
+	for _, name := range []string{"bridge-nf-call-iptables", "bridge-nf-call-ip6tables", "bridge-nf-call-arptables"} {
+		if got := e.readFile(filepath.Join(dir, name)); strings.TrimSpace(got) != "0" {
+			t.Errorf("%s = %q, want 0", name, got)
+		}
+	}
+}

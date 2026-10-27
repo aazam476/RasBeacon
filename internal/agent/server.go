@@ -109,6 +109,8 @@ func (a *Agent) Handler() http.Handler {
 		defer a.mu.Unlock()
 		return a.speedtestStatus(), nil
 	}))
+	mux.HandleFunc("GET /settings/port-forwarding", view(a.PortForwardingSettings))
+	mux.HandleFunc("PUT /settings/port-forwarding", save(a.UpdatePortForwarding, a.PortForwardingSettings))
 	mux.HandleFunc("GET /settings/dns", view(a.DNSSettings))
 	mux.HandleFunc("PUT /settings/dns", save(a.UpdateDNSSettings, a.DNSSettings))
 

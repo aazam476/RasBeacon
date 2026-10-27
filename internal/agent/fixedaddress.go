@@ -52,7 +52,16 @@ func (a *Agent) SetFixedAddress(mac, address string) error {
 	slog.Info("fixed address changed", "mac", mac, "address", address)
 	// dnsmasq hands it out from now on. The device itself only asks for an
 	// address when it reconnects or renews its lease.
-	return a.applyDHCP(false)
+	if err := a.applyDHCP(false); err != nil {
+		return err
+	}
+	// Port forwarding rules for this device follow it to its new address.
+	for _, r := range a.cfg.PortForwarding.Rules {
+		if r.MAC == mac {
+			return a.applyFirewall()
+		}
+	}
+	return nil
 }
 
 // checkFixedAddress checks an address the owner chose for device mac: it

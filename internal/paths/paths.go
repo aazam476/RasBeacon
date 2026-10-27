@@ -213,6 +213,10 @@ func (p Paths) NetworkdDir() string { return p.join("run", "systemd", "network")
 // ("1") or off ("0").
 func (p Paths) IPv4Forwarding() string { return p.join("proc", "sys", "net", "ipv4", "ip_forward") }
 
+// ProcSysNetBridge exists only while the kernel's br_netfilter module is
+// loaded (see agent.bridgeNetfilterOff).
+func (p Paths) ProcSysNetBridge() string { return p.join("proc", "sys", "net", "bridge") }
+
 // ProcSysNetIPv6 exists only when the kernel has IPv6 switched on.
 func (p Paths) ProcSysNetIPv6() string { return p.join("proc", "sys", "net", "ipv6") }
 

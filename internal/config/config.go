@@ -93,6 +93,9 @@ type Config struct {
 	DNS      DNSConfig      `json:"dns"`
 	Swap     SwapConfig     `json:"swap"`
 	Plugins  PluginsConfig  `json:"plugins"`
+	// PortForwarding lets devices on the internet reach a device or a
+	// plugin on the hotspot (Internet page → Port forwarding).
+	PortForwarding PortForwardingConfig `json:"portForwarding"`
 }
 
 // PluginsConfig is the installed plugins and where the catalog looks for
@@ -911,6 +914,7 @@ func (c Config) Clone() Config {
 	c.Clients.Paused = maps.Clone(c.Clients.Paused)
 	c.Clients.Names = maps.Clone(c.Clients.Names)
 	c.Clients.FixedAddresses = maps.Clone(c.Clients.FixedAddresses)
+	c.PortForwarding.Rules = slices.Clone(c.PortForwarding.Rules)
 	c.DNS.Servers = slices.Clone(c.DNS.Servers)
 	c.DNS.DoH = slices.Clone(c.DNS.DoH)
 	c.Plugins.Sources = slices.Clone(c.Plugins.Sources)
@@ -1094,4 +1098,33 @@ func ValidateHostname(name string) error {
 		return &ValidationError{Field: "hostname", Message: "The name can't start or end with a hyphen."}
 	}
 	return nil
+}
+
+// PortForwardingConfig holds the port forwarding rules.
+type PortForwardingConfig struct {
+	Rules []PortForwardRule `json:"rules,omitempty"`
+}
+
+// PortForwardRule sends connections that arrive on RasBeacon's uplink, on
+// OutsidePort (to OutsidePortEnd, for a range), to a device on the hotspot
+// (by MAC address; it must have a fixed address) or to a plugin.
+type PortForwardRule struct {
+	// ID tells rules apart (rbd gives each new rule one).
+	ID string `json:"id"`
+	// Name is the owner's name for it ("Game server").
+	Name string `json:"name"`
+	// Protocol is "tcp", "udp" or "both".
+	Protocol string `json:"protocol"`
+	// OutsidePort is the port on the internet side; OutsidePortEnd, when
+	// set, makes it a range (the ports are kept the same inside).
+	OutsidePort    int `json:"outsidePort"`
+	OutsidePortEnd int `json:"outsidePortEnd,omitempty"`
+	// MAC is the device it goes to (with its fixed address), or Plugin the
+	// plugin. Exactly one of them is set.
+	MAC    string `json:"mac,omitempty"`
+	Plugin string `json:"plugin,omitempty"`
+	// InsidePort is the port on the device (0: the same as outside).
+	InsidePort int `json:"insidePort,omitempty"`
+	// Enabled rules are in the firewall; others are kept for later.
+	Enabled bool `json:"enabled"`
 }
