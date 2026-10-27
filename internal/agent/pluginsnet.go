@@ -166,7 +166,7 @@ func (a *Agent) proxyConnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	connectTunnel(w, r, func(ctx context.Context) (net.Conn, error) {
-		return a.pluginDialer().DialContext(ctx, "tcp", r.Host)
+		return a.plugins.proxyDial(ctx, r.Host)
 	})
 }
 

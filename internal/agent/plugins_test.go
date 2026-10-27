@@ -847,6 +847,9 @@ func TestPlugins_LongLogLinesAreJoined(t *testing.T) {
 	}
 }
 
+// Podman's downloads go through RasBeacon's proxy: an HTTPS connection
+// asked for with CONNECT is opened (marked, through the VPN) and passed
+// through untouched.
 func TestPlugins_DownloadProxyTunnelsHTTPS(t *testing.T) {
 	// An HTTPS server stands for a registry; the proxy's dial goes to it
 	// whatever the client asked for.
@@ -854,17 +857,20 @@ func TestPlugins_DownloadProxyTunnelsHTTPS(t *testing.T) {
 		w.Write([]byte("image layers"))
 	}))
 	defer registry.Close()
-	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		connectTunnel(w, r, func(ctx context.Context) (net.Conn, error) {
-			var d net.Dialer
-			return d.DialContext(ctx, "tcp", registry.Listener.Addr().String())
-		})
-	}))
-	defer proxy.Close()
+	e := newPluginEnv(t)
+	var asked []string
+	e.agent.plugins.proxyDial = func(ctx context.Context, address string) (net.Conn, error) {
+		asked = append(asked, address)
+		var d net.Dialer
+		return d.DialContext(ctx, "tcp", registry.Listener.Addr().String())
+	}
+	proxy, err := e.agent.downloadProxy()
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	proxyURL, _ := url.Parse(proxy.URL)
 	client := &http.Client{Transport: &http.Transport{
-		Proxy:           http.ProxyURL(proxyURL),
+		Proxy:           http.ProxyURL(&url.URL{Scheme: "http", Host: proxy}),
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // the test server's own certificate
 	}}
 	resp, err := client.Get("https://registry.example/v2/")
@@ -873,8 +879,8 @@ func TestPlugins_DownloadProxyTunnelsHTTPS(t *testing.T) {
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
-	if string(body) != "image layers" {
-		t.Errorf("through the proxy: %q", body)
+	if string(body) != "image layers" || !reflect.DeepEqual(asked, []string{"registry.example:443"}) {
+		t.Errorf("through the proxy: %q, dialed %v", body, asked)
 	}
 }
 

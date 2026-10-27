@@ -254,6 +254,9 @@ func New(p paths.Paths, runner system.Runner) *Agent {
 		},
 	}
 	a.plugins.client = a.pluginHTTPClient
+	a.plugins.proxyDial = func(ctx context.Context, address string) (net.Conn, error) {
+		return a.pluginDialer().DialContext(ctx, "tcp", address)
+	}
 	a.plugins.watchEvery = pluginWatchEvery
 	a.background = func(f func()) { go f() }
 	if _, real := runner.(system.ExecRunner); real {

@@ -37,11 +37,13 @@ package agent
 // to record the result.
 
 import (
+	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
+	"net"
 	"net/http"
 	"net/netip"
 	"os"
@@ -80,6 +82,9 @@ type pluginsState struct {
 	// proxy is the address of the download proxy for Podman ("" until
 	// first used).
 	proxy string
+	// proxyDial opens the proxy's connections: marked, through the VPN
+	// (pluginDialer); tests replace it.
+	proxyDial func(ctx context.Context, address string) (net.Conn, error)
 	// watchEvery is how often the crash watch runs (0: never, in tests).
 	watchEvery time.Duration
 }
