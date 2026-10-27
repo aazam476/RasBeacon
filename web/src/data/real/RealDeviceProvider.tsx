@@ -394,8 +394,8 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
       store('httpsSettings', await attempt(() => api.putHTTPSSettings(change)));
     }
 
-    async function uplinkChange(settings: UplinkSettings) {
-      store('uplinkSettings', await attempt(() => api.putUplinkSettings(settings)));
+    async function uplinkChange(settings: UplinkSettings, fields?: Record<string, string>) {
+      store('uplinkSettings', await attempt(() => api.putUplinkSettings(settings), fields));
       await refreshStatus();
     }
 
@@ -499,6 +499,11 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
         );
         store('modemSettings', saved);
         await refreshStatus();
+      },
+      saveUplinkMacs: async (wifiMac, ethernetMac) => {
+        const saved = latest.current.uplinkSettings.data;
+        if (!saved) throw new Error("The Internet settings haven't loaded yet.");
+        await uplinkChange({ ...saved, wifiMac, ethernetMac }, sameNames('wifiMac', 'ethernetMac'));
       },
       setPhoneMetered: async (phoneMetered) => {
         const saved = latest.current.uplinkSettings.data;

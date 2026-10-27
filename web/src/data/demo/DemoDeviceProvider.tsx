@@ -11,7 +11,7 @@ import {
 import { fixedAddressProblem } from '@/lib/fixedAddress';
 import { welcomeProblems } from '@/lib/welcome';
 import { FieldErrors } from '../errors';
-import type { Plugin, PluginChoices, PluginPreview, SavedNetwork, VPNProfile } from '../types';
+import type { MACChoice, Plugin, PluginChoices, PluginPreview, SavedNetwork, VPNProfile } from '../types';
 import { DemoIndex } from './DemoIndex';
 import { DemoTag } from './DemoTag';
 import { StressToggle } from './StressToggle';
@@ -358,6 +358,28 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
           const modem = d.router.status.uplink.modem;
           if (modem && pin && (modem.state === 'pin-needed' || modem.state === 'pin-refused'))
             modem.state = 'connecting';
+        });
+      },
+      saveUplinkMacs: async (wifiMac, ethernetMac) => {
+        await wait(900);
+        const check = (choice: MACChoice, field: string): MACChoice => {
+          if (choice.mode === 'random') {
+            return { mode: 'random', address: choice.address || randomMac() };
+          }
+          if (choice.mode === 'cloned') {
+            const address = (choice.address ?? '').trim().toLowerCase();
+            if (!/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/.test(address) || parseInt(address.slice(0, 2), 16) & 1) {
+              throw new FieldErrors({ [field]: 'Type a MAC address like 3a:1f:22:aa:bb:cc.' });
+            }
+            return { mode: 'cloned', address };
+          }
+          return { mode: '' };
+        };
+        const wifi = check(wifiMac, 'wifiMac');
+        const ethernet = check(ethernetMac, 'ethernetMac');
+        change((d) => {
+          d.router.uplinkSettings.wifiMac = wifi;
+          d.router.uplinkSettings.ethernetMac = ethernet;
         });
       },
       setPhoneMetered: async (metered) => {
@@ -1165,4 +1187,11 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
       <StressToggle />
     </DeviceContext>
   );
+}
+
+/** A random, locally administered unicast MAC address, as the router makes one. */
+function randomMac(): string {
+  const bytes = Array.from({ length: 6 }, () => Math.floor(Math.random() * 256));
+  bytes[0] = (bytes[0] & ~1) | 2;
+  return bytes.map((b) => b.toString(16).padStart(2, '0')).join(':');
 }

@@ -43,6 +43,8 @@ stops the run):
    network's interface for the uplink.
 8. The hotspot's interface, taken out of its bridge, is put back by `rbd`'s
    self-check.
+9. With a cloned MAC address for the Wi-Fi uplink, the hotel's DHCP server
+   sees RasBeacon as that device.
 
 Settings are changed through `rbd`'s API socket, as `rbweb` does; the
 phones only use the networks (and, in step 1, the setup page's API). Every

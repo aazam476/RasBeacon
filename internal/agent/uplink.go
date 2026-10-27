@@ -70,6 +70,9 @@ type uplinkState struct {
 	// lanPorts are the extra wired ports (USB Ethernet adapters), by
 	// interface name, which are always for devices (see lanports.go).
 	lanPorts map[string]*wiredPort
+	// wifiMAC is the address last set on the Wi-Fi uplink radio (see
+	// setWiFiMAC).
+	wifiMAC string
 	// phones is the phones' and modems' interfaces at the last check (see
 	// checkPhones).
 	phones string
@@ -173,6 +176,11 @@ func (a *Agent) applyUplinkConfig() error {
 	if err != nil {
 		return err
 	}
+	// The radio's own address, or the random or cloned one, is set before
+	// wpa_supplicant starts: it joins networks with the address it finds.
+	if a.setWiFiMAC(wifi) {
+		changed = true
+	}
 	if changed {
 		if err := system.ServiceRestart(a.runner, fmt.Sprintf(wpaService, wifi)); err != nil {
 			return fmt.Errorf("starting the Wi-Fi uplink: %w", err)
@@ -189,7 +197,7 @@ func (a *Agent) applyNetworkdConfig() error {
 
 	if a.hasEthernet() {
 		if a.cfg.Ethernet.Role == config.EthernetUplink {
-			text, err := render.NetworkdUplink(ethernetInterface, render.EthernetRouteMetric)
+			text, err := render.NetworkdUplinkWithMAC(ethernetInterface, render.EthernetRouteMetric, a.cfg.Ethernet.MAC.Address)
 			if err != nil {
 				return err
 			}
@@ -636,7 +644,11 @@ func (a *Agent) UplinkSettings() api.UplinkSettings {
 		EthernetPresent:     a.hasEthernet(),
 		WiFiUplinkAvailable: a.wifiUplinkInterface() != "",
 		PhoneMetered:        new(bool),
+		WiFiMAC:             &config.MACChoice{},
+		EthernetMAC:         &config.MACChoice{},
 	}
+	*settings.WiFiMAC = a.cfg.Uplink.WiFiMAC
+	*settings.EthernetMAC = a.cfg.Ethernet.MAC
 	*settings.PhoneMetered = !a.cfg.Uplink.PhoneNotMetered
 	for _, n := range a.cfg.Uplink.Networks {
 		settings.Networks = append(settings.Networks, api.SavedNetwork{
@@ -672,6 +684,20 @@ func (a *Agent) UpdateUplinkSettings(req api.UplinkSettings) error {
 
 	if req.PhoneMetered != nil {
 		newCfg.Uplink.PhoneNotMetered = !*req.PhoneMetered
+	}
+	if req.WiFiMAC != nil {
+		choice, err := a.checkMACChoice(*req.WiFiMAC, a.cfg.Uplink.WiFiMAC, "wifiMac")
+		if err != nil {
+			return err
+		}
+		newCfg.Uplink.WiFiMAC = choice
+	}
+	if req.EthernetMAC != nil {
+		choice, err := a.checkMACChoice(*req.EthernetMAC, a.cfg.Ethernet.MAC, "ethernetMac")
+		if err != nil {
+			return err
+		}
+		newCfg.Ethernet.MAC = choice
 	}
 	newCfg.Uplink.Networks = nil
 	newSecrets.UplinkPasswords = map[string]string{}

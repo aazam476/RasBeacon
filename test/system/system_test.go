@@ -512,6 +512,7 @@ func TestScenarios(t *testing.T) {
 		{"6 a phone joins with WPA3 only", wpa3Only},
 		{"7 rbd restarts with the guest network on", restartWithGuests},
 		{"8 the self-check repairs the hotspot", selfCheck},
+		{"9 the Wi-Fi uplink joins with a cloned MAC address", clonedMAC},
 	}
 	for _, step := range steps {
 		if !t.Run(step.name, step.run) {
@@ -734,4 +735,22 @@ func selfCheck(t *testing.T) {
 		out, _ := tryRun("", "ip", "-o", "link", "show", "ap0")
 		return strings.Contains(out, "master br-lan"), strings.TrimSpace(out)
 	})
+}
+
+// 9. With a cloned MAC address, RasBeacon joins the hotel as that device:
+// the hotel's DHCP server hands the address to the cloned MAC.
+func clonedMAC(t *testing.T) {
+	const cloned = "02:52:42:00:00:99"
+	var settings map[string]any
+	rbd(t, "GET", "/settings/uplink", nil, &settings)
+	settings["wifiMac"] = map[string]any{"mode": "cloned", "address": cloned}
+	rbd(t, "PUT", "/settings/uplink", settings, nil)
+	waitFor(t, "a hotel lease for the cloned address", 2*time.Minute, func() (bool, string) {
+		leases, _ := os.ReadFile(filepath.Join(stateDir, "hotel.leases"))
+		return strings.Contains(string(leases), cloned), strings.TrimSpace(string(leases))
+	})
+	out, _ := tryRun("", "ip", "-o", "link", "show", "wlan1")
+	if !strings.Contains(out, cloned) {
+		t.Errorf("wlan1 should have the cloned address: %s", out)
+	}
 }

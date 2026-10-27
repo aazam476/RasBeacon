@@ -13,6 +13,7 @@
 package config
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -579,6 +580,63 @@ const (
 // EthernetConfig holds the Ethernet port settings.
 type EthernetConfig struct {
 	Role EthernetRole `json:"role"`
+	// MAC is the address the port shows its network while it is the
+	// uplink.
+	MAC MACChoice `json:"mac,omitempty"`
+}
+
+// The MAC address choices of an uplink (MACChoice.Mode).
+const (
+	// MACOwn ("") is the Pi's own address.
+	MACOwn = ""
+	// MACRandom is a random address RasBeacon made once and keeps, so the
+	// network doesn't recognize the Pi.
+	MACRandom = "random"
+	// MACCloned is an address the owner typed: another device's, so the
+	// network takes RasBeacon for it (a hotel that registered a laptop, a
+	// modem that remembers one device).
+	MACCloned = "cloned"
+)
+
+// MACChoice is the MAC address an uplink shows its network.
+type MACChoice struct {
+	Mode string `json:"mode,omitempty"`
+	// Address is the random one RasBeacon made, or the cloned one
+	// (lowercase, like "3a:1f:22:aa:bb:cc"); "" with MACOwn.
+	Address string `json:"address,omitempty"`
+}
+
+// Validate checks the choice; field names it in the error.
+func (m MACChoice) Validate(field string) error {
+	switch m.Mode {
+	case MACOwn:
+		if m.Address != "" {
+			return &ValidationError{Field: field, Message: "The Pi's own address has nothing to type."}
+		}
+		return nil
+	case MACRandom, MACCloned:
+	default:
+		return &ValidationError{Field: field, Message: `Must be "", "random" or "cloned".`}
+	}
+	mac, err := NormalizeMAC(m.Address)
+	if err != nil || mac != m.Address {
+		return &ValidationError{Field: field, Message: "Type a MAC address like 3a:1f:22:aa:bb:cc."}
+	}
+	hw, _ := net.ParseMAC(mac)
+	if hw[0]&1 == 1 || mac == "00:00:00:00:00:00" {
+		return &ValidationError{Field: field, Message: "That isn't a device's address (it is a group address, or zero)."}
+	}
+	return nil
+}
+
+// RandomMAC makes a random MAC address: unicast and "locally
+// administered" (the second-lowest bit of the first byte set), as random
+// addresses must be, so it never matches a real device's.
+func RandomMAC() string {
+	b := make([]byte, 6)
+	_, _ = rand.Read(b)
+	b[0] = b[0]&^1 | 2
+	return net.HardwareAddr(b).String()
 }
 
 // UplinkSecurity is how a saved upstream Wi-Fi network is protected.
@@ -655,6 +713,9 @@ type UplinkConfig struct {
 	// metered. By default it is: devices are asked to hold back big
 	// downloads while RasBeacon uses one.
 	PhoneNotMetered bool `json:"phoneNotMetered,omitempty"`
+	// WiFiMAC is the address the Wi-Fi uplink radio shows the networks it
+	// joins (a network set to a random address per join still gets one).
+	WiFiMAC MACChoice `json:"wifiMac,omitempty"`
 }
 
 // SavedNetwork is one upstream Wi-Fi network. Its password (if any) is kept

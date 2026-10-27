@@ -361,6 +361,9 @@ export function applyWorstCase(demo: DemoState) {
   });
   // A Wi-Fi 6 adapter, on Wi-Fi 4 for very old devices.
   router.hotspotSettings = { ...router.hotspotSettings, noWifi6: false, standard: 'wifi4' };
+  // MAC addresses: Wi-Fi cloned from a device still on the hotspot (the warning), Ethernet random.
+  router.uplinkSettings.wifiMac = { mode: 'cloned', address: 'a4:83:e7:10:9c:20' };
+  router.uplinkSettings.ethernetMac = { mode: 'random', address: '0e:3d:9a:41:c7:52' };
   // Port forwarding: the longest name, a risky port, a range, a plugin with a long name, and a
   // device that has left (shown by its MAC address). The uplink's shared address adds the notice.
   router.portForwardingRules = [

@@ -982,3 +982,16 @@ func TestHostapd_WiFiStandards(t *testing.T) {
 		t.Errorf("Wi-Fi 4 on 5 GHz:\n%s", got)
 	}
 }
+
+func TestNetworkd_UplinkWithMAC(t *testing.T) {
+	got, err := NetworkdUplinkWithMAC("eth0", EthernetRouteMetric, "3C:22:FB:01:02:03")
+	if err != nil || !strings.Contains(got, "[Link]\n# The address RasBeacon shows this network (random or cloned), instead of\n# the Pi's own.\nMACAddress=3c:22:fb:01:02:03") {
+		t.Errorf("got %v:\n%s", err, got)
+	}
+	if got, _ := NetworkdUplink("eth0", EthernetRouteMetric); strings.Contains(got, "MACAddress") {
+		t.Error("no address without one")
+	}
+	if _, err := NetworkdUplinkWithMAC("eth0", 100, "nope"); err == nil {
+		t.Error("a bad address must be refused")
+	}
+}

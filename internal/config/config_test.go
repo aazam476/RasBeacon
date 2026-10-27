@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"net"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -391,5 +392,40 @@ func TestFillDefaults_CheckOnlineBecomesASchedule(t *testing.T) {
 	cfg.FillDefaults()
 	if cfg.Updates.CheckHours != 6 || cfg.Updates.CheckOnline {
 		t.Errorf("updates = %+v, want every 6 hours as before", cfg.Updates)
+	}
+}
+
+func TestMACChoice(t *testing.T) {
+	good := []MACChoice{
+		{},
+		{Mode: MACRandom, Address: "02:11:22:33:44:55"},
+		{Mode: MACCloned, Address: "3c:22:fb:01:02:03"},
+	}
+	for _, m := range good {
+		if err := m.Validate("mac"); err != nil {
+			t.Errorf("%+v: %v", m, err)
+		}
+	}
+	bad := []MACChoice{
+		{Address: "3c:22:fb:01:02:03"},                  // the Pi's own has no address
+		{Mode: "fake"},                                  // unknown mode
+		{Mode: MACCloned, Address: "nope"},              // not an address
+		{Mode: MACCloned, Address: "3C:22:FB:01:02:03"}, // not normalized
+		{Mode: MACCloned, Address: "01:00:5e:00:00:01"}, // multicast
+		{Mode: MACCloned, Address: "00:00:00:00:00:00"}, // zero
+	}
+	for _, m := range bad {
+		if err := m.Validate("mac"); err == nil {
+			t.Errorf("%+v should be refused", m)
+		}
+	}
+	for range 20 {
+		mac := RandomMAC()
+		if err := (MACChoice{Mode: MACRandom, Address: mac}).Validate("mac"); err != nil {
+			t.Fatalf("random %s: %v", mac, err)
+		}
+		if hw, _ := net.ParseMAC(mac); hw[0]&2 == 0 {
+			t.Errorf("%s should be locally administered", mac)
+		}
 	}
 }

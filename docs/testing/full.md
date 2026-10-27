@@ -157,6 +157,14 @@ first if you want them; everything else works from the web pages alone.
     operator, 4G/5G and signal), Status says *Connected through <modem>*,
     devices have internet, and it is metered. An APN from your carrier, if
     it doesn't connect by itself.
+13. **MAC address (new):** Internet → *MAC address* → *Wi-Fi*: **Cloned
+    from another device**, *Copy a device's address*: your laptop (then
+    disconnect the laptop from the hotspot), **Save**. **Expect:** the
+    hotspot of your phone (or the hotel's device list) shows RasBeacon
+    with the laptop's address, and the internet keeps working. **Random**:
+    a new `x2:`/`x6:`/`xa:`/`xe:` address shows, and stays the same after a
+    reboot. **The Pi's own** brings back the address it had at first.
+    The same for *Ethernet* with a cable to another router.
 
 ## 5. Your own DNS servers and DNS-over-HTTPS (new)
 
@@ -687,7 +695,7 @@ Board (Pi 4/5/3B/3B+/Zero 2 W) / RAM:     Adapter:          Card size:          
 1  First boot: setup network after __ s; opened by itself iPhone/Android:
 2  Setup + login (mismatch caught, wrong password refused, stay logged in):
 3  Storage shows full card (__ GB): / swap row 2 GB: / 4 GB, Off, 2 GB save: / SSH swapon+swappiness:
-4  Ethernet: / scan lists networks: / Wi-Fi uplink + switch: / eduroam: / hotspot move kept working 15 min: / renew, disconnect: / phone over USB (Android, iPhone, modem: which): / ModemManager modem (wrong PIN tried once, connects):
+4  Ethernet: / scan lists networks: / Wi-Fi uplink + switch: / eduroam: / hotspot move kept working 15 min: / renew, disconnect: / phone over USB (Android, iPhone, modem: which): / ModemManager modem (wrong PIN tried once, connects): / cloned and random MAC (Wi-Fi, Ethernet):
 5  dns.google saved as full address: / leak test shows Google: / rbdoh running: / Cloudflare+1.1.1.1: / bad entry refused: / plain only, rbdoh stopped: / back to network's:
 6  Count + this device: / traffic rates: / pause + reboot-proof: / disconnect: / flush lease: / rename pencil: / data limit without metered: / fixed address: / port forward from uplink side + hotspot, with VPN: / IPv6 pinhole:
 7  Laptop on client port gets address+internet: / listed with cable icon, no Disconnect: / leaves list: / safety warning: / USB Ethernet for devices + not used on a router:

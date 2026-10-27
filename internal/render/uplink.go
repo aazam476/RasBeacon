@@ -10,6 +10,7 @@ package render
 import (
 	"encoding/hex"
 	"fmt"
+	"net"
 	"net/netip"
 	"strings"
 
@@ -196,13 +197,27 @@ const (
 // address for an uplink interface by DHCP (IPv4) and router advertisements
 // (IPv6).
 func NetworkdUplink(iface string, routeMetric int) (string, error) {
+	return NetworkdUplinkWithMAC(iface, routeMetric, "")
+}
+
+// NetworkdUplinkWithMAC is NetworkdUplink with the MAC address the uplink
+// shows its network ("" for the Pi's own).
+func NetworkdUplinkWithMAC(iface string, routeMetric int, mac string) (string, error) {
 	if !isInterfaceName(iface) {
 		return "", fmt.Errorf("invalid interface name %q", iface)
+	}
+	if mac != "" {
+		hw, err := net.ParseMAC(mac)
+		if err != nil || len(hw) != 6 {
+			return "", fmt.Errorf("invalid MAC address %q", mac)
+		}
+		mac = hw.String()
 	}
 	return execute("uplink.network.tmpl", struct {
 		Interface   string
 		RouteMetric int
-	}{iface, routeMetric})
+		MAC         string
+	}{iface, routeMetric, mac})
 }
 
 // NetworkdUnmanaged produces a .network file telling systemd-networkd to

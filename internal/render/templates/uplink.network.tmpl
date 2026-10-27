@@ -7,6 +7,13 @@
 
 [Match]
 Name={{.Interface}}
+{{- if .MAC}}
+
+[Link]
+# The address RasBeacon shows this network (random or cloned), instead of
+# the Pi's own.
+MACAddress={{.MAC}}
+{{- end}}
 
 [Network]
 # IPv4 address by DHCP; IPv6 address from router advertisements.

@@ -146,6 +146,16 @@ describe('Internet', () => {
       sends: ['PUT /settings/uplink'],
     },
     {
+      name: 'the uplinks’ MAC addresses are saved with the other uplink settings',
+      run: (d) => d.saveUplinkMacs({ mode: 'cloned', address: '3a:1f:22:aa:bb:cc' }, { mode: 'random' }),
+      sends: ['PUT /settings/uplink'],
+      body: {
+        ...createMockRouter().uplinkSettings,
+        wifiMac: { mode: 'cloned', address: '3a:1f:22:aa:bb:cc' },
+        ethernetMac: { mode: 'random' },
+      },
+    },
+    {
       name: 'the welcome page is saved and kept as the router answers',
       run: (d) => d.saveWelcomeSettings({ ...createMockRouter().welcomeSettings, enabled: true }),
       sends: ['PUT /settings/welcome'],

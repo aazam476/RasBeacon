@@ -178,6 +178,10 @@ since their image has one copy of the system.
 - **WPA3 only** for the hotspot, if all your devices support it, and
   **Wi-Fi 6** with an adapter that can run it (picked by itself; Wi-Fi 4
   for very old devices): the **Hotspot** page.
+- **MAC address:** on the **Internet** page, choose the address the
+  networks RasBeacon joins see, for Wi-Fi and Ethernet separately: the
+  Pi's own, a random one, or one cloned from another device (for a hotel
+  that registered your laptop, or a modem that remembers one device).
 - **Public IPv6 through the VPN:** if your WireGuard server routes a public
   IPv6 /64 to RasBeacon, enter it on the **VPN** page (under *Server
   details*); devices then get their own public IPv6 addresses.

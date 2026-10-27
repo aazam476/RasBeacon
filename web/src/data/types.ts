@@ -639,6 +639,20 @@ export interface UplinkSettings {
   wifiUplinkAvailable: boolean;
   /** Treat a phone or modem connection as metered while in use (absent: unchanged). */
   phoneMetered?: boolean;
+  /** The MAC address the Wi-Fi uplink shows its networks (absent: unchanged). */
+  wifiMac?: MACChoice;
+  /** The MAC address the Ethernet port shows its network as the uplink (absent: unchanged). */
+  ethernetMac?: MACChoice;
+}
+
+/**
+ * The MAC address an uplink shows: the Pi's own (`mode` ""), a random one RasBeacon made once
+ * ("random"; sent without an address it makes a new one), or another device's ("cloned").
+ */
+export interface MACChoice {
+  mode?: '' | 'random' | 'cloned';
+  /** Lowercase, like "3a:1f:22:aa:bb:cc"; absent for the Pi's own. */
+  address?: string;
 }
 
 /** A Wi-Fi network found by a scan (POST /api/v1/uplink/scan). */

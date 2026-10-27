@@ -638,6 +638,12 @@ type UplinkSettings struct {
 	// while it is in use (see config.UplinkConfig.PhoneNotMetered). Absent
 	// in a request: unchanged.
 	PhoneMetered *bool `json:"phoneMetered,omitempty"`
+	// WiFiMAC and EthernetMAC are the MAC addresses the Wi-Fi uplink and
+	// the Ethernet port (as the uplink) show their networks (see
+	// config.MACChoice). Absent in a request: unchanged. Mode "random"
+	// without an address makes a new random one.
+	WiFiMAC     *config.MACChoice `json:"wifiMac,omitempty"`
+	EthernetMAC *config.MACChoice `json:"ethernetMac,omitempty"`
 }
 
 // SavedNetwork is one upstream Wi-Fi network in UplinkSettings.

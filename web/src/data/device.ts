@@ -37,6 +37,7 @@ import type {
   VPNSettings,
   WelcomeSettings,
   ModemSettings,
+  MACChoice,
   WiFiQR,
 } from './types';
 
@@ -204,6 +205,10 @@ export interface DeviceActions {
    * username, password, pin.
    */
   saveModemSettings: (settings: ModemSettings) => Promise<void>;
+  /**
+   * Save the MAC addresses the uplinks show their networks. Field keys: wifiMac, ethernetMac.
+   */
+  saveUplinkMacs: (wifiMac: MACChoice, ethernetMac: MACChoice) => Promise<void>;
   /** Treat a phone or modem connection (USB) as metered while it is in use. */
   setPhoneMetered: (metered: boolean) => Promise<void>;
   /** Fill `nearbyNetworks` (takes about 5 seconds). */
