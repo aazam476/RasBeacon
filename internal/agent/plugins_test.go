@@ -71,7 +71,8 @@ func writeTestPlugin(t *testing.T, manifest map[string]any, key ed25519.PrivateK
 	return writeTestPluginWithImage(t, manifest, key, imageTar("localhost/adguard:latest"))
 }
 
-// writeTestPluginWithImage is writeTestPlugin with this image.tar.
+// writeTestPluginWithImage is writeTestPlugin with this image.tar (none
+// if imageFile is "", for a plugin whose manifest names a published image).
 func writeTestPluginWithImage(t *testing.T, manifest map[string]any, key ed25519.PrivateKey, imageFile string) []byte {
 	t.Helper()
 	dir := t.TempDir()
@@ -88,7 +89,9 @@ func writeTestPluginWithImage(t *testing.T, manifest map[string]any, key ed25519
 	}
 	add(plugin.ManifestFile, string(m))
 	add(plugin.IconFile, testIcon())
-	add(plugin.ImageFile, imageFile)
+	if imageFile != "" {
+		add(plugin.ImageFile, imageFile)
+	}
 	// Every template the manifest lists: AdGuardHome.yaml as AdGuard Home's,
 	// any other a line with a setting.
 	templates, _ := manifest["templates"].([]map[string]any)

@@ -2,7 +2,16 @@
 // the pages that keep their data fresh. The waits take minutes, so the tests use a fake clock.
 import { act, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createMockRouter } from '@/data/demo/mockData';
 import { fakeRbweb, renderProvider } from './provider';
+
+// Where the page goes, instead of really going there (jsdom can't).
+const navigation = vi.hoisted(() => ({ hostname: 'localhost', renamed: [] as string[][] }));
+vi.mock('@/lib/navigate', () => ({
+  currentHostname: () => navigation.hostname,
+  openAddress: () => undefined,
+  renameHost: (from: string, to: string) => navigation.renamed.push([from, to]),
+}));
 
 // Actions that wait for minutes run outside act(): an act() left open would hold back the next
 // test's rendering. The clock moves inside act(), so React applies what happened.
@@ -103,6 +112,27 @@ describe('rebooting', () => {
     await waitFor(() => expect(done).toBe(true));
     // Sent as RasBeacon stores it.
     expect(sent.find((r) => r.path === '/system/hostname')?.body).toEqual({ hostname: 'travel-pi' });
+  });
+});
+
+describe('renaming from a page opened at the old name', () => {
+  it('waits out the restart, then opens the same page at the new name', async () => {
+    const router = createMockRouter();
+    const status = { ...router.status, device: { ...router.status.device, hostname: 'travel.lan' } };
+    fakeRbweb({ answers: { 'GET /status': { body: status } } });
+    navigation.hostname = 'travel.lan';
+    navigation.renamed = [];
+    const device = renderProvider();
+    await waitFor(() => expect(device().status.data?.device.hostname).toBe('travel.lan'));
+    let done = false;
+    void device()
+      .saveHostname('Beach')
+      .then(() => (done = true));
+    await wait(60_000);
+    expect(navigation.renamed).toEqual([]);
+    await wait(40_000);
+    await waitFor(() => expect(done).toBe(true));
+    expect(navigation.renamed).toEqual([['travel.lan', 'beach.lan']]);
   });
 });
 

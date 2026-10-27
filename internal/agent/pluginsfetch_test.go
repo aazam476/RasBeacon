@@ -22,6 +22,7 @@ const refetchURL = "https://github.com/" + testSource + "/releases/download/v1/a
 
 // refetchEnv is a RasBeacon whose source offers file as adguard-home 1.0,
 // and the plugin as a restore leaves it: pinned to pinnedKey's public key.
+// (installRefetched saves it among the installed plugins.)
 func refetchEnv(t *testing.T, file []byte, pinnedKey ed25519.PrivateKey) (*testEnv, config.InstalledPlugin) {
 	t.Helper()
 	gh := &fakeGitHub{releases: map[string]map[string][]byte{testSource: {"adguard-home-1.0.rba": file}}}
@@ -117,5 +118,78 @@ func TestDownloadProxy_OnlyOpensHTTPSConnections(t *testing.T) {
 		if w.Code != http.StatusForbidden {
 			t.Errorf("%s %s: got %d, want 403", tc.method, tc.host, w.Code)
 		}
+	}
+}
+
+// Most catalog plugins (AdGuard Home among them) name a published image
+// instead of carrying one: installing pulls it by its digest, so the
+// exact image the author signed is what runs, whatever the tag says now.
+func TestPlugins_APublishedImageIsInstalledByItsDigest(t *testing.T) {
+	e := newPluginEnv(t)
+	digest := "sha256:" + strings.Repeat("b", 64)
+	m := testPluginManifest("1.0")
+	m["image"] = map[string]any{"ref": "docker.io/adguard/adguardhome:v0.107.57", "digest": digest}
+	e.runner.commands = nil
+	if _, err := e.installTestPlugin(writeTestPluginWithImage(t, m, nil, ""), nil); err != nil {
+		t.Fatal(err)
+	}
+	pinned := "docker.io/adguard/adguardhome@" + digest
+	if !e.runner.ran("env HTTPS_PROXY=http://127.0.0.1:") || !e.runner.ran("podman pull --quiet --arch arm64 "+pinned) {
+		t.Errorf("the image should be pulled by its digest, through the download proxy; commands: %v", e.runner.commands)
+	}
+	if !e.runner.ran("podman tag " + pinned + " " + plugin.LocalImage("adguard-home", "1.0")) {
+		t.Errorf("the pulled image should get RasBeacon's name; commands: %v", e.runner.commands)
+	}
+	if e.runner.ran("podman load") {
+		t.Error("there is no image file to load")
+	}
+}
+
+// installRefetched saves p as the installed adguard-home.
+func installRefetched(e *testEnv, p config.InstalledPlugin) {
+	e.agent.mu.Lock()
+	defer e.agent.mu.Unlock()
+	if e.agent.cfg.Plugins.Installed == nil {
+		e.agent.cfg.Plugins.Installed = map[string]config.InstalledPlugin{}
+	}
+	e.agent.cfg.Plugins.Installed["adguard-home"] = p
+}
+
+// After a restore, fetchPluginImage downloads the image again, unless it
+// is still there from before, and then stops asking.
+func TestRefetch_AfterARestoreTheImageComesBackOnce(t *testing.T) {
+	_, key, _ := ed25519.GenerateKey(rand.Reader)
+	for _, stillThere := range []bool{false, true} {
+		e, p := refetchEnv(t, writeTestPlugin(t, testPluginManifest("1.0"), key), key)
+		installRefetched(e, p)
+		if !stillThere {
+			e.runner.failing = append(e.runner.failing, "podman image exists")
+		}
+		if err := e.agent.fetchPluginImage("adguard-home"); err != nil {
+			t.Fatal(err)
+		}
+		if loaded := e.runner.ran("podman load"); loaded == stillThere {
+			t.Errorf("image still there = %v, but loaded = %v", stillThere, loaded)
+		}
+		e.agent.mu.Lock()
+		fetch := e.agent.cfg.Plugins.Installed["adguard-home"].Fetch
+		e.agent.mu.Unlock()
+		if fetch != nil {
+			t.Errorf("image still there = %v: once it's back, nothing is left to download", stillThere)
+		}
+	}
+
+	// A download that fails keeps the plugin waiting for its image.
+	_, other, _ := ed25519.GenerateKey(rand.Reader)
+	e, p := refetchEnv(t, writeTestPlugin(t, testPluginManifest("1.0"), other), key)
+	installRefetched(e, p)
+	e.runner.failing = append(e.runner.failing, "podman image exists")
+	if err := e.agent.fetchPluginImage("adguard-home"); err == nil {
+		t.Error("a file signed by someone else must fail")
+	}
+	e.agent.mu.Lock()
+	defer e.agent.mu.Unlock()
+	if e.agent.cfg.Plugins.Installed["adguard-home"].Fetch == nil {
+		t.Error("after a failed download, the plugin still waits for its image")
 	}
 }

@@ -8,10 +8,18 @@
 //     sends: ['POST /clients/name'], body: { mac: '3a:…', name: 'Phone' } },
 import { createMockRouter } from '@/data/demo/mockData';
 import { act, waitFor } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Device } from '@/data/device';
 import { FieldErrors } from '@/data/errors';
 import { fakeRbweb, renderProvider, type FakeAnswer } from './provider';
+
+// Where the page goes, instead of really going there (jsdom can't).
+const navigation = vi.hoisted(() => ({ opened: [] as string[] }));
+vi.mock('@/lib/navigate', () => ({
+  currentHostname: () => 'localhost',
+  openAddress: (address: string) => navigation.opened.push(address),
+  renameHost: () => undefined,
+}));
 
 /** A small file, for uploads. */
 const testFile = (name: string) => new File(['data'], name);
@@ -264,7 +272,46 @@ describe('VPN', () => {
       sends: ['POST /settings/vpn/import'],
       body: { conf: '[Interface]\n', name: 'home.conf' },
     },
+    {
+      name: 'saves a profile’s server details as typed, trimmed',
+      run: (d) =>
+        d.saveVpnDetails('Home', {
+          endpoint: ' vpn.example.com:51820 ',
+          peerPublicKey: 'xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=',
+          addresses: '10.66.0.2/32',
+          dns: '10.66.0.1',
+          allowedIps: '0.0.0.0/0, ::/0',
+          persistentKeepalive: '',
+          mtu: '',
+          routedIpv6Prefix: '',
+          presharedKey: '',
+          privateKey: '',
+        }),
+      sends: ['POST /settings/vpn/profile/save'],
+    },
   ]);
+
+  it('a profile’s server details with a wrong number are refused before anything is sent', async () => {
+    const { device, sent } = await withReadyDevice({});
+    const before = sent.length;
+    const form = {
+      endpoint: 'vpn.example.com:51820',
+      peerPublicKey: 'xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=',
+      addresses: '10.66.0.2/32',
+      dns: '10.66.0.1',
+      allowedIps: '0.0.0.0/0',
+      persistentKeepalive: '',
+      mtu: 'big',
+      routedIpv6Prefix: '',
+      presharedKey: '',
+      privateKey: '',
+    };
+    const error = await device()
+      .saveVpnDetails('Home', form)
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(FieldErrors);
+    expect(sent.slice(before).some((r) => r.method === 'POST')).toBe(false);
+  });
 
   // Each switch sends the other's saved value too; guessing it could turn the VPN off.
   it.each([
@@ -548,6 +595,16 @@ describe('login pages', () => {
     { name: 'opens RasBeacon’s browser', run: (d) => d.openPortalBrowser(), sends: ['POST /portal/browser/start'] },
     { name: 'closes it', run: (d) => d.closePortalBrowser(), sends: ['POST /portal/browser/stop'] },
   ]);
+
+  it('login mode opens the network’s login page in this window, two seconds later', async () => {
+    navigation.opened = [];
+    const { device } = await withReadyDevice({
+      'POST /portal/start': { body: { ...createMockRouter().status.portal, loginUrl: 'http://login.hotel.example/' } },
+    });
+    await act(() => device().startLoginMode());
+    expect(navigation.opened).toEqual([]);
+    await waitFor(() => expect(navigation.opened).toEqual(['http://login.hotel.example/']), { timeout: 3000 });
+  });
 
   /** The browser open, showing its first picture of an 800 × 600 page. */
   async function withBrowserOpen() {

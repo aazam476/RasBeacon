@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router';
 import { loginPageAddress } from '../constants';
+import { currentHostname, openAddress, renameHost } from '@/lib/navigate';
 import {
   DeviceContext,
   type AppPhase,
@@ -456,7 +457,7 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
       startLoginMode: async () => {
         const portal = await portalChange(() => api.portalAction('start'));
         // As the original: then go to the login page in this window.
-        setTimeout(() => window.location.assign(loginPageAddress(portal.loginUrl)), 2000);
+        setTimeout(() => openAddress(loginPageAddress(portal.loginUrl)), 2000);
       },
       extendLoginMode: async () => void (await portalChange(() => api.portalAction('extend'))),
       stopLoginMode: async () => void (await portalChange(() => api.portalAction('stop'))),
@@ -759,10 +760,10 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
         const name = hostname.trim().toLowerCase();
         const oldName = latest.current.status.data?.device.hostname;
         await attempt(() => api.saveHostname(name), sameNames('hostname'));
-        if (oldName && oldName !== 'rasbeacon.lan' && window.location.hostname === oldName) {
+        if (oldName && oldName !== 'rasbeacon.lan' && currentHostname() === oldName) {
           // The old name stops working with the restart: wait it out, then open the new one.
           await sleep(90_000);
-          window.location.host = window.location.host.replace(oldName, `${name}.lan`);
+          renameHost(oldName, `${name}.lan`);
           return;
         }
         await waitForRestart();
