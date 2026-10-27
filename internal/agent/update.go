@@ -189,6 +189,20 @@ func (a *Agent) InstallUpdate(r io.Reader) error {
 		a.mu.Unlock()
 		return ErrUpdateBusy
 	}
+	// While a new system is on trial, the other slot holds the old one, the
+	// only way back if the trial fails: it must not be overwritten.
+	if a.update.trying && !a.update.confirmed {
+		a.mu.Unlock()
+		return &config.ValidationError{Field: "update", Message: "The last update is still being tried. Wait a minute until it is confirmed, then install this one."}
+	}
+	// An update that waits for its restart is about to be overwritten: from
+	// here on, restarting into the other slot would start a half-written
+	// system, so it no longer waits.
+	if err := os.Remove(a.paths.UpdatePendingFile()); err != nil && !os.IsNotExist(err) {
+		a.mu.Unlock()
+		return err
+	}
+	a.update.restartPending = false
 	a.update.installing = true
 	a.update.message = "Installing an update…"
 	a.mu.Unlock()
@@ -227,7 +241,7 @@ func (a *Agent) RestartIntoUpdate() error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	var pending pendingUpdate
-	if a.update.trying || config.ReadJSON(a.paths.UpdatePendingFile(), &pending) != nil {
+	if a.update.trying || a.update.installing || config.ReadJSON(a.paths.UpdatePendingFile(), &pending) != nil {
 		return &config.ValidationError{Field: "update", Message: "No installed update is waiting for a restart."}
 	}
 	slog.Info("restart into the update requested from the web UI", "version", pending.Version)

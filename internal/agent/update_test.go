@@ -234,6 +234,73 @@ func TestUpdate_AFailedRestartIsShownAndCanBeTriedAgain(t *testing.T) {
 	}
 }
 
+// A second install overwrites the slot an update waiting for its restart
+// is in. Once it began, "Restart to finish the update" must not start
+// that slot: it may be half written, and never passed its checks.
+func TestUpdate_ASecondInstallReplacesTheWaitingUpdate(t *testing.T) {
+	e, key := newUpdateEnv(t)
+	e.runner.failing = append(e.runner.failing, "systemctl reboot")
+	if err := e.agent.InstallUpdate(bytes.NewReader(updateFile(t, key, "pi4", testBundle(strings.Repeat("B", 32), strings.Repeat("S", 64))))); err != nil {
+		t.Fatal(err)
+	}
+	e.timers.runAll()
+	if !e.agent.Status().Update.RestartPending {
+		t.Fatal("test setup broken: the first update should wait for its restart")
+	}
+
+	// While the second one is being written, the restart is refused...
+	e.agent.mu.Lock()
+	e.agent.update.installing = true
+	e.agent.mu.Unlock()
+	var verr *config.ValidationError
+	if err := e.agent.RestartIntoUpdate(); !errors.As(err, &verr) {
+		t.Errorf("restart while installing = %v, want a refusal", err)
+	}
+	e.agent.mu.Lock()
+	e.agent.update.installing = false
+	e.agent.mu.Unlock()
+
+	// ... and after it failed, nothing waits any more.
+	_, otherKey, _ := ed25519.GenerateKey(rand.Reader)
+	if err := e.agent.InstallUpdate(bytes.NewReader(updateFile(t, otherKey, "pi4", testBundle(strings.Repeat("b", 32), strings.Repeat("s", 64))))); err == nil {
+		t.Fatal("test setup broken: an update signed by another key must fail")
+	}
+	if e.agent.Status().Update.RestartPending {
+		t.Error("the first update is gone once a second install began: nothing may wait for a restart")
+	}
+	if err := e.agent.RestartIntoUpdate(); !errors.As(err, &verr) {
+		t.Errorf("restart after a failed second install = %v, want a refusal", err)
+	}
+	e.runner.failing, e.runner.commands = nil, nil
+	e.timers.runAll()
+	if e.runner.ran("tryboot") {
+		t.Error("the other slot must not be started")
+	}
+}
+
+// While a new system is on trial, the other slot holds the old one: the
+// way back if the trial fails. Installing must wait until it's confirmed.
+func TestUpdate_InstallingWaitsForTheTrialToBeConfirmed(t *testing.T) {
+	e, key := newUpdateEnv(t)
+	e.agent.mu.Lock()
+	e.agent.update.trying = true
+	e.agent.mu.Unlock()
+	file := updateFile(t, key, "pi4", testBundle(strings.Repeat("B", 32), strings.Repeat("S", 64)))
+	var verr *config.ValidationError
+	if err := e.agent.InstallUpdate(bytes.NewReader(file)); !errors.As(err, &verr) || !strings.Contains(verr.Message, "still being tried") {
+		t.Errorf("install on trial = %v, want a refusal", err)
+	}
+	if e.readFile(e.paths.SlotDevice("other", "system")) != strings.Repeat("o", 64) {
+		t.Error("the old system must not be overwritten during the trial")
+	}
+	e.agent.mu.Lock()
+	e.agent.update.confirmed = true
+	e.agent.mu.Unlock()
+	if err := e.agent.InstallUpdate(bytes.NewReader(file)); err != nil {
+		t.Errorf("once confirmed, installing works: %v", err)
+	}
+}
+
 func TestUpdate_RestartingNeedsAnInstalledUpdate(t *testing.T) {
 	e, _ := newUpdateEnv(t)
 	var verr *config.ValidationError
