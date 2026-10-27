@@ -277,9 +277,7 @@ func (a *Agent) Handler() http.Handler {
 	})
 	mux.HandleFunc("GET /settings/updates", view(a.UpdateSettings))
 	mux.HandleFunc("PUT /settings/updates", save(a.UpdateUpdateSettings, a.lockedUpdateStatus))
-	mux.HandleFunc("POST /settings/updates/test", call(func(req api.NotifyTestRequest) (struct{}, error) {
-		return struct{}{}, a.SendTestNotification(req.URL)
-	}))
+	mux.HandleFunc("POST /settings/updates/test", do(func(req api.NotifyTestRequest) error { return a.SendTestNotification(req.URL) }))
 	mux.HandleFunc("POST /system/update/restart", act(a.RestartIntoUpdate))
 	mux.HandleFunc("POST /system/update/check", result(a.CheckForUpdateNow))
 
