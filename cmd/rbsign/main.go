@@ -6,13 +6,16 @@
 //	    RASBEACON_UPDATE_SIGNING_KEY secret of the GitHub repository) and its
 //	    public key (commit it to image/.../usr/lib/rasbeacon/update-keys/).
 //
-//	rbsign pack -board rpi64 -version v1.2.0 [-min-from v1.0.0] -bundle x.update.tar.zst -out x.rbupdate [-info x.update.json]
+//	rbsign pack -board rpi64 -version v1.2.0 [-min-from v1.0.0] -bundle x.update.tar.zst -out x.rbupdate [-info x.update.json] [-trusted DIR]
 //	    Makes a signed update file. The private key is read from the
 //	    RASBEACON_UPDATE_SIGNING_KEY environment variable, never from the
 //	    command line (which other users of the computer could see).
 //	    -min-from names the oldest version that can install it (none: any).
 //	    -info also writes a small JSON file with the version and -min-from,
 //	    which the online update check reads from the release.
+//	    -trusted names the folder of public keys the image trusts: pack
+//	    then says which of them belongs to the signing key, and refuses to
+//	    sign when none does (devices would refuse such an update).
 //
 //	rbsign plugin-keygen
 //	    Prints a new key for signing plugins: the private key (keep it
@@ -39,6 +42,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"rasbeacon/internal/plugin"
 	"rasbeacon/internal/update"
@@ -65,7 +70,7 @@ func run(args []string, env func(string) string, stdout, stderr io.Writer) int {
 		case "keygen":
 			err = keygen(stdout)
 		case "pack":
-			err = pack(args[1:], env)
+			err = pack(args[1:], env, stdout)
 		case "plugin-keygen":
 			err = pluginKeygen(stdout)
 		case "plugin-sign":
@@ -112,7 +117,7 @@ func keygen(stdout io.Writer) error {
 }
 
 // pack makes a signed update file from a RAUC bundle.
-func pack(args []string, env func(string) string) error {
+func pack(args []string, env func(string) string, stdout io.Writer) error {
 	flags := flag.NewFlagSet("pack", flag.ContinueOnError)
 	board := flags.String("board", "", "board the update is for: rpi64 (the Pi 4 and Pi 5 image)")
 	version := flags.String("version", "", "version, e.g. v1.2.0")
@@ -120,6 +125,7 @@ func pack(args []string, env func(string) string) error {
 	outPath := flags.String("out", "", "update file to write (.rbupdate)")
 	minFrom := flags.String("min-from", "", "oldest version that can install the update (empty: any)")
 	infoPath := flags.String("info", "", "also write the version and -min-from to this JSON file")
+	trustedDir := flags.String("trusted", "", "folder of the public keys the image trusts; the signing key must be one of them")
 	if err := parseFlags(flags, args); err != nil {
 		return err
 	}
@@ -130,6 +136,13 @@ func pack(args []string, env func(string) string) error {
 	key, err := update.ParsePrivateKey(env("RASBEACON_UPDATE_SIGNING_KEY"))
 	if err != nil {
 		return fmt.Errorf("RASBEACON_UPDATE_SIGNING_KEY: %w", err)
+	}
+	if *trustedDir != "" {
+		name, err := trustedKeyName(*trustedDir, key.Public().(ed25519.PublicKey))
+		if err != nil {
+			return err
+		}
+		fmt.Fprintln(stdout, "Signing with the key of", name)
 	}
 	bundle, err := os.Open(*bundlePath)
 	if err != nil {
@@ -155,6 +168,30 @@ func pack(args []string, env func(string) string) error {
 		return err
 	}
 	return os.WriteFile(*infoPath, append(info, '\n'), 0o644)
+}
+
+// trustedKeyName returns the name of the file in dir that holds public,
+// the signing key's public half. It's safe to print: public keys are
+// public. None of them: devices with this image would refuse the update.
+func trustedKeyName(dir string, public ed25519.PublicKey) (string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", err
+	}
+	for _, entry := range entries {
+		if !strings.HasSuffix(entry.Name(), ".pub") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, entry.Name()))
+		if err != nil {
+			return "", err
+		}
+		if key, err := update.ParsePublicKey(string(data)); err == nil && key.Equal(public) {
+			return entry.Name(), nil
+		}
+	}
+	return "", fmt.Errorf("the signing key (public key %s) is none of the keys in %s: RasBeacon would refuse its updates",
+		base64.StdEncoding.EncodeToString(public), dir)
 }
 
 // pluginKeygen prints a new key pair for signing plugins, and the public

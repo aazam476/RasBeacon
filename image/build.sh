@@ -110,8 +110,12 @@ if [ "$board" = rpi64 ] && [ -n "$signing_key" ] && [ -n "$bundle" ]; then
   # The oldest version that can install this update: image/update-from,
   # without its comment lines (empty: any version).
   min_from="$( { grep -v '^#' "$repo_root/image/update-from" || true; } | tr -d '[:space:]')"
+  # -trusted: the public keys this image trusts. rbsign prints which one
+  # belongs to the signing key, and stops if none does (devices would
+  # refuse the update).
   RASBEACON_UPDATE_SIGNING_KEY="$signing_key" go run "$repo_root/cmd/rbsign" pack -board "$board" -version "$version" -min-from "$min_from" \
-    -bundle "$out/bundle.tmp" -out "$out/$name-$version.rbupdate" -info "$out/$name-$version.update.json"
+    -bundle "$out/bundle.tmp" -out "$out/$name-$version.rbupdate" -info "$out/$name-$version.update.json" \
+    -trusted "$repo_root/image/layer/rasbeacon.d/customize.overlay/usr/lib/rasbeacon/update-keys"
   rm -f "$out/bundle.tmp"
 else
   echo "No update file made (no signing key, or no update bundle at '$bundle')."

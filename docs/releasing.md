@@ -77,6 +77,13 @@ to the repository.
    public key and write the release from step 2 into `image/update-from`
    (see below): devices older than it don't know the new key.
 
+Every build that makes an update file prints which public key in
+`update-keys/` belongs to the signing key ("Signing with the key of
+release-2.pub", in the "Build image" step of the Pi 4 and Pi 5 job), and
+fails if none does. To check a new secret before a release, run "Release
+images" from the Actions tab with the release name left empty: a test
+build, published nowhere.
+
 Devices from v0.2.0 on then move up in steps by themselves: their online
 check offers the newest release they can install (the one from step 2),
 and after it, the next one. Devices on v0.1.0 only read the newest release,

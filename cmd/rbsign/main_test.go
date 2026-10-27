@@ -99,6 +99,46 @@ func TestKeygenAndPack(t *testing.T) {
 	}
 }
 
+// With -trusted, pack says which of the image's keys signs, and refuses a
+// key the image doesn't hold before writing anything.
+func TestPackChecksTheTrustedKeys(t *testing.T) {
+	_, out, _ := rbsign(t, nil, "keygen")
+	private, public := keys(t, out)
+	_, out, _ = rbsign(t, nil, "keygen")
+	_, other := keys(t, out)
+
+	dir := t.TempDir()
+	trusted := filepath.Join(dir, "update-keys")
+	os.Mkdir(trusted, 0o755)
+	os.WriteFile(filepath.Join(trusted, "README"), []byte("not a key"), 0o644)
+	os.WriteFile(filepath.Join(trusted, "release.pub"), []byte(other+"\n"), 0o644)
+	bundle := filepath.Join(dir, "x.update.tar.zst")
+	os.WriteFile(bundle, []byte("the system image"), 0o644)
+	rbupdate := filepath.Join(dir, "x.rbupdate")
+	env := map[string]string{"RASBEACON_UPDATE_SIGNING_KEY": private}
+	args := []string{"pack", "-board", "rpi64", "-version", "v1.2.0", "-bundle", bundle, "-out", rbupdate, "-trusted", trusted}
+
+	code, _, stderr := rbsign(t, env, args...)
+	if code != 1 || !strings.Contains(stderr, "is none of the keys") || !strings.Contains(stderr, public) {
+		t.Errorf("a key the image doesn't trust: exit %d, %q", code, stderr)
+	}
+	if _, err := os.Stat(rbupdate); err == nil {
+		t.Error("nothing should be written for a key the image doesn't trust")
+	}
+
+	os.WriteFile(filepath.Join(trusted, "release-2.pub"), []byte(public+"\n"), 0o644)
+	code, stdout, stderr := rbsign(t, env, args...)
+	if code != 0 || !strings.Contains(stdout, "Signing with the key of release-2.pub") {
+		t.Errorf("a trusted key: exit %d, %q, %q", code, stdout, stderr)
+	}
+
+	// A folder that isn't there.
+	args[len(args)-1] = filepath.Join(dir, "missing")
+	if code, _, _ := rbsign(t, env, args...); code != 1 {
+		t.Errorf("a missing folder: exit %d", code)
+	}
+}
+
 func TestPackFailures(t *testing.T) {
 	dir := t.TempDir()
 	args := []string{"pack", "-board", "rpi64", "-version", "v1", "-bundle", filepath.Join(dir, "missing"), "-out", filepath.Join(dir, "x")}
