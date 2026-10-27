@@ -16,9 +16,13 @@ package agent
 import (
 	"encoding/base64"
 	"errors"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
+	"syscall"
 
 	"rasbeacon/internal/api"
 	"rasbeacon/internal/config"
@@ -108,4 +112,52 @@ func (a *Agent) restoreKeptData(id, publicKey string, useKeptData bool) {
 	}
 	_ = os.Remove(ownerFile)
 	slog.Info("plugin's kept data restored", "plugin", id, "chosenByOwner", !sameAuthor)
+}
+
+// keptData lists the data kept from removed plugins, for the Plugins page,
+// which can delete it (ForgetKeptData). The caller holds a.mu.
+func (a *Agent) keptData() []api.PluginKept {
+	kept := []api.PluginKept{}
+	entries, _ := os.ReadDir(a.paths.PluginKeptDir())
+	for _, entry := range entries {
+		id, ok := strings.CutSuffix(entry.Name(), ".img")
+		info, err := entry.Info()
+		if !ok || err != nil || !info.Mode().IsRegular() {
+			continue
+		}
+		_, _, owner := a.keptDataFor(id, "")
+		name := owner.Name
+		if name == "" {
+			name = id
+		}
+		kept = append(kept, api.PluginKept{ID: id, Name: name, Bytes: spaceUsed(info)})
+	}
+	return kept
+}
+
+// spaceUsed is the space a file takes on the card. A plugin's data is a
+// sparse file: its size is how large it may grow, not what it holds.
+func spaceUsed(info fs.FileInfo) int64 {
+	if st, ok := info.Sys().(*syscall.Stat_t); ok {
+		return int64(st.Blocks) * 512
+	}
+	return info.Size()
+}
+
+// ForgetKeptData deletes the data kept from a removed plugin, and whose it
+// was, for good.
+func (a *Agent) ForgetKeptData(id string) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	// Only an ID from the list: an ID is a file name here.
+	if !slices.ContainsFunc(a.keptData(), func(k api.PluginKept) bool { return k.ID == id }) {
+		return &config.ValidationError{Field: "id", Message: "No data is kept for this plugin."}
+	}
+	data, owner := a.keptDataFiles(id)
+	if err := os.Remove(data); err != nil {
+		return err
+	}
+	_ = os.Remove(owner)
+	slog.Info("kept plugin data deleted", "plugin", id)
+	return nil
 }

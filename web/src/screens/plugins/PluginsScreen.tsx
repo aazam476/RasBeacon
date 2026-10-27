@@ -2,9 +2,10 @@ import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useDevice } from '@/data/device';
 import { errorText } from '@/data/errors';
-import type { PluginPreview, PluginsState } from '@/data/types';
+import type { PluginKept, PluginPreview, PluginsState } from '@/data/types';
+import { formatBytes } from '@/lib/format';
 import { Loaded } from '@/shell/Loaded';
-import { ButtonRow, FormError, Icon, LinkRow, Section } from '@/ui';
+import { AlertDialog, ButtonRow, FormError, Icon, LinkRow, Section } from '@/ui';
 import { InstallSheet } from './InstallSheet';
 import { STATE_LABELS, toneText } from './pluginDisplay';
 
@@ -63,7 +64,42 @@ function PluginList({ state }: { state: PluginsState }) {
         />
         <InstallFromFile />
       </Section>
+
+      {state.kept.length > 0 && <KeptData kept={state.kept} />}
     </>
+  );
+}
+
+/** Data kept from removed plugins, waiting for them to be installed again; each can be deleted. */
+function KeptData({ kept }: { kept: PluginKept[] }) {
+  const { forgetKeptPluginData } = useDevice();
+  const [deleting, setDeleting] = useState<PluginKept | null>(null);
+  return (
+    <Section
+      title="Kept data"
+      footer="Kept when you removed these plugins, for when you install them again. Deleting it frees the space."
+    >
+      {kept.map((item) => (
+        <ButtonRow key={item.id} tone="danger" value={formatBytes(item.bytes)} onClick={() => setDeleting(item)}>
+          <span className="wrap-anywhere">Delete the data of {item.name}</span>
+        </ButtonRow>
+      ))}
+      {deleting && (
+        <AlertDialog
+          title="Delete the kept data?"
+          tone="danger"
+          confirmLabel="Delete"
+          busyLabel="Deleting…"
+          onConfirm={() => forgetKeptPluginData(deleting.id)}
+          onClose={() => setDeleting(null)}
+        >
+          <p>
+            The data of <span className="wrap-anywhere">{deleting.name}</span> is deleted for good. Installing it again
+            starts with none.
+          </p>
+        </AlertDialog>
+      )}
+    </Section>
   );
 }
 

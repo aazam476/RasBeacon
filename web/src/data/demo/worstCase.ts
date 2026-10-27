@@ -437,6 +437,10 @@ export function applyWorstCase(demo: DemoState) {
     name: 'Trip Notes & Shared Itinerary Planner for Families',
     keyId: 'E4C1 0A77 93BD 2F05',
   };
+  router.plugins.kept = [
+    { id: 'trip-notes', name: 'Trip Notes & Shared Itinerary Planner for Families', bytes: 2_147_483_648 },
+    { id: 'old-dlna', name: 'old-dlna', bytes: 12_288 },
+  ];
   // Plugins in every state, with the longest names and messages.
   const base = router.plugins.plugins[0];
   router.plugins.plugins = [

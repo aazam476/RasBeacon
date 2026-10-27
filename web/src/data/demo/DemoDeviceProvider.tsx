@@ -1035,6 +1035,7 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
         const address = existing?.address ?? `10.89.0.${2 + plugins.plugins.length}`;
         change((d) => {
           delete d.router.keptPluginData[definition.id]; // given back or not, the question is answered
+          d.router.plugins.kept = d.router.plugins.kept.filter((k) => k.id !== definition.id);
           const list = d.router.plugins.plugins;
           const plugin: Plugin = {
             ...installedPlugin(definition, address, choices, 'installing'),
@@ -1112,6 +1113,14 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
           // Like the router: data of an unsigned plugin isn't known to be the next one's, so its
           // next install asks. (A signed plugin's comes back to the same key by itself.)
           if (keepData && removed && !removed.signed) d.router.keptPluginData[id] = { name: removed.name };
+          if (keepData && removed) d.router.plugins.kept.push({ id, name: removed.name, bytes: 48_234_496 });
+        });
+      },
+      forgetKeptPluginData: async (id) => {
+        await wait(600);
+        change((d) => {
+          delete d.router.keptPluginData[id];
+          d.router.plugins.kept = d.router.plugins.kept.filter((k) => k.id !== id);
         });
       },
       pluginLogs: async (id) => {

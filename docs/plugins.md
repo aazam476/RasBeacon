@@ -67,8 +67,9 @@ data, for installing it again later. Anyone can give a plugin the same ID,
 so the data only comes back by itself to a plugin signed with the same key.
 For any other (another key, or either of them unsigned), the install sheet
 asks, with a switch that is off: *Use the data kept from the earlier …
-install*, naming the earlier plugin and its key. A factory reset removes
-all plugins.
+install*, naming the earlier plugin and its key. Kept data is listed under
+**Kept data** on the Plugins page, with the space it takes, and can be
+deleted there for good. A factory reset removes all plugins.
 A backup (System → Back up settings) can include the plugins with their
 images and data.
 

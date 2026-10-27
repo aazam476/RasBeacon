@@ -790,6 +790,9 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
       setPluginRunning: async (id, running) => {
         store('plugins', await attempt(() => api.pluginAction(running ? 'start' : 'stop', id)));
       },
+      forgetKeptPluginData: async (id) => {
+        store('plugins', await attempt(() => api.forgetKeptPluginData(id)));
+      },
       removePlugin: async (id, keepData) => {
         store('plugins', await attempt(() => api.removePlugin(id, keepData)));
       },

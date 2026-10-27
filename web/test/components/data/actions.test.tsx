@@ -577,6 +577,14 @@ describe('plugins', () => {
       body: { id: 'adguard', keepData: true },
     },
     {
+      name: 'deletes kept data, then shows the plugins as the router answers',
+      run: (d) => d.forgetKeptPluginData('trip-notes'),
+      sends: ['POST /plugins/kept/forget'],
+      body: { id: 'trip-notes' },
+      answer: { body: { ...createMockRouter().plugins, kept: [] } },
+      then: (d) => expect(d.plugins.data?.kept).toEqual([]),
+    },
+    {
       name: 'answers a plugin’s log lines',
       run: (d) => d.pluginLogs('adguard'),
       sends: ['POST /plugins/logs'],

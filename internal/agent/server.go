@@ -218,6 +218,10 @@ func (a *Agent) Handler() http.Handler {
 		err := a.RemovePlugin(req)
 		return a.PluginsState(), err
 	}))
+	mux.HandleFunc("POST /plugins/kept/forget", pluginCall(func(req api.PluginIDRequest) (api.PluginsState, error) {
+		err := a.ForgetKeptData(req.ID)
+		return a.PluginsState(), err
+	}))
 	mux.HandleFunc("POST /plugins/logs", pluginCall(func(req api.PluginIDRequest) (api.PluginLogs, error) {
 		return a.PluginLogs(req.ID)
 	}))

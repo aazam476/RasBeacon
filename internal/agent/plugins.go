@@ -217,6 +217,7 @@ func (a *Agent) PluginsState() api.PluginsState {
 		state.CheckedAt = a.plugins.catalog.CheckedAt.UTC().Format(time.RFC3339)
 	}
 	state.CheckError = a.plugins.catalog.errorText()
+	state.Kept = a.keptData()
 	for _, id := range a.pluginIDs() {
 		state.Plugins = append(state.Plugins, a.pluginView(id))
 	}

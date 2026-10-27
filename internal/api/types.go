@@ -1012,6 +1012,17 @@ type PluginsState struct {
 	// CheckedAt is when the catalog was last fetched ("" = never).
 	CheckedAt  string `json:"checkedAt,omitempty"`
 	CheckError string `json:"checkError,omitempty"`
+	// Kept is the data kept from removed plugins ("Remove, keep its
+	// data"), waiting for a later install.
+	Kept []PluginKept `json:"kept"`
+}
+
+// PluginKept is the data kept from a removed plugin: its ID, its name (the
+// ID for data RasBeacon 0.1 kept), and the space it takes on the card.
+type PluginKept struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Bytes int64  `json:"bytes"`
 }
 
 // PluginSummary is a plugin on the status page.

@@ -465,6 +465,45 @@ func TestPlugins_UnsignedKeptDataComesBackOnlyWhenChosen(t *testing.T) {
 	}
 }
 
+// The Plugins page lists the data kept from removed plugins, and can
+// delete it for good.
+func TestPlugins_KeptDataIsListedAndCanBeDeleted(t *testing.T) {
+	e := newPluginEnv(t)
+	if _, err := e.installTestPlugin(writeTestPlugin(t, testPluginManifest("1.0"), nil), nil); err != nil {
+		t.Fatal(err)
+	}
+	mustWrite(t, filepath.Join(e.paths.PluginDir("adguard-home"), pluginDataImage), strings.Repeat("d", 8192))
+	if err := e.agent.RemovePlugin(api.PluginRemoveRequest{ID: "adguard-home", KeepData: true}); err != nil {
+		t.Fatal(err)
+	}
+	kept := e.agent.PluginsState().Kept
+	if len(kept) != 1 || kept[0].ID != "adguard-home" || kept[0].Name != "AdGuard Home" || kept[0].Bytes < 8192 {
+		t.Fatalf("kept = %+v", kept)
+	}
+
+	// Only data that is listed: an ID names a file there.
+	var verr *config.ValidationError
+	for _, id := range []string{"../installed/adguard-home/manifest", "samba"} {
+		if err := e.agent.ForgetKeptData(id); !errors.As(err, &verr) {
+			t.Errorf("%q: got %v, want a refusal", id, err)
+		}
+	}
+	if err := e.agent.ForgetKeptData("adguard-home"); err != nil {
+		t.Fatal(err)
+	}
+	if kept := e.agent.PluginsState().Kept; len(kept) != 0 {
+		t.Errorf("after deleting, kept = %+v", kept)
+	}
+	if entries, _ := os.ReadDir(e.paths.PluginKeptDir()); len(entries) != 0 {
+		t.Errorf("the data and its owner's note should be gone: %v", entries)
+	}
+	// A new install has nothing to ask about.
+	preview, err := e.agent.StagePluginFile(bytes.NewReader(writeTestPlugin(t, testPluginManifest("1.0"), nil)))
+	if err != nil || preview.KeptData != nil {
+		t.Errorf("preview = %+v, %v; want nothing kept", preview.KeptData, err)
+	}
+}
+
 // Data kept by RasBeacon 0.1 has no note of whose it was: the sheet asks,
 // without a name or key, and it stays aside unless chosen.
 func TestPlugins_KeptDataWithoutAnOwnerStaysAside(t *testing.T) {

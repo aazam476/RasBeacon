@@ -404,6 +404,8 @@ export interface DeviceActions {
   savePluginSettings: (id: string, choices: PluginChoices) => Promise<void>;
   setPluginRunning: (id: string, running: boolean) => Promise<void>;
   removePlugin: (id: string, keepData: boolean) => Promise<void>;
+  /** Delete the data kept from a removed plugin, for good (the screen has asked first). */
+  forgetKeptPluginData: (id: string) => Promise<void>;
   /** Its last 500 lines of output. */
   pluginLogs: (id: string) => Promise<PluginLogLine[]>;
   pluginDrives: () => Promise<PluginDrive[]>;

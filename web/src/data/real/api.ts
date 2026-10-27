@@ -399,6 +399,9 @@ export const pluginAction = (action: 'start' | 'stop', id: string) =>
   request<PluginsState>('POST', `/plugins/${action}`, { body: { id }, timeoutMs: 120_000 });
 export const removePlugin = (id: string, keepData: boolean) =>
   request<PluginsState>('POST', '/plugins/remove', { body: { id, keepData }, timeoutMs: 120_000 });
+/** Deletes the data kept from a removed plugin, for good. */
+export const forgetKeptPluginData = (id: string) =>
+  request<PluginsState>('POST', '/plugins/kept/forget', { body: { id } });
 export const getPluginLogs = (id: string) => request<PluginLogsResponse>('POST', '/plugins/logs', { body: { id } });
 export const getPluginDrives = () => request<{ drives: PluginDrive[] }>('GET', '/plugins/drives');
 export const putPluginSources = (sources: string[]) =>

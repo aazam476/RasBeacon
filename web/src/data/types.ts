@@ -908,6 +908,16 @@ export interface PluginsState {
   metered: boolean;
   checkedAt?: string;
   checkError?: string;
+  /** Data kept from removed plugins ("keep its data"), waiting for a later install. */
+  kept: PluginKept[];
+}
+
+/** The data kept from a removed plugin: the space it takes on the card. */
+export interface PluginKept {
+  id: string;
+  /** The plugin's name (its ID for data RasBeacon 0.1 kept). */
+  name: string;
+  bytes: number;
 }
 
 /** A plugin on the status page. */

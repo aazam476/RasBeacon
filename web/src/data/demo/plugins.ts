@@ -354,6 +354,7 @@ export function createMockPlugins(): PluginsState {
     swapMb: 2_048,
     metered: false,
     checkedAt: '2026-10-13T08:12:00Z',
+    kept: [],
   };
 }
 

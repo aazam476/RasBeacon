@@ -87,6 +87,13 @@ describe('plugins', () => {
       body: { id: 'adguard-home', keepData: true },
     },
     {
+      name: 'deletes the data kept from a removed plugin',
+      call: () => api.forgetKeptPluginData('adguard-home'),
+      method: 'POST',
+      path: '/plugins/kept/forget',
+      body: { id: 'adguard-home' },
+    },
+    {
       name: 'reads its output',
       call: () => api.getPluginLogs('adguard-home'),
       method: 'POST',
