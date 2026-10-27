@@ -50,11 +50,46 @@ func TestWriteSparse(t *testing.T) {
 }
 
 func TestWriteSparse_RefusesTooBigOrBroken(t *testing.T) {
-	if _, err := WriteSparse(&memDevice{data: make([]byte, 32)}, bytes.NewReader(makeSparse()), 32); err == nil {
-		t.Error("an image bigger than the partition must be refused")
+	le := binary.LittleEndian
+	// header is a sparse header with chunks after it, changed by change.
+	header := func(change func(*sparseHeader), chunks ...any) []byte {
+		h := sparseHeader{Magic: sparseMagic, MajorVersion: 1, FileHeaderSize: 28, ChunkHeadSize: 12, BlockSize: 16, TotalBlocks: 4, TotalChunks: uint32(len(chunks))}
+		change(&h)
+		var b bytes.Buffer
+		binary.Write(&b, le, h)
+		for _, c := range chunks {
+			binary.Write(&b, le, c)
+		}
+		return b.Bytes()
 	}
-	if _, err := WriteSparse(&memDevice{data: make([]byte, 64)}, strings.NewReader("not sparse at all......."), 64); err == nil {
-		t.Error("junk must be refused")
+	same := func(*sparseHeader) {}
+	for _, tt := range []struct {
+		name  string
+		image []byte
+		want  string
+	}{
+		{"junk", []byte("not sparse at all......."), "sparse header"},
+		{"another magic number", header(func(h *sparseHeader) { h.Magic = 1 }), "not a sparse image"},
+		{"a newer major version", header(func(h *sparseHeader) { h.MajorVersion = 2 }), "not a sparse image"},
+		{"a block size of 0", header(func(h *sparseHeader) { h.BlockSize = 0 }), "not a sparse image"},
+		{"a block size that isn't a multiple of 4", header(func(h *sparseHeader) { h.BlockSize = 18 }), "not a sparse image"},
+		// rbd would set aside a gigabyte for one block, before the image's
+		// checksum could be checked.
+		{"one 1 GB block", header(func(h *sparseHeader) { h.BlockSize, h.TotalBlocks = 1 << 30, 0 }), "block size"},
+		{"bigger than the partition", makeSparse()[:28], "bigger than the partition"},
+		{"a chunk past the end", header(same, chunkHeader{Type: chunkDontCare, Blocks: 5, TotalSize: 12}), "past the end"},
+		{"a raw chunk of the wrong size", header(same, chunkHeader{Type: chunkRaw, Blocks: 1, TotalSize: 12}), "wrong size"},
+		{"an unknown chunk", header(same, chunkHeader{Type: 0xCAFF, Blocks: 1, TotalSize: 12}), "unknown type"},
+		{"chunks that cover too little", header(same, chunkHeader{Type: chunkDontCare, Blocks: 1, TotalSize: 12}), "the chunks cover"},
+		{"cut off in a chunk header", header(func(h *sparseHeader) { h.TotalChunks = 1 }), "reading chunk 0"},
+	} {
+		size := int64(64)
+		if tt.name == "bigger than the partition" {
+			size = 32
+		}
+		if _, err := WriteSparse(&memDevice{data: make([]byte, 64)}, bytes.NewReader(tt.image), size); err == nil || !strings.Contains(err.Error(), tt.want) {
+			t.Errorf("%s: got %v, want an error with %q", tt.name, err, tt.want)
+		}
 	}
 }
 

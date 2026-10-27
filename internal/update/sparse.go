@@ -31,6 +31,11 @@ const (
 	chunkCRC32     = 0xCAC4
 	fileHeaderSize = 28
 	chunkHeadSize  = 12
+	// maxBlockSize is the largest block size accepted. rpi-image-gen uses
+	// 4096 bytes. The image is read before its checksum can be checked,
+	// so a broken or hostile one must not make rbd set aside gigabytes
+	// for a single block.
+	maxBlockSize = 1 << 20
 )
 
 // sparseHeader is the start of a sparse image.
@@ -65,6 +70,9 @@ func WriteSparse(dst io.WriterAt, src io.Reader, maxSize int64) (int64, error) {
 	if h.Magic != sparseMagic || h.MajorVersion != 1 || h.FileHeaderSize < fileHeaderSize ||
 		h.ChunkHeadSize < chunkHeadSize || h.BlockSize == 0 || h.BlockSize%4 != 0 {
 		return 0, errors.New("not a sparse image")
+	}
+	if h.BlockSize > maxBlockSize {
+		return 0, fmt.Errorf("its block size (%d bytes) is larger than %d bytes", h.BlockSize, maxBlockSize)
 	}
 	// Skip any extra header bytes from a newer format version.
 	if _, err := io.CopyN(io.Discard, src, int64(h.FileHeaderSize-fileHeaderSize)); err != nil {
