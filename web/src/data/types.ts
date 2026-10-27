@@ -41,7 +41,17 @@ export interface SetupForm {
   hotspotSsid: string;
   hotspotPassword: string;
   hotspotBand: Band;
+  /**
+   * Where RasBeacon will be used, which only changes the next steps "Setup complete" shows: on
+   * trips it joins the place's Wi-Fi, at home its Ethernet port goes to the home router. Not sent
+   * to the router (the Ethernet port is an uplink either way, and every setting stays
+   * changeable).
+   */
+  place: SetupPlace;
 }
+
+/** "Where will you use RasBeacon?" in the setup. */
+export type SetupPlace = 'travel' | 'home';
 
 /** The form that changes the admin password (System page). */
 export interface AdminPasswordForm {

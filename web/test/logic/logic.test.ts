@@ -77,6 +77,7 @@ describe('input checks', () => {
       hotspotSsid: 'Ali',
       hotspotPassword: 'kq7m-2xvd-h8pt-rn4w',
       hotspotBand: '2.4GHz' as const,
+      place: 'travel' as const,
     };
     expect(checkSetupForm(form)).toEqual({ adminPasswordConfirm: "The two passwords don't match." });
     expect(checkSetupForm({ ...form, adminPasswordConfirm: form.adminPassword })).toEqual({});

@@ -70,7 +70,7 @@ export function Choice({ value, title, description, icon, mono = false, trailing
   const selected = list.value === value;
 
   return (
-    <div className="group row gap-0 py-0 pr-2 pl-0 lg:py-0 lg:pr-1.5 lg:pl-0">
+    <div className="group row @container gap-0 py-0 pr-2 pl-0 lg:py-0 lg:pr-1.5 lg:pl-0">
       <label className="row-pressable relative flex min-h-11 min-w-0 flex-1 cursor-pointer items-center gap-3 self-stretch py-2.5 pl-4 lg:min-h-10 lg:gap-2.5 lg:py-2 lg:pl-3.5 has-[input:focus-visible]:rounded-group has-[input:focus-visible]:outline-2 has-[input:focus-visible]:-outline-offset-2 has-[input:focus-visible]:outline-tint">
         <input
           type="radio"
@@ -82,15 +82,22 @@ export function Choice({ value, title, description, icon, mono = false, trailing
           className="absolute inset-0 size-full cursor-pointer appearance-none opacity-0"
         />
         {icon && (
-          <span className="row-tile grid w-[1.8125rem] shrink-0 place-items-center lg:w-6">
+          // With very large text on a narrow screen the symbol gives its room to the words.
+          <span className="row-tile grid w-[1.8125rem] shrink-0 place-items-center lg:w-6 @max-[14rem]:hidden">
             <Icon name={icon} size={22} className="text-label-2 lg:size-[1.125rem]" />
           </span>
         )}
         <span className="min-w-0 flex-1">
-          <span className={cn('block wrap-anywhere text-label', mono ? 'font-mono text-callout' : 'text-body')}>
+          {/* Words break only when one is wider than the row; file names (mono) anywhere. */}
+          <span
+            className={cn(
+              'block text-label',
+              mono ? 'font-mono text-callout wrap-anywhere' : 'text-body wrap-break-word',
+            )}
+          >
             {title}
           </span>
-          {description && <span className="mt-0.5 block text-subhead wrap-anywhere text-label-2">{description}</span>}
+          {description && <span className="mt-0.5 block text-subhead wrap-break-word text-label-2">{description}</span>}
         </span>
         <Icon
           name="check"

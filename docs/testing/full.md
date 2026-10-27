@@ -59,7 +59,10 @@ first if you want them; everything else works from the web pages alone.
 1. Type two different admin passwords. **Expect:** "The two passwords don't
    match."
 2. Choose an admin password (10+ characters), keep the hotspot name and
-   suggested Wi-Fi password, band **2.4 GHz**, **Finish setup**.
+   suggested Wi-Fi password, band **2.4 GHz**, and under *Where will you
+   use RasBeacon?* **Traveling** (new; *At home* only changes the next
+   steps shown), **Finish setup**. **Expect:** the next steps say to join
+   the Wi-Fi where you are on the Internet page.
 3. **Expect:** within about 10 s the setup network disappears and your
    hotspot appears. Join it with the password.
 4. Open `http://10.87.0.1` (or `http://rasbeacon.lan`). Log in with a wrong

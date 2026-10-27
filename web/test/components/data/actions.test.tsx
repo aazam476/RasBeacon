@@ -581,6 +581,7 @@ describe('first-time setup', () => {
     hotspotSsid: 'Travel',
     hotspotPassword: 'kq7m-2xvd-h8pt',
     hotspotBand: '5GHz' as const,
+    place: 'travel' as const,
   };
 
   it('a form with problems is refused before anything is sent', async () => {

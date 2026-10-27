@@ -89,6 +89,27 @@ describe('first-time setup', () => {
       'The setup network turns off in 1 second, and your hotspot starts.',
     );
     expect(screen.getAllByRole('link', { name: 'http://rasbeacon.lan' })).toHaveLength(2);
+    // Traveling, the first choice: join the Wi-Fi where you are.
+    expect(screen.getByText(/join the Wi-Fi where you are/)).toBeTruthy();
+  });
+
+  it('at home, says to connect the Ethernet port to the router', async () => {
+    const device = fakeDevice(
+      (router) => {
+        router.setup = { ...router.setup, mode: 'setup', claimed: false };
+      },
+      {
+        finishSetup: async () => ({ hotspotSsid: 'Home-Net', switchInSeconds: 1, adminUrl: 'http://rasbeacon.lan' }),
+      },
+    );
+    const { user } = renderScreen(<SetupScreen />, device);
+    await user.type(screen.getByLabelText('Admin password', { exact: true }), 'tangerine-orbit-42');
+    await user.type(screen.getByLabelText('Type it again'), 'tangerine-orbit-42');
+    await user.click(screen.getByRole('radio', { name: /At home/ }));
+    await user.click(screen.getByRole('button', { name: 'Finish setup' }));
+    expect(device.finishSetup).toHaveBeenCalledWith(expect.objectContaining({ place: 'home' }));
+    expect(await screen.findByText(/Ethernet port to your home router/)).toBeTruthy();
+    expect(screen.queryByText(/join the Wi-Fi where you are/)).toBeNull();
   });
 });
 

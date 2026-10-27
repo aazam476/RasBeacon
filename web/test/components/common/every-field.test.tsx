@@ -110,6 +110,7 @@ describe('every field', () => {
       hotspotSsid: 'Trip-Net',
       hotspotPassword: 'trip-pass-77',
       hotspotBand: '5GHz',
+      place: 'travel',
     });
   });
 });

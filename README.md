@@ -92,6 +92,8 @@ hotel login pages.
       suggested).
    3. Choose the band: 2.4 GHz works with every device; 5 GHz is faster but
       has shorter range.
+   4. Say where you'll use it (traveling or at home), so the page shows
+      the right next step.
 7. After a few seconds the setup network disappears and **your hotspot
    starts**. Join it, then open `http://10.87.0.1` (or
    `http://rasbeacon.lan`) to see the status page.

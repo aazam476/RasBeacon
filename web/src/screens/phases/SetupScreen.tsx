@@ -1,10 +1,21 @@
 import { useState, type ReactNode } from 'react';
 import { useDevice } from '@/data/device';
-import type { ClaimResponse, SetupForm, SetupState } from '@/data/types';
+import type { ClaimResponse, SetupForm, SetupPlace, SetupState } from '@/data/types';
 import { useCountdown } from '@/lib/useCountdown';
 import { useForm } from '@/lib/useForm';
 import { FullPage, FullPageHeader } from '@/shell/FullPage';
-import { Button, FormError, Icon, Notice, PasswordField, Section, SelectField, TextField } from '@/ui';
+import {
+  Button,
+  Choice,
+  ChoiceList,
+  FormError,
+  Icon,
+  Notice,
+  PasswordField,
+  Section,
+  SelectField,
+  TextField,
+} from '@/ui';
 import { bandOptions } from '../common/wifiOptions';
 
 /**
@@ -13,17 +24,23 @@ import { bandOptions } from '../common/wifiOptions';
  */
 export function SetupScreen() {
   const { setup } = useDevice();
-  const [result, setResult] = useState<ClaimResponse | null>(null);
+  const [result, setResult] = useState<{ answer: ClaimResponse; place: SetupPlace } | null>(null);
 
-  if (result) return <SetupComplete result={result} />;
+  if (result?.answer) return <SetupComplete result={result.answer} place={result.place} />;
   if (!setup) return null;
-  return <SetupWizard setup={setup} onDone={setResult} />;
+  return <SetupWizard setup={setup} onDone={(answer, place) => setResult({ answer, place })} />;
 }
 
 /** Typing settings for the network name: no capitals, corrections or suggestions. */
 const PLAIN_INPUT = { autoComplete: 'off', autoCapitalize: 'none', autoCorrect: 'off', spellCheck: false } as const;
 
-function SetupWizard({ setup, onDone }: { setup: SetupState; onDone: (result: ClaimResponse) => void }) {
+function SetupWizard({
+  setup,
+  onDone,
+}: {
+  setup: SetupState;
+  onDone: (result: ClaimResponse, place: SetupPlace) => void;
+}) {
   const { finishSetup } = useDevice();
   const form = useForm<SetupForm>(
     {
@@ -32,8 +49,9 @@ function SetupWizard({ setup, onDone }: { setup: SetupState; onDone: (result: Cl
       hotspotSsid: setup.suggestedHotspotSsid ?? '',
       hotspotPassword: setup.suggestedHotspotPassword ?? '',
       hotspotBand: '2.4GHz',
+      place: 'travel',
     },
-    async (values) => onDone(await finishSetup(values)),
+    async (values) => onDone(await finishSetup(values), values.place),
   );
   const { values, setField, fieldErrors } = form;
 
@@ -101,6 +119,30 @@ function SetupWizard({ setup, onDone }: { setup: SetupState; onDone: (result: Cl
           />
         </Section>
 
+        <Section
+          title="Where will you use RasBeacon?"
+          footer="This only changes the next steps shown after setup. You can use RasBeacon anywhere, either way."
+        >
+          <ChoiceList
+            ariaLabel="Where will you use RasBeacon?"
+            value={values.place}
+            onChange={(place) => setField('place', place)}
+          >
+            <Choice
+              value="travel"
+              title="Traveling"
+              description="It joins the Wi-Fi of a hotel, a café or a campus, or a cable in the wall."
+              icon="public"
+            />
+            <Choice
+              value="home"
+              title="At home"
+              description="A cable connects its Ethernet port to your home router."
+              icon="settings_ethernet"
+            />
+          </ChoiceList>
+        </Section>
+
         {form.error && <FormError className="px-4">{form.error}</FormError>}
         <Button type="submit" size="lg" loading={form.pending}>
           {form.pending ? 'Saving…' : 'Finish setup'}
@@ -139,7 +181,7 @@ function Step({ number, children }: { number: number; children: ReactNode }) {
   );
 }
 
-function SetupComplete({ result }: { result: ClaimResponse }) {
+function SetupComplete({ result, place }: { result: ClaimResponse; place: SetupPlace }) {
   const secondsLeft = useCountdown(result.switchInSeconds);
   const adminLink = (
     <a href={result.adminUrl} className="selectable font-mono text-tint underline">
@@ -179,6 +221,17 @@ function SetupComplete({ result }: { result: ClaimResponse }) {
             password you chose.
           </Step>
           <Step number={2}>Come back to {adminLink} to see the status page.</Step>
+          {place === 'home' ? (
+            <Step number={3}>
+              Connect RasBeacon’s Ethernet port to your home router with a cable. It uses the internet from there by
+              itself.
+            </Step>
+          ) : (
+            <Step number={3}>
+              On the Internet page, join the Wi-Fi where you are, or plug in a cable from the wall. If the network has a
+              login page, RasBeacon helps you through it.
+            </Step>
+          )}
         </ol>
       </Section>
     </FullPage>
