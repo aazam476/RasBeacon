@@ -189,6 +189,8 @@ type routerRules struct {
 	portForwards []render.PortForward
 	// pinholes open ports to devices' addresses in routedIPv6.
 	pinholes []render.Pinhole
+	// guest adds the guest network (see buildGuest).
+	guest bool
 }
 
 // renderRouterRules writes rbd's firewall for r to a file and returns its
@@ -205,6 +207,7 @@ func renderRouterRules(t *testing.T, r routerRules) string {
 		LANAddress:      render.DefaultLAN.Prefix.Addr(),
 		PortForwards:    r.portForwards,
 		Pinholes:        r.pinholes,
+		Guest:           r.guest,
 	})
 	if err != nil {
 		t.Fatal(err)

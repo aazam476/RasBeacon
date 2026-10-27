@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"rasbeacon/internal/render"
+	"rasbeacon/internal/routing"
 )
 
 const guestNS = "rb-guest"
@@ -114,5 +115,37 @@ func TestGuest_ReachesInternetButNothingElse(t *testing.T) {
 	}
 	if !tcpConnects(phoneNS, "10.87.0.1", "80") {
 		t.Error("the owner's devices should still reach the web UI")
+	}
+}
+
+// Guests use the VPN like the owner's devices: the site behind the VPN
+// answers them, the hotel's network doesn't, and when the VPN server
+// stops answering (kill switch on), they reach nothing at all.
+func TestGuest_UsesTheVPNAndTheKillSwitch(t *testing.T) {
+	n := buildVPNNetwork(t)
+	buildGuest(t)
+	// The guest network's routing rule and firewall, as rbd sets them with
+	// the guest network on (ClientsThroughTunnel covers both bridges).
+	runAllIgnoringErrors(routerNS, routing.ClientsDirect())
+	runAll(t, routerNS, routing.ClientsThroughTunnel(routing.KernelHasIPv6("/proc/sys/net/ipv6")))
+	n.applyRouterRulesWith(t, routerRules{egress: []string{routing.TunnelInterface}, upstreamDNS: []string{vpnServerAddress}, guest: true})
+	giveGuestAddress(t)
+	waitForHandshake(t)
+
+	if !tcpConnects(guestNS, tunnelSite, "8080") {
+		t.Fatal("guests should reach the site behind the VPN (only reachable through the tunnel)")
+	}
+	// The hotel's network itself is only reached through the tunnel too
+	// (10.99.0.2 is also the VPN server, which answers through it).
+	leaked := countPacketsOutsideTheTunnel(t, n, "8081")
+	tcpConnects(guestNS, "10.99.0.2", "8081")
+	if out := leaked(); out != "" {
+		t.Errorf("LEAK: a guest's connection reached the hotel's network outside the VPN:\n%s", out)
+	}
+
+	// The VPN server disappears: guests reach nothing.
+	inNS(t, upstreamNS, "ip", "link", "delete", serverInterface)
+	if tcpConnects(guestNS, tunnelSite, "8080") || tcpConnects(guestNS, "10.99.0.2", "8081") {
+		t.Error("LEAK: with the kill switch on and the VPN down, guests must reach nothing")
 	}
 }
