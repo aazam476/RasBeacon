@@ -349,7 +349,6 @@ func TestFirstBoot_BrokenSetupTxt_KeepsNetworkOffInsteadOfOpen(t *testing.T) {
 	e := newTestEnv(t)
 	mustWrite(t, e.paths.SetupTxtFile(), "setup_password=short\n")
 	e.start()
-	defer e.agent.stopLED()
 
 	if mode := e.agent.SetupState().Mode; mode != api.ModeSetupError {
 		t.Fatalf("mode = %q, want setup-error", mode)

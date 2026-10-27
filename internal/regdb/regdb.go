@@ -23,9 +23,6 @@ import (
 	"fmt"
 )
 
-// File is where Linux keeps the database.
-const File = "/lib/firmware/regulatory.db"
-
 const (
 	magic   = 0x52474442 // "RGDB"
 	version = 20

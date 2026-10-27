@@ -194,7 +194,9 @@ type Agent struct {
 	setupPassword    string // from setup.txt; only kept to redact it from diagnostics
 	setupDeadline    time.Time
 	setupWindowTimer *time.Timer
-	stopLEDBlink     chan struct{}
+	// ledBlinking is set once the setup.txt error blink started (it runs
+	// until RasBeacon restarts).
+	ledBlinking bool
 
 	// webGroup is rbweb's group ID (-1 = unknown), for the HTTPS key copy.
 	webGroup int
@@ -849,19 +851,13 @@ func (a *Agent) applyFirewall() error {
 	return nil
 }
 
-// startLEDBlink blinks the setup.txt error pattern until stopLED is called.
+// startLEDBlink blinks the setup.txt error pattern until RasBeacon
+// restarts (a fixed setup.txt needs a restart to be read again).
 func (a *Agent) startLEDBlink() {
-	if a.stopLEDBlink != nil {
-		return // already blinking
+	if a.ledBlinking {
+		return
 	}
-	a.stopLEDBlink = make(chan struct{})
-	go led.Blink(led.FindActivityLED(a.paths.SysClassLeds()), led.ErrorPattern, a.stopLEDBlink)
-}
-
-// stopLED stops the error blink, if one is running.
-func (a *Agent) stopLED() {
-	if a.stopLEDBlink != nil {
-		close(a.stopLEDBlink)
-		a.stopLEDBlink = nil
-	}
+	a.ledBlinking = true
+	ledDir := led.FindActivityLED(a.paths.SysClassLeds())
+	a.background(func() { led.Blink(ledDir, led.ErrorPattern, nil) })
 }

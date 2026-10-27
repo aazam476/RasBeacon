@@ -29,7 +29,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 	"time"
 
@@ -523,7 +522,10 @@ func (a *Agent) checkForUpdate() error {
 	}
 
 	message := fmt.Sprintf("RasBeacon %s is available (this one runs %s).", release.TagName, version.Version)
-	if s := a.updateStatusLocked(); s.Reflash != nil {
+	a.mu.Lock()
+	s := a.updateStatus()
+	a.mu.Unlock()
+	if s.Reflash != nil {
 		message += " It needs a fresh install: open the System page for the steps."
 	} else if s.NewerVersion != "" {
 		message += fmt.Sprintf(" %s is out too, but can't be installed over this version yet: install this one first, and RasBeacon then offers the next step.", s.NewerVersion)
@@ -543,13 +545,6 @@ func (a *Agent) checkForUpdate() error {
 	}
 	slog.Info("new version announced", "version", release.TagName)
 	return nil
-}
-
-// updateStatusLocked is updateStatus, taking a.mu itself.
-func (a *Agent) updateStatusLocked() api.UpdateStatus {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	return a.updateStatus()
 }
 
 // UpdateSettings returns the update check's schedule and notification
@@ -678,9 +673,9 @@ func fetchUpdateRelease(client *http.Client, apiURL, repository, running string)
 	if len(newer) == 0 {
 		return latestRelease{}, "", nil
 	}
-	sort.SliceStable(newer, func(i, j int) bool {
-		result, _ := version.Compare(newer[i].TagName, newer[j].TagName)
-		return result > 0
+	slices.SortStableFunc(newer, func(a, b latestRelease) int {
+		result, _ := version.Compare(b.TagName, a.TagName)
+		return result
 	})
 
 	// The first (newest) one that can be installed over running.
