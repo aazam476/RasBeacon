@@ -247,9 +247,10 @@ Updates use the two copies ("slots", A and B) of the system on the SD card
 2. rbd streams the new boot and system partitions into the slot that isn't
    running, then checks the SHA-256 of everything against the signed one.
 3. The device restarts into the new slot **on trial** (the bootloader's
-   "tryboot"). If rbd runs normally for a minute, with the web UI (rbweb)
-   and the hotspot (hostapd) running, the new slot becomes the default; otherwise, the next start (forced after 5 minutes) is the old
-   slot again.
+   "tryboot"). If rbd runs normally for a minute without ever having
+   crashed, with the web UI (rbweb) and the hotspot (hostapd) running, the
+   new slot becomes the default. Otherwise the next start, forced 5 minutes
+   after boot, is the old slot again.
 
 Settings live on the shared `/persistent` partition, so they carry over.
 

@@ -15,8 +15,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"rasbeacon/internal/api"
 	"rasbeacon/internal/config"
@@ -338,25 +340,38 @@ func TestUpdate_TamperedBundleIsNotStarted(t *testing.T) {
 	}
 }
 
-func TestUpdate_TrialIsConfirmedAfterANormalStart(t *testing.T) {
+// trialEnv is a claimed device that restarted into a new system on trial,
+// with rbd never restarted since boot (unless the test says otherwise).
+func trialEnv(t *testing.T) *testEnv {
+	t.Helper()
 	e := newTestEnv(t)
-	mustWrite(t, e.paths.TrybootFlag(), "\x00\x00\x00\x01")
-	e.runner.outputs["rpi-slot-tryboot"] = "[all]\ntryboot_a_b=1\nboot_partition=3\n[tryboot]\nboot_partition=2\n"
 	e.start()
 	if _, err := e.agent.Claim(validClaim); err != nil {
 		t.Fatal(err)
 	}
-	// Simulate the reboot into the claimed device on trial.
-	restarted := New(e.paths, e.runner)
-	timers := &fakeTimers{}
-	restarted.afterFunc, restarted.usbRadioWait = timers.afterFunc, 0
-	restarted.background = func(func()) {} // no loops left running after the test
-	if err := restarted.Start(); err != nil {
-		t.Fatal(err)
-	}
-	timers.runAll() // confirmation (after a minute) and the fallback (5 minutes)
-	if got := e.readFile(e.paths.AutobootFile()); !strings.Contains(got, "boot_partition=3") {
-		t.Errorf("autoboot.txt = %q, want the new slot as default", got)
+	e.timers.runAll()
+	// The next start is the new system's, on trial.
+	mustWrite(t, e.paths.TrybootFlag(), "\x00\x00\x00\x01")
+	e.runner.outputs["rpi-slot-tryboot"] = "[all]\ntryboot_a_b=1\nboot_partition=3\n[tryboot]\nboot_partition=2\n"
+	e.runner.outputs[nRestartsCommand] = "0\n"
+	return e
+}
+
+// nRestartsCommand asks systemd how often it restarted rbd since boot.
+const nRestartsCommand = "systemctl show --property=NRestarts --value rbd.service"
+
+// confirmed reports whether the new system was made the default.
+func (e *testEnv) confirmed() bool {
+	data, err := os.ReadFile(e.paths.AutobootFile())
+	return err == nil && strings.Contains(string(data), "boot_partition=3")
+}
+
+func TestUpdate_TrialIsConfirmedAfterANormalStart(t *testing.T) {
+	e := trialEnv(t)
+	e.restart()
+	e.timers.runAll() // confirmation (after a minute) and the fallback (5 minutes)
+	if !e.confirmed() {
+		t.Errorf("autoboot.txt should make the new slot the default")
 	}
 	for _, c := range e.runner.commands {
 		if strings.Contains(c, "reboot") {
@@ -368,33 +383,57 @@ func TestUpdate_TrialIsConfirmedAfterANormalStart(t *testing.T) {
 // Without the web UI or the hotspot, the owner couldn't reach RasBeacon to
 // go back, so the update isn't confirmed and the old system comes back.
 func TestUpdate_TrialIsntConfirmedWithoutTheWebUI(t *testing.T) {
-	e := newTestEnv(t)
-	mustWrite(t, e.paths.TrybootFlag(), "\x00\x00\x00\x01")
-	e.runner.outputs["rpi-slot-tryboot"] = "[all]\ntryboot_a_b=1\nboot_partition=3\n[tryboot]\nboot_partition=2\n"
-	e.start()
-	if _, err := e.agent.Claim(validClaim); err != nil {
-		t.Fatal(err)
-	}
+	e := trialEnv(t)
 	e.runner.failing = []string{"systemctl is-active rbweb.service"}
-	restarted := New(e.paths, e.runner)
-	timers := &fakeTimers{}
-	restarted.afterFunc, restarted.usbRadioWait = timers.afterFunc, 0
-	restarted.background = func(func()) {} // no loops left running after the test
-	if err := restarted.Start(); err != nil {
-		t.Fatal(err)
-	}
+	e.restart()
 	// Each round runs what is due: the first check, then the checks again.
 	for range 20 {
-		timers.runAll()
+		e.timers.runAll()
 	}
-	if _, err := os.Stat(e.paths.AutobootFile()); err == nil {
+	if e.confirmed() {
 		t.Error("the update must not be confirmed while the web UI isn't running")
 	}
-	if checks := restarted.update.confirmChecks; checks < 2 || checks > 16 {
+	if checks := e.agent.update.confirmChecks; checks < 2 || checks > 16 {
 		t.Errorf("checked %d times, want a few retries before the rollback", checks)
 	}
 	if !e.runner.ran("systemctl reboot") {
 		t.Error("without confirmation, RasBeacon goes back to the old system")
+	}
+}
+
+// systemd restarts a crashed rbd. A new rbd that crashed after a minute
+// (once the web UI and hotspot were up) must not get its system confirmed
+// by the next start: the old system comes back instead.
+func TestUpdate_TrialIsntConfirmedAfterRbdRestarted(t *testing.T) {
+	e := trialEnv(t)
+	e.runner.outputs[nRestartsCommand] = "1\n"
+	e.restart()
+	e.timers.runAll()
+	if e.confirmed() {
+		t.Error("the update must not be confirmed after rbd restarted")
+	}
+	if !e.runner.ran("systemctl reboot") {
+		t.Error("the old system should come back")
+	}
+}
+
+// The way back is timed from boot: an rbd that keeps crashing starts
+// again every few seconds, and each start must not wait 5 minutes anew.
+func TestUpdate_TrialRollbackIsTimedFromBoot(t *testing.T) {
+	for _, tt := range []struct {
+		uptime string
+		want   time.Duration
+	}{
+		{"30.50 12.00", rollbackAfter - 30*time.Second},
+		{"290.00 80.00", 10 * time.Second},
+		{"400.00 99.00", 0}, // already late: at once
+	} {
+		e := trialEnv(t)
+		mustWrite(t, e.paths.ProcUptime(), tt.uptime)
+		e.restart()
+		if !slices.Contains(e.timers.delays, tt.want) {
+			t.Errorf("uptime %s: timers %v, want the rollback in %v", tt.uptime, e.timers.delays, tt.want)
+		}
 	}
 }
 

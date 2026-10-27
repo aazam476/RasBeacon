@@ -101,10 +101,12 @@ As built in milestone 1, this uses rpi-image-gen's `image-rota` layout
      `minFromVersion` (otherwise: back up, flash, restore).
   2. Write the inactive boot and root slots, verify their hashes, then run
      `reboot "0 tryboot"`.
-  3. The new slot runs a health check: `rbd` running, `ap0` beaconing, the UI
-     answering locally, all within 180 s. If it passes, `autoboot.txt` is
-     swapped to commit the update. If it fails, a normal reboot, which
-     automatically returns to the old slot.
+  3. The new slot runs a health check a minute in: the web UI (`rbweb`) and
+     the hotspot (`hostapd`) running, and `rbd` never restarted since boot
+     (systemd's `NRestarts`). If it passes, `autoboot.txt` is swapped to
+     commit the update. If it doesn't pass by 5 minutes after boot (counted
+     from boot, so an `rbd` that keeps crashing still gets there), a normal
+     reboot, which automatically returns to the old slot.
 - **How updates arrive:** you upload the `.update` file through the UI from a
   phone or laptop. An opt-in "Check GitHub for updates" button fetches the
   releases feed directly and is off by default (no cloud dependency, no
@@ -836,9 +838,11 @@ wins.
   through `zstd` into `/dev/disk/by-slot/other/*`, verifies the SHA-256,
   then `systemctl reboot "0 tryboot"`. On a tryboot start, rbd confirms
   after 60 s of normal running, once `systemctl is-active rbweb.service
-  rasbeacon-hostapd.service` succeeds (looking again every 15 s), by writing `rpi-slot-tryboot`'s output to
-  `autoboot.txt`, or forces a plain reboot (back to the old slot) after
-  5 minutes. Keys: `cmd/rbsign`, the `RASBEACON_UPDATE_SIGNING_KEY`
+  rasbeacon-hostapd.service` succeeds (looking again every 15 s) and
+  systemd's `NRestarts` for `rbd.service` is 0, by writing
+  `rpi-slot-tryboot`'s output to `autoboot.txt`, or forces a plain reboot
+  (back to the old slot) 5 minutes after boot (`/proc/uptime`, so a
+  crashing rbd doesn't start the wait again at every restart). Keys: `cmd/rbsign`, the `RASBEACON_UPDATE_SIGNING_KEY`
   secret, and `/usr/lib/rasbeacon/update-keys/*.pub` in the image.
 - **HTTPS:** as specified (generated or uploaded certificate). Setup, the
   portal notice and RFC 8908 stay on HTTP; logins over HTTP are refused

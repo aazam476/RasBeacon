@@ -44,8 +44,10 @@ const (
 	// confirmAfter: how long the new slot must run normally before it is
 	// made the default.
 	confirmAfter = time.Minute
-	// rollbackAfter: if the new slot isn't confirmed by then, restart into
-	// the old one.
+	// rollbackAfter: if the new slot isn't confirmed this long after the
+	// system started, restart into the old one. Counted from boot, not from
+	// rbd's start: systemd restarts a crashing rbd every few seconds, and
+	// each start would otherwise wait the whole time again, forever.
 	rollbackAfter = 5 * time.Minute
 	// confirmRetry: how long to wait before looking again when the web UI
 	// or the hotspot isn't running yet at confirmAfter. Until rollbackAfter
@@ -361,8 +363,9 @@ func (a *Agent) checkTrialStart() {
 
 	switch {
 	case a.update.trying:
-		slog.Warn("running a new system on trial", "version", version.Version)
-		a.afterFunc(rollbackAfter, a.rollbackIfUnconfirmed)
+		wait := max(rollbackAfter-time.Duration(a.uptimeSeconds())*time.Second, 0)
+		slog.Warn("running a new system on trial", "version", version.Version, "rollbackIn", wait)
+		a.afterFunc(wait, a.rollbackIfUnconfirmed)
 	case hasPending && !pending.Restarting:
 		// Installed, but RasBeacon never restarted into it: keep it waiting.
 		slog.Warn("an installed update is waiting for a restart", "update", pending.Version)
@@ -400,6 +403,15 @@ func (a *Agent) confirmUpdate() {
 		} else {
 			slog.Error("not confirming the update: the web UI or the hotspot isn't running", "error", err)
 		}
+		return
+	}
+	// rbd itself must have run without a crash since the system started:
+	// systemd restarts it after one, so a crash a minute in would otherwise
+	// pass unnoticed, and a release whose rbd keeps crashing would become
+	// the default, with no way back to the old one. The rollback follows.
+	restarts, err := a.runner.Run("systemctl", "show", "--property=NRestarts", "--value", rbdService)
+	if err != nil || strings.TrimSpace(restarts) != "0" {
+		slog.Error("not confirming the update: rbd restarted since the system started", "restarts", strings.TrimSpace(restarts), "error", err)
 		return
 	}
 	// rpi-slot-tryboot prints autoboot.txt for the slot that is running now.

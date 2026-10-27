@@ -100,6 +100,8 @@ import (
 // image/layer/rasbeacon.d/customize.overlay/usr/lib/systemd/system/.
 const (
 	hostapdService = "rasbeacon-hostapd.service"
+	// rbdService is rbd's own unit.
+	rbdService     = "rbd.service"
 	dnsmasqService = "rasbeacon-dnsmasq.service"
 	sshService     = "ssh.service"
 )
