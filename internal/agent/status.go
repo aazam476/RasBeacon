@@ -353,13 +353,21 @@ func (a *Agent) Diagnostics() string {
 // macAddress matches MAC addresses like 3a:1f:22:aa:bb:cc.
 var macAddress = regexp.MustCompile(`(?i)\b([0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}):[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}\b`)
 
-// Redact hides secrets and the last half of MAC addresses in text.
+// eui64Address matches the end of an IPv6 address a device built from its
+// MAC address (EUI-64): "ff:fe" sits in the middle of its last four
+// groups, as in fe80::381f:22ff:feaa:bbcc for the MAC 3a:1f:22:aa:bb:cc.
+// The last 24 bits after "fe" are the MAC's last half.
+var eui64Address = regexp.MustCompile(`(?i)(:[0-9a-f]{0,2}ff:fe)[0-9a-f]{2}:[0-9a-f]{1,4}\b`)
+
+// Redact hides secrets and the last half of MAC addresses in text, also
+// where a MAC is part of an IPv6 address (`ip neigh` lists those).
 func Redact(text string, secrets []string) string {
 	for _, secret := range secrets {
 		if secret != "" {
 			text = strings.ReplaceAll(text, secret, "<redacted>")
 		}
 	}
+	text = eui64Address.ReplaceAllString(text, "${1}xx:xxxx")
 	return macAddress.ReplaceAllString(text, "$1:xx:xx:xx")
 }
 

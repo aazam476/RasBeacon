@@ -581,6 +581,20 @@ func TestRedact_HidesSecretsAndMACs(t *testing.T) {
 	if !strings.Contains(got, "3a:1f:22:xx:xx:xx") {
 		t.Errorf("MAC should keep its first half: %q", got)
 	}
+
+	// IPv6 addresses built from a MAC address (EUI-64) carry it too.
+	for _, tt := range []struct{ in, want string }{
+		{"fe80::381f:22ff:feaa:bbcc dev br-lan", "fe80::381f:22ff:fexx:xxxx dev br-lan"},
+		{"2001:db8:1:2:21f:22ff:fe0a:b", "2001:db8:1:2:21f:22ff:fexx:xxxx"},
+		{"FE80::0200:00FF:FEAA:BBCC", "FE80::0200:00FF:FExx:xxxx"},
+		{"fe80::ff:fe00:1 lladdr", "fe80::ff:fexx:xxxx lladdr"},
+		// Private (random) addresses carry no MAC: left alone.
+		{"2001:db8::8d3c:41a2:97e5:1f0b", "2001:db8::8d3c:41a2:97e5:1f0b"},
+	} {
+		if got := Redact(tt.in, nil); got != tt.want {
+			t.Errorf("Redact(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
 }
 
 func TestHTTP_ClaimWithBadInputReturns400AndField(t *testing.T) {
