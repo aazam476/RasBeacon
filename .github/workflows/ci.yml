@@ -139,10 +139,12 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+      # debian-archive-keyring: Debian's signing keys, which Ubuntu doesn't
+      # have, to check the packages the machine is built from.
       - name: Install mmdebstrap and QEMU
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q --no-install-recommends mmdebstrap qemu-system-x86 e2fsprogs
+          sudo apt-get install -y -q --no-install-recommends mmdebstrap debian-archive-keyring qemu-system-x86 e2fsprogs
           sudo chmod 666 /dev/kvm
       # A Debian system with the image's packages, programs and services,
       # plus the test (see test/system/README.md).

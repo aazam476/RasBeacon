@@ -30,8 +30,14 @@ packages="systemd-sysv,linux-image-amd64,initramfs-tools,udev,kmod,iproute2,iw,r
 hostapd,dnsmasq-base,dnsmasq-utils,wpasupplicant,ca-certificates,wireguard-tools,
 systemd-resolved,nftables,netbase,wireless-regdb,zstd,chromium-headless-shell,fonts-dejavu-core,
 busybox"
+# Debian's signing keys check the packages (on Ubuntu they come from the
+# debian-archive-keyring package).
+keyring=""
+if [ -f /usr/share/keyrings/debian-archive-keyring.gpg ]; then
+	keyring="--keyring=/usr/share/keyrings/debian-archive-keyring.gpg"
+fi
 rm -rf "$root"
-mmdebstrap --variant=apt --include="$(echo "$packages" | tr -d '\n ')" \
+mmdebstrap --variant=apt $keyring --include="$(echo "$packages" | tr -d '\n ')" \
 	--customize-hook='chroot "$1" useradd --system --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin rbweb' \
 	--customize-hook='chroot "$1" useradd --system --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin rbdoh' \
 	--customize-hook='chroot "$1" useradd --system --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin rbbrowser' \
