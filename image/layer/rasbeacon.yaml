@@ -30,6 +30,9 @@ mmdebstrap:
     - systemd-resolved
     # Firewall
     - nftables
+    # /etc/protocols, where nftables looks up protocol names such as
+    # "ipv6-icmp" in RasBeacon's rules (without it, loading them fails)
+    - netbase
     # Wi-Fi and network tools used by rbd
     - iw
     # Each country's Wi-Fi rules (/lib/firmware/regulatory.db): the kernel
