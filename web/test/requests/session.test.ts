@@ -73,12 +73,16 @@ describe('sending requests', () => {
         ),
       );
       const upload = api.uploadBackup(testFile('big.rbbackup')).catch(() => undefined);
+      // rbd downloading a large plugin, and a restore loading the backup's plugins, wait as long too.
+      const download = api.downloadCatalogPlugin('builtin', 'big.rba').catch(() => undefined);
+      const update = api.downloadPluginUpdate('big').catch(() => undefined);
+      const restore = api.restoreBackup('backup-password').catch(() => undefined);
       const status = api.getStatus().catch(() => undefined);
       // Two hours: a 6 GB backup over a slow hotspot.
       await vi.advanceTimersByTimeAsync(2 * 60 * 60_000);
       await status;
       expect(aborted).toEqual(['/api/v1/status']);
-      void upload;
+      void [upload, download, update, restore];
     } finally {
       vi.useRealTimers();
     }

@@ -114,11 +114,21 @@ interface RequestOptions {
   body?: unknown;
   /** Sent as the raw body (update files). */
   file?: Blob;
-  /** How long to wait for the answer. Ignored for uploads (`file`), which have no limit. */
+  /**
+   * How long to wait for the answer; `NO_TIME_LIMIT` (0) waits as long as it takes. Uploads (`file`)
+   * always have no limit.
+   */
   timeoutMs?: number;
   /** Set on the second try after a refused CSRF token, so it is retried only once. */
   retried?: boolean;
 }
+
+/**
+ * For transfers whose length depends on the link: rbd downloading a large plugin, or a restore
+ * loading the backup's plugins. A fixed limit would give up near the end on a slow link and blame
+ * the network. (Not `Infinity`: `setTimeout` treats it as 0, ending the request at once.)
+ */
+const NO_TIME_LIMIT = 0;
 
 /** rbweb's `field` on a 403 that refused the CSRF token (internal/webserver/server.go). */
 const CSRF_FIELD = 'csrfToken';
@@ -150,10 +160,11 @@ async function request<T>(method: string, path: string, options: RequestOptions 
   if (method !== 'GET' && csrfToken) headers['X-CSRF-Token'] = csrfToken;
 
   const controller = new AbortController();
-  // Uploads (updates, plugins, backups) get no time limit here: a large backup on a slow link can
-  // take hours. rbweb ends an upload that stops sending data for 2 minutes
+  // Uploads (updates, plugins, backups) and NO_TIME_LIMIT requests get no time limit here: a large
+  // backup on a slow link can take hours. rbweb ends an upload that stops sending data for 2 minutes
   // (internal/webserver/transfers.go), so a stuck one still fails.
-  const timer = file === undefined ? setTimeout(() => controller.abort(), timeoutMs) : undefined;
+  const timer =
+    file === undefined && timeoutMs !== NO_TIME_LIMIT ? setTimeout(() => controller.abort(), timeoutMs) : undefined;
   let response: Response;
   try {
     response = await fetch(`/api/v1${path}`, {
@@ -375,9 +386,9 @@ export const uploadPlugin = (file: File) => request<PluginPreview>('POST', '/plu
 export const getPluginCatalog = (refresh: boolean) =>
   request<PluginCatalog>('POST', '/plugins/catalog', { body: { refresh }, timeoutMs: 120_000 });
 export const downloadCatalogPlugin = (source: string, file: string) =>
-  request<PluginPreview>('POST', '/plugins/catalog/download', { body: { source, file }, timeoutMs: 30 * 60_000 });
+  request<PluginPreview>('POST', '/plugins/catalog/download', { body: { source, file }, timeoutMs: NO_TIME_LIMIT });
 export const downloadPluginUpdate = (id: string) =>
-  request<PluginPreview>('POST', '/plugins/update', { body: { id }, timeoutMs: 30 * 60_000 });
+  request<PluginPreview>('POST', '/plugins/update', { body: { id }, timeoutMs: NO_TIME_LIMIT });
 export const installPlugin = (stagingId: string, choices: PluginChoices, useKeptData = false) =>
   request<Plugin>('POST', '/plugins/install', { body: { stagingId, ...choices, useKeptData } });
 export const cancelPluginInstall = (stagingId: string) =>
@@ -407,5 +418,5 @@ export const uploadBackup = (file: File) => request<void>('POST', '/system/resto
 export const restoreBackup = (password: string) =>
   request<{ version: string; created: string; plugins: boolean }>('POST', '/system/restore', {
     body: { password },
-    timeoutMs: 30 * 60_000,
+    timeoutMs: NO_TIME_LIMIT,
   });
