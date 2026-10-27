@@ -305,6 +305,12 @@ export function applyWorstCase(demo: DemoState) {
     ],
     withVpn: true,
   };
+  // USB Ethernet: one in use, one plugged into another network, one without a cable.
+  router.status.lanPorts = [
+    { name: 'enx00e04c680001', cablePlugged: true, connected: true },
+    { name: 'enx3c18a0b1c2d3', cablePlugged: true, connected: false, foreignDhcpServer: '192.168.178.1' },
+    { name: 'eth1', cablePlugged: false, connected: false },
+  ];
   // Port forwarding: the longest name, a risky port, a range, a plugin with a long name, and a
   // device that has left (shown by its MAC address). The uplink's shared address adds the notice.
   router.portForwardingRules = [

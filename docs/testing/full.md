@@ -233,6 +233,13 @@ The VPN stays **off** for this section.
    plugged into a network", and other devices at home keep getting normal
    addresses.
 6. Set the port back to **Uplink**, **Save**.
+7. **USB Ethernet (new, needs a USB Ethernet adapter):** keep the port as
+   **Uplink** with its cable to the internet, plug the adapter into the Pi
+   and the laptop into the adapter. **Expect:** Internet → *USB Ethernet*
+   says *For devices*; the laptop gets a `10.87.0.x` address, internet, and
+   shows on Clients with the cable icon. Plug the adapter into your home
+   router instead: *Not used*, with a warning, and your home network keeps
+   working.
 
 ## 8. VPN and kill switch
 
@@ -643,7 +650,7 @@ Board (Pi 4/5/3B/3B+/Zero 2 W) / RAM:     Adapter:          Card size:          
 4  Ethernet: / scan lists networks: / Wi-Fi uplink + switch: / eduroam: / hotspot move kept working 15 min: / renew, disconnect:
 5  dns.google saved as full address: / leak test shows Google: / rbdoh running: / Cloudflare+1.1.1.1: / bad entry refused: / plain only, rbdoh stopped: / back to network's:
 6  Count + this device: / traffic rates: / pause + reboot-proof: / disconnect: / flush lease: / rename pencil: / data limit without metered: / fixed address: / port forward from uplink side + hotspot, with VPN: / IPv6 pinhole:
-7  Laptop on client port gets address+internet: / listed with cable icon, no Disconnect: / leaves list: / safety warning:
+7  Laptop on client port gets address+internet: / listed with cable icon, no Disconnect: / leaves list: / safety warning: / USB Ethernet for devices + not used on a router:
 8  Import turns VPN on + connect (IP = VPN): / kill switch + VPN off blocks, warns: / rename profile: / DNS = VPN's even with own DNS set: / kill switch on no leak: / off falls back: / boot no leak: / MTU check: / profiles: / clock:
 9  Speed test: down __ up __ ping __ location __, took __ s / speed.cloudflare.com: down __ up __
 10 Login page notice: / zero-leak login worked, tap delay __ s: / no leak: / login mode:

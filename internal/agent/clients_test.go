@@ -90,7 +90,7 @@ func TestClients_DevicesOnTheEthernetClientPort(t *testing.T) {
 		t.Fatalf("%d clients before the port joined", n)
 	}
 	e.agent.mu.Lock()
-	e.agent.uplink.ethernetInBridge = true
+	e.agent.uplink.ethernet.inBridge = true
 	e.agent.mu.Unlock()
 
 	e.agent.Status()

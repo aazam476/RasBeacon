@@ -80,6 +80,7 @@ func (a *Agent) StatusFor(viewer string) api.Status {
 		LAN:                 a.lanInfo(),
 		Speedtest:           a.speedtestStatus(),
 		EthernetDiagnostics: a.ethernetDiagnostics(),
+		LANPorts:            a.lanPortStatus(),
 	}
 	// Empty lists are sent as [] rather than null, which is easier for the UI.
 	if status.Radios == nil {
@@ -103,22 +104,28 @@ func (a *Agent) connectedClients() []stations.Station {
 	return append(a.stationsOn(radio.HotspotInterfaceName), a.wiredClients()...)
 }
 
-// wiredClients lists devices on the Ethernet client port, from the devices
-// the hotspot bridge has seen behind that port, with their DHCP leases.
+// wiredClients lists devices on the wired ports for devices (the Ethernet
+// client port and USB Ethernet adapters), from the devices the hotspot
+// bridge has seen behind those ports, with their DHCP leases.
 // "Connected for" counts from when RasBeacon first saw each one.
 func (a *Agent) wiredClients() []stations.Station {
-	if !a.uplink.ethernetInBridge {
+	ports := a.bridgedWiredPorts()
+	if len(ports) == 0 {
 		a.uplink.wiredSince = nil
 		return nil
 	}
-	out, err := a.runner.Run("bridge", "-json", "fdb", "show", "br", render.BridgeName, "brport", ethernetInterface)
-	if err != nil {
-		return nil
-	}
-	macs, err := stations.ParseBridgeFDB(out)
-	if err != nil {
-		slog.Warn("could not list the devices on the Ethernet port", "error", err)
-		return nil
+	var macs []string
+	for _, port := range ports {
+		out, err := a.runner.Run("bridge", "-json", "fdb", "show", "br", render.BridgeName, "brport", port)
+		if err != nil {
+			continue
+		}
+		found, err := stations.ParseBridgeFDB(out)
+		if err != nil {
+			slog.Warn("could not list the devices on a wired port", "port", port, "error", err)
+			continue
+		}
+		macs = append(macs, found...)
 	}
 	seen := map[string]time.Time{}
 	var wired []stations.Station

@@ -385,6 +385,8 @@ export interface Status {
   speedtest: Speedtest;
   /** null while the cable doesn't carry the internet. */
   ethernetDiagnostics: EthernetDiagnostics | null;
+  /** Extra wired ports for devices, such as a USB Ethernet adapter; empty without one. */
+  lanPorts: LANPortStatus[];
 }
 
 // --- Settings --------------------------------------------------------------------------------
@@ -922,4 +924,18 @@ export interface PluginLogsResponse {
 export interface PluginLogLine {
   time?: string;
   text: string;
+}
+
+/**
+ * An extra wired port for devices (a USB Ethernet adapter). A device plugged into it joins the
+ * hotspot, after the same safety check as the Ethernet client port.
+ */
+export interface LANPortStatus {
+  /** The interface, e.g. "enx00e04c680001". */
+  name: string;
+  cablePlugged: boolean;
+  /** True when the port has joined the hotspot network. */
+  connected: boolean;
+  /** Set when a DHCP server answered on the port, so it was kept off the hotspot network. */
+  foreignDhcpServer?: string;
 }

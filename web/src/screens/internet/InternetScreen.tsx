@@ -9,6 +9,7 @@ import { AddNetworkSheet, type AddNetworkStart } from './AddNetworkSheet';
 import { ConnectionSection } from './ConnectionSection';
 import { DnsSection } from './DnsSection';
 import { EthernetSection } from './EthernetSection';
+import { LANPortsSection } from './LANPortsSection';
 import { SavedNetworksSection } from './SavedNetworksSection';
 import { SpeedtestSection } from './SpeedtestSection';
 import { UnsavedChangesBar } from './UnsavedChangesBar';
@@ -61,6 +62,7 @@ function NetworkSettings({ settings, status }: { settings: UplinkSettings; statu
           diagnostics={status?.ethernetDiagnostics}
         />
       )}
+      <LANPortsSection ports={status?.lanPorts ?? []} />
       <DnsSection />
       <PortForwardingLink />
       {adding && (

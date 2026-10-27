@@ -309,6 +309,7 @@ export function createMockRouter(): MockRouter {
           pingMs: 4,
         },
       },
+      lanPorts: [],
       ethernetDiagnostics: null,
     },
 

@@ -156,8 +156,11 @@ export function Row({ leading, trailing, children, className, ...text }: RowProp
     );
   }
   return (
-    <div className={cn('row', className)}>
-      <Leading leading={leading} />
+    <div className={cn('row @container', className)}>
+      {/* With very large text on a narrow screen the icon gives its room to the words. */}
+      <span className="contents @max-[14rem]:hidden">
+        <Leading leading={leading} />
+      </span>
       <RowText {...text} />
       {trailing}
     </div>

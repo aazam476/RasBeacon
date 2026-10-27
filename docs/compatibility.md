@@ -55,6 +55,23 @@ drivers generally can; please report what the Realtek adapters show.
 | MT7921AU adapters (e.g. Alfa AWUS036AXML) | MT7921AU (mt7921u) | varies | Untested (fallback) | Driver table 15 | — | Higher (USB 3, Wi-Fi 6) | AP mode since Linux 5.19 |
 | Built-in Wi-Fi (any Pi) as the hotspot | brcmfmac | — | **Known-limited** | About 8 (third-party reports) | — | — | Used only as a fallback; RasBeacon warns on the status page |
 
+## USB Ethernet adapters (extra wired ports for devices)
+
+A USB Ethernet adapter becomes a wired port of the hotspot, so the built-in
+Ethernet port can carry the internet while a computer, a console or a
+switch still connects by cable (on the Pi Zero 2 W, which has no Ethernet
+port, it is the only wired port). Like the Ethernet client port, it joins
+the hotspot only when no DHCP server answers on it. Any adapter with an
+in-kernel driver should work; phones and modems (drivers `rndis_host`,
+`ipheth`, `qmi_wwan`, `cdc_mbim`, `huawei_cdc_ncm`) are never used as ports
+for devices.
+
+| Adapter | Chip (Linux driver) | Status | Notes |
+|---|---|---|---|
+| Generic USB 3 gigabit adapters | RTL8153 (r8152) | Untested (reference) | The most common chip |
+| Generic USB 3 gigabit adapters | AX88179 (ax88179_178a) | Untested | |
+| Generic USB 2 100 Mb/s adapters | AX88772 (asix) | Untested | |
+
 ## Power banks
 
 | Model | Capacity | Status | Auto-off with RasBeacon idle? | Pass-through charging? | Measured runtime |

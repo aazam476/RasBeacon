@@ -189,6 +189,10 @@ since their image has one copy of the system.
 - **Share the Wi-Fi with a QR code:** the **Hotspot** and **Guests** pages.
 - **Name your devices, see their data use** and set a data limit per
   device: the **Clients** page.
+- **More wired devices:** plug a USB Ethernet adapter into RasBeacon and
+  it becomes a port of your hotspot (with the same check as the client
+  port: a cable that leads to another network is never connected), so the
+  Ethernet port can carry the internet at the same time.
 - **Fixed addresses and port forwarding:** give a device the same address
   every time (the **Clients** page), and let the internet reach a game
   server, a camera or a plugin through a port (Internet → **Port

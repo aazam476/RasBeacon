@@ -143,6 +143,24 @@ type Status struct {
 	// EthernetDiagnostics describes the Ethernet port while it carries the
 	// internet (null otherwise).
 	EthernetDiagnostics *EthernetDiagnostics `json:"ethernetDiagnostics"`
+	// LANPorts are extra wired ports for devices, such as a USB Ethernet
+	// adapter (empty without one).
+	LANPorts []LANPortStatus `json:"lanPorts"`
+}
+
+// LANPortStatus is one extra wired port for devices (a USB Ethernet
+// adapter). Devices plugged into it join the hotspot network, after the
+// same safety check as the Ethernet client port.
+type LANPortStatus struct {
+	// Name is the interface, e.g. "enx00e04c680001".
+	Name string `json:"name"`
+	// CablePlugged is true when the port has a link.
+	CablePlugged bool `json:"cablePlugged"`
+	// Connected is true when the port has joined the hotspot network.
+	Connected bool `json:"connected"`
+	// ForeignDHCPServer is set when a DHCP server answered on the port, so
+	// it was kept off the hotspot network (it leads to another network).
+	ForeignDHCPServer string `json:"foreignDhcpServer,omitempty"`
 }
 
 // Throughput is the traffic between RasBeacon and the devices on its

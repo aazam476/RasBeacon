@@ -64,17 +64,15 @@ var ErrNoWiFiUplink = errors.New("there is no Wi-Fi radio available for joining 
 type uplinkState struct {
 	// status is the result of the last check, shown on the status page.
 	status api.UplinkStatus
-	// ethernetCarrierChanges is the Ethernet port's plug/unplug counter at
-	// the last client-port safety check ("" = check again).
-	ethernetCarrierChanges string
-	// ethernetInBridge is true when Ethernet (client port) has joined the
-	// hotspot network.
-	ethernetInBridge bool
-	// wiredSince is when each device on the Ethernet client port was first
-	// seen (see wiredClients).
+	// ethernet is the built-in Ethernet port's safety check, while it is
+	// the client port.
+	ethernet wiredPort
+	// lanPorts are the extra wired ports (USB Ethernet adapters), by
+	// interface name, which are always for devices (see lanports.go).
+	lanPorts map[string]*wiredPort
+	// wiredSince is when each device on a wired port was first seen (see
+	// wiredClients).
 	wiredSince map[string]time.Time
-	// foreignDHCPServer is the DHCP server found by the safety check.
-	foreignDHCPServer string
 	// connectedSince is when the uplink last became connected.
 	connectedSince time.Time
 }
@@ -131,16 +129,16 @@ func (a *Agent) applyUplinkConfig() error {
 			if err := system.SetLinkUp(a.runner, ethernetInterface); err != nil {
 				slog.Warn("could not bring up Ethernet", "error", err)
 			}
-		} else if a.uplink.ethernetInBridge {
+		} else if a.uplink.ethernet.inBridge {
 			if err := system.RemoveFromBridge(a.runner, ethernetInterface); err != nil {
 				return err
 			}
-			a.uplink.ethernetInBridge = false
+			a.uplink.ethernet.inBridge = false
 		}
 		// Run the safety check again at the next check, in case the role
 		// just changed.
-		a.uplink.ethernetCarrierChanges = ""
-		a.uplink.foreignDHCPServer = ""
+		a.uplink.ethernet.carrierChanges = ""
+		a.uplink.ethernet.foreignDHCPServer = ""
 	}
 
 	// Wi-Fi uplink.
@@ -278,6 +276,7 @@ func (a *Agent) RunUplinkMonitor() {
 		time.Sleep(UplinkCheckInterval)
 		a.mu.Lock()
 		a.checkUplink()
+		a.checkLANPorts()
 		a.checkHotspot()
 		a.refreshPinholes()
 		a.renewCertificateIfDue()
@@ -390,7 +389,7 @@ func (a *Agent) observeUplink() (api.UplinkStatus, []netip.Prefix) {
 		Present:           a.hasEthernet(),
 		Role:              a.cfg.Ethernet.Role,
 		CablePlugged:      a.readSysNet(ethernetInterface, "carrier") == "1",
-		ForeignDHCPServer: a.uplink.foreignDHCPServer,
+		ForeignDHCPServer: a.uplink.ethernet.foreignDHCPServer,
 	}
 	if s.Ethernet.Present {
 		s.Ethernet.LinkSpeed, s.Ethernet.Duplex = a.ethernetLink()
@@ -442,53 +441,72 @@ func (a *Agent) tempDisabledNetworks(iface string) []string {
 	return uplink.ParseTempDisabled(out)
 }
 
-// checkEthernetClientPort is the safety check for Ethernet in client-port
-// mode. Each time a cable is plugged in, the port is kept off the hotspot
-// network until we know no DHCP server answers on it. If one answers, the
-// cable probably leads to someone else's network (a hotel wall socket), and
-// handing out our addresses there would break it.
+// checkEthernetClientPort is the safety check for the built-in Ethernet
+// port in client-port mode (see checkWiredPort).
 func (a *Agent) checkEthernetClientPort() {
 	if !a.hasEthernet() || a.cfg.Ethernet.Role != config.EthernetClientPort {
 		return
 	}
+	a.checkWiredPort(ethernetInterface, &a.uplink.ethernet)
+}
+
+// wiredPort is what rbd knows about a wired port for devices between
+// checks.
+type wiredPort struct {
+	// carrierChanges is the port's plug/unplug counter at the last safety
+	// check ("" = check again).
+	carrierChanges string
+	// inBridge is true when the port has joined the hotspot network.
+	inBridge bool
+	// foreignDHCPServer is the DHCP server the safety check found ("" if
+	// none).
+	foreignDHCPServer string
+}
+
+// checkWiredPort is the safety check for a wired port meant for devices.
+// Each time a cable is plugged in, the port is kept off the hotspot network
+// until we know no DHCP server answers on it. If one answers, the cable
+// probably leads to someone else's network (a hotel wall socket), and
+// handing out our addresses there would break it.
+func (a *Agent) checkWiredPort(iface string, port *wiredPort) {
 	// carrier_changes counts every plug and unplug. If it is unchanged since
 	// the last check, the cable has not moved and nothing needs doing.
-	changes := a.readSysNet(ethernetInterface, "carrier_changes")
-	if changes == a.uplink.ethernetCarrierChanges {
+	changes := a.readSysNet(iface, "carrier_changes")
+	if changes == port.carrierChanges {
 		return
 	}
-	a.uplink.ethernetCarrierChanges = changes
-	a.uplink.foreignDHCPServer = ""
-	if a.uplink.ethernetInBridge {
-		if err := system.RemoveFromBridge(a.runner, ethernetInterface); err != nil {
-			slog.Error("could not take Ethernet off the hotspot network", "error", err)
+	port.carrierChanges = changes
+	port.foreignDHCPServer = ""
+	if port.inBridge {
+		if err := system.RemoveFromBridge(a.runner, iface); err != nil {
+			slog.Error("could not take a wired port off the hotspot network", "port", iface, "error", err)
 			return
 		}
-		a.uplink.ethernetInBridge = false
+		port.inBridge = false
 	}
-	if a.readSysNet(ethernetInterface, "carrier") != "1" {
+	if a.readSysNet(iface, "carrier") != "1" {
 		return // no cable: check again when one is plugged in
 	}
 
-	result, err := a.dhcpProbe(ethernetInterface, dhcpProbeTimeout)
+	result, err := a.dhcpProbe(iface, dhcpProbeTimeout)
 	if err != nil {
-		slog.Warn("Ethernet safety check failed; keeping the port off the hotspot network", "error", err)
-		a.uplink.ethernetCarrierChanges = "" // try again at the next check
+		slog.Warn("wired port safety check failed; keeping the port off the hotspot network", "port", iface, "error", err)
+		port.carrierChanges = "" // try again at the next check
 		return
 	}
 	if result.ServerFound {
-		slog.Warn("a DHCP server answered on the Ethernet client port; not connecting it",
-			"server", result.ServerAddress)
-		a.uplink.foreignDHCPServer = result.ServerAddress
+		slog.Warn("a DHCP server answered on a wired port for devices; not connecting it",
+			"port", iface, "server", result.ServerAddress)
+		port.foreignDHCPServer = result.ServerAddress
 		return
 	}
-	if err := system.AddToBridge(a.runner, ethernetInterface, render.BridgeName); err != nil {
-		slog.Error("could not connect Ethernet to the hotspot network", "error", err)
-		a.uplink.ethernetCarrierChanges = ""
+	if err := system.AddToBridge(a.runner, iface, render.BridgeName); err != nil {
+		slog.Error("could not connect a wired port to the hotspot network", "port", iface, "error", err)
+		port.carrierChanges = ""
 		return
 	}
-	a.uplink.ethernetInBridge = true
-	slog.Info("Ethernet client port connected to the hotspot network")
+	port.inBridge = true
+	slog.Info("wired port connected to the hotspot network", "port", iface)
 }
 
 // readSysNet reads one of an interface's files in /sys/class/net, e.g.
@@ -553,7 +571,7 @@ func (a *Agent) uplinkWarnings() []string {
 			"so the hotspot network moved to %s. Devices get new addresses automatically. "+
 			"These settings are now at http://%s/.", a.lan.Prefix.Masked(), a.lan.Address()))
 	}
-	if a.uplink.foreignDHCPServer != "" {
+	if a.uplink.ethernet.foreignDHCPServer != "" {
 		warnings = append(warnings, "The Ethernet port is set to \"Client port\", but it seems to be plugged into a "+
 			"network (a DHCP server answered), so it was not connected. If this cable is your internet "+
 			"connection, set the Ethernet port to \"Uplink\" on the Internet page.")

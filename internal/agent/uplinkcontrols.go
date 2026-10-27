@@ -126,7 +126,7 @@ func (a *Agent) RescanEthernetPort() error {
 			return fmt.Errorf("checking the port again: %w", err)
 		}
 	} else {
-		a.uplink.ethernetCarrierChanges = "" // makes the safety check run now
+		a.uplink.ethernet.carrierChanges = "" // makes the safety check run now
 	}
 	slog.Info("Ethernet port checked again", "role", a.cfg.Ethernet.Role)
 	a.checkUplink()
