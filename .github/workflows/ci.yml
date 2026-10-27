@@ -150,8 +150,9 @@ jobs:
       # plus the test (see test/system/README.md).
       - name: Build the virtual machine
         run: sudo env "PATH=$PATH" GOCACHE="$(go env GOCACHE)" GOMODCACHE="$(go env GOMODCACHE)" sh test/system/build-vm.sh "$RUNNER_TEMP/vm"
+      # As root, like the build: the machine's folder belongs to root.
       - name: Run the test
-        run: sh test/system/run-vm.sh "$RUNNER_TEMP/vm"
+        run: sudo sh test/system/run-vm.sh "$RUNNER_TEMP/vm"
       - name: Keep the console log
         if: always()
         uses: actions/upload-artifact@v7
