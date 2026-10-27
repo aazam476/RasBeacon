@@ -537,6 +537,18 @@ type FirewallInput struct {
 	// Welcome, when set, holds devices on some networks at the welcome
 	// page (the owner's own captive portal) until they accept it.
 	Welcome *WelcomeRule
+	// QoS, when set, sorts devices' internet traffic into the priority
+	// device classes the shaping uses (see qos.go).
+	QoS *QoSRule
+}
+
+// QoSRule is the priority devices in the firewall.
+type QoSRule struct {
+	// PriorityMACs are the priority devices.
+	PriorityMACs []string
+	// Upload and Download say which directions are shaped; only those
+	// are sorted.
+	Upload, Download bool
 }
 
 // WelcomePort is where rbweb serves the welcome page. Web requests from
@@ -678,6 +690,16 @@ type firewallData struct {
 	Pinholes []pinholeData
 	// The welcome page (see FirewallInput.Welcome).
 	Welcome *welcomeData
+	// Priority devices (see FirewallInput.QoS).
+	QoS *qosData
+}
+
+type qosData struct {
+	PriorityMACs     []string
+	Upload, Download bool
+	Label            int
+	PriorityClass    string
+	NormalClass      string
 }
 
 type welcomeData struct {
@@ -791,7 +813,30 @@ func Firewall(in FirewallInput) (string, error) {
 	if err := addWelcome(&data, in); err != nil {
 		return "", err
 	}
+	if err := addQoS(&data, in); err != nil {
+		return "", err
+	}
 	return execute("firewall.nft.tmpl", data)
+}
+
+// addQoS checks the priority devices and puts them in data. Nothing is
+// sorted without a shaped direction, or before setup (no egress).
+func addQoS(data *firewallData, in FirewallInput) error {
+	q := in.QoS
+	if q == nil || len(in.Egress) == 0 || (!q.Upload && !q.Download) {
+		return nil
+	}
+	d := &qosData{Upload: q.Upload, Download: q.Download, Label: QoSLabel,
+		PriorityClass: QoSPriorityClass, NormalClass: QoSNormalClass}
+	for _, mac := range q.PriorityMACs {
+		hw, err := net.ParseMAC(mac)
+		if err != nil || len(hw) != 6 {
+			return fmt.Errorf("invalid priority device %q", mac)
+		}
+		d.PriorityMACs = append(d.PriorityMACs, hw.String())
+	}
+	data.QoS = d
+	return nil
 }
 
 // addPortForwards checks the port forwarding rules and puts them in data.

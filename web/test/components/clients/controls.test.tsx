@@ -46,7 +46,10 @@ describe('a device’s controls', () => {
     const client = device.status.data!.clients[0];
     const name = client.name || client.hostname;
     expect(within(card(name)).getAllByText(/Data limit reached/).length).toBeGreaterThan(0);
-    expect(within(card(name)).getByRole('switch')).toHaveProperty('disabled', true);
+    expect(within(card(name)).getByRole('switch', { name: `Internet access for ${name}` })).toHaveProperty(
+      'disabled',
+      true,
+    );
   });
 });
 

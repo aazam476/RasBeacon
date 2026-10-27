@@ -117,6 +117,8 @@ export interface Client {
   name?: string;
   /** The address it always gets on the hotspot, when the owner chose one ("Always use this address"). */
   fixedAddress?: string;
+  /** A priority device: its traffic goes first when the internet connection is busy. */
+  priority?: boolean;
   /** Data used since the counters were reset (Wi-Fi devices; 0 for wired ones). */
   downBytes: number;
   upBytes: number;
@@ -560,6 +562,22 @@ export interface UsageSettings {
   since?: string;
   /** How many devices the limit pauses now; read-only. */
   devicesPaused: number;
+}
+
+/**
+ * GET/PUT /api/v1/settings/qos: the internet connection's speeds, which priority devices need.
+ * RasBeacon sends at 90% of them so the queue forms where it can put priority devices first.
+ */
+export interface QoSSettings {
+  /** Kilobits per second; 0 = not set (that direction isn't shaped). */
+  uploadKbps: number;
+  downloadKbps: number;
+  /** How many priority devices there are; read-only. */
+  priorityDevices: number;
+  /** Priority devices' traffic is being put first now; read-only. */
+  active: boolean;
+  /** Why it isn't, when RasBeacon couldn't set up its queues; read-only. */
+  problem?: string;
 }
 
 /** POST /api/v1/wifi-qr: a QR code phones scan to join a network. */

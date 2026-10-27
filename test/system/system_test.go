@@ -513,6 +513,7 @@ func TestScenarios(t *testing.T) {
 		{"7 rbd restarts with the guest network on", restartWithGuests},
 		{"8 the self-check repairs the hotspot", selfCheck},
 		{"9 the Wi-Fi uplink joins with a cloned MAC address", clonedMAC},
+		{"10 priority devices get their queues", priorityDevices},
 	}
 	for _, step := range steps {
 		if !t.Run(step.name, step.run) {
@@ -752,5 +753,31 @@ func clonedMAC(t *testing.T) {
 	out, _ := tryRun("", "ip", "-o", "link", "show", "wlan1")
 	if !strings.Contains(out, cloned) {
 		t.Errorf("wlan1 should have the cloned address: %s", out)
+	}
+}
+
+// priorityDevices checks that the real kernel takes RasBeacon's queues (the
+// htb, ifb and fq_codel modules) and its firewall's priority rules, and
+// that they go away with the last priority device.
+func priorityDevices(t *testing.T) {
+	const mac = "02:52:42:00:00:42"
+	rbd(t, "PUT", "/settings/qos", map[string]any{"uploadKbps": 20_000, "downloadKbps": 50_000}, nil)
+	rbd(t, "POST", "/clients/priority", map[string]any{"mac": mac, "priority": true}, nil)
+	waitFor(t, "the queues to be set up", time.Minute, func() (bool, string) {
+		var qos map[string]any
+		rbd(t, "GET", "/settings/qos", nil, &qos)
+		return qos["active"] == true, fmt.Sprint(qos)
+	})
+	if out, _ := tryRun("", "tc", "qdisc", "show"); !strings.Contains(out, "qdisc htb 1: dev rbifb0 root") ||
+		!strings.Contains(out, "fq_codel") {
+		t.Errorf("the queues should be there:\n%s", out)
+	}
+	if out, _ := tryRun("", "nft", "list", "chain", "inet", "rasbeacon", "qos"); !strings.Contains(out, mac) {
+		t.Errorf("the firewall should label the priority device's connections:\n%s", out)
+	}
+
+	rbd(t, "POST", "/clients/priority", map[string]any{"mac": mac, "priority": false}, nil)
+	if out, _ := tryRun("", "tc", "qdisc", "show"); strings.Contains(out, "htb") {
+		t.Errorf("the queues should be gone:\n%s", out)
 	}
 }

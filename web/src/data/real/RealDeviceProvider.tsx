@@ -28,6 +28,7 @@ import type {
   Status,
   UplinkSettings,
   UsageSettings,
+  QoSSettings,
   PluginsState,
   VPNSettings,
   WelcomeSettings,
@@ -67,6 +68,7 @@ interface DataTypes {
   updateSettings: UpdateSettings;
   accessSettings: AccessSettings;
   usageSettings: UsageSettings;
+  qosSettings: QoSSettings;
   plugins: PluginsState;
   httpsSettings: HTTPSSettings;
   portal: PortalStatus;
@@ -89,6 +91,7 @@ const LOADERS: { [K in DataKey]: () => Promise<DataTypes[K]> } = {
   updateSettings: api.getUpdateSettings,
   accessSettings: api.getAccessSettings,
   usageSettings: api.getUsageSettings,
+  qosSettings: api.getQoSSettings,
   plugins: api.getPlugins,
   httpsSettings: api.getHTTPSSettings,
   portal: api.getPortalStatus,
@@ -110,6 +113,7 @@ const NO_DATA: AllData = {
   updateSettings: NOTHING,
   accessSettings: NOTHING,
   usageSettings: NOTHING,
+  qosSettings: NOTHING,
   plugins: NOTHING,
   httpsSettings: NOTHING,
   portal: NOTHING,
@@ -130,19 +134,20 @@ const SETTINGS: DataKey[] = [
   'updateSettings',
   'accessSettings',
   'usageSettings',
+  'qosSettings',
   'httpsSettings',
 ];
 
 /** What each page loads again when it opens. */
 const PAGE_DATA: Record<string, DataKey[]> = {
   '/': ['status'],
-  '/internet': ['uplinkSettings', 'dnsSettings', 'portForwarding', 'modemSettings', 'status'],
+  '/internet': ['uplinkSettings', 'dnsSettings', 'portForwarding', 'modemSettings', 'qosSettings', 'status'],
   '/internet/port-forwarding': ['portForwarding', 'status'],
   '/vpn': ['vpnSettings', 'status'],
   '/hotspot': ['hotspotSettings', 'accessSettings', 'status'],
   '/guests': ['guestSettings', 'welcomeSettings'],
   '/guests/welcome': ['welcomeSettings', 'guestSettings'],
-  '/clients': ['status', 'usageSettings'],
+  '/clients': ['status', 'usageSettings', 'qosSettings'],
   '/ssh': ['sshSettings'],
   '/https': ['httpsSettings'],
   '/system': ['status', 'swapSettings', 'updateSettings'],
@@ -669,6 +674,16 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
       resetUsage: async () => {
         store('usageSettings', await attempt(() => api.resetUsage()));
         await refreshStatus();
+      },
+      setClientPriority: async (mac, priority) => {
+        // Shown in the error toast (a switch has no field to show it under).
+        await attempt(() => api.setClientPriority(mac, priority));
+        await refreshStatus();
+        // The count of priority devices, and whether they go first now.
+        store('qosSettings', await attempt(() => api.getQoSSettings()));
+      },
+      saveQoSSettings: async (speeds) => {
+        store('qosSettings', await attempt(() => api.putQoSSettings(speeds), sameNames('uploadKbps', 'downloadKbps')));
       },
 
       saveSshSettings: async (settings) => {

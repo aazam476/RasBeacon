@@ -52,6 +52,9 @@ type Station struct {
 	// FixedAddress is the address it always gets, when the owner chose one
 	// ("Always use this address"); "" otherwise.
 	FixedAddress string `json:"fixedAddress,omitempty"`
+	// Priority is true for the owner's priority devices, whose traffic
+	// goes first when the internet connection is busy.
+	Priority bool `json:"priority,omitempty"`
 	// DownBytes and UpBytes are the data it used since the counters were
 	// reset (Wi-Fi devices only; the radio counts them).
 	DownBytes uint64 `json:"downBytes"`

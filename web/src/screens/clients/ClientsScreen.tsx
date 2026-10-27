@@ -8,7 +8,8 @@ import { ButtonRow, Icon, Row, Section, StatRow } from '@/ui';
 import { allClients, type NetworkClient } from '../common/clientDisplay';
 import { ClientSection } from './ClientSection';
 import { UsageSection } from './UsageSection';
-import { CLIENT_FILTERS, filterClients, type ClientFilter } from './clientFilters';
+import { CLIENT_FILTERS, filterClients, priorityFirst, type ClientFilter } from './clientFilters';
+import { PriorityNotice } from './PriorityNotice';
 
 /** Every device on RasBeacon's networks, with live readings and a switch for its internet access. */
 export function ClientsScreen() {
@@ -25,7 +26,7 @@ function ClientList({ status }: { status: Status }) {
   const { refreshStatus } = useDevice();
   const [filter, setFilter] = useState<ClientFilter>('all');
   const clients = allClients(status);
-  const shown = filterClients(clients, filter);
+  const shown = priorityFirst(filterClients(clients, filter));
 
   return (
     <>
@@ -44,6 +45,7 @@ function ClientList({ status }: { status: Status }) {
         </ButtonRow>
       </Section>
 
+      <PriorityNotice />
       {clients.length === 0 ? (
         <NoDevices status={status} />
       ) : (

@@ -9,6 +9,7 @@ import { AddNetworkSheet, type AddNetworkStart } from './AddNetworkSheet';
 import { ConnectionSection } from './ConnectionSection';
 import { DnsSection } from './DnsSection';
 import { EthernetSection } from './EthernetSection';
+import { InternetSpeedSection } from './InternetSpeedSection';
 import { LANPortsSection } from './LANPortsSection';
 import { MacAddressSection } from './MacAddressSection';
 import { ModemSection } from './ModemSection';
@@ -71,6 +72,7 @@ function NetworkSettings({ settings, status }: { settings: UplinkSettings; statu
       <PhonesSection phones={status?.uplink.phones ?? []} metered={settings.phoneMetered ?? true} />
       <LANPortsSection ports={status?.lanPorts ?? []} />
       <DnsSection />
+      <InternetSpeedSection lastTest={status?.speedtest.last} />
       <PortForwardingLink />
       {adding && (
         <AddNetworkSheet start={adding} list={draft.networks} onAdd={draft.add} onClose={() => setAdding(null)} />

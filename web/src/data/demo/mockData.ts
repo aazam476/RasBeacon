@@ -18,6 +18,7 @@ import type {
   UpdateSettings,
   UplinkSettings,
   UsageSettings,
+  QoSSettings,
   VPNSettings,
 } from '../types';
 import { createMockPlugins } from './plugins';
@@ -43,6 +44,8 @@ export interface MockRouter {
   updateSettings: UpdateSettings;
   accessSettings: AccessSettings;
   usageSettings: UsageSettings;
+  /** The connection's speeds as saved (qosView fills in the rest from the devices). */
+  qosSpeeds: { uploadKbps: number; downloadKbps: number };
   plugins: PluginsState;
   /** Data kept when a plugin was removed, by plugin ID, that its next install asks about. */
   keptPluginData: Record<string, PluginKeptData>;
@@ -260,8 +263,9 @@ export function createMockRouter(): MockRouter {
           role: 'hotspot',
         },
       ],
-      clients,
-      guest: { enabled: true, running: true, ssid: 'RasBeacon-Guests', clients: guestClients },
+      // Copies, so a scenario or test that changes a device doesn't change it for the next one.
+      clients: structuredClone(clients),
+      guest: { enabled: true, running: true, ssid: 'RasBeacon-Guests', clients: structuredClone(guestClients) },
       warnings: [],
 
       throughput: {
@@ -475,6 +479,7 @@ export function createMockRouter(): MockRouter {
     plugins: createMockPlugins(),
     keptPluginData: {},
     usageSettings: { limitMb: 0, since: '2026-10-01T08:00:00Z', devicesPaused: 0 },
+    qosSpeeds: { uploadKbps: 0, downloadKbps: 0 },
 
     sshSettings: {
       enabled: true,
@@ -489,4 +494,12 @@ export function createMockRouter(): MockRouter {
       validUntil: '2036-10-01',
     },
   };
+}
+
+/** The QoS settings as the router shows them: the speeds, and what the devices make of them. */
+export function qosView(router: MockRouter): QoSSettings {
+  const { clients, guest } = router.status;
+  const priorityDevices = [...clients, ...guest.clients].filter((client) => client.priority).length;
+  const { uploadKbps, downloadKbps } = router.qosSpeeds;
+  return { uploadKbps, downloadKbps, priorityDevices, active: priorityDevices > 0 && uploadKbps + downloadKbps > 0 };
 }

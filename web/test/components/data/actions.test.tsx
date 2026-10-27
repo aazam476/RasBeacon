@@ -351,6 +351,18 @@ describe('clients', () => {
       then: (d) => expect(d.usageSettings.data).toEqual({ limitMb: 500, since: '2026-10-19T00:00:00Z' }),
     },
     { name: 'resets the counts', run: (d) => d.resetUsage(), sends: ['POST /clients/usage/reset'] },
+    {
+      name: 'a priority device is saved, then the count of them read again',
+      run: (d) => d.setClientPriority('3a:1f:22:aa:bb:cc', true),
+      sends: ['POST /clients/priority', 'GET /settings/qos'],
+    },
+    {
+      name: 'the internet speeds are saved and kept as the router answers',
+      run: (d) => d.saveQoSSettings({ uploadKbps: 20_000, downloadKbps: 100_000 }),
+      sends: ['PUT /settings/qos'],
+      answer: { body: { uploadKbps: 20_000, downloadKbps: 100_000, priorityDevices: 1, active: true } },
+      then: (d) => expect(d.qosSettings.data?.active).toBe(true),
+    },
   ]);
 });
 

@@ -1,18 +1,20 @@
 import { useState } from 'react';
 import { useDevice } from '@/data/device';
 import { cn } from '@/lib/cn';
-import { Badge, BreakableText, ButtonRow, EditButton, RenameSheet, Row, SheetRow, Switch } from '@/ui';
+import { Badge, BreakableText, ButtonRow, EditButton, RenameSheet, Row, SheetRow, Switch, SwitchRow } from '@/ui';
 import { clientDetails, clientName, networkName, type NetworkClient } from '../common/clientDisplay';
 import { FixedAddressSheet } from './FixedAddressSheet';
 
 /**
  * One device as a group: its name (renamed with the pencil beside it) and network with the
- * switch for its internet access, its readings, its fixed address (hotspot devices), and
+ * switch for its internet access, its readings, whether it goes first (priority), its fixed
+ * address (hotspot devices), and
  * disconnecting it (or, while paused, flushing its lease). A device
  * paused by the data limit stays paused until the counts are reset or the limit is raised.
  */
 export function ClientSection({ client }: { client: NetworkClient }) {
-  const { setClientInternetAccess, disconnectClient, flushClientLease, renameClient, resetWelcome } = useDevice();
+  const { setClientInternetAccess, setClientPriority, disconnectClient, flushClientLease, renameClient, resetWelcome } =
+    useDevice();
   const [renaming, setRenaming] = useState(false);
   const [fixingAddress, setFixingAddress] = useState(false);
   const paused = !client.internetAccess;
@@ -30,6 +32,7 @@ export function ClientSection({ client }: { client: NetworkClient }) {
             {/* The tag comes right after the name, so its place doesn't depend on the pencil,
                 which is hidden until hovered with a mouse. */}
             {client.isThisDevice && <Badge tone="tint">This device</Badge>}
+            {client.priority && <Badge>Priority</Badge>}
             <EditButton label={`Rename ${name}`} onClick={() => setRenaming(true)} className="-my-1.5" />
           </span>
           <span className="mt-0.5 block text-subhead text-label-2">
@@ -60,6 +63,12 @@ export function ClientSection({ client }: { client: NetworkClient }) {
           </div>
         ))}
       </dl>
+      <SwitchRow
+        title="Priority"
+        subtitle="Goes first when the internet connection is busy, for calls and games."
+        checked={client.priority ?? false}
+        onChange={(priority) => setClientPriority(client.mac, priority)}
+      />
       {/* Guests' addresses come from their own network and aren't kept. */}
       {client.network === 'hotspot' && (
         <SheetRow title="Fixed address" value={client.fixedAddress ?? 'Off'} onClick={() => setFixingAddress(true)} />

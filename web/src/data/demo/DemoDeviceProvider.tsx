@@ -9,12 +9,14 @@ import {
   type Loadable,
 } from '../device';
 import { fixedAddressProblem } from '@/lib/fixedAddress';
+import { MAX_PRIORITY_DEVICES, speedProblem } from '@/lib/qos';
 import { welcomeProblems } from '@/lib/welcome';
 import { FieldErrors } from '../errors';
 import type { MACChoice, Plugin, PluginChoices, PluginPreview, SavedNetwork, VPNProfile } from '../types';
 import { DemoIndex } from './DemoIndex';
 import { DemoTag } from './DemoTag';
 import { StressToggle } from './StressToggle';
+import { qosView } from './mockData';
 import { checkPortForwarding, portForwardingView } from './portForwarding';
 import { LOGIN_PAGE_PICTURE } from './loginPagePicture';
 import {
@@ -693,6 +695,32 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
         });
       },
 
+      setClientPriority: async (mac, priority) => {
+        await wait(600);
+        const { clients, guest } = currentDemo.router.status;
+        const count = [...clients, ...guest.clients].filter((client) => client.priority).length;
+        if (priority && count >= MAX_PRIORITY_DEVICES) {
+          throw new Error(
+            `At most ${MAX_PRIORITY_DEVICES} devices can be priority devices. Turn it off for another one first.`,
+          );
+        }
+        change((d) => {
+          const { status } = d.router;
+          for (const client of [...status.clients, ...status.guest.clients]) {
+            if (client.mac === mac) client.priority = priority || undefined;
+          }
+        });
+      },
+      saveQoSSettings: async ({ uploadKbps, downloadKbps }) => {
+        await wait(700);
+        const problems = Object.entries({
+          uploadKbps: speedProblem(uploadKbps),
+          downloadKbps: speedProblem(downloadKbps),
+        });
+        const found = Object.fromEntries(problems.filter((entry): entry is [string, string] => entry[1] !== undefined));
+        if (Object.keys(found).length > 0) throw new FieldErrors(found);
+        change((d) => void (d.router.qosSpeeds = { uploadKbps, downloadKbps }));
+      },
       saveSwapSettings: async (sizeGb) => {
         await wait(1500);
         change((d) => {
@@ -1145,6 +1173,7 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
       accessSettings: loadable('accessSettings', router.accessSettings),
       plugins: loadable('plugins', router.plugins),
       usageSettings: loadable('usageSettings', router.usageSettings),
+      qosSettings: loadable('qosSettings', qosView(router)),
       httpsSettings: loadable('httpsSettings', router.httpsSettings),
       nearbyNetworks: demo.nearbyNetworks,
       portal: loadable('portal', router.status.portal),

@@ -249,6 +249,17 @@ The VPN stays **off** for this section.
     the laptop's public IPv6 address, and from an IPv6 connection elsewhere
     (a phone on mobile data) `http://[that address]:8000` loads; port 8001
     does not. Turn the switch off: it no longer loads.
+12. **Priority devices (new, needs two devices and a connection you can
+    fill):** run the speed test on the Internet page. On Clients, turn on
+    **Priority** for phone A. **Expect:** the page says *Set your internet
+    speed*. On Internet → *Internet speed*, **Use the last speed test**,
+    **Save**: *1 device goes first*. Start a big download or upload on the
+    laptop (a large file, or `iperf3` to a server), and on phone A run
+    `ping 1.1.1.1` (or a video call). **Expect:** phone A's ping stays close
+    to its idle time; the same on the laptop (not a priority device) grows
+    a lot. Turn Priority off for phone A: its ping grows too. Run the speed
+    test again with Priority on: it still measures the full speed
+    (RasBeacon's own traffic isn't slowed down).
 
 ## 7. The Ethernet port as a client port
 
@@ -697,7 +708,7 @@ Board (Pi 4/5/3B/3B+/Zero 2 W) / RAM:     Adapter:          Card size:          
 3  Storage shows full card (__ GB): / swap row 2 GB: / 4 GB, Off, 2 GB save: / SSH swapon+swappiness:
 4  Ethernet: / scan lists networks: / Wi-Fi uplink + switch: / eduroam: / hotspot move kept working 15 min: / renew, disconnect: / phone over USB (Android, iPhone, modem: which): / ModemManager modem (wrong PIN tried once, connects): / cloned and random MAC (Wi-Fi, Ethernet):
 5  dns.google saved as full address: / leak test shows Google: / rbdoh running: / Cloudflare+1.1.1.1: / bad entry refused: / plain only, rbdoh stopped: / back to network's:
-6  Count + this device: / traffic rates: / pause + reboot-proof: / disconnect: / flush lease: / rename pencil: / data limit without metered: / fixed address: / port forward from uplink side + hotspot, with VPN: / IPv6 pinhole:
+6  Count + this device: / traffic rates: / pause + reboot-proof: / disconnect: / flush lease: / rename pencil: / data limit without metered: / fixed address: / port forward from uplink side + hotspot, with VPN: / IPv6 pinhole: / priority device ping idle __ ms, busy __ ms, laptop busy __ ms:
 7  Laptop on client port gets address+internet: / listed with cable icon, no Disconnect: / leaves list: / safety warning: / USB Ethernet for devices + not used on a router:
 8  Import turns VPN on + connect (IP = VPN): / kill switch + VPN off blocks, warns: / rename profile: / DNS = VPN's even with own DNS set: / kill switch on no leak: / off falls back: / boot no leak: / MTU check: / profiles: / clock:
 9  Speed test: down __ up __ ping __ location __, took __ s / speed.cloudflare.com: down __ up __

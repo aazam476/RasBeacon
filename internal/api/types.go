@@ -811,6 +811,27 @@ type UsageSettings struct {
 	DevicesPaused int `json:"devicesPaused"`
 }
 
+// ClientPriorityRequest makes a device a priority device or an ordinary
+// one (POST /clients/priority).
+type ClientPriorityRequest struct {
+	MAC      string `json:"mac"`
+	Priority bool   `json:"priority"`
+}
+
+// QoSSettings is the internet connection's speeds, which priority devices
+// need (GET/PUT /settings/qos).
+type QoSSettings struct {
+	// UploadKbps and DownloadKbps are in kilobits per second; 0 is not
+	// set (that direction isn't shaped).
+	UploadKbps   int `json:"uploadKbps"`
+	DownloadKbps int `json:"downloadKbps"`
+	// Read-only: how many priority devices there are, whether their
+	// traffic is being put first now, and why not if it should be.
+	PriorityDevices int    `json:"priorityDevices"`
+	Active          bool   `json:"active"`
+	Problem         string `json:"problem,omitempty"`
+}
+
 // ClientInternetAccessRequest pauses (allowed false) or allows a device's
 // internet access (POST /clients/internet-access).
 type ClientInternetAccessRequest struct {

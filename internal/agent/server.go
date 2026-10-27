@@ -71,6 +71,11 @@ func (a *Agent) Handler() http.Handler {
 	}))
 	mux.HandleFunc("POST /clients/disconnect", do(func(req api.ClientRequest) error { return a.DisconnectClient(req.MAC) }))
 	mux.HandleFunc("POST /clients/flush-lease", do(func(req api.ClientRequest) error { return a.FlushClientLease(req.MAC) }))
+	mux.HandleFunc("POST /clients/priority", do(func(req api.ClientPriorityRequest) error {
+		return a.SetClientPriority(req.MAC, req.Priority)
+	}))
+	mux.HandleFunc("GET /settings/qos", view(a.QoSSettings))
+	mux.HandleFunc("PUT /settings/qos", call(a.UpdateQoSSettings))
 	mux.HandleFunc("GET /settings/usage", view(a.UsageSettings))
 	mux.HandleFunc("PUT /settings/usage", call(a.UpdateUsageSettings))
 	mux.HandleFunc("POST /clients/usage/reset", result(a.ResetUsage))

@@ -30,6 +30,21 @@ describe('clients', () => {
       body: { mac },
     },
     {
+      name: 'makes a device a priority device',
+      call: () => api.setClientPriority(mac, true),
+      method: 'POST',
+      path: '/clients/priority',
+      body: { mac, priority: true },
+    },
+    { name: 'reads the internet speeds', call: api.getQoSSettings, method: 'GET', path: '/settings/qos' },
+    {
+      name: 'saves the internet speeds',
+      call: () => api.putQoSSettings({ uploadKbps: 20_000, downloadKbps: 0 }),
+      method: 'PUT',
+      path: '/settings/qos',
+      body: { uploadKbps: 20_000, downloadKbps: 0 },
+    },
+    {
       name: 'names a device',
       call: () => api.renameClient(mac, "Ali's phone"),
       method: 'POST',

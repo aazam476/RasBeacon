@@ -278,6 +278,36 @@ table inet rasbeacon {
 	}
 {{- end}}
 
+{{- with .QoS}}
+
+	# Priority devices: their traffic goes first when the internet
+	# connection is busy. Each packet devices send to or get from the
+	# internet is put in a class by its "priority" field, which RasBeacon's
+	# queues read (see internal/render/qos.go): {{.PriorityClass}} for priority
+	# devices, {{.NormalClass}} for the others. RasBeacon's own traffic and traffic
+	# between devices get no class and aren't slowed down.
+	chain qos {
+		type filter hook forward priority mangle;
+{{- if .PriorityMACs}}
+		# Connections a priority device starts are labeled, so the answers
+		# coming back are known as theirs too.
+		iifname @lans ether saddr { {{range $i, $m := .PriorityMACs}}{{if $i}}, {{end}}{{$m}}{{end}} } ct label set {{.Label}}
+{{- end}}
+{{- if .Upload}}
+		iifname @lans oifname != @lans oifname != "{{$.PluginBridge}}" meta priority set {{.NormalClass}}
+{{- if .PriorityMACs}}
+		iifname @lans oifname != @lans oifname != "{{$.PluginBridge}}" ct label {{.Label}} meta priority set {{.PriorityClass}}
+{{- end}}
+{{- end}}
+{{- if .Download}}
+		iifname != @lans iifname != "{{$.PluginBridge}}" oifname @lans meta priority set {{.NormalClass}}
+{{- if .PriorityMACs}}
+		iifname != @lans iifname != "{{$.PluginBridge}}" oifname @lans ct label {{.Label}} meta priority set {{.PriorityClass}}
+{{- end}}
+{{- end}}
+	}
+{{- end}}
+
 {{- if .PluginPorts}}
 
 	# Plugins' ports: a device on your hotspot reaches a plugin at

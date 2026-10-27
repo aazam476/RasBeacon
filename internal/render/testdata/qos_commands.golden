@@ -1,0 +1,26 @@
+tc qdisc replace dev wg0 root handle 1: htb default 30
+tc class replace dev wg0 parent 1: classid 1:1 htb rate 18000kbit ceil 18000kbit
+tc class replace dev wg0 parent 1:1 classid 1:10 htb rate 13500kbit ceil 18000kbit prio 0
+tc class replace dev wg0 parent 1:1 classid 1:20 htb rate 4500kbit ceil 18000kbit prio 1
+tc qdisc replace dev wg0 parent 1:10 fq_codel   # may fail
+tc qdisc replace dev wg0 parent 1:20 fq_codel   # may fail
+ip link del rbifb0   # may fail
+ip link add rbifb0 type ifb
+ip link set rbifb0 up
+tc qdisc replace dev rbifb0 root handle 1: htb default 30
+tc class replace dev rbifb0 parent 1: classid 1:1 htb rate 90000kbit ceil 90000kbit
+tc class replace dev rbifb0 parent 1:1 classid 1:10 htb rate 67500kbit ceil 90000kbit prio 0
+tc class replace dev rbifb0 parent 1:1 classid 1:20 htb rate 22500kbit ceil 90000kbit prio 1
+tc qdisc replace dev rbifb0 parent 1:10 fq_codel   # may fail
+tc qdisc replace dev rbifb0 parent 1:20 fq_codel   # may fail
+tc qdisc del dev br-lan clsact   # may fail
+tc qdisc add dev br-lan clsact
+tc filter add dev br-lan egress protocol all pref 1 u32 match u32 0 0 action mirred egress redirect dev rbifb0
+tc qdisc del dev br-guest clsact   # may fail
+tc qdisc add dev br-guest clsact
+tc filter add dev br-guest egress protocol all pref 1 u32 match u32 0 0 action mirred egress redirect dev rbifb0
+# removal
+tc qdisc del dev wg0 root   # may fail
+tc qdisc del dev br-lan clsact   # may fail
+tc qdisc del dev br-guest clsact   # may fail
+ip link del rbifb0   # may fail

@@ -465,6 +465,9 @@ export function applyWorstCase(demo: DemoState) {
     },
   ];
 
+  // Priority devices with the longest names first, and the fastest speeds allowed.
+  for (const client of router.status.clients.slice(0, 3)) client.priority = true;
+  router.qosSpeeds = { uploadKbps: 10_000_000, downloadKbps: 9_876_500 };
   // The largest data limit, with two devices over it.
   router.usageSettings = { limitMb: 1_000_000, since: '2024-02-29T23:59:59Z', devicesPaused: 2 };
   // A 2 TB SSD instead of an SD card: nearly 1,900 sizes to choose from.

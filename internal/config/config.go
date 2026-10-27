@@ -104,6 +104,44 @@ type Config struct {
 	// Modem is the mobile broadband modem's settings (one that needs
 	// ModemManager); its password and SIM PIN are in Secrets.
 	Modem ModemConfig `json:"modem"`
+	// QoS puts the owner's priority devices first when the internet
+	// connection is busy (Clients page, and the speeds on the Internet
+	// page).
+	QoS QoSConfig `json:"qos"`
+}
+
+// QoSConfig is "quality of service": which devices go first, and how fast
+// the internet connection is. RasBeacon can only choose what goes first
+// where the queue builds up, so it keeps traffic just below these speeds:
+// the queue then forms in RasBeacon instead of in the hotel's router.
+type QoSConfig struct {
+	// Priority lists the priority devices by MAC address (lower case), at
+	// most MaxPriorityDevices.
+	Priority []string `json:"priority,omitempty"`
+	// UploadKbps and DownloadKbps are the connection's speeds in kilobits
+	// per second (1000 = 1 Mb/s). 0 means not set: that direction isn't
+	// shaped, so priority does nothing there.
+	UploadKbps   int `json:"uploadKbps,omitempty"`
+	DownloadKbps int `json:"downloadKbps,omitempty"`
+}
+
+// MaxPriorityDevices is how many devices can be priority devices. With more,
+// "priority" would stop meaning much.
+const MaxPriorityDevices = 16
+
+// MinSpeedKbps and MaxSpeedKbps bound the speeds the owner can enter:
+// 1 Mb/s to 10 Gb/s.
+const (
+	MinSpeedKbps = 1_000
+	MaxSpeedKbps = 10_000_000
+)
+
+// ValidateSpeed checks one of the speeds (0 is "not set").
+func ValidateSpeed(field string, kbps int) error {
+	if kbps != 0 && (kbps < MinSpeedKbps || kbps > MaxSpeedKbps) {
+		return &ValidationError{Field: field, Message: "Use a speed from 1 Mb/s to 10,000 Mb/s, or leave it empty."}
+	}
+	return nil
 }
 
 // ModemConfig is how to connect a mobile broadband modem: the carrier's
@@ -1039,6 +1077,7 @@ func (c Config) Clone() Config {
 	c.Clients.Names = maps.Clone(c.Clients.Names)
 	c.Clients.FixedAddresses = maps.Clone(c.Clients.FixedAddresses)
 	c.PortForwarding.Rules = slices.Clone(c.PortForwarding.Rules)
+	c.QoS.Priority = slices.Clone(c.QoS.Priority)
 	c.DNS.Servers = slices.Clone(c.DNS.Servers)
 	c.DNS.DoH = slices.Clone(c.DNS.DoH)
 	c.Plugins.Sources = slices.Clone(c.Plugins.Sources)

@@ -34,6 +34,7 @@ import type {
   UpdateStatus,
   UplinkSettings,
   UsageSettings,
+  QoSSettings,
   VPNProfile,
   VPNSettings,
   WiFiQR,
@@ -318,6 +319,12 @@ export const renameClient = (mac: string, name: string) =>
   request<void>('POST', '/clients/name', { body: { mac, name } });
 export const setFixedAddress = (mac: string, address: string) =>
   request<void>('POST', '/clients/fixed-address', { body: { mac, address } });
+
+export const setClientPriority = (mac: string, priority: boolean) =>
+  request<void>('POST', '/clients/priority', { body: { mac, priority } });
+export const getQoSSettings = () => request<QoSSettings>('GET', '/settings/qos');
+export const putQoSSettings = (speeds: { uploadKbps: number; downloadKbps: number }) =>
+  request<QoSSettings>('PUT', '/settings/qos', { body: speeds });
 
 export const getUsageSettings = () => request<UsageSettings>('GET', '/settings/usage');
 export const putUsageSettings = (limitMb: number) =>

@@ -33,6 +33,7 @@ import type {
   UpdateSettings,
   UplinkSettings,
   UsageSettings,
+  QoSSettings,
   VPNDetailsForm,
   VPNSettings,
   WelcomeSettings,
@@ -80,6 +81,7 @@ export type DataKey =
   | 'updateSettings'
   | 'accessSettings'
   | 'usageSettings'
+  | 'qosSettings'
   | 'plugins'
   | 'httpsSettings'
   | 'portal';
@@ -120,6 +122,7 @@ export interface DeviceState {
   updateSettings: Loadable<UpdateSettings>;
   accessSettings: Loadable<AccessSettings>;
   usageSettings: Loadable<UsageSettings>;
+  qosSettings: Loadable<QoSSettings>;
   plugins: Loadable<PluginsState>;
   httpsSettings: Loadable<HTTPSSettings>;
   /** The last scan's results; null before the first scan. */
@@ -308,6 +311,10 @@ export interface DeviceActions {
   saveUsageLimit: (limitMb: number) => Promise<void>;
   /** Start counting data use again from zero (the screen has already asked). */
   resetUsage: () => Promise<void>;
+  /** Make a device a priority device, or an ordinary one (at most 16; the error says so). */
+  setClientPriority: (mac: string, priority: boolean) => Promise<void>;
+  /** The internet connection's speeds in kbit/s (0 = not set). Field keys: uploadKbps, downloadKbps. */
+  saveQoSSettings: (speeds: { uploadKbps: number; downloadKbps: number }) => Promise<void>;
 
   // --- SSH and HTTPS -----------------------------------------------------------------------
 

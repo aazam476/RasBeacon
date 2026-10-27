@@ -13,7 +13,7 @@ import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { vi, type Mock } from 'vitest';
-import { createMockRouter, type MockRouter } from '@/data/demo/mockData';
+import { createMockRouter, qosView, type MockRouter } from '@/data/demo/mockData';
 import { portForwardingView } from '@/data/demo/portForwarding';
 import { DeviceContext, type Device, type DeviceActions, type DeviceState } from '@/data/device';
 import { ErrorToastProvider } from '@/ui';
@@ -51,6 +51,7 @@ export function fakeDevice(change?: (router: MockRouter) => void, actions: Parti
     updateSettings: loaded(router.updateSettings),
     accessSettings: loaded(router.accessSettings),
     usageSettings: loaded(router.usageSettings),
+    qosSettings: loaded(qosView(router)),
     plugins: loaded(router.plugins),
     httpsSettings: loaded(router.httpsSettings),
     nearbyNetworks: router.nearbyNetworks,

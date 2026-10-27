@@ -45,6 +45,9 @@ stops the run):
    self-check.
 9. With a cloned MAC address for the Wi-Fi uplink, the hotel's DHCP server
    sees RasBeacon as that device.
+10. A priority device and the internet speeds set up the queues (the real
+    kernel's `htb`, `ifb` and `fq_codel`) and the firewall's priority rules;
+    they go away with the last priority device.
 
 Settings are changed through `rbd`'s API socket, as `rbweb` does; the
 phones only use the networks (and, in step 1, the setup page's API). Every

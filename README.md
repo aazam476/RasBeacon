@@ -178,6 +178,10 @@ since their image has one copy of the system.
 - **WPA3 only** for the hotspot, if all your devices support it, and
   **Wi-Fi 6** with an adapter that can run it (picked by itself; Wi-Fi 4
   for very old devices): the **Hotspot** page.
+- **Priority devices:** on the **Clients** page, turn on **Priority** for
+  a work laptop or a game console, and enter your internet speed on the
+  **Internet** page (the last speed test fills it in). When the connection
+  is busy, priority devices' traffic goes first, both ways.
 - **MAC address:** on the **Internet** page, choose the address the
   networks RasBeacon joins see, for Wi-Fi and Ethernet separately: the
   Pi's own, a random one, or one cloned from another device (for a hotel

@@ -148,6 +148,8 @@ type Agent struct {
 	// (as text), so the uplink monitor notices a device's new address (see
 	// refreshPinholes).
 	appliedPinholes string
+	// qos is the priority devices' queues (see qos.go).
+	qos qosState
 	// welcome is the welcome page's accepted devices (see welcome.go).
 	welcome welcomeState
 	// modem is the mobile broadband modem (see modem.go).
@@ -752,6 +754,7 @@ func (a *Agent) applyFirewall() error {
 		input.PortForwards = a.portForwards()
 		input.Pinholes = a.pinholes()
 		input.Welcome = a.welcomeRule()
+		input.QoS = a.qosRule()
 		a.appliedPinholes = fmt.Sprint(input.Pinholes)
 		if g := a.guestLAN(); g != nil {
 			input.GuestAddress = g.Prefix.Addr()
@@ -767,7 +770,12 @@ func (a *Agent) applyFirewall() error {
 	if err := config.WriteFileAtomic(a.paths.FirewallRules(), []byte(rules), 0o644); err != nil {
 		return err
 	}
-	return system.ApplyFirewall(a.runner, a.paths.FirewallRules())
+	if err := system.ApplyFirewall(a.runner, a.paths.FirewallRules()); err != nil {
+		return err
+	}
+	// The queues follow the firewall's classes (and the egress it uses).
+	a.refreshQoS()
+	return nil
 }
 
 // startLEDBlink blinks the setup.txt error pattern until stopLED is called.

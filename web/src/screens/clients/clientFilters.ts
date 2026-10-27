@@ -21,3 +21,8 @@ export function filterClients(clients: NetworkClient[], filter: ClientFilter): N
   const option = CLIENT_FILTERS.find((candidate) => candidate.value === filter);
   return option ? clients.filter(option.matches) : clients;
 }
+
+/** Priority devices first, the others after them, each in the order they came. */
+export function priorityFirst(clients: NetworkClient[]): NetworkClient[] {
+  return [...clients].sort((a, b) => Number(b.priority ?? false) - Number(a.priority ?? false));
+}
