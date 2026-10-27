@@ -2,6 +2,9 @@
 
 package dhcpprobe
 
+// This file is probe for systems other than Linux, where it isn't
+// available (see probe_linux.go).
+
 import (
 	"errors"
 	"time"

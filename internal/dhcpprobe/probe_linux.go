@@ -2,6 +2,9 @@
 
 package dhcpprobe
 
+// This file sends the DHCP probe on Linux, with a raw packet socket on the
+// interface (see probe_other.go for other systems).
+
 import (
 	"fmt"
 	"net"

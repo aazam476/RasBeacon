@@ -1,5 +1,8 @@
 package browser
 
+// This file says how the login browser's process runs on Linux (see
+// procattr_other.go for other systems).
+
 import "syscall"
 
 // processAttributes says how the browser process runs: as cred's user, in

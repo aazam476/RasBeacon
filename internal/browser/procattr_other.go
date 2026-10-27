@@ -2,6 +2,9 @@
 
 package browser
 
+// This file is processAttributes for systems other than Linux (see
+// procattr_linux.go).
+
 import "syscall"
 
 // processAttributes is the Linux version (procattr_linux.go) without

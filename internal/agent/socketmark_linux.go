@@ -1,5 +1,8 @@
 package agent
 
+// This file marks a socket on Linux, for the connections rbd makes for
+// plugins (see socketmark_other.go for other systems).
+
 import "syscall"
 
 // setSocketMark puts the mark on a socket (SO_MARK, Linux only), so the

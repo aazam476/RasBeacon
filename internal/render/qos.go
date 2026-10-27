@@ -1,11 +1,6 @@
 package render
 
-import (
-	"fmt"
-	"strconv"
-)
-
-// Priority devices ("quality of service").
+// This file shapes traffic for priority devices ("quality of service").
 //
 // # The idea
 //
@@ -37,6 +32,11 @@ import (
 //     sends everything it is about to send into one virtual "ifb" device
 //     (IFBName), whose HTB holds the download speed for all of them together,
 //     and which passes the packets back to their bridge afterwards.
+
+import (
+	"fmt"
+	"strconv"
+)
 
 // IFBName is the virtual device downloads are queued in.
 const IFBName = "rbifb0"
