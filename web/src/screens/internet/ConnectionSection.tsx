@@ -26,7 +26,13 @@ export function ConnectionSection({ status }: { status: Status }) {
 
   return (
     <Section title="Connection" action={<Badge tone="green">Online</Badge>}>
-      {uplink.kind === 'phone' ? (
+      {uplink.kind === 'modem' ? (
+        <Row
+          leading={{ tile: 'signal_wifi_4_bar', color: 'orange' }}
+          title={uplink.modem?.name ?? 'Mobile modem'}
+          subtitle={[uplink.modem?.operator, uplink.modem?.network].filter(Boolean).join(', ') || undefined}
+        />
+      ) : uplink.kind === 'phone' ? (
         <Row
           leading={{ tile: 'usb', color: 'orange' }}
           title={<BreakableText>{phoneName(phone)}</BreakableText>}

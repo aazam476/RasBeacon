@@ -140,6 +140,8 @@ export interface HotspotStatus {
   lanAddress: string;
   /** Devices are told the connection is limited. */
   metered: boolean;
+  /** The Wi-Fi standard it runs. */
+  standard?: WiFiStandard;
 }
 
 /** The guest network on the Status page. */
@@ -189,7 +191,7 @@ export interface EthernetUplinkStatus {
 export interface UplinkStatus {
   connected: boolean;
   /** Which uplink is in use, or "" when not connected. `phone`: a phone or modem on USB. */
-  kind: 'ethernet' | 'wifi' | 'phone' | '';
+  kind: 'ethernet' | 'wifi' | 'phone' | 'modem' | '';
   interface: string;
   address: string;
   gateway: string;
@@ -199,6 +201,8 @@ export interface UplinkStatus {
   ethernet: EthernetUplinkStatus;
   /** Phones sharing their connection and modems on USB; absent or null without one. */
   phones?: PhoneUplinkStatus[] | null;
+  /** The mobile broadband modem that needs ModemManager; absent without one. */
+  modem?: ModemStatus;
 
   // Hidden when missing.
   subnetMask?: string;
@@ -427,7 +431,17 @@ export interface HotspotSettings {
   no5GHz?: boolean;
   /** Read-only: the hotspot's radio can't run a WPA3-only hotspot, so it isn't offered. */
   noWpa3?: boolean;
+  /**
+   * The Wi-Fi standard in use (the best the radio and band allow, unless one was chosen). Sending
+   * the one in use keeps "the best".
+   */
+  standard?: WiFiStandard;
+  /** Read-only: the hotspot's radio can't run Wi-Fi 6, so it isn't offered. */
+  noWifi6?: boolean;
 }
+
+/** A Wi-Fi standard the hotspot can run: 802.11ax, 802.11ac (5 GHz only) or 802.11n. */
+export type WiFiStandard = 'wifi6' | 'wifi5' | 'wifi4';
 
 /**
  * GET/PUT /api/v1/settings/guest. `password` is never returned; when saving, empty keeps the
@@ -1002,4 +1016,46 @@ export interface PhoneUplinkStatus {
   /** Data through it since it was plugged in. */
   receivedBytes: number;
   sentBytes: number;
+}
+
+/** What a mobile broadband modem is doing. */
+export type ModemState =
+  | 'connected'
+  | 'connecting'
+  | 'searching'
+  | 'pin-needed'
+  | 'pin-refused'
+  | 'puk-needed'
+  | 'no-sim'
+  | 'starting'
+  | 'failed';
+
+/** A mobile broadband modem (one that needs ModemManager: QMI or MBIM). */
+export interface ModemStatus {
+  /** "Quectel EM12-G", or "Mobile modem". */
+  name: string;
+  state: ModemState;
+  operator?: string;
+  /** "5G", "4G" or "3G". */
+  network?: string;
+  signalPercent: number;
+  /** PIN attempts the SIM has left; -1 when unknown. */
+  pinTries: number;
+  /** The last problem connecting, in ModemManager's words. */
+  error?: string;
+}
+
+/**
+ * GET/PUT /api/v1/settings/modem. `password` and `pin` are write-only: empty keeps the saved
+ * one; `forgetPassword`/`forgetPin` remove it.
+ */
+export interface ModemSettings {
+  apn: string;
+  username: string;
+  password?: string;
+  hasPassword: boolean;
+  pin?: string;
+  hasPin: boolean;
+  forgetPassword?: boolean;
+  forgetPin?: boolean;
 }

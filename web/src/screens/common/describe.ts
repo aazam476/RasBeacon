@@ -16,6 +16,7 @@ export function describeUplink(uplink: UplinkStatus): string {
   if (!uplink.connected) return 'Not connected';
   if (uplink.kind === 'ethernet') return 'Connected by Ethernet';
   if (uplink.kind === 'phone') return `Connected through ${phoneName(phoneInUse(uplink))}`;
+  if (uplink.kind === 'modem') return `Connected through ${uplink.modem?.name ?? 'the mobile modem'}`;
   return uplink.wifi.ssid ? `Connected to Wi-Fi "${uplink.wifi.ssid}"` : 'Connected by Wi-Fi';
 }
 

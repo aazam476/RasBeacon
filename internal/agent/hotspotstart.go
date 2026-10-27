@@ -48,6 +48,30 @@ func (a *Agent) hotspotHasWPA3() bool {
 	return r != nil && r.HasWPA3
 }
 
+// hotspotHasWiFi6 reports whether the hotspot's radio can run Wi-Fi 6
+// (radio.SupportsWiFi6AP).
+func (a *Agent) hotspotHasWiFi6() bool {
+	r := a.hotspotRadio()
+	return r != nil && r.HasWiFi6
+}
+
+// hotspotStandard is the Wi-Fi standard hostapd runs: the saved one, or
+// the best the radio and band allow ("" saved, or Wi-Fi 6 saved for a radio
+// that can't). Like the security setting, the saved choice stays.
+func (a *Agent) hotspotStandard() config.Standard {
+	saved := a.cfg.Hotspot.Standard
+	if saved == config.StandardWiFi4 || (saved == config.StandardWiFi5 && a.hotspotBand() == config.Band5GHz) {
+		return saved
+	}
+	if a.hotspotHasWiFi6() {
+		return config.StandardWiFi6
+	}
+	if a.hotspotBand() == config.Band5GHz {
+		return config.StandardWiFi5
+	}
+	return config.StandardWiFi4
+}
+
 // hotspotSecurity is the security hostapd uses for the saved settings: the
 // saved one, except WPA2/WPA3 when "WPA3 only" is saved but the radio can't
 // run it (another adapter, or a restored backup). Like the band, the saved
@@ -139,6 +163,9 @@ func (a *Agent) checkHotspotForRadio(h config.HotspotConfig) error {
 	}
 	if h.Security == config.SecurityWPA3 && !a.hotspotHasWPA3() {
 		return &config.ValidationError{Field: "hotspot.security", Message: "This Wi-Fi adapter can't run a WPA3-only hotspot."}
+	}
+	if h.Standard == config.StandardWiFi6 && !a.hotspotHasWiFi6() {
+		return &config.ValidationError{Field: "hotspot.standard", Message: "This Wi-Fi adapter can't run Wi-Fi 6."}
 	}
 	allowed := a.countryChannels(h.Country)[h.Band]
 	if len(allowed) == 0 {

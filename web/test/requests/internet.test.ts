@@ -1,7 +1,7 @@
 // The Internet page: saved networks, nearby networks, the uplink buttons, DNS and the speed test.
 import { describe } from 'vitest';
 import * as api from '@/data/real/api';
-import type { DNSSettings, PortForwardRule, UplinkSettings, WelcomeSettings } from '@/data/types';
+import type { DNSSettings, ModemSettings, PortForwardRule, UplinkSettings, WelcomeSettings } from '@/data/types';
 import { testRequests } from './helpers';
 
 const uplink: UplinkSettings = {
@@ -106,6 +106,20 @@ describe('welcome page', () => {
       method: 'POST',
       path: '/clients/welcome-reset',
       body: { mac: '3a:1f:22:aa:bb:cc' },
+    },
+  ]);
+});
+
+describe('mobile modem', () => {
+  const settings: ModemSettings = { apn: 'internet', username: '', hasPassword: false, hasPin: false, pin: '1234' };
+  testRequests([
+    { name: 'reads its settings', call: api.getModemSettings, method: 'GET', path: '/settings/modem' },
+    {
+      name: 'saves them',
+      call: () => api.putModemSettings(settings),
+      method: 'PUT',
+      path: '/settings/modem',
+      body: settings,
     },
   ]);
 });

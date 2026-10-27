@@ -109,7 +109,11 @@ func (a *Agent) uplinkInterfaces() []string {
 	if wifi := a.wifiUplinkInterface(); wifi != "" {
 		names = append(names, wifi)
 	}
-	return append(names, a.phoneInterfaces()...)
+	names = append(names, a.phoneInterfaces()...)
+	if a.modem.iface != "" {
+		names = append(names, a.modem.iface)
+	}
+	return names
 }
 
 // --- Applying the uplink settings ---
@@ -208,6 +212,10 @@ func (a *Agent) applyNetworkdConfig() error {
 			return err
 		}
 		files["00-rasbeacon-"+name+".network"] = text
+	}
+	// A connected modem's data port (see modem.go).
+	if a.modem.iface != "" {
+		files["00-rasbeacon-"+a.modem.iface+".network"] = a.modem.network
 	}
 	text, err := render.NetworkdUnmanaged(unmanaged)
 	if err != nil {
@@ -309,8 +317,9 @@ func (a *Agent) checkUplink() {
 	//    server answers on it.
 	a.checkEthernetClientPort()
 
-	// 1b. Phones and modems plugged in or out.
+	// 1b. Phones and modems plugged in or out, and the mobile modem.
 	a.checkPhones()
+	a.checkModem()
 
 	// 2. Look at routes, addresses and the Wi-Fi connection.
 	status, upstreamIPv4 := a.observeUplink()
@@ -326,7 +335,7 @@ func (a *Agent) checkUplink() {
 
 	// A phone or modem connection came or went: devices are told whether
 	// the connection is metered (see metered).
-	if (status.Kind == "phone") != (previous.Kind == "phone") && !a.cfg.Hotspot.Metered && !a.cfg.Uplink.PhoneNotMetered {
+	if mobile(status.Kind) != mobile(previous.Kind) && !a.cfg.Hotspot.Metered && !a.cfg.Uplink.PhoneNotMetered {
 		if err := a.applyDHCP(false); err != nil {
 			slog.Error("could not update the metered setting", "error", err)
 		}
@@ -375,6 +384,8 @@ func (a *Agent) observeUplink() (api.UplinkStatus, []netip.Prefix) {
 		s.Kind = "ethernet"
 	case slices.Contains(phones, s.Interface):
 		s.Kind = "phone"
+	case s.Interface != "" && s.Interface == a.modem.iface:
+		s.Kind = "modem"
 	case s.Interface != "":
 		s.Kind = "wifi"
 	}
@@ -415,6 +426,10 @@ func (a *Agent) observeUplink() (api.UplinkStatus, []netip.Prefix) {
 		s.WiFi = a.observeWiFi(wifi)
 	}
 	s.Phones = a.observePhones(addressed)
+	if a.modem.status != nil {
+		m := *a.modem.status
+		s.Modem = &m
+	}
 	s.Ethernet = api.EthernetUplinkStatus{
 		Present:           a.hasEthernet(),
 		Role:              a.cfg.Ethernet.Role,

@@ -187,6 +187,9 @@ const (
 	// neither Ethernet nor Wi-Fi has the internet (they usually count
 	// data).
 	PhoneRouteMetric = 900
+	// ModemRouteMetric is for modems that need ModemManager: the last
+	// resort, like phones.
+	ModemRouteMetric = 950
 )
 
 // NetworkdUplink produces a systemd-networkd .network file that gets an
@@ -247,4 +250,30 @@ func WireGuard(in WireGuardInput) (string, error) {
 		WireGuardInput
 		AllowedIPs string
 	}{in, strings.Join(allowed, ", ")})
+}
+
+// StaticUplink is an uplink whose address is given rather than asked for
+// by DHCP: a mobile broadband modem's data connection.
+type StaticUplink struct {
+	Interface   string
+	Address     netip.Prefix
+	Gateway     netip.Addr
+	DNS         []netip.Addr
+	MTU         int
+	RouteMetric int
+}
+
+// NetworkdStaticUplink produces a systemd-networkd .network file that sets
+// a given address, gateway and DNS servers on an uplink.
+func NetworkdStaticUplink(u StaticUplink) (string, error) {
+	if !isInterfaceName(u.Interface) {
+		return "", fmt.Errorf("invalid interface name %q", u.Interface)
+	}
+	if !u.Address.IsValid() || !u.Address.Addr().Is4() || !u.Gateway.Is4() {
+		return "", fmt.Errorf("invalid address %v or gateway %v", u.Address, u.Gateway)
+	}
+	if u.MTU < 0 || u.MTU > 65535 {
+		return "", fmt.Errorf("invalid MTU %d", u.MTU)
+	}
+	return execute("static.network.tmpl", u)
 }

@@ -33,14 +33,25 @@ ieee80211d=1
 hw_mode=a
 channel={{.Channel}}
 ieee80211n=1
+{{- if .WiFi5}}
+# Wi-Fi 5 (802.11ac).
 ieee80211ac=1
+{{- else}}
+# Wi-Fi 4 only (802.11n), for very old devices: no 802.11ac.
+{{- end}}
 {{- if .VHT80}}
 # Use 80 MHz wide channels (802.11ac) centred on channel {{.VHTCenterChannel}}.
 # {{.HT40Direction}} says whether the 40 MHz partner channel is above (+) or
 # below (-) channel {{.Channel}}.
 ht_capab=[{{.HT40Direction}}][SHORT-GI-40]
+{{- if .WiFi5}}
 vht_oper_chwidth=1
 vht_oper_centr_freq_seg0_idx={{.VHTCenterChannel}}
+{{- end}}
+{{- if .WiFi6}}
+he_oper_chwidth=1
+he_oper_centr_freq_seg0_idx={{.VHTCenterChannel}}
+{{- end}}
 {{- else}}
 # Channel {{.Channel}} cannot be combined into a wider channel, so it uses
 # 20 MHz.
@@ -51,6 +62,13 @@ vht_oper_chwidth=0
 hw_mode=g
 channel={{.Channel}}
 ieee80211n=1
+{{- end}}
+{{- if .WiFi6}}
+# Wi-Fi 6 (802.11ax): faster with many devices at once. Older devices
+# still join with Wi-Fi 4 or 5. The "BSS color" ({{.BSSColor}}) tells this
+# network's signals from a neighbor's on the same channel.
+ieee80211ax=1
+he_bss_color={{.BSSColor}}
 {{- end}}
 # WMM (Wi-Fi Multimedia) is required for Wi-Fi 4/5 speeds.
 wmm_enabled=1

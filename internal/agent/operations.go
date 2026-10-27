@@ -215,6 +215,7 @@ func (a *Agent) HotspotSettings() api.HotspotSettings {
 	return api.HotspotSettings{
 		SSID: h.SSID, Band: h.Band, Channel: h.Channel, Security: h.Security, Country: h.Country, Metered: h.Metered,
 		No5GHz: !a.hotspotHas5GHz(), NoWPA3: !a.hotspotHasWPA3(),
+		Standard: a.hotspotStandard(), NoWiFi6: !a.hotspotHasWiFi6(),
 	}
 }
 
@@ -231,7 +232,13 @@ func (a *Agent) UpdateHotspotSettings(req api.HotspotSettings) error {
 	newCfg := a.cfg.Clone()
 	newCfg.Hotspot = config.HotspotConfig{
 		SSID: req.SSID, Band: req.Band, Channel: req.Channel, Security: req.Security, Country: req.Country,
-		Metered: req.Metered,
+		Metered: req.Metered, Standard: req.Standard,
+	}
+	// The page sends back the standard in use; when that is the best one
+	// (nothing chosen), "nothing chosen" stays, so a better adapter later
+	// gets its best.
+	if req.Standard == a.hotspotStandard() && req.Band == a.cfg.Hotspot.Band {
+		newCfg.Hotspot.Standard = a.cfg.Hotspot.Standard
 	}
 	if err := newCfg.Hotspot.Validate(); err != nil {
 		return err
@@ -280,7 +287,8 @@ func (a *Agent) UpdateHotspotSettings(req api.HotspotSettings) error {
 	// DHCP alone carries the hint (devices see it when they reconnect).
 	onlyMetered := req.Password == "" && newCfg.Hotspot.SSID == a.cfg.Hotspot.SSID &&
 		newCfg.Hotspot.Band == a.cfg.Hotspot.Band && newCfg.Hotspot.Channel == a.cfg.Hotspot.Channel &&
-		newCfg.Hotspot.Security == a.cfg.Hotspot.Security && !countryChanged
+		newCfg.Hotspot.Security == a.cfg.Hotspot.Security && newCfg.Hotspot.Standard == a.cfg.Hotspot.Standard &&
+		!countryChanged
 	oldCfg, oldSecrets := a.cfg, a.secrets
 	a.cfg = newCfg
 	a.secrets = newSecrets

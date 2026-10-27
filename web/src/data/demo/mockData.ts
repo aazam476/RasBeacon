@@ -3,6 +3,7 @@ import type {
   Client,
   DNSSettings,
   WelcomeSettings,
+  ModemSettings,
   PortForwardRule,
   GuestSettings,
   HotspotSettings,
@@ -37,6 +38,7 @@ export interface MockRouter {
   /** The port forwarding rules as saved (portForwarding.ts fills in the rest of the page). */
   portForwardingRules: PortForwardRule[];
   welcomeSettings: WelcomeSettings;
+  modemSettings: ModemSettings;
   swapSettings: SwapSettings;
   updateSettings: UpdateSettings;
   accessSettings: AccessSettings;
@@ -322,6 +324,9 @@ export function createMockRouter(): MockRouter {
       security: 'wpa2-wpa3',
       country: 'US',
       metered: false,
+      // The Alfa AWUS036ACM (MT7612U) is a Wi-Fi 5 adapter.
+      standard: 'wifi5',
+      noWifi6: true,
     },
     hotspotPassword: 'kq7m-2xvd-h8pt-rn4w',
 
@@ -430,6 +435,7 @@ export function createMockRouter(): MockRouter {
     },
 
     dnsSettings: { servers: [], withVpn: false },
+    modemSettings: { apn: '', username: '', hasPassword: false, hasPin: false },
     welcomeSettings: {
       enabled: false,
       networks: 'guest',

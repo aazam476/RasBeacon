@@ -205,6 +205,29 @@ export const SCENARIOS: DemoScenario[] = [
     },
   },
   {
+    id: 'modem-uplink',
+    group: 'Status',
+    title: 'Internet from a 5G modem',
+    route: '/internet',
+    apply: (d) => {
+      Object.assign(d.router.status.uplink, {
+        kind: 'modem',
+        interface: 'wwan0',
+        address: '10.164.33.17',
+        gateway: '10.164.33.18',
+        modem: {
+          name: 'Quectel RM520N-GL',
+          state: 'connected',
+          operator: 'T-Mobile',
+          network: '5G',
+          signalPercent: 72,
+          pinTries: 3,
+        },
+      });
+      d.router.status.hotspot.metered = true;
+    },
+  },
+  {
     id: 'vpn-down',
     group: 'Status',
     title: 'VPN not working, kill switch on (no internet)',

@@ -28,7 +28,8 @@ They run in order, each building on the ones before (the first failure
 stops the run):
 
 1. A phone joins the open setup network and sets RasBeacon up (through
-   `rbweb`, like the setup page), then joins the new hotspot.
+   `rbweb`, like the setup page), then joins the new hotspot, which runs
+   Wi-Fi 6 by itself (the simulated radios can).
 2. RasBeacon joins the hotel's Wi-Fi, notices the login page, and the owner
    accepts the terms in RasBeacon's own login browser. The phone then
    reaches the internet, which sees RasBeacon's hotel address.

@@ -31,6 +31,7 @@ import type {
   PluginsState,
   VPNSettings,
   WelcomeSettings,
+  ModemSettings,
 } from '../types';
 import * as api from './api';
 import { ApiError } from './api';
@@ -61,6 +62,7 @@ interface DataTypes {
   dnsSettings: DNSSettings;
   portForwarding: PortForwardingSettings;
   welcomeSettings: WelcomeSettings;
+  modemSettings: ModemSettings;
   swapSettings: SwapSettings;
   updateSettings: UpdateSettings;
   accessSettings: AccessSettings;
@@ -82,6 +84,7 @@ const LOADERS: { [K in DataKey]: () => Promise<DataTypes[K]> } = {
   dnsSettings: api.getDNSSettings,
   portForwarding: api.getPortForwarding,
   welcomeSettings: api.getWelcomeSettings,
+  modemSettings: api.getModemSettings,
   swapSettings: api.getSwapSettings,
   updateSettings: api.getUpdateSettings,
   accessSettings: api.getAccessSettings,
@@ -102,6 +105,7 @@ const NO_DATA: AllData = {
   dnsSettings: NOTHING,
   portForwarding: NOTHING,
   welcomeSettings: NOTHING,
+  modemSettings: NOTHING,
   swapSettings: NOTHING,
   updateSettings: NOTHING,
   accessSettings: NOTHING,
@@ -121,6 +125,7 @@ const SETTINGS: DataKey[] = [
   'dnsSettings',
   'portForwarding',
   'welcomeSettings',
+  'modemSettings',
   'swapSettings',
   'updateSettings',
   'accessSettings',
@@ -131,7 +136,7 @@ const SETTINGS: DataKey[] = [
 /** What each page loads again when it opens. */
 const PAGE_DATA: Record<string, DataKey[]> = {
   '/': ['status'],
-  '/internet': ['uplinkSettings', 'dnsSettings', 'portForwarding', 'status'],
+  '/internet': ['uplinkSettings', 'dnsSettings', 'portForwarding', 'modemSettings', 'status'],
   '/internet/port-forwarding': ['portForwarding', 'status'],
   '/vpn': ['vpnSettings', 'status'],
   '/hotspot': ['hotspotSettings', 'accessSettings', 'status'],
@@ -487,6 +492,14 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
         if (!saved) throw new Error("The Internet settings haven't loaded yet.");
         await uplinkChange({ ...saved, ethernetRole: role });
       },
+      saveModemSettings: async (settings) => {
+        const saved = await attempt(
+          () => api.putModemSettings(settings),
+          sameNames('apn', 'username', 'password', 'pin'),
+        );
+        store('modemSettings', saved);
+        await refreshStatus();
+      },
       setPhoneMetered: async (phoneMetered) => {
         const saved = latest.current.uplinkSettings.data;
         if (!saved) throw new Error("The Internet settings haven't loaded yet.");
@@ -578,6 +591,7 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
           'hotspot.band': 'band',
           'hotspot.channel': 'channel',
           'hotspot.country': 'country',
+          'hotspot.standard': 'standard',
           hotspotPassword: 'password',
         });
         store('hotspotSettings', saved);

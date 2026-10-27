@@ -946,3 +946,39 @@ func TestFirewall_WelcomePage(t *testing.T) {
 		}
 	}
 }
+
+func TestHostapd_WiFiStandards(t *testing.T) {
+	base := HotspotInput{
+		Interface: "ap0", SSID: "RasBeacon-4F2A", Band: config.Band5GHz, Channel: 36,
+		Country: "US", Security: config.SecurityWPA2WPA3, Password: "kq7m-2xvd-h8pt-rn4w",
+	}
+	wifi6 := base
+	wifi6.Standard = config.StandardWiFi6
+	got, err := Hostapd(wifi6)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkGolden(t, "hostapd_wifi6_5ghz", got)
+	for _, want := range []string{"ieee80211ac=1", "ieee80211ax=1", "he_oper_chwidth=1", "he_oper_centr_freq_seg0_idx=42", "he_bss_color="} {
+		if !strings.Contains(got, want) {
+			t.Errorf("Wi-Fi 6 on 5 GHz: no %q", want)
+		}
+	}
+	// The color stays the same for a name, and is 1 to 63.
+	if c := bssColor("RasBeacon-4F2A"); c < 1 || c > 63 || c != bssColor("RasBeacon-4F2A") {
+		t.Errorf("BSS color %d", c)
+	}
+
+	wifi6.Band, wifi6.Channel = config.Band2GHz, 6
+	got, _ = Hostapd(wifi6)
+	if !strings.Contains(got, "ieee80211ax=1") || strings.Contains(got, "ieee80211ac") || strings.Contains(got, "he_oper_chwidth=1") {
+		t.Errorf("Wi-Fi 6 on 2.4 GHz:\n%s", got)
+	}
+
+	wifi4 := base
+	wifi4.Standard = config.StandardWiFi4
+	got, _ = Hostapd(wifi4)
+	if strings.Contains(got, "ieee80211ac") || strings.Contains(got, "vht_oper_chwidth=1") || strings.Contains(got, "ieee80211ax") {
+		t.Errorf("Wi-Fi 4 on 5 GHz:\n%s", got)
+	}
+}

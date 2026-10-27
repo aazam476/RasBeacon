@@ -60,7 +60,10 @@ drivers generally can; please report what the Realtek adapters show.
 A phone sharing its connection over USB, or a "HiLink" modem (one that
 works like a small router with its own DHCP server), carries the internet
 when neither Ethernet nor Wi-Fi has it. Modems that need a modem manager
-(QMI or MBIM, most M.2 and many 5G modems) don't work yet. A Pi 4's USB
+(QMI or MBIM: most M.2 and many 5G modems) work through ModemManager: the
+Internet page's *Mobile modem* takes the carrier's APN and the SIM's PIN
+(tried once: a refused PIN is never sent again, so it can't block the
+SIM). A Pi 4's USB
 ports give 1.2 A in total: a modem that draws more needs a powered USB hub.
 
 | Device | Driver | Status | Notes |
@@ -69,6 +72,26 @@ ports give 1.2 A in total: a modem that draws more needs a powered USB hub.
 | iPhone (Personal Hotspot over USB) | ipheth + usbmuxd | Untested | Tap *Trust* the first time; the pairing is kept on the settings partition |
 | Huawei E3372h (HiLink) | cdc_ether | Untested | |
 | ZTE / Alcatel HiLink sticks | cdc_ether, cdc_ncm | Untested | |
+| Quectel EM12-G / RM520N-GL (M.2 in a USB case) | qmi_wwan + ModemManager | Untested | Needs a powered USB hub on a Pi 4 |
+| Sierra Wireless EM7455 / EM9191 | qmi_wwan or cdc_mbim + ModemManager | Untested | |
+
+## Wi-Fi 6, 6E and 7 on the hotspot
+
+RasBeacon runs the best standard the hotspot's adapter can (it reads what
+the driver allows: `iw phy`, "HE Iftypes: … AP"), and the Hotspot page only
+offers those. Older devices still join a Wi-Fi 6 network.
+
+| Adapter | Best hotspot standard |
+|---|---|
+| MT7921AU adapters (e.g. Alfa AWUS036AXML) | Wi-Fi 6 on 2.4 and 5 GHz |
+| Alfa AWUS036ACM (MT7612U) | Wi-Fi 5 on 5 GHz, Wi-Fi 4 on 2.4 GHz |
+| TP-Link Archer T3U/T4U (rtw88) | Wi-Fi 5 on 5 GHz, Wi-Fi 4 on 2.4 GHz |
+| Built-in Wi-Fi (Pi 4/5, 3B+) | Wi-Fi 5 on 5 GHz; Wi-Fi 4 on 2.4 GHz (Zero 2 W and 3B: 2.4 GHz only) |
+
+**Wi-Fi 6E (6 GHz) and Wi-Fi 7 are not offered.** Linux's MT7921AU and
+MT7925 drivers don't allow an access point on 6 GHz (the channels are
+"no IR"), and no USB adapter runs a Wi-Fi 7 access point on Linux yet. They
+come when an adapter that can is available.
 
 ## USB Ethernet adapters (extra wired ports for devices)
 

@@ -134,6 +134,13 @@ describe('Internet', () => {
       then: (d) => expect(d.portForwarding.data).toEqual({ rules: [], reachability: 'offline' }),
     },
     {
+      name: 'the modem settings are saved and kept as the router answers',
+      run: (d) => d.saveModemSettings({ apn: 'internet', username: '', hasPassword: false, hasPin: false }),
+      sends: ['PUT /settings/modem'],
+      answer: { body: { apn: 'internet', username: '', hasPassword: false, hasPin: true } },
+      then: (d) => expect(d.modemSettings.data?.hasPin).toBe(true),
+    },
+    {
       name: 'a phone connection is set not metered, with the saved networks as they are',
       run: (d) => d.setPhoneMetered(false),
       sends: ['PUT /settings/uplink'],

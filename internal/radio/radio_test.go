@@ -283,3 +283,23 @@ func TestChannelAllowed(t *testing.T) {
 		}
 	}
 }
+
+func TestSupportsWiFi6AP(t *testing.T) {
+	// Excerpts of `iw phy` output: an MT7921AU (Wi-Fi 6, AP on 2.4 and 5 GHz)
+	// and a radio that only joins Wi-Fi 6 networks.
+	const mt7921 = "Wiphy phy3\n\tBand 1:\n\t\tHE Iftypes: managed, AP\n\t\t\tHE MAC Capabilities (0x080112a09801):\n\tBand 2:\n\t\tHE Iftypes: managed, AP\n"
+	const stationOnly = "Wiphy phy1\n\tBand 1:\n\t\tHE Iftypes: managed\n"
+	for name, tc := range map[string]struct {
+		info string
+		want bool
+	}{
+		"AP listed":     {mt7921, true},
+		"managed only":  {stationOnly, false},
+		"no Wi-Fi 6":    {"Wiphy phy0\n\tBand 1:\n\t\tCapabilities: 0x1862\n", false},
+		"AP without HE": {"Wiphy phy0\n\tSupported interface modes:\n\t\t * AP\n", false},
+	} {
+		if got := SupportsWiFi6AP(tc.info); got != tc.want {
+			t.Errorf("%s: got %v, want %v", name, got, tc.want)
+		}
+	}
+}

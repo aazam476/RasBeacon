@@ -325,6 +325,17 @@ export function applyWorstCase(demo: DemoState) {
       sentBytes: 0,
     },
   ];
+  // A modem whose SIM refused the saved PIN, with the longest names.
+  router.status.uplink.modem = {
+    name: 'Sierra Wireless EM9191 5G NR Sub-6 GHz M.2 Module',
+    state: 'pin-refused',
+    operator: 'Deutsche Telekom Mobilfunk Roaming Partner',
+    network: '5G',
+    signalPercent: 3,
+    pinTries: 1,
+    error: 'Couldn’t connect: Serving network not allowed to the subscriber (apn: internet.telekom)',
+  };
+  router.modemSettings = { apn: 'internet.telekom', username: 'telekom', hasPassword: true, hasPin: true };
   // USB Ethernet: one in use, one plugged into another network, one without a cable.
   router.status.lanPorts = [
     { name: 'enx00e04c680001', cablePlugged: true, connected: true },
@@ -348,6 +359,8 @@ export function applyWorstCase(demo: DemoState) {
   router.status.clients.forEach((client, index) => {
     client.welcome = index % 3 === 0 ? 'waiting' : 'accepted';
   });
+  // A Wi-Fi 6 adapter, on Wi-Fi 4 for very old devices.
+  router.hotspotSettings = { ...router.hotspotSettings, noWifi6: false, standard: 'wifi4' };
   // Port forwarding: the longest name, a risky port, a range, a plugin with a long name, and a
   // device that has left (shown by its MAC address). The uplink's shared address adds the notice.
   router.portForwardingRules = [

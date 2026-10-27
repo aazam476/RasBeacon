@@ -32,6 +32,7 @@ ieee80211d=1
 hw_mode=a
 channel=149
 ieee80211n=1
+# Wi-Fi 5 (802.11ac).
 ieee80211ac=1
 # Use 80 MHz wide channels (802.11ac) centred on channel 155.
 # HT40+ says whether the 40 MHz partner channel is above (+) or

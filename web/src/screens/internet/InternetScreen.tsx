@@ -10,6 +10,7 @@ import { ConnectionSection } from './ConnectionSection';
 import { DnsSection } from './DnsSection';
 import { EthernetSection } from './EthernetSection';
 import { LANPortsSection } from './LANPortsSection';
+import { ModemSection } from './ModemSection';
 import { PhonesSection } from './PhonesSection';
 import { SavedNetworksSection } from './SavedNetworksSection';
 import { SpeedtestSection } from './SpeedtestSection';
@@ -39,6 +40,7 @@ export function InternetScreen() {
 }
 
 function NetworkSettings({ settings, status }: { settings: UplinkSettings; status: Status | undefined }) {
+  const { modemSettings } = useDevice();
   const draft = useNetworkDraft(settings);
   const [adding, setAdding] = useState<AddNetworkStart | null>(null);
   const connectedSsid = status?.uplink.connected && status.uplink.kind === 'wifi' ? status.uplink.wifi.ssid : '';
@@ -63,6 +65,7 @@ function NetworkSettings({ settings, status }: { settings: UplinkSettings; statu
           diagnostics={status?.ethernetDiagnostics}
         />
       )}
+      {modemSettings.data && <ModemSection modem={status?.uplink.modem} settings={modemSettings.data} />}
       <PhonesSection phones={status?.uplink.phones ?? []} metered={settings.phoneMetered ?? true} />
       <LANPortsSection ports={status?.lanPorts ?? []} />
       <DnsSection />

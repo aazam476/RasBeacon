@@ -183,3 +183,50 @@ describe('the channel in use', () => {
     expect(screen.queryByText(/Running on channel/)).toBeNull();
   });
 });
+
+describe('Wi-Fi standard', () => {
+  it('offers what a Wi-Fi 5 adapter can run, the best recommended', async () => {
+    const device = fakeDevice();
+    const { user } = renderScreen(<HotspotScreen />, device, '/hotspot');
+    const select = screen.getByLabelText('Wi-Fi standard') as HTMLSelectElement;
+    expect([...select.options].map((option) => option.text)).toEqual([
+      'Wi-Fi 5 (recommended)',
+      'Wi-Fi 4, for very old devices',
+    ]);
+    await user.selectOptions(select, 'wifi4');
+    await user.click(screen.getAllByRole('button', { name: 'Save' })[0]);
+    expect(device.saveHotspotSettings).toHaveBeenCalledWith(expect.objectContaining({ standard: 'wifi4' }));
+  });
+
+  it('offers Wi-Fi 6 on an adapter that can run it, and leaves Wi-Fi 5 behind on 2.4 GHz', async () => {
+    const device = fakeDevice((router) => {
+      router.hotspotSettings = { ...router.hotspotSettings, noWifi6: false, standard: 'wifi5' };
+    });
+    const { user } = renderScreen(<HotspotScreen />, device, '/hotspot');
+    const select = () => screen.getByLabelText('Wi-Fi standard') as HTMLSelectElement;
+    expect([...select().options].map((option) => option.value)).toEqual(['wifi6', 'wifi5', 'wifi4']);
+    expect(select().options[0].text).toBe('Wi-Fi 6 (recommended)');
+    await user.selectOptions(screen.getByLabelText('Band'), '2.4GHz');
+    expect(select().value).toBe('wifi6');
+    expect([...select().options].map((option) => option.value)).toEqual(['wifi6', 'wifi4']);
+  });
+
+  it('shows the router’s answer', async () => {
+    const device = fakeDevice(undefined, {
+      saveHotspotSettings: async () => {
+        throw new FieldErrors({ standard: "This Wi-Fi adapter can't run Wi-Fi 6." });
+      },
+    });
+    const { user } = renderScreen(<HotspotScreen />, device, '/hotspot');
+    await user.click(screen.getAllByRole('button', { name: 'Save' })[0]);
+    expect(await screen.findByText("This Wi-Fi adapter can't run Wi-Fi 6.")).toBeTruthy();
+  });
+
+  it('falls back to the best when nothing was chosen', () => {
+    const device = fakeDevice((router) => {
+      router.hotspotSettings = { ...router.hotspotSettings, standard: undefined };
+    });
+    renderScreen(<HotspotScreen />, device, '/hotspot');
+    expect((screen.getByLabelText('Wi-Fi standard') as HTMLSelectElement).value).toBe('wifi5');
+  });
+});

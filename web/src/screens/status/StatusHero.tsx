@@ -74,6 +74,7 @@ function Facts({ status }: { status: Status }) {
   if (uplink.connected) {
     if (uplink.kind === 'ethernet') internet = 'Ethernet';
     else if (uplink.kind === 'phone') internet = phoneName(phoneInUse(uplink));
+    else if (uplink.kind === 'modem') internet = uplink.modem?.name ?? 'Mobile modem';
     else internet = uplink.wifi.ssid || 'Wi-Fi';
   }
 

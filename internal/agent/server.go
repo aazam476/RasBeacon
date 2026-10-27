@@ -111,6 +111,8 @@ func (a *Agent) Handler() http.Handler {
 	}))
 	mux.HandleFunc("GET /settings/port-forwarding", view(a.PortForwardingSettings))
 	mux.HandleFunc("PUT /settings/port-forwarding", save(a.UpdatePortForwarding, a.PortForwardingSettings))
+	mux.HandleFunc("GET /settings/modem", view(a.ModemSettings))
+	mux.HandleFunc("PUT /settings/modem", save(a.UpdateModemSettings, a.ModemSettings))
 	mux.HandleFunc("GET /settings/welcome", view(a.WelcomeSettings))
 	mux.HandleFunc("PUT /settings/welcome", save(a.UpdateWelcomeSettings, a.WelcomeSettings))
 	// The welcome page itself (rbweb's welcome server, not the settings

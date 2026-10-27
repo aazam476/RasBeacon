@@ -106,5 +106,9 @@ func (a *Agent) checkPhones() {
 // the owner's setting, or a phone or modem connection in use (unless the
 // owner turned that off). The caller holds a.mu.
 func (a *Agent) metered() bool {
-	return a.cfg.Hotspot.Metered || (a.uplink.status.Kind == "phone" && !a.cfg.Uplink.PhoneNotMetered)
+	return a.cfg.Hotspot.Metered || (mobile(a.uplink.status.Kind) && !a.cfg.Uplink.PhoneNotMetered)
 }
+
+// mobile reports whether an uplink kind is a phone or a modem, which
+// usually count data.
+func mobile(kind string) bool { return kind == "phone" || kind == "modem" }

@@ -63,6 +63,7 @@ func (a *Agent) StatusFor(viewer string) api.Status {
 			Interface:     radio.HotspotInterfaceName,
 			LANAddress:    a.lan.Address(),
 			Metered:       a.metered(), // also while a phone connection is in use
+			Standard:      a.hotspotStandard(),
 		},
 		Guest:    a.guestStatus(hostapdRunning),
 		Uplink:   a.uplink.status,

@@ -302,3 +302,46 @@ func TestHotspot_SavedWPA3OnlyRunsAsWPA2WPA3OnARadioWithoutIt(t *testing.T) {
 		t.Errorf("status = %s, warnings %q", status.Hotspot.Security, status.Warnings)
 	}
 }
+
+// iwInfoWiFi6 is a dual-band radio that can run a Wi-Fi 6 hotspot.
+const iwInfoWiFi6 = iwInfoDualBand + "\t\tHE Iftypes: managed, AP\n"
+
+func TestHotspot_WiFiStandard(t *testing.T) {
+	e := newClaimedEnv(t, true)
+	// The adapter can't run Wi-Fi 6: the best is Wi-Fi 4 on 2.4 GHz.
+	if s := e.agent.HotspotSettings(); s.Standard != config.StandardWiFi4 || !s.NoWiFi6 {
+		t.Errorf("settings = %+v", s)
+	}
+	settings := e.agent.HotspotSettings()
+	settings.Standard = config.StandardWiFi6
+	var ve *config.ValidationError
+	if err := e.agent.UpdateHotspotSettings(settings); !errors.As(err, &ve) || ve.Field != "hotspot.standard" {
+		t.Errorf("Wi-Fi 6 without the adapter: %v", err)
+	}
+	settings.Standard = config.StandardWiFi5
+	if err := e.agent.UpdateHotspotSettings(settings); !errors.As(err, &ve) || ve.Field != "hotspot.standard" {
+		t.Errorf("Wi-Fi 5 on 2.4 GHz: %v", err)
+	}
+
+	// A Wi-Fi 6 adapter: the best by itself, without choosing.
+	e.runner.outputs["iw phy phy1 info"] = iwInfoWiFi6
+	restarted := New(e.paths, e.runner)
+	restarted.usbRadioWait = 0
+	restarted.afterFunc = e.timers.afterFunc
+	restarted.background = func(func()) {}
+	if err := restarted.Start(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(e.readFile(e.paths.HostapdConfig()), "ieee80211ax=1") || restarted.Status().Hotspot.Standard != config.StandardWiFi6 {
+		t.Error("a Wi-Fi 6 adapter should run Wi-Fi 6")
+	}
+	// Choosing Wi-Fi 4, for very old devices, sticks.
+	settings = restarted.HotspotSettings()
+	settings.Standard = config.StandardWiFi4
+	if err := restarted.UpdateHotspotSettings(settings); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(e.readFile(e.paths.HostapdConfig()), "ieee80211ax") || restarted.HotspotSettings().Standard != config.StandardWiFi4 {
+		t.Error("Wi-Fi 4 was chosen")
+	}
+}

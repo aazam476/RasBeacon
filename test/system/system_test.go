@@ -462,7 +462,10 @@ func tryRBD(method, path string, body, out any) error {
 
 // status is the part of rbd's status the scenarios look at.
 type status struct {
-	Mode   string `json:"mode"`
+	Mode    string `json:"mode"`
+	Hotspot struct {
+		Standard string `json:"standard"`
+	} `json:"hotspot"`
 	Uplink struct {
 		Connected bool   `json:"connected"`
 		Interface string `json:"interface"`
@@ -548,6 +551,11 @@ func setUp(t *testing.T) {
 	})
 	p.join(t, hotspotSSID, hotspotPassword, false)
 	t.Logf("phone1 is on the hotspot with %s", p.connected(t))
+	// The simulated radios can run Wi-Fi 6, so the hotspot does by itself
+	// (and the phone still joined).
+	if got := rbdStatus(t).Hotspot.Standard; got != "wifi6" {
+		t.Errorf("the hotspot runs %q, want wifi6", got)
+	}
 }
 
 // 2. RasBeacon joins the hotel's Wi-Fi, notices its login page, and the

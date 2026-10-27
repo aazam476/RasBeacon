@@ -1,4 +1,4 @@
-import type { Band, Security } from '@/data/types';
+import type { Band, Security, WiFiStandard } from '@/data/types';
 
 const BAND_OPTIONS: { value: Band; label: string }[] = [
   { value: '2.4GHz', label: '2.4 GHz (works with every device, longer range)' },
@@ -25,4 +25,25 @@ const SECURITY_OPTIONS: { value: Security; label: string }[] = [
  */
 export function securityOptions(noWpa3: boolean | undefined): { value: Security; label: string }[] {
   return noWpa3 ? SECURITY_OPTIONS.filter((option) => option.value !== 'wpa3') : SECURITY_OPTIONS;
+}
+
+/** The best standard a radio runs on a band (what the router picks when none was chosen). */
+export function bestStandard(band: Band, noWifi6: boolean | undefined): WiFiStandard {
+  if (!noWifi6) return 'wifi6';
+  return band === '5GHz' ? 'wifi5' : 'wifi4';
+}
+
+/**
+ * The Wi-Fi standards the Hotspot page offers: only what the adapter can run on the band, the best
+ * marked "recommended".
+ */
+export function standardOptions(band: Band, noWifi6: boolean | undefined): { value: WiFiStandard; label: string }[] {
+  const best = bestStandard(band, noWifi6);
+  const options: { value: WiFiStandard; label: string }[] = [];
+  if (!noWifi6) options.push({ value: 'wifi6', label: 'Wi-Fi 6' });
+  if (band === '5GHz') options.push({ value: 'wifi5', label: 'Wi-Fi 5' });
+  options.push({ value: 'wifi4', label: 'Wi-Fi 4, for very old devices' });
+  return options.map((option) =>
+    option.value === best ? { ...option, label: `${option.label} (recommended)` } : option,
+  );
 }

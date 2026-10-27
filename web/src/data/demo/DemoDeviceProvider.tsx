@@ -342,6 +342,24 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
         });
       },
 
+      saveModemSettings: async (settings) => {
+        await wait(700);
+        const pin = settings.pin?.trim() ?? '';
+        if (pin && !/^\d{4,8}$/.test(pin)) throw new FieldErrors({ pin: 'A SIM PIN is 4 to 8 digits.' });
+        change((d) => {
+          const old = d.router.modemSettings;
+          d.router.modemSettings = {
+            apn: settings.apn.trim(),
+            username: settings.username.trim(),
+            hasPassword: settings.forgetPassword ? false : old.hasPassword || Boolean(settings.password),
+            hasPin: settings.forgetPin ? false : old.hasPin || Boolean(pin),
+          };
+          // A new PIN unlocks the demo's SIM.
+          const modem = d.router.status.uplink.modem;
+          if (modem && pin && (modem.state === 'pin-needed' || modem.state === 'pin-refused'))
+            modem.state = 'connecting';
+        });
+      },
       setPhoneMetered: async (metered) => {
         await wait(700);
         change((d) => void (d.router.uplinkSettings.phoneMetered = metered));
@@ -1099,6 +1117,7 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
       dnsSettings: loadable('dnsSettings', router.dnsSettings),
       portForwarding: loadable('portForwarding', portForwardingView(router)),
       welcomeSettings: loadable('welcomeSettings', router.welcomeSettings),
+      modemSettings: loadable('modemSettings', router.modemSettings),
       swapSettings: loadable('swapSettings', router.swapSettings),
       updateSettings: loadable('updateSettings', router.updateSettings),
       accessSettings: loadable('accessSettings', router.accessSettings),

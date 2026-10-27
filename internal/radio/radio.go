@@ -67,7 +67,10 @@ type Radio struct {
 	// HasWPA3 is true when the radio can run a WPA3-only hotspot (see
 	// SupportsWPA3AP).
 	HasWPA3 bool `json:"hasWpa3"`
-	Role    Role `json:"role"`
+	// HasWiFi6 is true when the radio can run a Wi-Fi 6 (802.11ax)
+	// hotspot (see SupportsWiFi6AP).
+	HasWiFi6 bool `json:"hasWifi6"`
+	Role     Role `json:"role"`
 }
 
 // PhyInfoFunc returns the output of `iw phy <phy> info`. It is a parameter so
@@ -120,6 +123,7 @@ func Detect(sysClassNet string, phyInfo PhyInfoFunc) ([]Radio, error) {
 			r.MaxAPs = MaxAPInterfaces(info)
 			r.Has5GHz = Supports5GHz(info)
 			r.HasWPA3 = SupportsWPA3AP(r.Driver, info)
+			r.HasWiFi6 = SupportsWiFi6AP(info)
 		}
 
 		radios = append(radios, r)
@@ -326,6 +330,28 @@ func Supports5GHz(iwPhyInfo string) bool {
 	for _, line := range strings.Split(iwPhyInfo, "\n") {
 		if strings.TrimSpace(line) == "Band 2:" {
 			return true
+		}
+	}
+	return false
+}
+
+// SupportsWiFi6AP reads `iw phy <name> info` output and reports whether the
+// radio can run a Wi-Fi 6 (802.11ax, "HE") hotspot. iw lists, for each band,
+// which modes may use HE:
+//
+//	HE Iftypes: managed, AP
+//
+// A radio that only joins Wi-Fi 6 networks lists "managed" alone.
+func SupportsWiFi6AP(iwPhyInfo string) bool {
+	for _, line := range strings.Split(iwPhyInfo, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "HE Iftypes:") {
+			continue
+		}
+		for _, mode := range strings.Split(strings.TrimPrefix(line, "HE Iftypes:"), ",") {
+			if strings.TrimSpace(mode) == "AP" {
+				return true
+			}
 		}
 	}
 	return false

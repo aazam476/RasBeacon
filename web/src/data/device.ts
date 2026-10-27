@@ -36,6 +36,7 @@ import type {
   VPNDetailsForm,
   VPNSettings,
   WelcomeSettings,
+  ModemSettings,
   WiFiQR,
 } from './types';
 
@@ -73,6 +74,7 @@ export type DataKey =
   | 'dnsSettings'
   | 'portForwarding'
   | 'welcomeSettings'
+  | 'modemSettings'
   | 'swapSettings'
   | 'updateSettings'
   | 'accessSettings'
@@ -112,6 +114,7 @@ export interface DeviceState {
   dnsSettings: Loadable<DNSSettings>;
   portForwarding: Loadable<PortForwardingSettings>;
   welcomeSettings: Loadable<WelcomeSettings>;
+  modemSettings: Loadable<ModemSettings>;
   swapSettings: Loadable<SwapSettings>;
   updateSettings: Loadable<UpdateSettings>;
   accessSettings: Loadable<AccessSettings>;
@@ -196,6 +199,11 @@ export interface DeviceActions {
 
   /** Save UplinkSettings.ethernetRole (with the saved networks as they are). */
   setEthernetRole: (role: EthernetRole) => Promise<void>;
+  /**
+   * Save the mobile modem's settings (APN, username, password, SIM PIN). Field keys: apn,
+   * username, password, pin.
+   */
+  saveModemSettings: (settings: ModemSettings) => Promise<void>;
   /** Treat a phone or modem connection (USB) as metered while it is in use. */
   setPhoneMetered: (metered: boolean) => Promise<void>;
   /** Fill `nearbyNetworks` (takes about 5 seconds). */
@@ -260,7 +268,7 @@ export interface DeviceActions {
 
   // --- Hotspot and guests ------------------------------------------------------------------
 
-  /** Field keys: ssid, password, band, channel, country. */
+  /** Field keys: ssid, password, band, channel, country, standard. */
   saveHotspotSettings: (settings: HotspotSettings) => Promise<void>;
   /** Answer with the current Wi-Fi password (being logged in is enough). */
   revealHotspotPassword: () => Promise<string>;

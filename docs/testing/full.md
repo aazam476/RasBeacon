@@ -148,6 +148,15 @@ first if you want them; everything else works from the web pages alone.
     **HiLink modem:** the same, listed as the modem's name. Note in the
     report which phones and modems worked, and whether a modem needed a
     powered USB hub.
+12. **A modem that needs ModemManager (new, if you have one: M.2 in a USB
+    case, or a 5G stick that isn't HiLink):** plug it in with a SIM.
+    **Expect:** Internet → *Mobile modem* shows its name. With a SIM PIN:
+    *Needs the SIM's PIN*; type a **wrong** PIN, **Save**: *The SIM refused
+    the PIN*, and waiting 5 minutes doesn't use up more tries (the tries
+    left stay the same). The right PIN: it connects (*Connected*, the
+    operator, 4G/5G and signal), Status says *Connected through <modem>*,
+    devices have internet, and it is metered. An APN from your carrier, if
+    it doesn't connect by itself.
 
 ## 5. Your own DNS servers and DNS-over-HTTPS (new)
 
@@ -382,6 +391,12 @@ Keep the VPN on with the kill switch.
 3. **WPA3 only (new):** Security → *WPA3 only*, **Save**. **Expect:** the
    footer warns about older devices; a phone from 2019 or later rejoins,
    an older laptop or adapter can't. Switch back to *WPA2/WPA3*.
+   **Wi-Fi standard (new):** Hotspot → *Wi-Fi standard* lists only what the
+   adapter can run, the best marked *recommended* (Wi-Fi 6 on an MT7921AU,
+   Wi-Fi 5 on an MT7612U on 5 GHz). Choose **Wi-Fi 4, for very old
+   devices**, **Save**: phones still join (a Wi-Fi analyzer app shows no
+   802.11ac/ax). Choose the recommended one again. With a Wi-Fi 6 adapter,
+   check a Wi-Fi 5 laptop and a Wi-Fi 4 device still join.
 4. **Allowed devices (new):** *Who can join* → *Allowed devices* → turn on
    **Only allow these devices**. **Expect:** a warning that the device
    you're using isn't on the list, with **Add this device**; **Save**
@@ -672,7 +687,7 @@ Board (Pi 4/5/3B/3B+/Zero 2 W) / RAM:     Adapter:          Card size:          
 1  First boot: setup network after __ s; opened by itself iPhone/Android:
 2  Setup + login (mismatch caught, wrong password refused, stay logged in):
 3  Storage shows full card (__ GB): / swap row 2 GB: / 4 GB, Off, 2 GB save: / SSH swapon+swappiness:
-4  Ethernet: / scan lists networks: / Wi-Fi uplink + switch: / eduroam: / hotspot move kept working 15 min: / renew, disconnect: / phone over USB (Android, iPhone, modem: which):
+4  Ethernet: / scan lists networks: / Wi-Fi uplink + switch: / eduroam: / hotspot move kept working 15 min: / renew, disconnect: / phone over USB (Android, iPhone, modem: which): / ModemManager modem (wrong PIN tried once, connects):
 5  dns.google saved as full address: / leak test shows Google: / rbdoh running: / Cloudflare+1.1.1.1: / bad entry refused: / plain only, rbdoh stopped: / back to network's:
 6  Count + this device: / traffic rates: / pause + reboot-proof: / disconnect: / flush lease: / rename pencil: / data limit without metered: / fixed address: / port forward from uplink side + hotspot, with VPN: / IPv6 pinhole:
 7  Laptop on client port gets address+internet: / listed with cable icon, no Disconnect: / leaves list: / safety warning: / USB Ethernet for devices + not used on a router:
@@ -680,7 +695,7 @@ Board (Pi 4/5/3B/3B+/Zero 2 W) / RAM:     Adapter:          Card size:          
 9  Speed test: down __ up __ ping __ location __, took __ s / speed.cloudflare.com: down __ up __
 10 Login page notice: / zero-leak login worked, tap delay __ s: / no leak: / login mode:
 11 SSH: / pages OK phone+laptop+dark: / rounded focus outline: / readings: / stay logged in: / unsaved bar:
-12 Hotspot password check + 5 GHz: / UK refused, GB saves: / JP channels end at 48: / show password (no admin password): / WPA3 only: / allowed devices + lockout warning: / device limit: / metered: / guests isolated: / welcome page + code + ask again: rbd restart with guests, uplink not guest0: / IPv6: / HTTPS fingerprint + redirect: / iPhone Safari accepts the certificate:
+12 Hotspot password check + 5 GHz: / UK refused, GB saves: / JP channels end at 48: / show password (no admin password): / WPA3 only: / Wi-Fi standard (6 if the adapter can, 4 for old devices): / allowed devices + lockout warning: / device limit: / metered: / guests isolated: / welcome page + code + ask again: / rbd restart with guests, uplink not guest0: / IPv6: / HTTPS fingerprint + redirect: / iPhone Safari accepts the certificate:
 13 Plugins: catalog install AdGuard: / isolation: / ports: / Samba: / crash stop: / changed byte refused: / image with another plugin's name refused, AdGuard unchanged: / kept data asked about: / rbport + bridge table:
 14 Version before __ / renamed image refused: / changed byte refused: / update installed, settings kept, took __ min: / rollback: / check schedule + Check now: / ntfy test + new-version notice:
 15 Power cuts x3: / reboot dialog: / shut down + power on: / rename to travel-pi.lan: / long run __ devices __ min, drops: / memory: / diagnostics clean:

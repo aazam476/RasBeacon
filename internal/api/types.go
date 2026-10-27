@@ -285,6 +285,8 @@ type HotspotStatus struct {
 	LANAddress string `json:"lanAddress"`
 	// Metered is true when devices are told the connection is limited.
 	Metered bool `json:"metered"`
+	// Standard is the Wi-Fi standard it runs ("wifi6", "wifi5", "wifi4").
+	Standard config.Standard `json:"standard,omitempty"`
 }
 
 // GuestStatus describes the guest network on the status page.
@@ -314,8 +316,9 @@ type GuestSettings struct {
 type UplinkStatus struct {
 	// Connected is true when RasBeacon has a route to the internet.
 	Connected bool `json:"connected"`
-	// Kind is "ethernet", "wifi" or "phone" (a phone or modem on USB) for
-	// the uplink in use, or "" if none.
+	// Kind is "ethernet", "wifi", "phone" (a phone or modem on USB) or
+	// "modem" (a modem that needs ModemManager) for the uplink in use, or
+	// "" if none.
 	Kind      string `json:"kind"`
 	Interface string `json:"interface"`
 	// Address is RasBeacon's IPv4 address on the upstream network.
@@ -329,6 +332,9 @@ type UplinkStatus struct {
 	// a USB port (empty without one). One of them is in use when Kind is
 	// "phone".
 	Phones []PhoneUplinkStatus `json:"phones"`
+	// Modem is the mobile broadband modem that needs ModemManager (nil
+	// without one). It carries the internet when Kind is "modem".
+	Modem *ModemStatus `json:"modem,omitempty"`
 	// SubnetMask and InterfaceMAC describe RasBeacon's address on the
 	// uplink in use ("" when not connected).
 	SubnetMask   string `json:"subnetMask,omitempty"`
@@ -700,6 +706,13 @@ type HotspotSettings struct {
 	// NoWPA3 is true when the hotspot's radio can't run a WPA3-only
 	// hotspot, so the page doesn't offer "WPA3 only".
 	NoWPA3 bool `json:"noWpa3,omitempty"`
+	// Standard is the Wi-Fi standard: "wifi6", "wifi5" (5 GHz only) or
+	// "wifi4". The answer is the one in use (the best when none was
+	// chosen); "" in a request picks the best.
+	Standard config.Standard `json:"standard,omitempty"`
+	// NoWiFi6 is true when the hotspot's radio can't run Wi-Fi 6, so the
+	// page doesn't offer it. Read-only.
+	NoWiFi6 bool `json:"noWifi6,omitempty"`
 }
 
 // HotspotChannelsRequest asks which channels a country allows (POST
@@ -1268,4 +1281,38 @@ type PhoneUplinkStatus struct {
 	// plugged in.
 	ReceivedBytes uint64 `json:"receivedBytes"`
 	SentBytes     uint64 `json:"sentBytes"`
+}
+
+// ModemStatus is a mobile broadband modem (one that needs ModemManager).
+type ModemStatus struct {
+	// Name is "Quectel EM12-G", or "Mobile modem".
+	Name string `json:"name"`
+	// State is "connected", "connecting", "searching" (for a network),
+	// "pin-needed" (enter the SIM's PIN), "pin-refused" (the saved PIN
+	// was wrong: RasBeacon won't try it again), "puk-needed" (the SIM is
+	// blocked: unblock it in a phone), "no-sim", "starting" or "failed".
+	State string `json:"state"`
+	// Operator ("T-Mobile"), Network ("5G", "4G", "3G") and SignalPercent
+	// while it is on a network.
+	Operator      string `json:"operator,omitempty"`
+	Network       string `json:"network,omitempty"`
+	SignalPercent int    `json:"signalPercent"`
+	// PINTries is how many PIN attempts the SIM has left (-1: unknown).
+	PINTries int `json:"pinTries"`
+	// Error is the last problem connecting, in ModemManager's words.
+	Error string `json:"error,omitempty"`
+}
+
+// ModemSettings is the modem's settings (GET and PUT /settings/modem).
+// Password and PIN are write-only: empty keeps the saved one.
+type ModemSettings struct {
+	APN         string `json:"apn"`
+	Username    string `json:"username"`
+	Password    string `json:"password,omitempty"`
+	HasPassword bool   `json:"hasPassword"`
+	PIN         string `json:"pin,omitempty"`
+	HasPIN      bool   `json:"hasPin"`
+	// ForgetPassword and ForgetPIN remove the saved ones.
+	ForgetPassword bool `json:"forgetPassword,omitempty"`
+	ForgetPIN      bool `json:"forgetPin,omitempty"`
 }

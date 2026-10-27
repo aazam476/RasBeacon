@@ -149,7 +149,9 @@ type Agent struct {
 	// refreshPinholes).
 	appliedPinholes string
 	// welcome is the welcome page's accepted devices (see welcome.go).
-	welcome   welcomeState
+	welcome welcomeState
+	// modem is the mobile broadband modem (see modem.go).
+	modem     modemState
 	portal    portalState
 	readings  readingsState
 	speedtest speedtestState
@@ -631,6 +633,7 @@ func (a *Agent) ownerHotspot() (render.HotspotInput, error) {
 		Security:   a.hotspotSecurity(),
 		Password:   a.secrets.HotspotPassword,
 		MaxDevices: a.cfg.Access.MaxDevices,
+		Standard:   a.hotspotStandard(),
 		Guest:      a.guestHostapd(),
 	}
 	if a.cfg.Access.AllowListOn {

@@ -8,6 +8,7 @@ import type {
   AccessSettings,
   ClaimResponse,
   DNSSettings,
+  ModemSettings,
   WelcomeSettings,
   PortForwardingSettings,
   PortForwardRule,
@@ -285,6 +286,10 @@ export const getPortForwarding = () => request<PortForwardingSettings>('GET', '/
 /** Reloading the firewall takes a moment. */
 export const putPortForwarding = (rules: PortForwardRule[]) =>
   request<PortForwardingSettings>('PUT', '/settings/port-forwarding', { body: { rules }, timeoutMs: 30_000 });
+
+export const getModemSettings = () => request<ModemSettings>('GET', '/settings/modem');
+export const putModemSettings = (settings: ModemSettings) =>
+  request<ModemSettings>('PUT', '/settings/modem', { body: settings });
 
 export const getWelcomeSettings = () => request<WelcomeSettings>('GET', '/settings/welcome');
 /** Reloading the firewall takes a moment. */

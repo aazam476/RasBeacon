@@ -177,6 +177,9 @@ type HotspotInput struct {
 	// MaxDevices is the most devices on each network at once (0: hostapd's
 	// own limit).
 	MaxDevices int
+	// Standard is the Wi-Fi standard to run (config.StandardWiFi6, 5 or
+	// 4); "" is Wi-Fi 5 on 5 GHz and Wi-Fi 4 on 2.4 GHz.
+	Standard config.Standard
 	// Guest adds the guest network on the same radio (nil: no guest
 	// network). The radio must support two access points (see
 	// radio.MaxAPInterfaces).
@@ -227,9 +230,24 @@ type hostapdData struct {
 	VHTCenterChannel int
 	// HT40Direction is "HT40+" or "HT40-" (see ht40Direction).
 	HT40Direction string
+	// WiFi6 turns on 802.11ax (HE); WiFi5 802.11ac (VHT, 5 GHz only).
+	WiFi6    bool
+	WiFi5    bool
+	BSSColor int
 }
 
 // Hostapd produces hostapd.conf text for the hotspot.
+// bssColor picks the hotspot's Wi-Fi 6 "BSS color" (1 to 63) from its name,
+// so it stays the same across restarts. Devices use it to tell this
+// network's signals from a neighbor's on the same channel.
+func bssColor(ssid string) int {
+	sum := 0
+	for _, b := range []byte(ssid) {
+		sum += int(b)
+	}
+	return sum%63 + 1
+}
+
 func Hostapd(in HotspotInput) (string, error) {
 	if in.Channel == 0 {
 		in.Channel = config.DefaultChannel(in.Band)
@@ -273,6 +291,9 @@ func Hostapd(in HotspotInput) (string, error) {
 		VHTCenterChannel: vhtCenterChannel(in.Channel),
 		VHT80:            vhtCenterChannel(in.Channel) != in.Channel,
 		HT40Direction:    ht40Direction(in.Channel),
+		WiFi6:            in.Standard == config.StandardWiFi6,
+		WiFi5:            in.Band == config.Band5GHz && in.Standard != config.StandardWiFi4,
+		BSSColor:         bssColor(in.SSID),
 	}
 	if g := in.Guest; g != nil {
 		data.GuestInterface = GuestInterface

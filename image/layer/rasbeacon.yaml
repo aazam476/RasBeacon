@@ -47,6 +47,9 @@ mmdebstrap:
     # kernel's ipheth driver needs usbmuxd to pair with the phone ("Trust
     # this computer?"). Android phones and HiLink modems need nothing more.
     - usbmuxd
+    # 4G/5G modems that need a modem manager (QMI and MBIM: most M.2 and
+    # many 5G USB modems). rbd tells it what to do with mmcli.
+    - modemmanager
     # Decompresses update files while they are installed
     - zstd
     # Firmware the USB Wi-Fi adapters load when they start: Realtek (e.g.

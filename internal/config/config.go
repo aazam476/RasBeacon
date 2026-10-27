@@ -100,6 +100,31 @@ type Config struct {
 	// Welcome is the owner's own captive portal: a page devices see before
 	// they get the internet (Guests page → Welcome page).
 	Welcome WelcomeConfig `json:"welcome"`
+	// Modem is the mobile broadband modem's settings (one that needs
+	// ModemManager); its password and SIM PIN are in Secrets.
+	Modem ModemConfig `json:"modem"`
+}
+
+// ModemConfig is how to connect a mobile broadband modem: the carrier's
+// APN ("" lets the modem pick from its own list) and, for some carriers, a
+// username.
+type ModemConfig struct {
+	APN      string `json:"apn,omitempty"`
+	Username string `json:"username,omitempty"`
+}
+
+// Validate checks the modem settings. They go to mmcli as one
+// "key=value,key=value" argument, so commas, equal signs and quotes are
+// refused.
+func (m ModemConfig) Validate() error {
+	bad := func(s string) bool { return strings.ContainsAny(s, ",=\"'\n\r") || utf8.RuneCountInString(s) > 64 }
+	if bad(m.APN) {
+		return &ValidationError{Field: "apn", Message: "Use up to 64 characters, without commas, quotes or =."}
+	}
+	if bad(m.Username) {
+		return &ValidationError{Field: "username", Message: "Use up to 64 characters, without commas, quotes or =."}
+	}
+	return nil
 }
 
 // PluginsConfig is the installed plugins and where the catalog looks for
@@ -430,7 +455,21 @@ type HotspotConfig struct {
 	// phone's hotspot, a paid plan), so they hold back large downloads.
 	// Only Android reads this hint automatically (see render.Dnsmasq).
 	Metered bool `json:"metered"`
+	// Standard is the Wi-Fi standard the hotspot runs: "" for the best the
+	// radio and band allow, or StandardWiFi6, StandardWiFi5 (5 GHz only)
+	// or StandardWiFi4 (for very old devices).
+	Standard Standard `json:"standard,omitempty"`
 }
+
+// Standard is a Wi-Fi standard the hotspot can run.
+type Standard string
+
+// The Wi-Fi standards: 802.11ax, 802.11ac and 802.11n.
+const (
+	StandardWiFi6 Standard = "wifi6"
+	StandardWiFi5 Standard = "wifi5"
+	StandardWiFi4 Standard = "wifi4"
+)
 
 // AccessConfig limits which and how many devices may join the hotspot.
 // It only applies to Wi-Fi: devices plugged into an Ethernet port always get
@@ -752,6 +791,12 @@ type Secrets struct {
 	WireGuardPresharedKey string `json:"wireguardPresharedKey,omitempty"`
 	// Plugins holds plugins' password settings: plugin ID → key → value.
 	Plugins map[string]map[string]string `json:"plugins,omitempty"`
+	// ModemPassword is the carrier's password for the modem's APN, if any.
+	ModemPassword string `json:"modemPassword,omitempty"`
+	// ModemPIN unlocks the modem's SIM card. RasBeacon tries it once; if
+	// the SIM refuses it, it waits for a new one (see agent/modem.go), so
+	// it can never use up the SIM's attempts.
+	ModemPIN string `json:"modemPin,omitempty"`
 }
 
 // WireGuardKeys are one VPN profile's secrets (base64).
@@ -837,6 +882,15 @@ func (h HotspotConfig) Validate() error {
 	}
 	if h.Channel != 0 && !IsAllowedChannel(h.Band, h.Channel) {
 		return &ValidationError{Field: "hotspot.channel", Message: "This channel is not offered for this band."}
+	}
+	switch h.Standard {
+	case "", StandardWiFi6, StandardWiFi4:
+	case StandardWiFi5:
+		if h.Band != Band5GHz {
+			return &ValidationError{Field: "hotspot.standard", Message: "Wi-Fi 5 needs the 5 GHz band."}
+		}
+	default:
+		return &ValidationError{Field: "hotspot.standard", Message: `Must be "wifi6", "wifi5" or "wifi4".`}
 	}
 	if !isCountryCode(h.Country) {
 		return &ValidationError{Field: "hotspot.country", Message: countryMessage(h.Country)}

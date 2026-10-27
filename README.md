@@ -175,8 +175,9 @@ since their image has one copy of the system.
 - **Who can join:** on the **Hotspot** page, let only the devices you list
   join (by MAC address; phones often use a private one per network), and
   set the most devices at once. Devices on Ethernet always get in.
-- **WPA3 only** for the hotspot, if all your devices support it: the
-  **Hotspot** page.
+- **WPA3 only** for the hotspot, if all your devices support it, and
+  **Wi-Fi 6** with an adapter that can run it (picked by itself; Wi-Fi 4
+  for very old devices): the **Hotspot** page.
 - **Public IPv6 through the VPN:** if your WireGuard server routes a public
   IPv6 /64 to RasBeacon, enter it on the **VPN** page (under *Server
   details*); devices then get their own public IPv6 addresses.
@@ -197,8 +198,10 @@ since their image has one copy of the system.
   device: the **Clients** page.
 - **Internet from your phone or a USB modem:** plug in an Android phone
   with USB tethering on, an iPhone with Personal Hotspot on (tap *Trust*
-  once), or a HiLink 4G/5G stick. RasBeacon uses it when neither Ethernet
-  nor Wi-Fi has the internet, and tells your devices it is metered.
+  once), a HiLink 4G/5G stick, or a modem that needs a modem manager
+  (most M.2 and many 5G modems: enter the APN and SIM PIN on the
+  **Internet** page). RasBeacon uses it when neither Ethernet nor Wi-Fi has
+  the internet, and tells your devices it is metered.
 - **More wired devices:** plug a USB Ethernet adapter into RasBeacon and
   it becomes a port of your hotspot (with the same check as the client
   port: a cable that leads to another network is never connected), so the

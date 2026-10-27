@@ -46,6 +46,7 @@ export function fakeDevice(change?: (router: MockRouter) => void, actions: Parti
     dnsSettings: loaded(router.dnsSettings),
     portForwarding: loaded(portForwardingView(router)),
     welcomeSettings: loaded(router.welcomeSettings),
+    modemSettings: loaded(router.modemSettings),
     swapSettings: loaded(router.swapSettings),
     updateSettings: loaded(router.updateSettings),
     accessSettings: loaded(router.accessSettings),

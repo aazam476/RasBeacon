@@ -17,11 +17,11 @@ import {
   TextField,
 } from '@/ui';
 import { QrCode } from '../common/QrCode';
-import { bandOptions, securityOptions } from '../common/wifiOptions';
+import { bandOptions, bestStandard, securityOptions, standardOptions } from '../common/wifiOptions';
 import { AccessSection } from './AccessSection';
 
 /** The settings that restart the hotspot when they change; only `metered` doesn't. */
-const RESTARTING_FIELDS = ['ssid', 'band', 'channel', 'security', 'country'] as const;
+const RESTARTING_FIELDS = ['ssid', 'band', 'channel', 'security', 'country', 'standard'] as const;
 
 /** Typing settings for names and codes: no capitals, corrections or suggestions. */
 const PLAIN_INPUT = { autoComplete: 'off', autoCapitalize: 'none', autoCorrect: 'off', spellCheck: false } as const;
@@ -170,7 +170,21 @@ function HotspotForm({ settings }: { settings: HotspotSettings }) {
           value={values.band}
           error={fieldErrors.band ?? (bandRefused ? "This country doesn't allow a hotspot on 5 GHz." : undefined)}
           // A channel of the old band doesn't exist on the new one, so it goes back to the default.
-          onChange={(band) => form.update((current) => ({ ...current, band, channel: 0 }), ['band', 'channel'])}
+          onChange={(band) =>
+            form.update(
+              (current) => ({
+                ...current,
+                band,
+                channel: 0,
+                // Wi-Fi 5 is 5 GHz only: on 2.4 GHz the best takes its place.
+                standard:
+                  current.standard === 'wifi5' && band !== '5GHz'
+                    ? bestStandard(band, settings.noWifi6)
+                    : current.standard,
+              }),
+              ['band', 'channel', 'standard'],
+            )
+          }
         />
         <SelectField
           label="Channel"
@@ -184,6 +198,14 @@ function HotspotForm({ settings }: { settings: HotspotSettings }) {
           options={securityOptions(settings.noWpa3)}
           value={values.security}
           onChange={(security) => setField('security', security)}
+        />
+        <SelectField
+          label="Wi-Fi standard"
+          options={standardOptions(values.band, settings.noWifi6)}
+          value={values.standard ?? bestStandard(values.band, settings.noWifi6)}
+          onChange={(standard) => setField('standard', standard)}
+          hint="Older devices still join a Wi-Fi 6 network, with their own standard."
+          error={fieldErrors.standard}
         />
       </Section>
 
