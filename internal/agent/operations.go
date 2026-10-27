@@ -64,7 +64,11 @@ func (a *Agent) Claim(req api.ClaimRequest) (api.ClaimResponse, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if a.mode != api.ModeSetup {
+	// The mode stays "setup" for switchDelay after a claim, until
+	// finishClaim switches networks; Claimed is set at once, so a second
+	// claim meanwhile (from anyone on the setup network) can't replace the
+	// owner's password and hotspot.
+	if a.mode != api.ModeSetup || a.cfg.Claimed {
 		return api.ClaimResponse{}, ErrWrongMode
 	}
 

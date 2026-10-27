@@ -222,9 +222,20 @@ func newTestEnv(t *testing.T) *testEnv {
 		"iw phy phy0 info": iwInfoWithAP,
 		"iw phy phy1 info": iwInfoDualBand,
 	}}
-	timers := &fakeTimers{}
-	a := New(p, runner)
-	a.afterFunc = timers.afterFunc
+	e := &testEnv{t: t, paths: p, runner: runner}
+	e.agent = e.newAgent()
+	return e
+}
+
+// newAgent makes an agent on e's device, with the fakes every test uses:
+// e.runner for commands, fresh fake timers (in e.timers), no real waits,
+// lookups or disk space, and background work that waits until a test runs
+// it. So nothing touches this computer, and nothing keeps running after
+// the test.
+func (e *testEnv) newAgent() *Agent {
+	a := New(e.paths, e.runner)
+	e.timers = &fakeTimers{}
+	a.afterFunc = e.timers.afterFunc
 	a.usbRadioWait = 0
 	a.sleep = func(time.Duration) {} // don't really wait in tests
 	// Every name is at 203.0.113.7 (a documentation address), with no DNS.
@@ -233,12 +244,20 @@ func newTestEnv(t *testing.T) *testEnv {
 	}
 	// A card with 10 GB free, whatever this computer's disk holds.
 	a.diskFree = func(string) (int64, error) { return 10 << 30, nil }
-	e := &testEnv{t: t, paths: p, runner: runner, timers: timers, agent: a}
-	// Background work (plugins) waits until a test runs it.
 	a.background = func(f func()) { e.backgroundMu.Lock(); e.pending = append(e.pending, f); e.backgroundMu.Unlock() }
 	a.plugins.watchEvery = 0
 	a.dhcpProbe = e.fakeDHCPProbe
-	return e
+	return a
+}
+
+// restart is rbd starting again on the same device (after a reboot, a
+// crash or an update): a new agent with the same files and fakes replaces
+// e.agent (with fresh timers in e.timers), and starts.
+func (e *testEnv) restart() *Agent {
+	e.t.Helper()
+	e.agent = e.newAgent()
+	e.start()
+	return e.agent
 }
 
 func mustWrite(t *testing.T, path, content string) {
@@ -428,6 +447,30 @@ func TestClaim_TwiceIsRejected(t *testing.T) {
 	e.timers.runAll()
 	if _, err := e.agent.Claim(validClaim); !errors.Is(err, ErrWrongMode) {
 		t.Errorf("second claim should fail with ErrWrongMode, got %v", err)
+	}
+}
+
+// A second claim in the seconds before the network switch (the mode is
+// still "setup") must not replace the owner's password and hotspot.
+func TestClaim_SecondClaimBeforeTheSwitchIsRejected(t *testing.T) {
+	e := newTestEnv(t)
+	e.start()
+	if _, err := e.agent.Claim(validClaim); err != nil {
+		t.Fatal(err)
+	}
+	intruder := validClaim
+	intruder.AdminPassword = "intruder-password-123"
+	intruder.HotspotSSID = "Intruder"
+	intruder.HotspotPassword = "intruder-wifi-pass"
+	if _, err := e.agent.Claim(intruder); !errors.Is(err, ErrWrongMode) {
+		t.Errorf("a second claim before the switch = %v, want ErrWrongMode", err)
+	}
+	e.timers.runAll()
+	if !e.agent.VerifyAdminPassword(validClaim.AdminPassword) || e.agent.VerifyAdminPassword(intruder.AdminPassword) {
+		t.Error("the owner's admin password must stay")
+	}
+	if hostapd := e.readFile(e.paths.HostapdConfig()); !strings.Contains(hostapd, "wpa_passphrase="+validClaim.HotspotPassword) {
+		t.Errorf("the owner's hotspot must stay:\n%s", hostapd)
 	}
 }
 
