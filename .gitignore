@@ -9,3 +9,4 @@
 /build/
 /test/e2e/node_modules/
 /coverage.out
+/web/coverage/
