@@ -33,6 +33,10 @@ export default mergeConfig(
         // The demo's sample data and the entry point aren't app logic.
         exclude: ['src/data/demo/**', 'src/main.tsx', 'src/**/*.d.ts'],
         reporter: ['text-summary', 'text'],
+        // `npm run coverage` (and CI) fails if the tests cover less than
+        // this. Raise them as coverage grows; never lower them to make a
+        // change pass (see docs/testing/README.md).
+        thresholds: { statements: 96, branches: 87, functions: 96, lines: 97 },
       },
     },
   }),

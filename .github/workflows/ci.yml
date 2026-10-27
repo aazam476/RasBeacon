@@ -37,9 +37,26 @@ jobs:
       - name: Check that everything builds on macOS
         run: GOOS=darwin GOARCH=arm64 go vet ./...
       - run: go run honnef.co/go/tools/cmd/staticcheck@2025.1.1 ./...
-      # -cover prints how much of each package the tests run; -race fails
-      # the run if two goroutines touch the same data without a lock.
-      - run: go test -race -cover ./...
+      # The login browser and speed test tests drive a real headless
+      # Chromium (Playwright's, the same one the end-to-end test uses).
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Install Playwright's Chromium
+        working-directory: test/e2e
+        run: npm ci --no-audit --no-fund && npx playwright install --with-deps chromium
+      # -race fails the run if two goroutines touch the same data without a
+      # lock. The coverage profile records which statements the tests ran;
+      # RASBEACON_REQUIRE_BROWSER=1 fails the browser tests instead of
+      # skipping them if Chromium can't be found.
+      - run: RASBEACON_REQUIRE_BROWSER=1 go test -race -coverprofile=coverage.out ./...
+      # The share of all Go statements the unit tests run must stay at 85% or
+      # more (see docs/testing/README.md). New code comes with its tests.
+      - name: Check Go test coverage (at least 85%)
+        run: |
+          total=$(go tool cover -func=coverage.out | awk '/^total:/ { sub("%", "", $3); print $3 }')
+          echo "Go test coverage: ${total}% of statements"
+          awk -v total="$total" 'BEGIN { exit !(total >= 85.0) }' || { echo "::error::Go test coverage fell below 85% (${total}%)"; exit 1; }
 
   web:
     name: Web UI (typecheck, lint, format, tests, build)
@@ -131,10 +148,6 @@ jobs:
       - name: Install Playwright's Chromium
         working-directory: test/e2e
         run: npm ci --no-audit --no-fund && npx playwright install --with-deps chromium
-      - name: Browser and speed test unit tests (real headless Chromium)
-        # RASBEACON_REQUIRE_BROWSER=1 makes them fail instead of skipping if
-        # Playwright's headless Chromium can't be found.
-        run: RASBEACON_REQUIRE_BROWSER=1 go test -count=1 ./internal/browser/ ./internal/speedtest/
       - name: Run the walkthrough
         env:
           SCREENSHOT_DIR: ${{ runner.temp }}/screenshots

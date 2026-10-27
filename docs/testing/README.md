@@ -17,6 +17,30 @@ checks. CI runs all but the hardware tests on every push and prints how
 much of the code the unit tests run (`go test -cover ./...` and
 `npm run coverage`).
 
+### Coverage minimums
+
+CI fails if the tests cover less than:
+
+- **Go: 85% of all statements.** Measured the way `go test
+  -coverprofile=coverage.out ./...` and `go tool cover -func=coverage.out`
+  count them: each package's statements count as run when that package's
+  own tests run them (code reached only from another package's tests
+  doesn't count). Packages without tests count as 0%. To see it locally:
+
+  ```sh
+  go test -coverprofile=coverage.out ./... && go tool cover -func=coverage.out | tail -1
+  ```
+
+  The browser and speed test tests need Playwright's headless Chromium
+  (CI installs it); without it they're skipped and the total reads lower.
+- **Web UI:** 96% of statements, 87% of branches, 96% of functions and
+  97% of lines (`thresholds` in `web/vitest.config.ts`; `npm run coverage`
+  fails below them). The demo's sample data doesn't count.
+
+New code comes with its tests, so these only go up: raise a minimum when
+coverage has grown well past it, and never lower one to get a change
+through.
+
 ### When CI runs
 
 CI runs once for each change: on every push to any branch (merging a pull
