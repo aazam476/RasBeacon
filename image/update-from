@@ -6,3 +6,4 @@
 # Older RasBeacons then refuse the update and tell their owner to back up
 # the settings, flash the new image and restore the backup. See
 # docs/releasing.md.
+v0.2.0

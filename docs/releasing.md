@@ -78,6 +78,10 @@ to the repository.
    public key and write the release from step 2 into `image/update-from`
    (see below): devices older than it don't know the new key.
 
+   RasBeacon did this once: v0.2.0 added `release-2.pub`, still signed with
+   the old key, and v0.3.0 is signed with the new key, has only
+   `release-2.pub`, and needs v0.2.0 or newer to install its update file.
+
 Every build that makes an update file prints which public key in
 `update-keys/` belongs to the signing key ("Signing with the key of
 release-2.pub", in the "Build image" step of the Pi 4 and Pi 5 job), and
