@@ -95,9 +95,11 @@ function TunnelSections({ vpn, online, settings }: { vpn: VPNStatus; online: boo
           leading={{ tile: 'block', color: 'red' }}
           title="Kill switch"
           subtitle={
-            vpn.killSwitch
-              ? "Devices only use the internet through the VPN, and have none while it's down or off."
-              : 'If the VPN goes down, devices use the internet directly.'
+            !configured
+              ? 'Import a WireGuard profile first.'
+              : vpn.killSwitch
+                ? "Devices only use the internet through the VPN, and have none while it's down or off."
+                : 'If the VPN goes down, devices use the internet directly.'
           }
           checked={configured && vpn.killSwitch}
           onChange={setKillSwitch}

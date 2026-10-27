@@ -5,14 +5,27 @@ import { VpnScreen } from '@/screens/vpn/VpnScreen';
 import { fakeDevice, renderScreen } from '../render';
 
 describe('kill switch', () => {
-  it('is grayed out until a WireGuard profile is imported', () => {
+  // A new device has the kill switch on, but no profile for it to keep traffic in: it shows off,
+  // and doesn't claim to be blocking anything.
+  it('is grayed out and off until a WireGuard profile is imported', () => {
     renderScreen(
       <VpnScreen />,
       fakeDevice((router) => {
-        router.vpnSettings = { ...router.vpnSettings, enabled: false, activeProfile: '', profiles: [] };
+        router.vpnSettings = {
+          ...router.vpnSettings,
+          enabled: false,
+          killSwitch: true,
+          activeProfile: '',
+          profiles: [],
+        };
+        router.status.vpn.killSwitch = true;
       }),
     );
-    expect(screen.getByRole('switch', { name: /Kill switch/ })).toHaveProperty('disabled', true);
+    const killSwitch = screen.getByRole('switch', { name: /Kill switch/ });
+    expect(killSwitch).toHaveProperty('disabled', true);
+    expect(killSwitch.getAttribute('aria-checked')).toBe('false');
+    expect(screen.getByText('Import a WireGuard profile first.')).toBeTruthy();
+    expect(screen.queryByText(/Devices only use the internet through the VPN/)).toBeNull();
   });
 
   it('turns on and off with a profile, and says what each position does', async () => {
