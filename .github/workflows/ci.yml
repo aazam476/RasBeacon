@@ -1,5 +1,15 @@
 # Runs on every push and pull request: formatting, linting, unit tests,
 # network namespace tests and the browser end-to-end test.
+#
+# CI runs once per change:
+# - a push to any branch runs it (merging a PR is a push to main, so main is
+#   checked after every merge too);
+# - a pull request event only runs it for PRs from forks, whose pushes run
+#   in the fork, not here. A PR from a branch of this repository is already
+#   tested by its branch's push, so its pull_request jobs show as "Skipped".
+#   (With "Require branches to be up to date before merging" on main, the
+#   tested commit is the one that lands.)
+# Every job therefore starts with the same `if:` line.
 name: CI
 
 on:
@@ -12,6 +22,7 @@ permissions:
 jobs:
   go:
     name: Go (format, vet, staticcheck, unit tests)
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -32,6 +43,7 @@ jobs:
 
   web:
     name: Web UI (typecheck, lint, format, tests, build)
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -55,6 +67,7 @@ jobs:
 
   netns:
     name: Network namespace tests (real firewall and dnsmasq)
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -70,6 +83,7 @@ jobs:
 
   hwsim:
     name: Simulated Wi-Fi tests (Enterprise logins, guest network)
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -98,6 +112,7 @@ jobs:
 
   e2e:
     name: Browser end-to-end test (simulated device, ${{ matrix.viewport }})
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false

@@ -17,6 +17,32 @@ checks. CI runs all but the hardware tests on every push and prints how
 much of the code the unit tests run (`go test -cover ./...` and
 `npm run coverage`).
 
+### When CI runs
+
+CI runs once for each change: on every push to any branch (merging a pull
+request is a push to main, so main is checked after each merge), and for
+pull requests from forks. A pull request from a branch of this repository
+is tested by its branch's push, so its `pull_request` jobs show as
+"Skipped"; they count as passing. To make sure the tested commit is the one
+that lands, main's branch rules should have "Require branches to be up to
+date before merging" on.
+
+### Required checks on main
+
+These jobs should be required before merging into main (GitHub → Settings →
+Branches → main → Require status checks to pass; only the repository's
+owner can change it):
+
+- Go (format, vet, staticcheck, unit tests)
+- Web UI (typecheck, lint, format, tests, build)
+- Network namespace tests (real firewall and dnsmasq)
+- Simulated Wi-Fi tests (Enterprise logins, guest network)
+- Browser end-to-end test (simulated device, phone)
+- Browser end-to-end test (simulated device, desktop)
+
+The full-system test joins the list once it has passed about 20 runs in a
+row.
+
 ## Back end
 
 ### Go unit tests
