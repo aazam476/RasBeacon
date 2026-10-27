@@ -136,6 +136,9 @@ jobs:
         run: cat *.sha256 > SHA256SUMS && rm *.sha256 && cat SHA256SUMS
       - uses: softprops/action-gh-release@v3
         with:
+          # A release must have every file, the update file above all:
+          # without it, no RasBeacon could update to this release.
+          fail_on_unmatched_files: true
           files: |
             dist/*.img.xz
             dist/*.rbupdate

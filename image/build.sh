@@ -104,8 +104,14 @@ xz -T0 -6 -c "$built" > "$final"
 #    boot and system partitions). Without the signing key (for example in
 #    a fork), no update file is made; the image itself is unaffected.
 bundle="$(sudo find "$repo_root/build/rig-$board/image-$name" -maxdepth 1 -name '*.update.tar.zst' | head -n 1)"
-# The Pi 3/Zero 2 W image has one system copy and no update bundle.
-if [ "$board" = rpi64 ] && [ -n "$signing_key" ] && [ -n "$bundle" ]; then
+# The Pi 3/Zero 2 W image has one system copy and no update bundle. The
+# Pi 4/5 image must have one: with the signing key set (a release), going
+# on without it would publish a release nobody can update to.
+if [ "$board" = rpi64 ] && [ -n "$signing_key" ] && [ -z "$bundle" ]; then
+  echo "error: rpi-image-gen made no update bundle (*.update.tar.zst) in build/rig-$board/image-$name, so no update file can be made." >&2
+  exit 1
+fi
+if [ "$board" = rpi64 ] && [ -n "$signing_key" ]; then
   sudo cat "$bundle" > "$out/bundle.tmp"
   # The oldest version that can install this update: image/update-from,
   # without its comment lines (empty: any version).
@@ -118,7 +124,7 @@ if [ "$board" = rpi64 ] && [ -n "$signing_key" ] && [ -n "$bundle" ]; then
     -trusted "$repo_root/image/layer/rasbeacon.d/customize.overlay/usr/lib/rasbeacon/update-keys"
   rm -f "$out/bundle.tmp"
 else
-  echo "No update file made (no signing key, or no update bundle at '$bundle')."
+  echo "No update file made (no signing key, or a board without one)."
 fi
 
 (cd "$out" && for f in $name-$version.*; do
