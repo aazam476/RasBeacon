@@ -318,8 +318,9 @@ function ReflashNotice({
       </p>
       <ol className="flex list-decimal flex-col gap-0.5 pl-5">
         <li>
-          Back up your settings{hasPlugins && <> (turn on Include plugins to keep them too)</>}, and keep the file and
-          its password.
+          Back up your settings
+          {hasPlugins && <> (under Plugins, choose Plugin data or Everything to keep their data too)</>}, and keep the
+          file and its password.
         </li>
         <li>Flash the {reflash.version} image for your board onto the SD card, with Raspberry Pi Imager.</li>
         <li>Set RasBeacon up, then restore the backup on this page, under Backup.</li>

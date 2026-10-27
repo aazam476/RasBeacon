@@ -65,6 +65,8 @@ describe('software', () => {
   it('gives the steps for a version that needs a fresh install, with Back up settings', async () => {
     const { user } = renderSoftware({ reflash: { version: '1.0.0', minFromVersion: '0.9.0' } });
     expect(screen.getByText('RasBeacon 1.0.0 needs a fresh install')).toBeTruthy();
+    // With plugins installed (the sample router has some), it names the backup's choice that keeps them.
+    expect(screen.getByText(/under Plugins, choose Plugin data or Everything/)).toBeTruthy();
     // The notice comes first on the page; the Backup group further down has the same button.
     await user.click(screen.getAllByRole('button', { name: 'Back up settings' })[0]);
     expect(screen.getByRole('dialog')).toBeTruthy();
