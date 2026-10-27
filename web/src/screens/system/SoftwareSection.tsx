@@ -53,7 +53,10 @@ export function SoftwareSection({ status }: { status: Status }) {
           >
             <p>Download its .rbupdate file for your board, then install it below.</p>
             {update.newerVersion && (
-              <p>After this, RasBeacon offers {update.newerVersion}, which needs this version first.</p>
+              <p>
+                {update.newerVersion} is out too, but can&apos;t be installed over this RasBeacon yet. Install this one
+                first: RasBeacon then offers the next step.
+              </p>
             )}
           </Notice>
         )

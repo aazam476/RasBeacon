@@ -28,7 +28,11 @@ describe('software', () => {
 
   it('says when a newer version comes after the one offered', () => {
     renderSoftware({ latestVersion: '0.3.0', newerVersion: '0.4.0' });
-    expect(screen.getByText('After this, RasBeacon offers 0.4.0, which needs this version first.')).toBeTruthy();
+    expect(
+      screen.getByText(
+        "0.4.0 is out too, but can't be installed over this RasBeacon yet. Install this one first: RasBeacon then offers the next step.",
+      ),
+    ).toBeTruthy();
   });
 
   it('says nothing more when the offered version is the newest', () => {

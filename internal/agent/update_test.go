@@ -762,7 +762,7 @@ func TestUpdateCheck_AnnouncesANewVersionOnce(t *testing.T) {
 	if _, err := e.agent.CheckForUpdateNow(); err != nil {
 		t.Fatal(err)
 	}
-	if len(announced) != 1 || !strings.Contains(announced[0], "RasBeacon v1.1.0") || !strings.Contains(announced[0], "v1.2.0 can only be installed over it") {
+	if len(announced) != 1 || !strings.Contains(announced[0], "RasBeacon v1.1.0") || !strings.Contains(announced[0], "v1.2.0 is out too, but can't be installed over this version yet") {
 		t.Errorf("announced %q, want the new version once", announced)
 	}
 	if err := e.agent.SendTestNotification(""); err != nil || len(announced) != 2 {

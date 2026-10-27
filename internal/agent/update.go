@@ -526,7 +526,7 @@ func (a *Agent) checkForUpdate() error {
 	if s := a.updateStatusLocked(); s.Reflash != nil {
 		message += " It needs a fresh install: open the System page for the steps."
 	} else if s.NewerVersion != "" {
-		message += fmt.Sprintf(" Install it first: %s can only be installed over it.", s.NewerVersion)
+		message += fmt.Sprintf(" %s is out too, but can't be installed over this version yet: install this one first, and RasBeacon then offers the next step.", s.NewerVersion)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
