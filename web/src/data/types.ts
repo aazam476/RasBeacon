@@ -188,8 +188,8 @@ export interface EthernetUplinkStatus {
 /** RasBeacon's connection to the internet. */
 export interface UplinkStatus {
   connected: boolean;
-  /** Which uplink is in use, or "" when not connected. */
-  kind: 'ethernet' | 'wifi' | '';
+  /** Which uplink is in use, or "" when not connected. `phone`: a phone or modem on USB. */
+  kind: 'ethernet' | 'wifi' | 'phone' | '';
   interface: string;
   address: string;
   gateway: string;
@@ -197,6 +197,8 @@ export interface UplinkStatus {
   ipv6: boolean;
   wifi: WiFiUplinkStatus;
   ethernet: EthernetUplinkStatus;
+  /** Phones sharing their connection and modems on USB; absent or null without one. */
+  phones?: PhoneUplinkStatus[] | null;
 
   // Hidden when missing.
   subnetMask?: string;
@@ -621,6 +623,8 @@ export interface UplinkSettings {
   /** Read-only hints. */
   ethernetPresent: boolean;
   wifiUplinkAvailable: boolean;
+  /** Treat a phone or modem connection as metered while in use (absent: unchanged). */
+  phoneMetered?: boolean;
 }
 
 /** A Wi-Fi network found by a scan (POST /api/v1/uplink/scan). */
@@ -985,4 +989,17 @@ export interface WelcomeSettings {
   customPage: string;
   /** Read-only: how many devices may use the internet now. */
   accepted: number;
+}
+
+/** A phone sharing its connection over USB, or a USB modem that works like one (HiLink). */
+export interface PhoneUplinkStatus {
+  interface: string;
+  kind: 'iphone' | 'android' | 'modem';
+  /** What the device calls itself over USB ("Pixel 8"), or "". */
+  name?: string;
+  /** True when it gave RasBeacon an address. */
+  connected: boolean;
+  /** Data through it since it was plugged in. */
+  receivedBytes: number;
+  sentBytes: number;
 }

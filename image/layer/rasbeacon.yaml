@@ -43,6 +43,10 @@ mmdebstrap:
     - rfkill
     # Shows USB adapters in the diagnostics report
     - usbutils
+    # iPhones sharing their connection over USB (Personal Hotspot): the
+    # kernel's ipheth driver needs usbmuxd to pair with the phone ("Trust
+    # this computer?"). Android phones and HiLink modems need nothing more.
+    - usbmuxd
     # Decompresses update files while they are installed
     - zstd
     # Firmware the USB Wi-Fi adapters load when they start: Realtek (e.g.

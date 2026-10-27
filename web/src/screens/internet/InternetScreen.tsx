@@ -10,6 +10,7 @@ import { ConnectionSection } from './ConnectionSection';
 import { DnsSection } from './DnsSection';
 import { EthernetSection } from './EthernetSection';
 import { LANPortsSection } from './LANPortsSection';
+import { PhonesSection } from './PhonesSection';
 import { SavedNetworksSection } from './SavedNetworksSection';
 import { SpeedtestSection } from './SpeedtestSection';
 import { UnsavedChangesBar } from './UnsavedChangesBar';
@@ -62,6 +63,7 @@ function NetworkSettings({ settings, status }: { settings: UplinkSettings; statu
           diagnostics={status?.ethernetDiagnostics}
         />
       )}
+      <PhonesSection phones={status?.uplink.phones ?? []} metered={settings.phoneMetered ?? true} />
       <LANPortsSection ports={status?.lanPorts ?? []} />
       <DnsSection />
       <PortForwardingLink />

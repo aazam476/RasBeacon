@@ -135,6 +135,19 @@ first if you want them; everything else works from the web pages alone.
     network's router, if you can see its device list, shows a new device).
     Reboot: another new address. Turn it off, **Save**: the Pi's own
     address is back.
+11. **Internet from a phone (new, needs an Android phone, an iPhone or a
+    HiLink USB modem):** unplug Ethernet and forget the Wi-Fi networks (or
+    take RasBeacon out of their range). Plug in an Android phone with **USB
+    tethering** on. **Expect** within about 20 s: Internet → *Phones and
+    modems* lists the phone *Connected*, Status says *Connected through
+    <phone>*, devices on the hotspot have internet (through the VPN if on),
+    and *Treat as metered* is on (Status: *Metered connection*). Turn it
+    off: no longer metered. Plug Ethernet back in: it takes over (the phone
+    stays listed). **iPhone:** turn on Personal Hotspot, plug it in, tap
+    *Trust*: the same; reboot RasBeacon: it isn't asked to trust again.
+    **HiLink modem:** the same, listed as the modem's name. Note in the
+    report which phones and modems worked, and whether a modem needed a
+    powered USB hub.
 
 ## 5. Your own DNS servers and DNS-over-HTTPS (new)
 
@@ -659,7 +672,7 @@ Board (Pi 4/5/3B/3B+/Zero 2 W) / RAM:     Adapter:          Card size:          
 1  First boot: setup network after __ s; opened by itself iPhone/Android:
 2  Setup + login (mismatch caught, wrong password refused, stay logged in):
 3  Storage shows full card (__ GB): / swap row 2 GB: / 4 GB, Off, 2 GB save: / SSH swapon+swappiness:
-4  Ethernet: / scan lists networks: / Wi-Fi uplink + switch: / eduroam: / hotspot move kept working 15 min: / renew, disconnect:
+4  Ethernet: / scan lists networks: / Wi-Fi uplink + switch: / eduroam: / hotspot move kept working 15 min: / renew, disconnect: / phone over USB (Android, iPhone, modem: which):
 5  dns.google saved as full address: / leak test shows Google: / rbdoh running: / Cloudflare+1.1.1.1: / bad entry refused: / plain only, rbdoh stopped: / back to network's:
 6  Count + this device: / traffic rates: / pause + reboot-proof: / disconnect: / flush lease: / rename pencil: / data limit without metered: / fixed address: / port forward from uplink side + hotspot, with VPN: / IPv6 pinhole:
 7  Laptop on client port gets address+internet: / listed with cable icon, no Disconnect: / leaves list: / safety warning: / USB Ethernet for devices + not used on a router:

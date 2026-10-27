@@ -196,6 +196,8 @@ export interface DeviceActions {
 
   /** Save UplinkSettings.ethernetRole (with the saved networks as they are). */
   setEthernetRole: (role: EthernetRole) => Promise<void>;
+  /** Treat a phone or modem connection (USB) as metered while it is in use. */
+  setPhoneMetered: (metered: boolean) => Promise<void>;
   /** Fill `nearbyNetworks` (takes about 5 seconds). */
   scanNearbyNetworks: () => Promise<void>;
   /**

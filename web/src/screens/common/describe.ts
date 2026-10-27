@@ -3,6 +3,7 @@
 import type {
   EthernetUplinkStatus,
   HotspotStatus,
+  PhoneUplinkStatus,
   Security,
   UplinkStatus,
   VPNStatus,
@@ -14,6 +15,7 @@ import type { BaseIconName, Tone } from '@/ui';
 export function describeUplink(uplink: UplinkStatus): string {
   if (!uplink.connected) return 'Not connected';
   if (uplink.kind === 'ethernet') return 'Connected by Ethernet';
+  if (uplink.kind === 'phone') return `Connected through ${phoneName(phoneInUse(uplink))}`;
   return uplink.wifi.ssid ? `Connected to Wi-Fi "${uplink.wifi.ssid}"` : 'Connected by Wi-Fi';
 }
 
@@ -173,4 +175,18 @@ export const NEEDS_INTERNET = 'Needs an internet connection';
  */
 export function vpnSwitchBlocked(vpn: VPNStatus, online: boolean): string | null {
   return !vpn.enabled && !online ? NEEDS_INTERNET : null;
+}
+
+/** What to call a phone or modem: its own name, or what kind it is. */
+export function phoneName(phone: PhoneUplinkStatus | undefined): string {
+  if (phone?.name) return phone.name;
+  if (phone?.kind === 'iphone') return 'iPhone';
+  if (phone?.kind === 'android') return 'Android phone';
+  return 'USB modem';
+}
+
+/** The phone or modem carrying the internet now, if one is. */
+export function phoneInUse(uplink: UplinkStatus): PhoneUplinkStatus | undefined {
+  if (uplink.kind !== 'phone') return undefined;
+  return (uplink.phones ?? []).find((phone) => phone.interface === uplink.interface);
 }

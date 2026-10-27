@@ -206,7 +206,7 @@ func (a *Agent) PluginsState() api.PluginsState {
 		Board:    a.pluginBoard(),
 		MemoryMB: memory,
 		SwapMB:   swap,
-		Metered:  a.cfg.Hotspot.Metered,
+		Metered:  a.metered(),
 	}
 	if !a.plugins.catalog.CheckedAt.IsZero() {
 		state.CheckedAt = a.plugins.catalog.CheckedAt.UTC().Format(time.RFC3339)

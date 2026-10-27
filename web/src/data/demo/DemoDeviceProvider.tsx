@@ -342,6 +342,10 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
         });
       },
 
+      setPhoneMetered: async (metered) => {
+        await wait(700);
+        change((d) => void (d.router.uplinkSettings.phoneMetered = metered));
+      },
       setEthernetRole: async (role) => {
         await wait(1200);
         change((d) => {

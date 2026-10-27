@@ -4,7 +4,7 @@ import { cn } from '@/lib/cn';
 import { formatMbps } from '@/lib/format';
 import { prefersReducedMotion } from '@/lib/spring';
 import { Icon, type Tone } from '@/ui';
-import { vpnStateView } from '../common/describe';
+import { vpnStateView, phoneInUse, phoneName } from '../common/describe';
 
 const SYMBOL_CLASSES: Record<Tone, string> = {
   green: 'bg-green-fill/15 text-green',
@@ -71,7 +71,11 @@ function Facts({ status }: { status: Status }) {
   const { uplink } = status;
   const devices = status.clients.length + status.guest.clients.length;
   let internet = 'Not connected';
-  if (uplink.connected) internet = uplink.kind === 'ethernet' ? 'Ethernet' : uplink.wifi.ssid || 'Wi-Fi';
+  if (uplink.connected) {
+    if (uplink.kind === 'ethernet') internet = 'Ethernet';
+    else if (uplink.kind === 'phone') internet = phoneName(phoneInUse(uplink));
+    else internet = uplink.wifi.ssid || 'Wi-Fi';
+  }
 
   const facts = [
     { label: 'Internet', value: internet },

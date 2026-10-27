@@ -9,6 +9,7 @@ export function InternetSection({ status }: { status: Status }) {
   const { wifi, ethernet } = uplink;
   const onWifi = uplink.connected && uplink.kind === 'wifi';
   const onEthernet = uplink.connected && uplink.kind === 'ethernet';
+  const onPhone = uplink.connected && uplink.kind === 'phone';
   const badge = uplinkBadge(uplink);
 
   let leading: RowLeading = { tile: 'public', color: 'gray' };
@@ -19,6 +20,9 @@ export function InternetSection({ status }: { status: Status }) {
   } else if (onEthernet) {
     leading = { tile: 'settings_ethernet', color: 'green' };
     detail = describeEthernet(ethernet);
+  } else if (onPhone) {
+    leading = { tile: 'usb', color: 'orange' };
+    detail = status.hotspot.metered ? 'USB, metered' : 'USB';
   } else if (!wifi.available) {
     detail = 'No radio free to join networks';
   } else if (wifi.state !== 'login-failed') {

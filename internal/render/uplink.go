@@ -183,6 +183,10 @@ func checkEnterprise(n WPANetwork) error {
 const (
 	EthernetRouteMetric = 100
 	WiFiRouteMetric     = 600
+	// PhoneRouteMetric is for phones and modems on USB: used only when
+	// neither Ethernet nor Wi-Fi has the internet (they usually count
+	// data).
+	PhoneRouteMetric = 900
 )
 
 // NetworkdUplink produces a systemd-networkd .network file that gets an

@@ -195,6 +195,10 @@ since their image has one copy of the system.
 - **Share the Wi-Fi with a QR code:** the **Hotspot** and **Guests** pages.
 - **Name your devices, see their data use** and set a data limit per
   device: the **Clients** page.
+- **Internet from your phone or a USB modem:** plug in an Android phone
+  with USB tethering on, an iPhone with Personal Hotspot on (tap *Trust*
+  once), or a HiLink 4G/5G stick. RasBeacon uses it when neither Ethernet
+  nor Wi-Fi has the internet, and tells your devices it is metered.
 - **More wired devices:** plug a USB Ethernet adapter into RasBeacon and
   it becomes a port of your hotspot (with the same check as the client
   port: a cable that leads to another network is never connected), so the

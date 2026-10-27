@@ -487,6 +487,11 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
         if (!saved) throw new Error("The Internet settings haven't loaded yet.");
         await uplinkChange({ ...saved, ethernetRole: role });
       },
+      setPhoneMetered: async (phoneMetered) => {
+        const saved = latest.current.uplinkSettings.data;
+        if (!saved) throw new Error("The Internet settings haven't loaded yet.");
+        await uplinkChange({ ...saved, phoneMetered });
+      },
       scanNearbyNetworks: async () => {
         const { networks } = await attempt(api.scanNearbyNetworks);
         setNearbyNetworks(networks);

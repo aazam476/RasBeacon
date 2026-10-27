@@ -14,16 +14,18 @@ import (
 	"rasbeacon/internal/api"
 )
 
-// uplinkDrivers are the drivers of USB network devices that bring the
+// notLANDrivers are the drivers of USB network devices that bring the
 // internet rather than take devices: phones sharing their connection and
-// mobile broadband modems. They are never LAN ports.
-var uplinkDrivers = map[string]bool{
-	"rndis_host": true, "ipheth": true, "qmi_wwan": true, "cdc_mbim": true, "huawei_cdc_ncm": true,
+// modems (see phoneDrivers), and modems that need a modem manager. They
+// are never LAN ports.
+func notLANDriver(driver string) bool {
+	_, phone := phoneDrivers[driver]
+	return phone || driver == "qmi_wwan" || driver == "cdc_mbim"
 }
 
 // extraWiredPorts lists the wired network ports other than the built-in
 // Ethernet port: physical (with a device behind them), Ethernet (type 1),
-// not Wi-Fi, and not a phone or modem (see uplinkDrivers). Sorted by name.
+// not Wi-Fi, and not a phone or modem (see notLANDriver). Sorted by name.
 func (a *Agent) extraWiredPorts() []string {
 	entries, err := os.ReadDir(a.paths.SysClassNet())
 	if err != nil {
@@ -37,7 +39,7 @@ func (a *Agent) extraWiredPorts() []string {
 			exists(filepath.Join(dir, "wireless")) || exists(filepath.Join(dir, "phy80211")) {
 			continue
 		}
-		if driver, err := os.Readlink(filepath.Join(dir, "device", "driver")); err == nil && uplinkDrivers[filepath.Base(driver)] {
+		if driver, err := os.Readlink(filepath.Join(dir, "device", "driver")); err == nil && notLANDriver(filepath.Base(driver)) {
 			continue
 		}
 		ports = append(ports, name)

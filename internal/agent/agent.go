@@ -672,7 +672,7 @@ func (a *Agent) applyDHCP(captive bool) error {
 		Plugins:          a.pluginBridge,
 		IPv6DefaultRoute: a.devicesHaveIPv6Internet(),
 		Guest:            a.guestLAN(),
-		Metered:          a.cfg.Hotspot.Metered,
+		Metered:          a.metered(),
 		FixedAddresses:   a.fixedAddresses(),
 	}
 	if a.noticeActive() {

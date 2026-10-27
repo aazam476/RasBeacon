@@ -259,7 +259,7 @@ func (a *Agent) preview(s *stagedPlugin) (api.PluginPreview, error) {
 		Source: s.source, Signed: key != "", Update: update,
 		Permissions: permissionViews(m.Permissions), UsesDrive: m.USBDrive != nil,
 		DriveOptional: m.USBDrive != nil && m.USBDrive.Optional,
-		DownloadSize:  s.downloadSize, Metered: a.cfg.Hotspot.Metered,
+		DownloadSize:  s.downloadSize, Metered: a.metered(),
 		MemoryMB: m.Memory(), CPUs: m.CPULimit(), StorageMB: m.Storage(),
 	}
 	if key != "" {

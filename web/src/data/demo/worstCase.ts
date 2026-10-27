@@ -305,6 +305,26 @@ export function applyWorstCase(demo: DemoState) {
     ],
     withVpn: true,
   };
+  // Phones and modems: one with a long name, one waiting for an address, one without a name.
+  router.status.uplink.phones = [
+    {
+      interface: 'usb0',
+      kind: 'android',
+      name: 'Galaxy S24 Ultra von Konstantin Oberhauser-Wettstein',
+      connected: true,
+      receivedBytes: 48_300_000_000,
+      sentBytes: 2_100_000_000,
+    },
+    { interface: 'eth1', kind: 'iphone', name: '', connected: false, receivedBytes: 0, sentBytes: 0 },
+    {
+      interface: 'enx0c5b8f279a64',
+      kind: 'modem',
+      name: 'HUAWEI_MOBILE',
+      connected: true,
+      receivedBytes: 1,
+      sentBytes: 0,
+    },
+  ];
   // USB Ethernet: one in use, one plugged into another network, one without a cable.
   router.status.lanPorts = [
     { name: 'enx00e04c680001', cablePlugged: true, connected: true },

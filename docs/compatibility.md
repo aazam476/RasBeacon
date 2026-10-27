@@ -55,6 +55,21 @@ drivers generally can; please report what the Realtek adapters show.
 | MT7921AU adapters (e.g. Alfa AWUS036AXML) | MT7921AU (mt7921u) | varies | Untested (fallback) | Driver table 15 | — | Higher (USB 3, Wi-Fi 6) | AP mode since Linux 5.19 |
 | Built-in Wi-Fi (any Pi) as the hotspot | brcmfmac | — | **Known-limited** | About 8 (third-party reports) | — | — | Used only as a fallback; RasBeacon warns on the status page |
 
+## Phones and USB modems (internet over USB)
+
+A phone sharing its connection over USB, or a "HiLink" modem (one that
+works like a small router with its own DHCP server), carries the internet
+when neither Ethernet nor Wi-Fi has it. Modems that need a modem manager
+(QMI or MBIM, most M.2 and many 5G modems) don't work yet. A Pi 4's USB
+ports give 1.2 A in total: a modem that draws more needs a powered USB hub.
+
+| Device | Driver | Status | Notes |
+|---|---|---|---|
+| Android phones (USB tethering) | rndis_host, cdc_ncm | Untested (reference) | |
+| iPhone (Personal Hotspot over USB) | ipheth + usbmuxd | Untested | Tap *Trust* the first time; the pairing is kept on the settings partition |
+| Huawei E3372h (HiLink) | cdc_ether | Untested | |
+| ZTE / Alcatel HiLink sticks | cdc_ether, cdc_ncm | Untested | |
+
 ## USB Ethernet adapters (extra wired ports for devices)
 
 A USB Ethernet adapter becomes a wired port of the hotspot, so the built-in

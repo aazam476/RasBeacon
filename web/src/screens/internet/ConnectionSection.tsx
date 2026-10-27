@@ -1,6 +1,7 @@
 import { useDevice } from '@/data/device';
 import type { Status, UplinkStatus } from '@/data/types';
-import { bandOfFrequency, formatBand, formatSignal, keepTogether } from '@/lib/format';
+import { bandOfFrequency, formatBand, formatBytes, formatSignal, keepTogether } from '@/lib/format';
+import { phoneInUse, phoneName } from '../common/describe';
 import {
   Badge,
   BreakableText,
@@ -21,10 +22,17 @@ export function ConnectionSection({ status }: { status: Status }) {
   if (!uplink.connected) return <UplinkProblem uplink={uplink} />;
 
   const onWifi = uplink.kind === 'wifi';
+  const phone = phoneInUse(uplink);
 
   return (
     <Section title="Connection" action={<Badge tone="green">Online</Badge>}>
-      {onWifi ? (
+      {uplink.kind === 'phone' ? (
+        <Row
+          leading={{ tile: 'usb', color: 'orange' }}
+          title={<BreakableText>{phoneName(phone)}</BreakableText>}
+          subtitle={`Over USB (${uplink.interface})`}
+        />
+      ) : onWifi ? (
         <Row
           leading={{ tile: 'wifi', color: 'blue' }}
           title={<BreakableText>{wifi.ssid}</BreakableText>}
@@ -51,7 +59,13 @@ export function ConnectionSection({ status }: { status: Status }) {
           value={`${wifi.channel}${wifi.frequencyMhz !== undefined ? ` (${bandOfFrequency(wifi.frequencyMhz)})` : ''}`}
         />
       )}
-      {!onWifi && ethernet.duplex && <Row title="Link" value={ethernet.duplex} />}
+      {uplink.kind === 'ethernet' && ethernet.duplex && <Row title="Link" value={ethernet.duplex} />}
+      {phone && (
+        <Row
+          title="Data used"
+          value={`↓\u00a0${formatBytes(phone.receivedBytes)} ↑\u00a0${formatBytes(phone.sentBytes)}`}
+        />
+      )}
       {uplink.interfaceMac && <Row title="MAC address" value={uplink.interfaceMac} />}
       <ButtonRow action={renewDhcpLease} busyLabel="Renewing…">
         Renew lease

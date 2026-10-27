@@ -331,6 +331,7 @@ export function createMockRouter(): MockRouter {
       ethernetRole: 'uplink',
       ethernetPresent: true,
       wifiUplinkAvailable: true,
+      phoneMetered: true,
       networks: [
         { id: 'n1', ssid: 'GrandHyatt_Guest_5G', security: 'open', hidden: false, hasPassword: false },
         {

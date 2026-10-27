@@ -181,6 +181,30 @@ export const SCENARIOS: DemoScenario[] = [
     },
   },
   {
+    id: 'phone-uplink',
+    group: 'Status',
+    title: 'Internet from a phone over USB',
+    route: '/internet',
+    apply: (d) => {
+      const phone = {
+        interface: 'usb0',
+        kind: 'android' as const,
+        name: 'Pixel 8',
+        connected: true,
+        receivedBytes: 734_000_000,
+        sentBytes: 52_000_000,
+      };
+      Object.assign(d.router.status.uplink, {
+        kind: 'phone',
+        interface: 'usb0',
+        address: '192.168.42.17',
+        gateway: '192.168.42.129',
+        phones: [phone],
+      });
+      d.router.status.hotspot.metered = true;
+    },
+  },
+  {
     id: 'vpn-down',
     group: 'Status',
     title: 'VPN not working, kill switch on (no internet)',

@@ -612,6 +612,10 @@ type UplinkConfig struct {
 	// Networks are in order of preference: when several are in range, the
 	// first one in the list is joined.
 	Networks []SavedNetwork `json:"networks"`
+	// PhoneNotMetered stops treating a phone or modem connection (USB) as
+	// metered. By default it is: devices are asked to hold back big
+	// downloads while RasBeacon uses one.
+	PhoneNotMetered bool `json:"phoneNotMetered,omitempty"`
 }
 
 // SavedNetwork is one upstream Wi-Fi network. Its password (if any) is kept

@@ -314,7 +314,8 @@ type GuestSettings struct {
 type UplinkStatus struct {
 	// Connected is true when RasBeacon has a route to the internet.
 	Connected bool `json:"connected"`
-	// Kind is "ethernet" or "wifi" for the uplink in use, or "" if none.
+	// Kind is "ethernet", "wifi" or "phone" (a phone or modem on USB) for
+	// the uplink in use, or "" if none.
 	Kind      string `json:"kind"`
 	Interface string `json:"interface"`
 	// Address is RasBeacon's IPv4 address on the upstream network.
@@ -324,6 +325,10 @@ type UplinkStatus struct {
 	IPv6     bool                 `json:"ipv6"`
 	WiFi     WiFiUplinkStatus     `json:"wifi"`
 	Ethernet EthernetUplinkStatus `json:"ethernet"`
+	// Phones are phones sharing their connection and modems plugged into
+	// a USB port (empty without one). One of them is in use when Kind is
+	// "phone".
+	Phones []PhoneUplinkStatus `json:"phones"`
 	// SubnetMask and InterfaceMAC describe RasBeacon's address on the
 	// uplink in use ("" when not connected).
 	SubnetMask   string `json:"subnetMask,omitempty"`
@@ -623,6 +628,10 @@ type UplinkSettings struct {
 	// Read-only hints for the UI.
 	EthernetPresent     bool `json:"ethernetPresent"`
 	WiFiUplinkAvailable bool `json:"wifiUplinkAvailable"`
+	// PhoneMetered treats a phone or modem connection (USB) as metered
+	// while it is in use (see config.UplinkConfig.PhoneNotMetered). Absent
+	// in a request: unchanged.
+	PhoneMetered *bool `json:"phoneMetered,omitempty"`
 }
 
 // SavedNetwork is one upstream Wi-Fi network in UplinkSettings.
@@ -1243,4 +1252,20 @@ type WelcomePage struct {
 type WelcomeAcceptRequest struct {
 	IP   string `json:"ip"`
 	Code string `json:"code,omitempty"`
+}
+
+// PhoneUplinkStatus is a phone sharing its connection over USB, or a USB
+// modem that works like one (HiLink).
+type PhoneUplinkStatus struct {
+	Interface string `json:"interface"`
+	// Kind is "iphone", "android" or "modem".
+	Kind string `json:"kind"`
+	// Name is what the device calls itself over USB ("Pixel 8"), or "".
+	Name string `json:"name,omitempty"`
+	// Connected is true when it gave RasBeacon an address.
+	Connected bool `json:"connected"`
+	// ReceivedBytes and SentBytes count the data through it since it was
+	// plugged in.
+	ReceivedBytes uint64 `json:"receivedBytes"`
+	SentBytes     uint64 `json:"sentBytes"`
 }

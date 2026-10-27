@@ -134,6 +134,11 @@ describe('Internet', () => {
       then: (d) => expect(d.portForwarding.data).toEqual({ rules: [], reachability: 'offline' }),
     },
     {
+      name: 'a phone connection is set not metered, with the saved networks as they are',
+      run: (d) => d.setPhoneMetered(false),
+      sends: ['PUT /settings/uplink'],
+    },
+    {
       name: 'the welcome page is saved and kept as the router answers',
       run: (d) => d.saveWelcomeSettings({ ...createMockRouter().welcomeSettings, enabled: true }),
       sends: ['PUT /settings/welcome'],

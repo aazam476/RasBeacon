@@ -70,6 +70,9 @@ type uplinkState struct {
 	// lanPorts are the extra wired ports (USB Ethernet adapters), by
 	// interface name, which are always for devices (see lanports.go).
 	lanPorts map[string]*wiredPort
+	// phones is the phones' and modems' interfaces at the last check (see
+	// checkPhones).
+	phones string
 	// wiredSince is when each device on a wired port was first seen (see
 	// wiredClients).
 	wiredSince map[string]time.Time
@@ -106,7 +109,7 @@ func (a *Agent) uplinkInterfaces() []string {
 	if wifi := a.wifiUplinkInterface(); wifi != "" {
 		names = append(names, wifi)
 	}
-	return names
+	return append(names, a.phoneInterfaces()...)
 }
 
 // --- Applying the uplink settings ---
@@ -197,6 +200,14 @@ func (a *Agent) applyNetworkdConfig() error {
 			return err
 		}
 		files["00-rasbeacon-"+wifi+".network"] = text
+	}
+	// Phones and modems on USB: DHCP, used after Ethernet and Wi-Fi.
+	for _, name := range a.phoneInterfaces() {
+		text, err := render.NetworkdUplink(name, render.PhoneRouteMetric)
+		if err != nil {
+			return err
+		}
+		files["00-rasbeacon-"+name+".network"] = text
 	}
 	text, err := render.NetworkdUnmanaged(unmanaged)
 	if err != nil {
@@ -298,6 +309,9 @@ func (a *Agent) checkUplink() {
 	//    server answers on it.
 	a.checkEthernetClientPort()
 
+	// 1b. Phones and modems plugged in or out.
+	a.checkPhones()
+
 	// 2. Look at routes, addresses and the Wi-Fi connection.
 	status, upstreamIPv4 := a.observeUplink()
 	a.uplink.status = status
@@ -308,6 +322,14 @@ func (a *Agent) checkUplink() {
 		// A new network: look up the VPN server's address again at once.
 		a.vpn.lastRefresh = time.Time{}
 		a.uplink.connectedSince = a.now()
+	}
+
+	// A phone or modem connection came or went: devices are told whether
+	// the connection is metered (see metered).
+	if (status.Kind == "phone") != (previous.Kind == "phone") && !a.cfg.Hotspot.Metered && !a.cfg.Uplink.PhoneNotMetered {
+		if err := a.applyDHCP(false); err != nil {
+			slog.Error("could not update the metered setting", "error", err)
+		}
 	}
 
 	// 3. The VPN and its kill switch.
@@ -347,9 +369,13 @@ func (a *Agent) observeUplink() (api.UplinkStatus, []netip.Prefix) {
 			break
 		}
 	}
-	if s.Interface == ethernetInterface {
+	phones := a.phoneInterfaces()
+	switch {
+	case s.Interface == ethernetInterface:
 		s.Kind = "ethernet"
-	} else if s.Interface != "" {
+	case slices.Contains(phones, s.Interface):
+		s.Kind = "phone"
+	case s.Interface != "":
 		s.Kind = "wifi"
 	}
 
@@ -364,6 +390,7 @@ func (a *Agent) observeUplink() (api.UplinkStatus, []netip.Prefix) {
 
 	// Addresses on the uplinks.
 	var upstreamIPv4 []netip.Prefix
+	addressed := map[string]bool{}
 	out, _ = a.runner.Run("ip", "-json", "address", "show")
 	if addresses, err := uplink.ParseAddresses(out); err == nil {
 		for _, name := range uplinks {
@@ -372,6 +399,7 @@ func (a *Agent) observeUplink() (api.UplinkStatus, []netip.Prefix) {
 					continue
 				}
 				upstreamIPv4 = append(upstreamIPv4, prefix)
+				addressed[name] = true
 				if name == s.Interface && s.Address == "" {
 					s.Address = prefix.Addr().String()
 					s.SubnetMask = render.Netmask(prefix.Bits())
@@ -386,6 +414,7 @@ func (a *Agent) observeUplink() (api.UplinkStatus, []netip.Prefix) {
 	if wifi := a.wifiUplinkInterface(); wifi != "" {
 		s.WiFi = a.observeWiFi(wifi)
 	}
+	s.Phones = a.observePhones(addressed)
 	s.Ethernet = api.EthernetUplinkStatus{
 		Present:           a.hasEthernet(),
 		Role:              a.cfg.Ethernet.Role,
@@ -591,7 +620,9 @@ func (a *Agent) UplinkSettings() api.UplinkSettings {
 		Networks:            []api.SavedNetwork{},
 		EthernetPresent:     a.hasEthernet(),
 		WiFiUplinkAvailable: a.wifiUplinkInterface() != "",
+		PhoneMetered:        new(bool),
 	}
+	*settings.PhoneMetered = !a.cfg.Uplink.PhoneNotMetered
 	for _, n := range a.cfg.Uplink.Networks {
 		settings.Networks = append(settings.Networks, api.SavedNetwork{
 			ID:          n.ID,
@@ -624,6 +655,9 @@ func (a *Agent) UpdateUplinkSettings(req api.UplinkSettings) error {
 		return err
 	}
 
+	if req.PhoneMetered != nil {
+		newCfg.Uplink.PhoneNotMetered = !*req.PhoneMetered
+	}
 	newCfg.Uplink.Networks = nil
 	newSecrets.UplinkPasswords = map[string]string{}
 	credentials := map[string]config.NetworkCredentials{}
