@@ -288,3 +288,66 @@ func TestRoutes_HotspotChannels(t *testing.T) {
 		t.Errorf("UK = %d %s, want 400", status, body)
 	}
 }
+
+// Every route is wired to its action: a simple request reaches it and gets
+// an answer that isn't "no such route" (404) or a crash (500). What each
+// action does is tested in its own file; this catches a route that was
+// left out or points at the wrong action.
+func TestRoutes_EachReachesItsAction(t *testing.T) {
+	e := newClaimedEnv(t, false)
+	if err := e.agent.ImportVPNProfile(testWireGuardConf, "home.conf"); err != nil {
+		t.Fatal(err)
+	}
+	mac := map[string]any{"mac": "3a:1f:22:aa:bb:cc"}
+	profile := map[string]any{"name": "home.conf"}
+	routes := []struct {
+		route string
+		body  any
+	}{
+		{"POST /verify-password", map[string]any{"password": "wrong"}},
+		{"POST /remembered-logins", nil},
+		{"POST /remembered-logins/check", map[string]any{"token": "x"}},
+		{"POST /remembered-logins/forget", map[string]any{"token": "x"}},
+		{"POST /clients/internet-access", map[string]any{"mac": "3a:1f:22:aa:bb:cc", "allowed": true}},
+		{"POST /clients/name", map[string]any{"mac": "3a:1f:22:aa:bb:cc", "name": "Phone"}},
+		{"POST /clients/disconnect", mac},
+		{"POST /clients/flush-lease", mac},
+		{"POST /uplink/disconnect", nil},
+		{"POST /uplink/renew", nil},
+		{"POST /uplink/ethernet/scan", nil},
+		{"POST /speedtest", nil},
+		{"POST /settings/vpn/import", map[string]any{"conf": testWireGuardConf, "name": "office.conf"}},
+		{"POST /settings/vpn/profile/rename", map[string]any{"name": "office.conf", "newName": "work.conf"}},
+		{"POST /settings/vpn/profile/activate", profile},
+		{"POST /settings/vpn/profile/generate-key", profile},
+		{"POST /settings/vpn/profile/remove", map[string]any{"name": "work.conf"}},
+		{"POST /portal/start", nil},
+		{"POST /portal/extend", nil},
+		{"POST /portal/stop", nil},
+		{"POST /portal/check", nil},
+		{"POST /portal/browser/stop", nil},
+		{"POST /plugins/upload", "not a plugin"},
+		{"POST /plugins/cancel", map[string]any{"stagingId": "x"}},
+		{"POST /system/restore/upload", "not a backup"},
+		{"POST /system/update", "not an update"},
+		{"POST /settings/updates/test", map[string]any{"url": ""}},
+		{"POST /system/update/check", nil},
+		{"POST /system/hostname", map[string]any{"hostname": "travel"}},
+		{"POST /system/admin-password", map[string]any{"currentPassword": "wrong", "newPassword": "a new password"}},
+	}
+	for _, r := range routes {
+		method, path, _ := strings.Cut(r.route, " ")
+		status, answer := e.call(method, path, r.body)
+		if status == http.StatusNotFound || status == http.StatusMethodNotAllowed || status >= 500 {
+			t.Errorf("%s = %d %s", r.route, status, answer)
+		}
+		if len(answer) > 0 && !json.Valid(answer) {
+			t.Errorf("%s answered something that isn't JSON: %s", r.route, answer)
+		}
+		// "invalid request" means the body was refused before the action
+		// ran: the test sent a field the route doesn't know.
+		if strings.Contains(string(answer), "invalid request") {
+			t.Errorf("%s didn't reach its action: %s", r.route, answer)
+		}
+	}
+}

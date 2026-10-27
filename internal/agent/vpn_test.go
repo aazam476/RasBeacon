@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -561,5 +562,96 @@ func TestVPN_CantBeTurnedOnWithoutInternet(t *testing.T) {
 	// The kill switch alone can still be changed.
 	if err := e.agent.SetVPNSwitches(api.VPNSwitches{KillSwitch: true}); err != nil {
 		t.Errorf("the kill switch should still change without internet: %v", err)
+	}
+}
+
+// Each field of a profile's form that can't be used is refused, naming
+// the field, and nothing is saved.
+func TestVPN_ProfileFormRefusesEachBadField(t *testing.T) {
+	e, _ := newVPNEnv(t, false)
+	before := e.agent.VPNSettings()
+	for field, change := range map[string]func(d *api.VPNProfileDetails){
+		"addresses":        func(d *api.VPNProfileDetails) { d.Addresses = []string{"not an address"} },
+		"allowedIps":       func(d *api.VPNProfileDetails) { d.AllowedIPs = []string{"0.0.0.0/99"} },
+		"dns":              func(d *api.VPNProfileDetails) { d.DNS = []string{"dns.example"} },
+		"routedIpv6Prefix": func(d *api.VPNProfileDetails) { d.RoutedIPv6Prefix = "2001:db8::/200" },
+		"privateKey":       func(d *api.VPNProfileDetails) { d.PrivateKey = "too short" },
+		"presharedKey":     func(d *api.VPNProfileDetails) { d.PresharedKey = "too short" },
+	} {
+		details := e.profileDetails("home.conf")
+		change(&details)
+		err := e.agent.SaveVPNProfile(details)
+		var verr *config.ValidationError
+		if !errors.As(err, &verr) || verr.Field != field {
+			t.Errorf("%s: got %v", field, err)
+		}
+	}
+	if err := e.agent.SaveVPNProfile(api.VPNProfileDetails{VPNProfile: api.VPNProfile{Name: "nobody.conf"}}); err == nil {
+		t.Error("a profile that doesn't exist can't be saved")
+	}
+	if after := e.agent.VPNSettings(); !reflect.DeepEqual(before, after) {
+		t.Errorf("refused forms changed the settings:\nbefore %+v\nafter  %+v", before, after)
+	}
+}
+
+// A preshared key can be added and removed again from the form.
+func TestVPN_PresharedKeyAddedAndRemoved(t *testing.T) {
+	e, _ := newVPNEnv(t, false)
+	details := e.profileDetails("home.conf")
+	details.PresharedKey = "yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk="
+	if err := e.agent.SaveVPNProfile(details); err != nil {
+		t.Fatal(err)
+	}
+	if !e.profileDetails("home.conf").HasPresharedKey {
+		t.Error("the preshared key should be saved")
+	}
+	details = e.profileDetails("home.conf")
+	details.RemovePresharedKey = true
+	if err := e.agent.SaveVPNProfile(details); err != nil {
+		t.Fatal(err)
+	}
+	if e.profileDetails("home.conf").HasPresharedKey {
+		t.Error("the preshared key should be gone")
+	}
+}
+
+func TestVPN_ImportLimits(t *testing.T) {
+	e := newClaimedEnv(t, false)
+	var verr *config.ValidationError
+	if err := e.agent.ImportVPNProfile(strings.Repeat("#", 17*1024), ""); !errors.As(err, &verr) || !strings.Contains(verr.Message, "too big") {
+		t.Errorf("a huge file: got %v", err)
+	}
+	if err := e.agent.ImportVPNProfile("not a WireGuard file", ""); !errors.As(err, &verr) || verr.Field != "conf" {
+		t.Errorf("a broken file: got %v", err)
+	}
+	for range config.MaxVPNProfiles {
+		if err := e.agent.ImportVPNProfile(testWireGuardConf, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := e.agent.ImportVPNProfile(testWireGuardConf, ""); !errors.As(err, &verr) || !strings.Contains(verr.Message, "Remove one first") {
+		t.Errorf("one too many: got %v", err)
+	}
+}
+
+// Broken keys in the saved settings (edited by hand, or damaged) are an
+// error that names the key, not a tunnel with a wrong key.
+func TestVPN_SavedKeysThatDontParse(t *testing.T) {
+	good := "yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk="
+	profile := config.VPNProfile{Peer: config.VPNPeer{PublicKey: good}}
+	for name, tc := range map[string]struct {
+		profile config.VPNProfile
+		keys    config.WireGuardKeys
+	}{
+		"saved private key":   {profile, config.WireGuardKeys{PrivateKey: "x"}},
+		"saved server key":    {config.VPNProfile{Peer: config.VPNPeer{PublicKey: "x"}}, config.WireGuardKeys{PrivateKey: good}},
+		"saved preshared key": {profile, config.WireGuardKeys{PrivateKey: good, PresharedKey: "x"}},
+	} {
+		if _, _, err := wireguardConfigFor(tc.profile, tc.keys); err == nil || !strings.Contains(err.Error(), name) {
+			t.Errorf("%s: got %v", name, err)
+		}
+	}
+	if _, ok, err := wireguardConfigFor(profile, config.WireGuardKeys{}); ok || err != nil {
+		t.Errorf("without a private key the profile isn't ready yet: ok %v, %v", ok, err)
 	}
 }

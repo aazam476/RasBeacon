@@ -146,3 +146,60 @@ func TestClock_NotSetWhileALoginPageIsInTheWay(t *testing.T) {
 		t.Errorf("the clock was set behind a login page: %q", sets)
 	}
 }
+
+// The saved time floor: a damaged file counts as none, an earlier time is
+// never saved over a later one, and the clock only ever moves forward to
+// it at start.
+func TestTimeFloor(t *testing.T) {
+	e := newClaimedEnv(t, false)
+	now := time.Date(2026, 10, 27, 12, 0, 0, 0, time.UTC)
+	e.agent.now = func() time.Time { return now }
+
+	os.WriteFile(e.paths.ClockFile(), []byte("garbage\n"), 0o644)
+	if !e.agent.timeFloor().IsZero() {
+		t.Error("a damaged file means no saved time")
+	}
+	e.agent.SaveClock()
+	if got := e.agent.timeFloor(); !got.Equal(now) {
+		t.Errorf("saved %v, want %v", got, now)
+	}
+
+	// The clock went back (no battery, no network yet): nothing is saved,
+	// and at start the clock moves forward to the saved time.
+	earlier := now.Add(-48 * time.Hour)
+	e.agent.now = func() time.Time { return earlier }
+	e.agent.SaveClock()
+	if got := e.agent.timeFloor(); !got.Equal(now) {
+		t.Errorf("an earlier time was saved: %v", got)
+	}
+	e.runner.commands = nil
+	e.agent.applyTimeFloor()
+	if sets := clockSets(e); len(sets) != 1 || sets[0] != "date -u -s @"+strconv.FormatInt(now.Unix(), 10) {
+		t.Errorf("clock changes: %v", sets)
+	}
+
+	// A clock already past the floor stays as it is.
+	e.agent.now = func() time.Time { return now.Add(time.Hour) }
+	e.runner.commands = nil
+	e.agent.applyTimeFloor()
+	if sets := clockSets(e); len(sets) != 0 {
+		t.Errorf("the clock was moved back: %v", sets)
+	}
+	// A failure to set the clock is logged, not fatal.
+	e.agent.now = func() time.Time { return earlier }
+	e.runner.failing = append(e.runner.failing, "date")
+	e.agent.applyTimeFloor()
+}
+
+// NTP reports itself through timedatectl.
+func TestNTPSynchronized(t *testing.T) {
+	e := newClaimedEnv(t, false)
+	e.runner.outputs["timedatectl show --property=NTPSynchronized --value"] = "yes\n"
+	if !e.agent.ntpSynchronized() {
+		t.Error("yes means synchronized")
+	}
+	e.runner.outputs["timedatectl show --property=NTPSynchronized --value"] = "no\n"
+	if e.agent.ntpSynchronized() {
+		t.Error("no means not synchronized")
+	}
+}

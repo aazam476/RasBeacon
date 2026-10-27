@@ -192,3 +192,46 @@ func TestHTTPS_RbwebIsRestartedAfterABootToFindTheCertificate(t *testing.T) {
 		t.Error("rbweb must not be restarted when nothing changed")
 	}
 }
+
+// rbweb runs as its own user: the certificate and key it reads are given
+// to its group (root keeps owning them), and nobody else may read them.
+func TestHTTPS_FilesAreGivenToRbwebsGroup(t *testing.T) {
+	e := newClaimedEnv(t, false)
+	// rbd makes root the files' owner, which only root may do, so this
+	// runs only as root. The test's own group stands in for rbweb's.
+	if os.Getuid() != 0 {
+		t.Skip("giving files to root needs root")
+	}
+	e.agent.SetWebGroup(os.Getgid())
+	if err := e.agent.UpdateHTTPSSettings(api.HTTPSSettings{Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"cert.pem", "key.pem"} {
+		info, err := os.Stat(filepath.Join(e.paths.RunTLSDir(), name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0o640 {
+			t.Errorf("%s mode = %v, want 0640", name, info.Mode().Perm())
+		}
+	}
+}
+
+// HTTPS is on but its files are gone (a damaged card): rbd says what is
+// missing instead of serving nothing.
+func TestHTTPS_MissingCertificateFile(t *testing.T) {
+	e := newClaimedEnv(t, false)
+	if err := e.agent.UpdateHTTPSSettings(api.HTTPSSettings{Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	e.agent.mu.Lock()
+	defer e.agent.mu.Unlock()
+	os.Remove(e.agent.tlsKeyFile())
+	if _, err := e.agent.applyHTTPS(); err == nil {
+		t.Error("a missing key must be an error")
+	}
+	os.Remove(e.agent.tlsCertFile())
+	if _, err := e.agent.applyHTTPS(); err == nil {
+		t.Error("a missing certificate must be an error")
+	}
+}
