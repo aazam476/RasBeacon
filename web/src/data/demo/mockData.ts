@@ -2,6 +2,7 @@ import type {
   AccessSettings,
   Client,
   DNSSettings,
+  PortForwardRule,
   GuestSettings,
   HotspotSettings,
   HTTPSSettings,
@@ -32,6 +33,8 @@ export interface MockRouter {
   vpnSettings: VPNSettings;
   sshSettings: SSHSettings;
   dnsSettings: DNSSettings;
+  /** The port forwarding rules as saved (portForwarding.ts fills in the rest of the page). */
+  portForwardingRules: PortForwardRule[];
   swapSettings: SwapSettings;
   updateSettings: UpdateSettings;
   accessSettings: AccessSettings;
@@ -79,6 +82,7 @@ const clients: Client[] = [
     hostname: 'desktop-office.lan',
     mac: 'a4:83:e7:12:34:56',
     ip: '192.168.8.131',
+    fixedAddress: '192.168.8.131',
     signalDbm: 0,
     connectedSeconds: 7_260,
     band: '',
@@ -422,6 +426,25 @@ export function createMockRouter(): MockRouter {
     },
 
     dnsSettings: { servers: [], withVpn: false },
+    portForwardingRules: [
+      {
+        id: 'pf-minecraft',
+        name: 'Minecraft server',
+        protocol: 'tcp',
+        outsidePort: 25565,
+        mac: 'a4:83:e7:12:34:56',
+        enabled: true,
+      },
+      {
+        id: 'pf-steam',
+        name: 'Steam games',
+        protocol: 'udp',
+        outsidePort: 27015,
+        outsidePortEnd: 27030,
+        mac: 'a4:83:e7:12:34:56',
+        enabled: false,
+      },
+    ],
     swapSettings: { sizeGb: 2, maxGb: 26 },
     updateSettings: { checkHours: 0, notifyUrl: '' },
     accessSettings: { allowListOn: false, allowed: [], maxDevices: 0 },

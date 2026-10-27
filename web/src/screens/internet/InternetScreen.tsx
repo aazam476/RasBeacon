@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useDevice } from '@/data/device';
 import type { Status, UplinkSettings } from '@/data/types';
 import { Loaded } from '@/shell/Loaded';
+import { LinkRow, Section } from '@/ui';
 import { PortalNotice } from '../common/PortalNotice';
 import { AddNetworkSection } from './AddNetworkSection';
 import { AddNetworkSheet, type AddNetworkStart } from './AddNetworkSheet';
@@ -61,11 +62,25 @@ function NetworkSettings({ settings, status }: { settings: UplinkSettings; statu
         />
       )}
       <DnsSection />
+      <PortForwardingLink />
       {adding && (
         <AddNetworkSheet start={adding} list={draft.networks} onAdd={draft.add} onClose={() => setAdding(null)} />
       )}
       {/* Last on the page, so it can stay pinned to the bottom of the screen. */}
       <UnsavedChangesBar draft={draft} />
     </>
+  );
+}
+
+/** The way to Port forwarding, with how many rules are on. */
+function PortForwardingLink() {
+  const { portForwarding } = useDevice();
+  const on = portForwarding.data?.rules.filter((rule) => rule.enabled).length;
+  let value: string | undefined;
+  if (on !== undefined) value = on === 0 ? 'Off' : on === 1 ? '1 rule' : `${on} rules`;
+  return (
+    <Section footer="Lets devices on the internet reach a game server, a camera or a plugin on your hotspot.">
+      <LinkRow to="/internet/port-forwarding" leading={{ icon: 'swap_horiz' }} title="Port forwarding" value={value} />
+    </Section>
   );
 }

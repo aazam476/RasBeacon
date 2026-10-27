@@ -460,6 +460,53 @@ export interface DNSSettings {
   withVpn: boolean;
 }
 
+/** Which connections a port forwarding rule passes on. */
+export type PortForwardProtocol = 'tcp' | 'udp' | 'both';
+
+/**
+ * One port forwarding rule: connections from the internet to `outsidePort` (or the range up to
+ * `outsidePortEnd`) on RasBeacon's outside address go to a device on the hotspot (`mac`, at its
+ * fixed address) or to a plugin (`plugin`).
+ */
+export interface PortForwardRule {
+  /** "" for a new rule; the router gives it one. */
+  id: string;
+  name: string;
+  protocol: PortForwardProtocol;
+  outsidePort: number;
+  /** The last port of a range; absent (or 0) for one port. */
+  outsidePortEnd?: number;
+  /** The device's MAC address, or absent for a plugin. */
+  mac?: string;
+  /** The plugin's ID, or absent for a device. */
+  plugin?: string;
+  /** The port on the device; absent (or 0) for the same as outside. */
+  insidePort?: number;
+  enabled: boolean;
+  /** Read-only: the device's or plugin's name. */
+  target?: string;
+  /** Read-only: where the connections go; absent while the device has no fixed address. */
+  address?: string;
+  /** Read-only: a risk, such as a port often attacked. */
+  warning?: string;
+}
+
+/**
+ * GET/PUT /api/v1/settings/port-forwarding. A PUT sends the whole list of rules; the router
+ * answers with the list as saved.
+ */
+export interface PortForwardingSettings {
+  rules: PortForwardRule[];
+  /** Read-only: RasBeacon's address on the network that carries the internet; absent while offline. */
+  outsideAddress?: string;
+  /**
+   * Read-only: whether the internet can reach that address. `private`: RasBeacon is behind
+   * another router, which must forward the ports to it first. `shared`: the network shares one
+   * address between many customers (carrier-grade NAT), so it can't be reached.
+   */
+  reachability?: 'public' | 'private' | 'shared' | 'offline';
+}
+
 /**
  * GET/PUT /api/v1/settings/usage: a data limit per device that applies while the connection is
  * marked metered.

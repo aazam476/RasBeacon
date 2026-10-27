@@ -14,6 +14,7 @@ import type { Plugin, PluginChoices, PluginPreview, SavedNetwork, VPNProfile } f
 import { DemoIndex } from './DemoIndex';
 import { DemoTag } from './DemoTag';
 import { StressToggle } from './StressToggle';
+import { checkPortForwarding, portForwardingView } from './portForwarding';
 import { LOGIN_PAGE_PICTURE } from './loginPagePicture';
 import {
   catalogEntries,
@@ -679,6 +680,11 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
         const ordered = servers.map((server) => (isIp(server) ? server : full(server)!.toLowerCase()));
         change((d) => void (d.router.dnsSettings = { servers: ordered, withVpn }));
       },
+      savePortForwarding: async (rules) => {
+        await wait(800);
+        const saved = checkPortForwarding(currentDemo.router, rules);
+        change((d) => void (d.router.portForwardingRules = saved));
+      },
       saveSshSettings: async (settings) => {
         await wait(900);
         if (settings.enabled && settings.authorizedKeys.trim() === '') {
@@ -1059,6 +1065,7 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
       vpnSettings: loadable('vpnSettings', router.vpnSettings),
       sshSettings: loadable('sshSettings', router.sshSettings),
       dnsSettings: loadable('dnsSettings', router.dnsSettings),
+      portForwarding: loadable('portForwarding', portForwardingView(router)),
       swapSettings: loadable('swapSettings', router.swapSettings),
       updateSettings: loadable('updateSettings', router.updateSettings),
       accessSettings: loadable('accessSettings', router.accessSettings),

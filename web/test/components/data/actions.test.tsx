@@ -122,6 +122,17 @@ describe('Internet', () => {
       then: (d) => expect(d.dnsSettings.data).toEqual({ servers: ['9.9.9.9'], withVpn: true }),
     },
     {
+      name: 'port forwarding rules are saved as a list and kept as the router answers',
+      run: (d) =>
+        d.savePortForwarding([
+          { id: '', name: 'Web', protocol: 'tcp', outsidePort: 80, plugin: 'samba', enabled: true },
+        ]),
+      sends: ['PUT /settings/port-forwarding'],
+      body: { rules: [{ id: '', name: 'Web', protocol: 'tcp', outsidePort: 80, plugin: 'samba', enabled: true }] },
+      answer: { body: { rules: [], reachability: 'offline' } },
+      then: (d) => expect(d.portForwarding.data).toEqual({ rules: [], reachability: 'offline' }),
+    },
+    {
       name: 'the speed test result shows in the status',
       run: (d) => d.runSpeedtest(),
       sends: ['POST /speedtest'],

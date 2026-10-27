@@ -8,6 +8,8 @@ import type {
   AccessSettings,
   ClaimResponse,
   DNSSettings,
+  PortForwardingSettings,
+  PortForwardRule,
   GuestSettings,
   HotspotChannelsResponse,
   HotspotSettings,
@@ -277,6 +279,11 @@ export const putSwapSettings = (sizeGb: number) =>
 export const getDNSSettings = () => request<DNSSettings>('GET', '/settings/dns');
 export const putDNSSettings = (settings: DNSSettings) =>
   request<DNSSettings>('PUT', '/settings/dns', { body: settings, timeoutMs: 30_000 });
+
+export const getPortForwarding = () => request<PortForwardingSettings>('GET', '/settings/port-forwarding');
+/** Reloading the firewall takes a moment. */
+export const putPortForwarding = (rules: PortForwardRule[]) =>
+  request<PortForwardingSettings>('PUT', '/settings/port-forwarding', { body: { rules }, timeoutMs: 30_000 });
 
 export const getVPNSettings = () => request<VPNSettings>('GET', '/settings/vpn');
 export const putVPNSwitches = (switches: { enabled: boolean; killSwitch: boolean }) =>

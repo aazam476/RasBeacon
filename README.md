@@ -189,6 +189,12 @@ since their image has one copy of the system.
 - **Share the Wi-Fi with a QR code:** the **Hotspot** and **Guests** pages.
 - **Name your devices, see their data use** and set a data limit per
   device: the **Clients** page.
+- **Fixed addresses and port forwarding:** give a device the same address
+  every time (the **Clients** page), and let the internet reach a game
+  server, a camera or a plugin through a port (Internet → **Port
+  forwarding**). This works where the network gives RasBeacon a public
+  address or forwards the ports to it, such as at home; hotel and phone
+  networks usually don't, and the page says so.
 - **Backups:** the **System** page saves every setting and the plugins in
   a password-encrypted file, to restore or move to another RasBeacon. You
   choose whether it also keeps the plugins' data, and their apps (so a

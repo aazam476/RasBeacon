@@ -14,6 +14,7 @@ import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { vi, type Mock } from 'vitest';
 import { createMockRouter, type MockRouter } from '@/data/demo/mockData';
+import { portForwardingView } from '@/data/demo/portForwarding';
 import { DeviceContext, type Device, type DeviceActions, type DeviceState } from '@/data/device';
 import { ErrorToastProvider } from '@/ui';
 
@@ -43,6 +44,7 @@ export function fakeDevice(change?: (router: MockRouter) => void, actions: Parti
     vpnSettings: loaded(router.vpnSettings),
     sshSettings: loaded(router.sshSettings),
     dnsSettings: loaded(router.dnsSettings),
+    portForwarding: loaded(portForwardingView(router)),
     swapSettings: loaded(router.swapSettings),
     updateSettings: loaded(router.updateSettings),
     accessSettings: loaded(router.accessSettings),

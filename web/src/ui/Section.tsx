@@ -206,12 +206,15 @@ export function LinkRow({
   return (
     <div
       className={cn(
-        'row row-pressable',
+        'row row-pressable @container',
         'has-[a:focus-visible]:rounded-group has-[a:focus-visible]:outline-2 has-[a:focus-visible]:-outline-offset-2 has-[a:focus-visible]:outline-tint',
         className,
       )}
     >
-      <Leading leading={leading} />
+      {/* With very large text on a narrow screen the icon gives its room to the words. */}
+      <span className="contents @max-[14rem]:hidden">
+        <Leading leading={leading} />
+      </span>
       <span className="min-w-0 flex-1">
         <TitleLine
           title={
@@ -254,6 +257,8 @@ interface SheetRowProps {
   title: ReactNode;
   /** The state on the right, e.g. "Off" or "10.87.0.50". */
   value?: ReactNode;
+  /** A second line under the title, e.g. what a rule does. Read as part of the description. */
+  subtitle?: ReactNode;
   leading?: RowLeading;
   /** Opens the sheet. */
   onClick: () => void;
@@ -265,18 +270,22 @@ interface SheetRowProps {
  * (`LinkRow`): its name in the label color and its state on the right. The row's name is its
  * title; the value is read as its description.
  */
-export function SheetRow({ title, value, leading, onClick, className }: SheetRowProps) {
+export function SheetRow({ title, value, subtitle, leading, onClick, className }: SheetRowProps) {
   const id = useId();
+  const describedBy =
+    [hasValue(value) && `${id}-value`, subtitle && `${id}-subtitle`].filter(Boolean).join(' ') || undefined;
   return (
     <button
       type="button"
       onClick={onClick}
       aria-labelledby={`${id}-title`}
-      aria-describedby={hasValue(value) ? `${id}-value` : undefined}
+      aria-describedby={describedBy}
       aria-haspopup="dialog"
-      className={cn('row row-pressable w-full text-left', className)}
+      className={cn('row row-pressable @container w-full text-left', className)}
     >
-      <Leading leading={leading} />
+      <span className="contents @max-[14rem]:hidden">
+        <Leading leading={leading} />
+      </span>
       {/* The title and value share the line while they fit; with large text the value moves
           under the title (to the right), rather than squeezing it a letter wide. */}
       <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3">
@@ -286,6 +295,11 @@ export function SheetRow({ title, value, leading, onClick, className }: SheetRow
         {hasValue(value) && (
           <span id={`${id}-value`} className="ml-auto min-w-0 text-right text-body wrap-break-word text-label-2">
             {value}
+          </span>
+        )}
+        {subtitle && (
+          <span id={`${id}-subtitle`} className="mt-0.5 basis-full text-subhead wrap-break-word text-label-2">
+            {subtitle}
           </span>
         )}
       </span>
@@ -344,10 +358,13 @@ export function ButtonRow({
       className={cn(
         'row row-pressable w-full text-left disabled:cursor-not-allowed disabled:opacity-40',
         busy && 'cursor-wait',
+        '@container',
         className,
       )}
     >
-      <Leading leading={leading} />
+      <span className="contents @max-[14rem]:hidden">
+        <Leading leading={leading} />
+      </span>
       <span className={cn('min-w-0 flex-1 text-body wrap-break-word', tone === 'danger' ? 'text-red' : 'text-tint')}>
         {busy && busyLabel ? busyLabel : children}
         {note && <span className="block text-subhead text-label-2">{note}</span>}

@@ -305,6 +305,44 @@ export function applyWorstCase(demo: DemoState) {
     ],
     withVpn: true,
   };
+  // Port forwarding: the longest name, a risky port, a range, a plugin with a long name, and a
+  // device that has left (shown by its MAC address). The uplink's shared address adds the notice.
+  router.portForwardingRules = [
+    {
+      id: 'pf-rdp',
+      name: 'Remote Desktop to the office workstation'.slice(0, 40),
+      protocol: 'tcp',
+      outsidePort: 3389,
+      insidePort: 33890,
+      mac: 'a4:83:e7:10:9c:20',
+      enabled: true,
+    },
+    {
+      id: 'pf-range',
+      name: 'Steam',
+      protocol: 'both',
+      outsidePort: 27015,
+      outsidePortEnd: 27030,
+      mac: 'a4:83:e7:16:9c:4a',
+      enabled: true,
+    },
+    {
+      id: 'pf-plugin',
+      name: 'Home Assistant',
+      protocol: 'tcp',
+      outsidePort: 8123,
+      plugin: 'home-assistant-companion-bridge-xl',
+      enabled: true,
+    },
+    {
+      id: 'pf-gone',
+      name: 'Old game console',
+      protocol: 'udp',
+      outsidePort: 3074,
+      mac: 'de:ad:be:ef:00:01',
+      enabled: false,
+    },
+  ];
   // Data kept from an earlier Trip Notes of another author, with a long name.
   router.keptPluginData['trip-notes'] = {
     name: 'Trip Notes & Shared Itinerary Planner for Families',
