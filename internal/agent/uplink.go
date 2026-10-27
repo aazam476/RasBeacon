@@ -279,6 +279,7 @@ func (a *Agent) RunUplinkMonitor() {
 		a.mu.Lock()
 		a.checkUplink()
 		a.checkHotspot()
+		a.refreshPinholes()
 		a.renewCertificateIfDue()
 		a.sampleReadings()
 		a.mu.Unlock()

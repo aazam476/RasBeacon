@@ -1149,6 +1149,10 @@ type PortForwardingSettings struct {
 	// "shared" (carrier-grade NAT: many customers share one address, so
 	// they can't); or "offline".
 	Reachability string `json:"reachability,omitempty"`
+	// IPv6Prefix is the public IPv6 network the VPN routes to RasBeacon
+	// ("" when there is none), which rules with IPv6 open ports in (read
+	// only).
+	IPv6Prefix string `json:"ipv6Prefix,omitempty"`
 }
 
 // PortForwardRule is one rule (see config.PortForwardRule). Target,
@@ -1162,6 +1166,7 @@ type PortForwardRule struct {
 	MAC            string `json:"mac,omitempty"`
 	Plugin         string `json:"plugin,omitempty"`
 	InsidePort     int    `json:"insidePort,omitempty"`
+	IPv6           bool   `json:"ipv6,omitempty"`
 	Enabled        bool   `json:"enabled"`
 	// Target is the device's or plugin's name.
 	Target string `json:"target,omitempty"`
@@ -1170,4 +1175,7 @@ type PortForwardRule struct {
 	Address string `json:"address,omitempty"`
 	// Warning names a risk, such as a port often attacked.
 	Warning string `json:"warning,omitempty"`
+	// IPv6Addresses are the device's public IPv6 addresses the rule opens
+	// the port on (with IPv6): those it used lately.
+	IPv6Addresses []string `json:"ipv6Addresses,omitempty"`
 }

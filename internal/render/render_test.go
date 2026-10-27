@@ -15,6 +15,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -826,6 +827,67 @@ func TestDnsmasq_FixedAddresses(t *testing.T) {
 		in.FixedAddresses = []FixedAddress{bad}
 		if _, err := Dnsmasq(in); err == nil {
 			t.Errorf("%+v accepted", bad)
+		}
+	}
+}
+
+func TestFirewall_PortForwardsAndPinholes(t *testing.T) {
+	routed := netip.MustParsePrefix("2001:db8:1234:5678::/64")
+	phone := netip.MustParseAddr("10.87.0.50")
+	in := FirewallInput{
+		Egress: []string{"wg0"}, TunnelInterface: "wg0", RoutedIPv6: routed, Uplinks: []string{"wlan1"},
+		LANAddress: netip.MustParseAddr("10.87.0.1"),
+		PortForwards: []PortForward{
+			{Protocol: "tcp", From: 8080, To: 8080, Address: phone, InsidePort: 80},
+			{Protocol: "udp", From: 27015, To: 27030, Address: phone},
+		},
+		Pinholes: []Pinhole{
+			{Protocol: "tcp", From: 80, To: 80, Addresses: []netip.Addr{netip.MustParseAddr("2001:db8:1234:5678::a")}},
+			// A device without an address (yet) opens nothing.
+			{Protocol: "udp", From: 9000, To: 9010},
+		},
+	}
+	got, err := Firewall(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"tcp dport 8080 ct mark set 0x5246 dnat ip to 10.87.0.50:80",
+		"udp dport 27015-27030 ct mark set 0x5246 dnat ip to 10.87.0.50",
+		`iifname "wg0" oifname "br-lan" ip6 daddr { 2001:db8:1234:5678::a } tcp dport 80 accept`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("no %q in:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "dport 9000") {
+		t.Error("a pinhole without addresses must open nothing")
+	}
+
+	// Without the routed network there are no pinholes.
+	plain := in
+	plain.RoutedIPv6 = netip.Prefix{}
+	if got, _ := Firewall(plain); strings.Contains(got, "ip6 daddr {") {
+		t.Error("pinholes without the routed network")
+	}
+
+	bad := map[string]func(*FirewallInput){
+		"pinhole protocol":        func(f *FirewallInput) { f.Pinholes = []Pinhole{{Protocol: "icmp", From: 1, To: 1}} },
+		"pinhole ports":           func(f *FirewallInput) { f.Pinholes = []Pinhole{{Protocol: "tcp", From: 9, To: 1}} },
+		"pinhole outside network": func(f *FirewallInput) { f.Pinholes[0].Addresses = []netip.Addr{netip.MustParseAddr("2001:db8::1")} },
+		"forward protocol":        func(f *FirewallInput) { f.PortForwards[0].Protocol = "sctp" },
+		"forward range and port":  func(f *FirewallInput) { f.PortForwards[1].InsidePort = 80 },
+		"forward to IPv6":         func(f *FirewallInput) { f.PortForwards[0].Address = netip.MustParseAddr("fd00::1") },
+		"forward without LAN":     func(f *FirewallInput) { f.LANAddress = netip.Addr{} },
+		"forward uplink name":     func(f *FirewallInput) { f.Uplinks = []string{"wlan1; drop"} },
+	}
+	for name, change := range bad {
+		f := in
+		f.PortForwards = slices.Clone(in.PortForwards)
+		f.Pinholes = slices.Clone(in.Pinholes)
+		change(&f)
+		if _, err := Firewall(f); err == nil {
+			t.Errorf("%s: should be refused", name)
 		}
 	}
 }

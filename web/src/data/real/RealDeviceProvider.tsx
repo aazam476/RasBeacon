@@ -517,7 +517,7 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
       savePortForwarding: async (rules) => {
         const saved = await attempt(
           () => api.putPortForwarding(rules),
-          sameNames('name', 'protocol', 'outsidePort', 'insidePort', 'target', 'rules'),
+          sameNames('name', 'protocol', 'outsidePort', 'insidePort', 'target', 'ipv6', 'rules'),
         );
         store('portForwarding', saved);
       },

@@ -1125,6 +1125,10 @@ type PortForwardRule struct {
 	Plugin string `json:"plugin,omitempty"`
 	// InsidePort is the port on the device (0: the same as outside).
 	InsidePort int `json:"insidePort,omitempty"`
+	// IPv6 also opens the port to the device's public IPv6 addresses, when
+	// the VPN routes a public IPv6 network to RasBeacon (a "pinhole": no
+	// NAT, the same port inside). Devices only, not plugins.
+	IPv6 bool `json:"ipv6,omitempty"`
 	// Enabled rules are in the firewall; others are kept for later.
 	Enabled bool `json:"enabled"`
 }

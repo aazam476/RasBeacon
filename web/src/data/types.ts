@@ -482,6 +482,11 @@ export interface PortForwardRule {
   plugin?: string;
   /** The port on the device; absent (or 0) for the same as outside. */
   insidePort?: number;
+  /**
+   * Also opens the port (the inside one) on the device's public IPv6 addresses, while the VPN
+   * routes an IPv6 network to RasBeacon (`ipv6Prefix`). Devices only.
+   */
+  ipv6?: boolean;
   enabled: boolean;
   /** Read-only: the device's or plugin's name. */
   target?: string;
@@ -489,6 +494,8 @@ export interface PortForwardRule {
   address?: string;
   /** Read-only: a risk, such as a port often attacked. */
   warning?: string;
+  /** Read-only, with `ipv6`: the device's public IPv6 addresses the port is open on. */
+  ipv6Addresses?: string[];
 }
 
 /**
@@ -505,6 +512,8 @@ export interface PortForwardingSettings {
    * address between many customers (carrier-grade NAT), so it can't be reached.
    */
   reachability?: 'public' | 'private' | 'shared' | 'offline';
+  /** Read-only: the public IPv6 network the VPN routes to RasBeacon; absent when there is none. */
+  ipv6Prefix?: string;
 }
 
 /**

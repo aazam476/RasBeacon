@@ -291,3 +291,43 @@ describe('the demo’s port forwarding', () => {
     expect(view.rules[2].warning).toMatch(/Port 445/);
   });
 });
+
+describe('IPv6 pinholes', () => {
+  /** The VPN is up and routes a public IPv6 network to RasBeacon. */
+  const routed = (router: MockRouter) => void (router.status.vpn.routedIpv6Prefix = '2001:db8:1234:5678::/64');
+
+  it('offers the switch for a device only while the VPN routes an IPv6 network', async () => {
+    const { user, unmount } = renderScreen(<PortForwardingScreen />, device(), PATH);
+    await user.click(screen.getByRole('button', { name: 'Minecraft server' }));
+    expect(screen.queryByRole('checkbox', { name: 'Also open over IPv6' })).toBeNull();
+    unmount();
+
+    const fake = device(routed);
+    const second = renderScreen(<PortForwardingScreen />, fake, PATH);
+    await second.user.click(screen.getByRole('button', { name: 'Minecraft server' }));
+    const sheet = screen.getByRole('dialog');
+    await second.user.click(within(sheet).getByRole('checkbox', { name: 'Also open over IPv6' }));
+    await second.user.click(within(sheet).getByRole('button', { name: 'Save' }));
+    expect(fake.savePortForwarding.mock.calls[0][0][0]).toMatchObject({ id: 'pf-minecraft', ipv6: true });
+  });
+
+  it('shows where a saved rule is open, and says so in the list', async () => {
+    const fake = device((router) => {
+      routed(router);
+      router.portForwardingRules[0].ipv6 = true;
+    });
+    const { user } = renderScreen(<PortForwardingScreen />, fake, PATH);
+    const row = screen.getByRole('button', { name: 'Minecraft server' });
+    expect(row.textContent).toContain('TCP 25565, also IPv6');
+    await user.click(row);
+    expect(within(screen.getByRole('dialog')).getByText('2001:db8:1234:5678::3456')).toBeTruthy();
+  });
+
+  it('isn’t offered for a plugin', async () => {
+    const fake = device(routed);
+    const { user } = renderScreen(<PortForwardingScreen />, fake, PATH);
+    const plugin = fake.status.data!.plugins[0];
+    const sheet = await addRule(user, `${plugin.name} (plugin)`);
+    expect(within(sheet).queryByRole('checkbox', { name: 'Also open over IPv6' })).toBeNull();
+  });
+});

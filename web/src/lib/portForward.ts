@@ -53,7 +53,7 @@ export function portsText(rule: Pick<PortForwardRule, 'outsidePort' | 'outsidePo
 export function ruleSummary(rule: PortForwardRule): string {
   const protocol = PROTOCOL_OPTIONS.find((option) => option.value === rule.protocol)?.label ?? rule.protocol;
   const inside = rule.insidePort && rule.insidePort !== rule.outsidePort ? ` → ${rule.insidePort}` : '';
-  return `${protocol} ${formatPorts(rule)}${inside}`;
+  return `${protocol} ${formatPorts(rule)}${inside}${rule.ipv6 ? ', also IPv6' : ''}`;
 }
 
 /** Whether two rules forward a port in common on the same protocol (as the router checks). */
@@ -65,7 +65,7 @@ export function portsOverlap(x: PortForwardRule, y: PortForwardRule): boolean {
 }
 
 /** The problems the sheet can show before saving, by field key (the router's keys). */
-export type RuleProblems = Partial<Record<'name' | 'outsidePort' | 'insidePort' | 'target', string>>;
+export type RuleProblems = Partial<Record<'name' | 'outsidePort' | 'insidePort' | 'target' | 'ipv6', string>>;
 
 /**
  * The checks the router makes on one rule (internal/agent/portforward.go), so the sheet can
@@ -88,5 +88,6 @@ export function ruleProblems(rule: PortForwardRule, others: PortForwardRule[]): 
     problems.insidePort = 'A range keeps its ports: leave the inside port empty.';
   }
   if (!rule.mac && !rule.plugin) problems.target = 'Choose a device or an installed plugin.';
+  if (rule.ipv6 && rule.plugin) problems.ipv6 = 'Plugins have no public IPv6 address: turn IPv6 off for this rule.';
   return problems;
 }

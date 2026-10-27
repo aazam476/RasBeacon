@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"rasbeacon/internal/render"
 	"rasbeacon/internal/routing"
 	"rasbeacon/internal/wireguard"
 )
@@ -70,6 +71,28 @@ func TestVPN_RoutedIPv6NetworkIsNotNATed(t *testing.T) {
 
 	if !tcpConnectsTo(phoneNS, "["+ipv6Site+"]:8082") {
 		t.Fatal("the phone should reach the IPv6 site through the tunnel with its own public address")
+	}
+
+	// Inbound: nothing from the internet reaches the phone's public
+	// address, until a pinhole opens one port (port forwarding's "Also
+	// over IPv6"); other ports stay closed.
+	startGreeter(t, phoneNS, "["+routedPhone+"]:8090")
+	startGreeter(t, phoneNS, "["+routedPhone+"]:8091")
+	if tcpConnectsTo(upstreamNS, "["+routedPhone+"]:8090") {
+		t.Error("the phone's public address must be closed to the internet by default")
+	}
+	inNS(t, routerNS, "nft", "-f", renderRouterRules(t, routerRules{
+		egress: []string{routing.TunnelInterface}, routedIPv6: netip.MustParsePrefix(routedNetwork),
+		pinholes: []render.Pinhole{{Protocol: "tcp", From: 8090, To: 8090, Addresses: []netip.Addr{netip.MustParseAddr(routedPhone)}}},
+	}))
+	if !tcpConnectsTo(upstreamNS, "["+routedPhone+"]:8090") {
+		t.Error("the pinhole should let the internet reach the phone on port 8090")
+	}
+	if tcpConnectsTo(upstreamNS, "["+routedPhone+"]:8091") {
+		t.Error("a pinhole must open only its own port")
+	}
+	if !tcpConnectsTo(phoneNS, "["+ipv6Site+"]:8082") {
+		t.Error("the phone's own connections should still work with a pinhole")
 	}
 
 	// Control: with the ordinary firewall (NAT for everything), the site

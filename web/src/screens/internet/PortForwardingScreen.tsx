@@ -111,6 +111,7 @@ function Rules({ settings }: { settings: PortForwardingSettings }) {
         <PortForwardSheet
           rule={editing === 'new' ? null : editing}
           rules={settings.rules}
+          ipv6Prefix={settings.ipv6Prefix}
           onClose={() => setEditing(null)}
         />
       )}

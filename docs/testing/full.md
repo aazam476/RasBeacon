@@ -209,6 +209,13 @@ The VPN stays **off** for this section.
     longer loads. On a hotel or phone hotspot uplink the page says the
     internet can't reach it (shared address) or that RasBeacon is behind
     another router. Delete the rule.
+11. **IPv6 pinhole (new, needs a VPN that routes a public IPv6 /64, see
+    section 8):** edit the rule from step 10, turn on **Also open over
+    IPv6**, inside port `8000`, **Save**; run the laptop's server with
+    `python3 -m http.server --bind :: 8000`. **Expect:** the sheet lists
+    the laptop's public IPv6 address, and from an IPv6 connection elsewhere
+    (a phone on mobile data) `http://[that address]:8000` loads; port 8001
+    does not. Turn the switch off: it no longer loads.
 
 ## 7. The Ethernet port as a client port
 
@@ -635,7 +642,7 @@ Board (Pi 4/5/3B/3B+/Zero 2 W) / RAM:     Adapter:          Card size:          
 3  Storage shows full card (__ GB): / swap row 2 GB: / 4 GB, Off, 2 GB save: / SSH swapon+swappiness:
 4  Ethernet: / scan lists networks: / Wi-Fi uplink + switch: / eduroam: / hotspot move kept working 15 min: / renew, disconnect:
 5  dns.google saved as full address: / leak test shows Google: / rbdoh running: / Cloudflare+1.1.1.1: / bad entry refused: / plain only, rbdoh stopped: / back to network's:
-6  Count + this device: / traffic rates: / pause + reboot-proof: / disconnect: / flush lease: / rename pencil: / data limit without metered: / fixed address: / port forward from uplink side + hotspot, with VPN:
+6  Count + this device: / traffic rates: / pause + reboot-proof: / disconnect: / flush lease: / rename pencil: / data limit without metered: / fixed address: / port forward from uplink side + hotspot, with VPN: / IPv6 pinhole:
 7  Laptop on client port gets address+internet: / listed with cable icon, no Disconnect: / leaves list: / safety warning:
 8  Import turns VPN on + connect (IP = VPN): / kill switch + VPN off blocks, warns: / rename profile: / DNS = VPN's even with own DNS set: / kill switch on no leak: / off falls back: / boot no leak: / MTU check: / profiles: / clock:
 9  Speed test: down __ up __ ping __ location __, took __ s / speed.cloudflare.com: down __ up __

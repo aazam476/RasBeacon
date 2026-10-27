@@ -144,12 +144,16 @@ type Agent struct {
 	// routedIPv6 is the public IPv6 network currently on the hotspot bridge
 	// (see vpn.go, applyRoutedIPv6).
 	routedIPv6 netip.Prefix
-	portal     portalState
-	readings   readingsState
-	speedtest  speedtestState
-	update     updateState
-	usage      usageState
-	plugins    pluginsState
+	// appliedPinholes is the IPv6 pinholes last loaded into the firewall
+	// (as text), so the uplink monitor notices a device's new address (see
+	// refreshPinholes).
+	appliedPinholes string
+	portal          portalState
+	readings        readingsState
+	speedtest       speedtestState
+	update          updateState
+	usage           usageState
+	plugins         pluginsState
 	// hotspotCheck is the hotspot's regular self-check (hotspotcheck.go).
 	hotspotCheck hotspotCheckState
 	// serverCert remembers Enterprise login servers (servercert.go).
@@ -741,6 +745,8 @@ func (a *Agent) applyFirewall() error {
 		input.LANAddress = a.lan.Prefix.Addr()
 		input.Uplinks = a.uplinkInterfaces()
 		input.PortForwards = a.portForwards()
+		input.Pinholes = a.pinholes()
+		a.appliedPinholes = fmt.Sprint(input.Pinholes)
 		if g := a.guestLAN(); g != nil {
 			input.GuestAddress = g.Prefix.Addr()
 		}

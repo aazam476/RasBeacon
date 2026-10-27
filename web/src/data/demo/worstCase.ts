@@ -315,6 +315,7 @@ export function applyWorstCase(demo: DemoState) {
       outsidePort: 3389,
       insidePort: 33890,
       mac: 'a4:83:e7:10:9c:20',
+      ipv6: true,
       enabled: true,
     },
     {

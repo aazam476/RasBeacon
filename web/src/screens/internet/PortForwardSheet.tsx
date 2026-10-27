@@ -23,10 +23,13 @@ function targetKey(rule: PortForwardRule | null): TargetKey {
 export function PortForwardSheet({
   rule,
   rules,
+  ipv6Prefix,
   onClose,
 }: {
   rule: PortForwardRule | null;
   rules: PortForwardRule[];
+  /** The public IPv6 network the VPN routes to RasBeacon, if any: then a device's port can open there too. */
+  ipv6Prefix?: string;
   onClose: () => void;
 }) {
   const { status, savePortForwarding, setFixedAddress } = useDevice();
@@ -36,6 +39,7 @@ export function PortForwardSheet({
   const [inside, setInside] = useState(rule?.insidePort ? String(rule.insidePort) : '');
   const [target, setTarget] = useState<TargetKey>(targetKey(rule));
   const [enabled, setEnabled] = useState(rule?.enabled ?? true);
+  const [ipv6, setIpv6] = useState(rule?.ipv6 ?? false);
 
   // The menu: the hotspot's devices (guests can't be forwarded to), the device of this rule if it
   // isn't connected now, then the installed plugins.
@@ -66,6 +70,8 @@ export function PortForwardSheet({
     insidePort: insidePort || undefined,
     mac: kind === 'device' ? id : undefined,
     plugin: kind === 'plugin' ? id : undefined,
+    // Kept as it was while there is no IPv6 network to show the switch for; never for plugins.
+    ipv6: kind === 'device' && ipv6 ? true : undefined,
     enabled,
   };
   const others = rules.filter((other) => other.id !== rule?.id);
@@ -162,8 +168,27 @@ export function PortForwardSheet({
               />
             )}
           </Section>
-          <Section level={3} footer={errors.rules}>
+          <Section level={3} footer={errors.rules ?? errors.ipv6}>
             <FormSwitchRow label="On" checked={enabled} onChange={setEnabled} />
+            {ipv6Prefix && kind === 'device' && (
+              <FormSwitchRow
+                label="Also open over IPv6"
+                description={
+                  <>
+                    Devices on the internet can then reach this device’s own address in{' '}
+                    <span className="font-mono wrap-anywhere">{ipv6Prefix}</span> on the inside port, through the VPN.
+                    {rule?.ipv6 && rule.ipv6Addresses?.length ? (
+                      <>
+                        {' '}
+                        Open now on <span className="font-mono wrap-anywhere">{rule.ipv6Addresses.join(', ')}</span>.
+                      </>
+                    ) : null}
+                  </>
+                }
+                checked={ipv6}
+                onChange={setIpv6}
+              />
+            )}
           </Section>
           {rule?.warning && (
             <Notice tone="warning">

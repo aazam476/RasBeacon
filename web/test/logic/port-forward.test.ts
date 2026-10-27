@@ -51,6 +51,7 @@ describe('showing a rule', () => {
     expect(ruleSummary(rule())).toBe('TCP 25565');
     expect(ruleSummary(rule({ protocol: 'both', outsidePort: 8080, insidePort: 80 }))).toBe('TCP and UDP 8080 → 80');
     expect(ruleSummary(rule({ protocol: 'udp', insidePort: 25565 }))).toBe('UDP 25565');
+    expect(ruleSummary(rule({ ipv6: true }))).toBe('TCP 25565, also IPv6');
   });
 });
 
@@ -98,5 +99,10 @@ describe('ruleProblems', () => {
   it('needs somewhere to go', () => {
     expect(ruleProblems(rule({ mac: undefined }), []).target).toBe('Choose a device or an installed plugin.');
     expect(ruleProblems(rule({ mac: undefined, plugin: 'samba' }), []).target).toBeUndefined();
+  });
+
+  it('opens IPv6 to devices only', () => {
+    expect(ruleProblems(rule({ ipv6: true }), []).ipv6).toBeUndefined();
+    expect(ruleProblems(rule({ mac: undefined, plugin: 'samba', ipv6: true }), []).ipv6).toBeTruthy();
   });
 });

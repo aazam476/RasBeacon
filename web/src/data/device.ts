@@ -221,7 +221,7 @@ export interface DeviceActions {
   /**
    * Save the whole list of port forwarding rules (PortForwardingSettings.rules), with the one
    * being edited changed, added or left out. Field keys: name, protocol, outsidePort,
-   * insidePort, target (about that rule), rules (about the list).
+   * insidePort, target, ipv6 (about that rule), rules (about the list).
    */
   savePortForwarding: (rules: PortForwardRule[]) => Promise<void>;
   /**

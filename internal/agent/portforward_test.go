@@ -185,6 +185,12 @@ func TestPortForwarding_ToAPlugin(t *testing.T) {
 	e.agent.uplink.status.Connected = true
 	address := e.agent.cfg.Plugins.Installed["adguard-home"].Address.String()
 	e.agent.mu.Unlock()
+	// Plugins have no public IPv6 address.
+	v6 := api.PortForwardRule{Name: "AdGuard", Protocol: "tcp", OutsidePort: 3000, Plugin: "adguard-home", IPv6: true, Enabled: true}
+	var ve *config.ValidationError
+	if err := e.agent.UpdatePortForwarding(api.PortForwardingSettings{Rules: []api.PortForwardRule{v6}}); !errors.As(err, &ve) || ve.Field != "ipv6" {
+		t.Errorf("IPv6 to a plugin: got %v", err)
+	}
 	r := api.PortForwardRule{Name: "AdGuard", Protocol: "tcp", OutsidePort: 3000, Plugin: "adguard-home", Enabled: true}
 	if err := e.agent.UpdatePortForwarding(api.PortForwardingSettings{Rules: []api.PortForwardRule{r}}); err != nil {
 		t.Fatal(err)
@@ -192,5 +198,75 @@ func TestPortForwarding_ToAPlugin(t *testing.T) {
 	got := e.agent.PortForwardingSettings().Rules[0]
 	if got.Address != address || got.Target != "AdGuard Home" {
 		t.Errorf("rule = %+v, want the plugin at %s", got, address)
+	}
+}
+
+func TestPortForwarding_IPv6Pinholes(t *testing.T) {
+	// The VPN routes 2001:db8:1234:5678::/64 to RasBeacon (as in
+	// TestVPN_RoutedIPv6Network), and the phone uses two addresses in it.
+	e, _ := newVPNEnv(t, true)
+	mustWrite(t, e.paths.ProcSysNetIPv6()+"/conf/all/forwarding", "1")
+	ipv6Conf := strings.Replace(testWireGuardConf, "Address = 10.66.0.2/32", "Address = 10.66.0.2/32, fd66::2/128", 1)
+	if err := e.agent.ImportVPNProfile(ipv6Conf, "home.conf"); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.agent.SetActiveVPNProfile("home-2.conf"); err != nil {
+		t.Fatal(err)
+	}
+	settings := e.profileDetails("home-2.conf")
+	settings.RoutedIPv6Prefix = "2001:db8:1234:5678::/64"
+	if err := e.agent.SaveVPNProfile(settings); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.agent.SetFixedAddress("3a:1f:22:aa:bb:cc", "10.87.0.50"); err != nil {
+		t.Fatal(err)
+	}
+	const neigh = "ip -json -6 neigh show dev br-lan"
+	e.runner.outputs[neigh] = `[
+		{"dst":"2001:db8:1234:5678::b","lladdr":"3a:1f:22:aa:bb:cc"},
+		{"dst":"2001:db8:1234:5678::a","lladdr":"3a:1f:22:aa:bb:cc"},
+		{"dst":"fe80::1","lladdr":"3a:1f:22:aa:bb:cc"},
+		{"dst":"2001:db8:1234:5678::c","lladdr":"02:00:00:00:00:99"}]`
+
+	web := rule("Web server", 8080)
+	web.InsidePort, web.IPv6 = 80, true
+	if err := e.agent.UpdatePortForwarding(api.PortForwardingSettings{Rules: []api.PortForwardRule{web}}); err != nil {
+		t.Fatal(err)
+	}
+	// Over IPv6 there is no NAT: the device's own port opens, on its
+	// public addresses only (not its link-local one, not another device's).
+	want := `iifname "wg0" oifname "br-lan" ip6 daddr { 2001:db8:1234:5678::a, 2001:db8:1234:5678::b } tcp dport 80 accept`
+	if !strings.Contains(e.readFile(e.paths.FirewallRules()), want) {
+		t.Errorf("the firewall has no %q:\n%s", want, e.readFile(e.paths.FirewallRules()))
+	}
+	s := e.agent.PortForwardingSettings()
+	if s.IPv6Prefix != "2001:db8:1234:5678::/64" || !s.Rules[0].IPv6 ||
+		strings.Join(s.Rules[0].IPv6Addresses, " ") != "2001:db8:1234:5678::a 2001:db8:1234:5678::b" {
+		t.Errorf("settings = %+v", s)
+	}
+
+	// The monitor reloads the firewall only when the addresses change.
+	loads := e.runner.count("nft -f")
+	e.agent.mu.Lock()
+	e.agent.refreshPinholes()
+	e.agent.mu.Unlock()
+	if e.runner.count("nft -f") != loads {
+		t.Error("the firewall was loaded again with the same addresses")
+	}
+	e.runner.outputs[neigh] = `[{"dst":"2001:db8:1234:5678::d","lladdr":"3a:1f:22:aa:bb:cc"}]`
+	e.agent.mu.Lock()
+	e.agent.refreshPinholes()
+	e.agent.mu.Unlock()
+	if e.runner.count("nft -f") != loads+1 ||
+		!strings.Contains(e.readFile(e.paths.FirewallRules()), "ip6 daddr { 2001:db8:1234:5678::d } tcp dport 80 accept") {
+		t.Error("a new address should be opened at once")
+	}
+
+	// Without the VPN, no routed network and no pinholes.
+	if err := e.agent.SetVPNSwitches(api.VPNSwitches{Enabled: false}); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(e.readFile(e.paths.FirewallRules()), "2001:db8") || e.agent.PortForwardingSettings().IPv6Prefix != "" {
+		t.Error("pinholes stay without the routed network")
 	}
 }

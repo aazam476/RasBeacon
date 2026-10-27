@@ -21,7 +21,9 @@ function reachability(address: string): PortForwardingSettings['reachability'] {
 
 /** The Port forwarding page as the router answers it: the rules with their targets filled in. */
 export function portForwardingView(router: MockRouter): PortForwardingSettings {
-  const { uplink, clients } = router.status;
+  const { uplink, clients, vpn } = router.status;
+  // While the VPN is up, it may route a public IPv6 network to RasBeacon (pinholes open there).
+  const ipv6Prefix = vpn.state === 'up' && vpn.routedIpv6Prefix ? vpn.routedIpv6Prefix : undefined;
   const { plugins } = router.plugins;
   const rules = router.portForwardingRules.map((rule) => {
     const client = clients.find((c) => c.mac === rule.mac);
@@ -33,13 +35,18 @@ export function portForwardingView(router: MockRouter): PortForwardingSettings {
       ...rule,
       target: plugin?.name ?? (client ? client.name || client.hostname || client.mac : (rule.mac ?? rule.plugin)),
       address: plugin ? '10.88.0.2' : client?.fixedAddress,
+      // A made-up public address for the device, from the end of its MAC address.
+      ipv6Addresses:
+        ipv6Prefix && rule.ipv6 && client
+          ? [`${ipv6Prefix.replace(/::\/\d+$/, '')}::${client.mac.slice(-5).replace(':', '')}`]
+          : undefined,
       warning: risky
         ? `Port ${risky} (${RISKY_PORTS[risky]}) is often attacked from the internet. Use a strong password there, or another outside port.`
         : undefined,
     };
   });
-  if (!uplink.connected) return { rules, reachability: 'offline' };
-  return { rules, outsideAddress: uplink.address, reachability: reachability(uplink.address) };
+  if (!uplink.connected) return { rules, reachability: 'offline', ipv6Prefix };
+  return { rules, outsideAddress: uplink.address, reachability: reachability(uplink.address), ipv6Prefix };
 }
 
 /** Checks a new list as the router does, and answers it as saved (new rules get an ID). */
@@ -56,7 +63,7 @@ export function checkPortForwarding(router: MockRouter, rules: PortForwardRule[]
       throw new FieldErrors({ target: 'Give this device a fixed address first, so the rule always finds it.' });
     }
     // Only what a PUT keeps: the read-only fields are the router's.
-    const { target: _target, address: _address, warning: _warning, ...kept } = rule;
+    const { target: _target, address: _address, warning: _warning, ipv6Addresses: _ipv6, ...kept } = rule;
     return { ...kept, id: rule.id || `pf-${Date.now().toString(36)}-${index}` };
   });
 }

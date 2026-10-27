@@ -187,6 +187,8 @@ type routerRules struct {
 	routedIPv6  netip.Prefix
 	// portForwards are port forwarding rules (the uplink is "eth0").
 	portForwards []render.PortForward
+	// pinholes open ports to devices' addresses in routedIPv6.
+	pinholes []render.Pinhole
 }
 
 // renderRouterRules writes rbd's firewall for r to a file and returns its
@@ -202,6 +204,7 @@ func renderRouterRules(t *testing.T, r routerRules) string {
 		Uplinks:         []string{"eth0"},
 		LANAddress:      render.DefaultLAN.Prefix.Addr(),
 		PortForwards:    r.portForwards,
+		Pinholes:        r.pinholes,
 	})
 	if err != nil {
 		t.Fatal(err)

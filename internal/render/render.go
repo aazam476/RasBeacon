@@ -509,6 +509,20 @@ type FirewallInput struct {
 	// PortForwards send connections from the internet, arriving on the
 	// uplinks, to a device on the hotspot or a plugin.
 	PortForwards []PortForward
+	// Pinholes let connections from the internet reach a device's public
+	// IPv6 address (in RoutedIPv6) on a port, without NAT. They arrive
+	// through the tunnel, the only way RoutedIPv6 reaches RasBeacon.
+	Pinholes []Pinhole
+}
+
+// Pinhole is one port opened to a device's public IPv6 addresses.
+type Pinhole struct {
+	// Protocol is "tcp" or "udp" (a rule for both becomes two).
+	Protocol string
+	// From and To are the ports (the same for a single port).
+	From, To int
+	// Addresses are the device's addresses in the routed IPv6 network.
+	Addresses []netip.Addr
 }
 
 // PortForward is one port forwarding rule as the firewall needs it.
@@ -527,6 +541,12 @@ type PortForward struct {
 // replies go back out of the uplink (see routing.ForwardMark; the routing
 // package's tests check the two agree).
 const ForwardMark = "0x5246"
+
+type pinholeData struct {
+	Protocol  string
+	Ports     string // "8080" or "27015-27030"
+	Addresses []string
+}
 
 type portForwardData struct {
 	Protocol string
@@ -607,6 +627,8 @@ type firewallData struct {
 	PortForwards []portForwardData
 	OwnAddresses []string
 	ForwardMark  string
+	// IPv6 pinholes (see FirewallInput.Pinholes).
+	Pinholes []pinholeData
 }
 
 // Firewall produces the nftables ruleset.
@@ -707,6 +729,9 @@ func Firewall(in FirewallInput) (string, error) {
 	if err := addPortForwards(&data, in); err != nil {
 		return "", err
 	}
+	if err := addPinholes(&data, in); err != nil {
+		return "", err
+	}
 	return execute("firewall.nft.tmpl", data)
 }
 
@@ -753,6 +778,38 @@ func addPortForwards(data *firewallData, in FirewallInput) error {
 			d.Target += ":" + strconv.Itoa(f.InsidePort)
 		}
 		data.PortForwards = append(data.PortForwards, d)
+	}
+	return nil
+}
+
+// addPinholes checks the IPv6 pinholes and puts them in data. They need
+// the routed IPv6 network and the tunnel it arrives through; a pinhole
+// whose device has no address there (yet) is left out.
+func addPinholes(data *firewallData, in FirewallInput) error {
+	if !in.RoutedIPv6.IsValid() || in.TunnelInterface == "" || len(in.Egress) == 0 {
+		return nil
+	}
+	for _, p := range in.Pinholes {
+		if p.Protocol != "tcp" && p.Protocol != "udp" {
+			return fmt.Errorf("invalid protocol %q", p.Protocol)
+		}
+		if p.From < 1 || p.To < p.From || p.To > 65535 {
+			return fmt.Errorf("invalid ports %d-%d", p.From, p.To)
+		}
+		d := pinholeData{Protocol: p.Protocol, Ports: strconv.Itoa(p.From)}
+		if p.To != p.From {
+			d.Ports += "-" + strconv.Itoa(p.To)
+		}
+		for _, addr := range p.Addresses {
+			// Only the device's public addresses, never another network's.
+			if !addr.Is6() || !in.RoutedIPv6.Contains(addr) {
+				return fmt.Errorf("pinhole address %v is not in %v", addr, in.RoutedIPv6)
+			}
+			d.Addresses = append(d.Addresses, addr.String())
+		}
+		if len(d.Addresses) > 0 {
+			data.Pinholes = append(data.Pinholes, d)
+		}
 	}
 	return nil
 }

@@ -150,6 +150,15 @@ table inet rasbeacon {
 		iifname "{{.Bridge}}" oifname { "{{.Bridge}}", "{{.PluginBridge}}" } ct status dnat accept
 		iifname { "{{.Bridge}}", "{{.PluginBridge}}" } oifname "{{.Bridge}}" ct status dnat ct state established,related accept
 {{- end}}
+{{- if .Pinholes}}
+
+		# IPv6 pinholes: connections from the internet, through the VPN's
+		# routed IPv6 network, may reach these devices' public addresses on
+		# these ports (no NAT: the address is the device's own).
+{{- range .Pinholes}}
+		iifname "{{$.TunnelInterface}}" oifname "{{$.Bridge}}" ip6 daddr { {{range $i, $a := .Addresses}}{{if $i}}, {{end}}{{$a}}{{end}} } {{.Protocol}} dport {{.Ports}} accept
+{{- end}}
+{{- end}}
 
 		# Connections devices already started may continue, but only on the
 		# current path. When the path changes (for example from login mode
