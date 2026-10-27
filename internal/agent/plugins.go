@@ -802,10 +802,11 @@ func (a *Agent) PluginLogs(id string) (api.PluginLogs, error) {
 // lastLogLines reads Podman's k8s-file log and keeps the last n lines, each
 // with its time in UTC. Each log line is "<time> <stream> <tag> <text>":
 // the tag is F for a full line, or P for part of a long line that goes on
-// in the next one (those parts are joined back together).
+// in the next one (those parts are joined back together; a line the
+// plugin is still writing is shown as far as it got).
 func lastLogLines(text string, n int) []api.PluginLogLine {
 	var lines []api.PluginLogLine
-	partial := ""
+	partial, partialTime := "", ""
 	for _, line := range strings.Split(strings.TrimRight(text, "\n"), "\n") {
 		if line == "" {
 			continue
@@ -822,10 +823,14 @@ func lastLogLines(text string, n int) []api.PluginLogLine {
 		}
 		if fields[2] == "P" {
 			partial += content
+			partialTime = t.UTC().Format(time.RFC3339)
 			continue
 		}
 		lines = append(lines, api.PluginLogLine{Time: t.UTC().Format(time.RFC3339), Text: partial + content})
 		partial = ""
+	}
+	if partial != "" {
+		lines = append(lines, api.PluginLogLine{Time: partialTime, Text: partial})
 	}
 	if len(lines) > n {
 		lines = lines[len(lines)-n:]

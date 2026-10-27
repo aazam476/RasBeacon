@@ -607,6 +607,15 @@ func TestPlugins_LogLines(t *testing.T) {
 	if !reflect.DeepEqual(lines, want) {
 		t.Errorf("lines = %+v, want %+v", lines, want)
 	}
+
+	// A long line comes in parts (P), the last one marked F; one the
+	// plugin is still writing has no F yet, and shows as far as it got.
+	text = "2026-10-14T10:00:00Z stdout P first half \n2026-10-14T10:00:00Z stdout F and the rest\n" +
+		"2026-10-14T10:00:05Z stdout P still being wr\n2026-10-14T10:00:06Z stdout P itten\n"
+	want = []api.PluginLogLine{{Time: "2026-10-14T10:00:00Z", Text: "first half and the rest"}, {Time: "2026-10-14T10:00:06Z", Text: "still being written"}}
+	if lines := lastLogLines(text, 10); !reflect.DeepEqual(lines, want) {
+		t.Errorf("lines = %+v, want %+v", lines, want)
+	}
 }
 
 func TestPlugins_PowerSocketShutsDown(t *testing.T) {
