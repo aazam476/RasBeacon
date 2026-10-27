@@ -38,7 +38,15 @@ fi
 
 echo "Starting a simulated device in $work ..."
 "$repo_root/build/rbd" -dev "$work/device" -dev-hotel 127.0.0.1:8099 -dev-browser "$login_browser" >"$work/rbd.log" 2>&1 &
-sleep 1
+# rbd opens its API only once the (simulated) hotspot has started, a few
+# seconds in: wait for it (up to 30 s), so the first page finds it.
+for _ in $(seq 60); do
+  [ -S "$work/device/run/rbd/api.sock" ] && break
+  sleep 0.5
+done
+if [ ! -S "$work/device/run/rbd/api.sock" ]; then
+  echo "rbd didn't start:"; tail -n 50 "$work/rbd.log"; exit 1
+fi
 "$repo_root/build/rbweb" -listen 127.0.0.1:8080 -rbd-socket "$work/device/run/rbd/api.sock" >"$work/rbweb.log" 2>&1 &
 sleep 1
 
