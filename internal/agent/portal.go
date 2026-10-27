@@ -60,6 +60,11 @@ type portalState struct {
 	browserStarted   time.Time
 	browserUsed      time.Time
 	browserSawPortal bool
+
+	// pathFailed is set when applying devices' path after a change of
+	// login mode or the notice failed; CheckPortal then tries again every
+	// round (see applyPortalPath).
+	pathFailed bool
 }
 
 // noticeActive reports whether devices should be shown the "login needed"
@@ -164,8 +169,26 @@ func (a *Agent) CheckPortal(probe func(context.Context) portal.Result) {
 	a.checkBrowser()
 	if a.noticeActive() != wasNotice {
 		slog.Info("captive portal notice", "shown", a.noticeActive())
-		a.applyClientPath()
+		_ = a.applyPortalPath()
+	} else if a.portal.pathFailed {
+		_ = a.applyPortalPath()
 	}
+}
+
+// applyPortalPath applies where devices' traffic goes after login mode or
+// the notice changed. If that fails (nft refused the rules, say), the old
+// path stays, which may be login mode's way around the VPN while the page
+// says it's over: so the error is logged, and CheckPortal tries again
+// every round until it works. The caller holds a.mu.
+func (a *Agent) applyPortalPath() error {
+	err := a.applyClientPath()
+	if err != nil {
+		slog.Error("could not change where devices' traffic goes; trying again in a few seconds", "loginMode", a.portal.loginMode, "error", err)
+	} else if a.portal.pathFailed {
+		slog.Info("devices' traffic goes where it should again", "loginMode", a.portal.loginMode)
+	}
+	a.portal.pathFailed = err != nil
+	return err
 }
 
 // RecheckPortal makes the next check for a login page happen within a few
@@ -192,8 +215,7 @@ func (a *Agent) StartLoginMode() error {
 	a.portal.loginStarted = a.now()
 	a.portal.loginUntil = a.now().Add(LoginWindow)
 	a.portal.probedAt = time.Time{} // check again soon
-	a.applyClientPath()
-	return nil
+	return a.applyPortalPath()
 }
 
 // ExtendLoginMode adds LoginWindow, up to MaxLoginWindow in total.
@@ -227,7 +249,7 @@ func (a *Agent) StopLoginMode() error {
 func (a *Agent) endLoginMode(reason string) {
 	slog.Info("login mode ended", "reason", reason)
 	a.portal.loginMode = false
-	a.applyClientPath()
+	_ = a.applyPortalPath()
 }
 
 // PortalStatus returns the captive portal state (public: the notice page

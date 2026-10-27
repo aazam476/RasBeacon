@@ -194,3 +194,51 @@ func TestProbeClient_OpensNewConnectionsEachTime(t *testing.T) {
 		t.Error("the portal check must not keep connections open between checks")
 	}
 }
+
+// If the firewall can't be loaded when login mode ends, the old rules stay,
+// with web and DNS still going straight to the hotel's network. The error
+// must not be dropped: the next rounds try again until it works.
+func TestPortal_AFailedReturnToTheTunnelIsTriedAgain(t *testing.T) {
+	e, c, p := newPortalEnv(t)
+	if err := e.agent.StartLoginMode(); err != nil {
+		t.Fatal(err)
+	}
+	e.runner.failing = []string{"nft -f"}
+	p.result = portal.Result{State: portal.Open}
+	c.advance(5 * time.Second)
+	e.agent.CheckPortal(p.probe)
+	if e.agent.PortalStatus().LoginMode {
+		t.Fatal("login mode should be over")
+	}
+
+	// Still failing: each round tries again.
+	e.runner.commands = nil
+	c.advance(5 * time.Second)
+	e.agent.CheckPortal(p.probe)
+	if !e.runner.ran("nft -f") {
+		t.Error("the next round should load the firewall again")
+	}
+
+	// nft works again: the tunnel's rules are back, and the rounds stop.
+	e.runner.failing = nil
+	c.advance(5 * time.Second)
+	e.agent.CheckPortal(p.probe)
+	if got := e.firewallEgress(); got != `elements = { "wg0" }` {
+		t.Errorf("egress = %s, want only wg0", got)
+	}
+	e.runner.commands = nil
+	c.advance(5 * time.Second)
+	e.agent.CheckPortal(p.probe)
+	if e.runner.ran("nft -f") {
+		t.Error("once it worked, the rounds don't load the firewall again")
+	}
+}
+
+// Starting login mode reports a firewall that can't be loaded.
+func TestPortal_StartingLoginModeReportsAFailure(t *testing.T) {
+	e, _, _ := newPortalEnv(t)
+	e.runner.failing = []string{"nft -f"}
+	if err := e.agent.StartLoginMode(); err == nil {
+		t.Error("StartLoginMode should report that the firewall couldn't be loaded")
+	}
+}
