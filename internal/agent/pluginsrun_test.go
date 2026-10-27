@@ -22,14 +22,31 @@ func TestFillTemplate_DefinesEveryAllowedFunction(t *testing.T) {
 			calls = append(calls, `{{json "x"}}`)
 		case "port":
 			calls = append(calls, `{{port 3000}}`)
+		case "html":
+			calls = append(calls, `{{html "<b>"}}`)
 		default:
 			t.Fatalf("this test doesn't know %q yet: add a call to it", name)
 		}
 	}
 	values := plugin.Values{Ports: map[int]int{3000: 3001}}
 	out, err := fillTemplate("config", []byte(strings.Join(calls, " ")), values)
-	if err != nil || !strings.Contains(string(out), "3001") || !strings.Contains(string(out), `"x"`) {
+	if err != nil || !strings.Contains(string(out), "3001") || !strings.Contains(string(out), `"x"`) || !strings.Contains(string(out), "&lt;b&gt;") {
 		t.Errorf("fillTemplate = %q, %v", out, err)
+	}
+}
+
+// json and html can each make a text longer, so nesting them could grow
+// it at every level: a result larger than a whole template is refused,
+// before it is written anywhere.
+func TestFillTemplate_RefusesHugeValues(t *testing.T) {
+	quotes := plugin.Values{Settings: map[string]string{"x": strings.Repeat(`"`, 1<<20)}}
+	for _, text := range []string{
+		"{{json (json (json .Settings.x))}}", // each json doubles the quotes
+		"{{html (html .Settings.x)}}",        // " becomes &#34;, then &amp;#34;
+	} {
+		if out, err := fillTemplate("config", []byte(text), quotes); err == nil || !strings.Contains(err.Error(), "too large") {
+			t.Errorf("%s = %d bytes, %v; want refused as too large", text, len(out), err)
+		}
 	}
 }
 

@@ -172,8 +172,9 @@ const (
 
 // fillTemplate fills in a template with the plugin's settings:
 // {{.Settings.key}}, {{.Address}}, {{.Host}}, {{port 3000}}, {{json …}},
-// {{html …}} (built in), and {{bcrypt .Settings.password}} for programs
-// that keep password hashes.
+// {{html …}}, and {{bcrypt .Settings.password}} for programs that keep
+// password hashes. plugin.CheckTemplate refuses everything else (variables,
+// loops, printf), so a template can't build a huge value step by step.
 func fillTemplate(name string, text []byte, values plugin.Values) ([]byte, error) {
 	bcryptCalls := 0
 	// Functions the template may call, by name.
@@ -187,9 +188,22 @@ func fillTemplate(name string, text []byte, values plugin.Values) ([]byte, error
 			return string(hash), err
 		},
 		"port": func(container int) int { return values.Ports[container] },
+		// json and html can make a text several times longer (each quote
+		// becomes \"), so one nested in another could still grow it a
+		// lot: each refuses a result larger than a whole template may be.
 		"json": func(v any) (string, error) {
 			data, err := json.Marshal(v)
+			if err == nil && len(data) > maxTemplateOutput {
+				return "", errTemplateTooLarge
+			}
 			return string(data), err
+		},
+		"html": func(v any) (string, error) {
+			text := template.HTMLEscapeString(fmt.Sprint(v))
+			if len(text) > maxTemplateOutput {
+				return "", errTemplateTooLarge
+			}
+			return text, nil
 		},
 	}
 	// Plugins installed before the check existed are checked here too.
@@ -208,6 +222,10 @@ func fillTemplate(name string, text []byte, values plugin.Values) ([]byte, error
 	return out.buf.Bytes(), nil
 }
 
+// errTemplateTooLarge stops a template whose output, or one of whose
+// values, would be larger than maxTemplateOutput.
+var errTemplateTooLarge = errors.New("it is too large")
+
 // limitedBuffer collects a template's output, refusing more than limit
 // bytes (which stops the template).
 type limitedBuffer struct {
@@ -219,7 +237,7 @@ type limitedBuffer struct {
 // passed.
 func (b *limitedBuffer) Write(p []byte) (int, error) {
 	if b.buf.Len()+len(p) > b.limit {
-		return 0, errors.New("it is too large")
+		return 0, errTemplateTooLarge
 	}
 	return b.buf.Write(p)
 }
