@@ -42,8 +42,9 @@ export function NoticeList({ tone = 'info', ariaLabel, messages }: NoticeListPro
 
   return (
     <ul aria-label={ariaLabel} className={cn('notice-list flex flex-col rounded-group', style.surface)}>
-      {messages.map((message) => (
-        <li key={message} className="relative flex gap-3 px-4 py-3.5 lg:px-3.5 lg:py-3">
+      {/* The same message can come twice (two devices with the same problem): the place makes keys unique. */}
+      {messages.map((message, i) => (
+        <li key={`${i}:${message}`} className="relative flex gap-3 px-4 py-3.5 lg:px-3.5 lg:py-3">
           <Icon name={style.defaultIcon} filled size={22} className={cn('mt-px lg:size-5', style.icon)} />
           <p role="alert" className="min-w-0 flex-1 text-subhead wrap-break-word text-label">
             {message}

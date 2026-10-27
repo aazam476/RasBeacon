@@ -175,7 +175,7 @@ func (a *Agent) readPluginFiles(id string, live *pluginLive) error {
 func (a *Agent) pluginBoard() string {
 	model := a.boardModel()
 	switch {
-	case strings.Contains(model, "Pi 5"):
+	case strings.Contains(model, "Pi 5"), strings.Contains(model, "Compute Module 5"):
 		return "pi5"
 	case strings.Contains(model, "Pi 4"), strings.Contains(model, "Pi 400"), strings.Contains(model, "Compute Module 4"):
 		return "pi4"

@@ -140,6 +140,7 @@ func TestReadings_BoardMemoryAndUptime(t *testing.T) {
 		"Raspberry Pi 5 Model B Rev 1.0\x00":      "pi5",
 		"Raspberry Pi 4 Model B Rev 1.4\x00":      "pi4",
 		"Raspberry Pi Compute Module 4 Rev 1.0":   "pi4",
+		"Raspberry Pi Compute Module 5 Rev 1.0":   "pi5",
 		"Raspberry Pi Zero 2 W Rev 1.0\x00":       "zero2w",
 		"Raspberry Pi 3 Model B Plus Rev 1.3\x00": "pi3",
 		"Some other board":                        "",

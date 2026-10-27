@@ -142,3 +142,25 @@ func TestReadings_WiFiAccessPoint(t *testing.T) {
 		t.Error("channel numbers")
 	}
 }
+
+// The space RasBeacon's files take counts each file once, also with two
+// names (a hard link), and a sparse file by what it holds.
+func TestFilesSize_CountsEachFileOnceByTheSpaceItTakes(t *testing.T) {
+	dir := t.TempDir()
+	data := filepath.Join(dir, "data")
+	mustWrite(t, data, strings.Repeat("x", 8192))
+	if err := os.Link(data, filepath.Join(dir, "same-data")); err != nil {
+		t.Skip("no hard links here:", err)
+	}
+	sparse, err := os.Create(filepath.Join(dir, "plugin.img"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sparse.Truncate(1 << 30); err != nil { // may grow to 1 GB, holds nothing
+		t.Fatal(err)
+	}
+	sparse.Close()
+	if got := filesSize(dir); got < 8192 || got >= 2*8192 {
+		t.Errorf("filesSize = %d, want about 8192 (one copy of the data, nothing for the empty sparse file)", got)
+	}
+}

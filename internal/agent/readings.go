@@ -327,15 +327,29 @@ func (a *Agent) persistentBytes() uint64 {
 	return p.bytes
 }
 
-// filesSize adds up the sizes of the regular files in dir and below it.
+// filesSize adds up the space the regular files in dir and below it take
+// on the card: each file once, however many names (hard links, which
+// Podman's image storage uses) it has, and a sparse file (a plugin's data)
+// by what it holds, not by how large it may grow (see spaceUsed).
 func filesSize(dir string) uint64 {
 	var total uint64
+	seen := map[[2]uint64]bool{}
 	_ = filepath.WalkDir(dir, func(_ string, d fs.DirEntry, err error) error {
-		if err == nil && d.Type().IsRegular() {
-			if info, err := d.Info(); err == nil {
-				total += uint64(info.Size())
-			}
+		if err != nil || !d.Type().IsRegular() {
+			return nil
 		}
+		info, err := d.Info()
+		if err != nil {
+			return nil
+		}
+		if st, ok := info.Sys().(*syscall.Stat_t); ok {
+			file := [2]uint64{uint64(st.Dev), uint64(st.Ino)}
+			if seen[file] {
+				return nil
+			}
+			seen[file] = true
+		}
+		total += uint64(spaceUsed(info))
 		return nil
 	})
 	return total
