@@ -308,6 +308,11 @@ type previousVersion struct {
 	readme   string
 	record   config.InstalledPlugin
 	secrets  map[string]string
+	// files are its manifest, icon, readme and templates as they were on
+	// disk (see pluginFiles): an update that fails once it began writing
+	// the new ones puts these back, or the old version would start with
+	// the new version's templates after the next restart.
+	files map[string][]byte
 }
 
 // InstallPlugin installs a previewed plugin with the owner's choices. It
@@ -350,6 +355,7 @@ func (a *Agent) InstallPlugin(req api.PluginInstallRequest) (api.Plugin, error) 
 		previous = &previousVersion{
 			manifest: live.manifest, icon: live.icon, readme: live.readme,
 			record: old.Clone(), secrets: maps.Clone(a.secrets.Plugins[m.ID]),
+			files: a.pluginFiles(m.ID),
 		}
 	}
 
@@ -437,6 +443,9 @@ func (a *Agent) installFailed(id string, m *plugin.Manifest, image string, previ
 		return
 	}
 	live.manifest, live.icon, live.readme = previous.manifest, previous.icon, previous.readme
+	if err := a.writePluginFiles(id, previous.files); err != nil {
+		slog.Error("could not put the plugin's old files back", "plugin", id, "error", err)
+	}
 	_ = a.savePluginConfig(id, func(p *config.InstalledPlugin) { *p = previous.record })
 	_ = a.savePluginSecrets(id, previous.secrets)
 	a.setPluginState(id, api.PluginStopped, "")
@@ -524,6 +533,36 @@ func loadedImage(out string) string {
 // savePluginFiles writes the plugin's manifest, icon, readme and
 // templates into its folder (replacing an older version's).
 func (a *Agent) savePluginFiles(id string, s *stagedPlugin) error {
+	files := map[string][]byte{plugin.ManifestFile: s.archive.ManifestData, plugin.IconFile: s.archive.Icon, plugin.ReadmeFile: []byte(s.archive.Readme)}
+	for name, data := range s.archive.Templates {
+		files[filepath.Join("templates", name)] = data
+	}
+	return a.writePluginFiles(id, files)
+}
+
+// pluginFiles reads the files savePluginFiles writes, as they are now (by
+// their path in the plugin's folder). They are small.
+func (a *Agent) pluginFiles(id string) map[string][]byte {
+	dir := a.paths.PluginDir(id)
+	files := map[string][]byte{}
+	for _, name := range []string{plugin.ManifestFile, plugin.IconFile, plugin.ReadmeFile} {
+		if data, err := os.ReadFile(filepath.Join(dir, name)); err == nil {
+			files[name] = data
+		}
+	}
+	entries, _ := os.ReadDir(filepath.Join(dir, "templates"))
+	for _, entry := range entries {
+		name := filepath.Join("templates", entry.Name())
+		if data, err := os.ReadFile(filepath.Join(dir, name)); err == nil && entry.Type().IsRegular() {
+			files[name] = data
+		}
+	}
+	return files
+}
+
+// writePluginFiles replaces the plugin's manifest, icon, readme and
+// templates with files (by their path in its folder).
+func (a *Agent) writePluginFiles(id string, files map[string][]byte) error {
 	dir := a.paths.PluginDir(id)
 	templates := filepath.Join(dir, "templates")
 	if err := os.RemoveAll(templates); err != nil {
@@ -532,9 +571,10 @@ func (a *Agent) savePluginFiles(id string, s *stagedPlugin) error {
 	if err := os.MkdirAll(templates, 0o700); err != nil {
 		return err
 	}
-	files := map[string][]byte{plugin.ManifestFile: s.archive.ManifestData, plugin.IconFile: s.archive.Icon, plugin.ReadmeFile: []byte(s.archive.Readme)}
-	for name, data := range s.archive.Templates {
-		files[filepath.Join("templates", name)] = data
+	for _, name := range []string{plugin.ManifestFile, plugin.IconFile, plugin.ReadmeFile} {
+		if _, ok := files[name]; !ok {
+			_ = os.Remove(filepath.Join(dir, name))
+		}
 	}
 	for _, name := range slices.Sorted(maps.Keys(files)) {
 		if err := config.WriteFileAtomic(filepath.Join(dir, name), files[name], 0o600); err != nil {

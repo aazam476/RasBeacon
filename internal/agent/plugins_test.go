@@ -746,6 +746,45 @@ func TestPlugins_FailedUpdatePutsTheOldVersionBack(t *testing.T) {
 	}
 }
 
+// An update that fails once it began writing the new version's files
+// (here: its manifest can't be written) must put the old files back too,
+// or the old version would start with the new one's after a restart.
+func TestPlugins_AnUpdateFailingWhileSavingItsFilesPutsTheOldOnesBack(t *testing.T) {
+	e := newPluginEnv(t)
+	if _, err := e.installTestPlugin(writeTestPlugin(t, testPluginManifest("1.0"), nil), nil); err != nil {
+		t.Fatal(err)
+	}
+	dir := e.paths.PluginDir("adguard-home")
+	oldTemplate := e.readFile(filepath.Join(dir, "templates", "AdGuardHome.yaml"))
+	manifest := filepath.Join(dir, plugin.ManifestFile)
+	newImage := plugin.LocalImage("adguard-home", "2.0")
+	effect := e.runner.effect
+	e.runner.effect = func(args []string) {
+		effect(args)
+		switch strings.Join(args, " ") {
+		case "podman tag localhost/adguard:latest " + newImage:
+			// The new image is in; writing the manifest will fail.
+			_ = os.Remove(manifest)
+			_ = os.MkdirAll(filepath.Join(manifest, "in-the-way"), 0o700)
+		case "podman rmi --ignore " + newImage:
+			_ = os.RemoveAll(manifest) // the failed install cleans up
+		}
+	}
+	if _, err := e.installTestPlugin(writeTestPlugin(t, testPluginManifest("2.0"), nil), nil); err != nil {
+		t.Fatal(err)
+	}
+	if p := e.plugin("adguard-home"); p.Version != "1.0" || !strings.Contains(p.Message, "Updating to 2.0 failed") {
+		t.Errorf("the old version should be back: %+v", p)
+	}
+	var m plugin.Manifest
+	if err := json.Unmarshal([]byte(e.readFile(manifest)), &m); err != nil || m.Version != "1.0" {
+		t.Errorf("the old manifest should be back on disk: %+v, %v", m, err)
+	}
+	if got := e.readFile(filepath.Join(dir, "templates", "AdGuardHome.yaml")); got != oldTemplate {
+		t.Errorf("the old template should be back: %q", got)
+	}
+}
+
 func TestPlugins_GivingUpAfterCrashesLetsGoOfTheContainer(t *testing.T) {
 	e := newPluginEnv(t)
 	if _, err := e.installTestPlugin(writeTestPlugin(t, testPluginManifest("1.0"), nil), nil); err != nil {
