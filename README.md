@@ -35,24 +35,27 @@ hotel login pages.
     choose a schedule on the System page.
 - **Licensed under Apache-2.0.**
 
-> **Status: beta (v0.2). Everything is built and tested in CI; hardware
+> **Status: beta (v0.3). Everything is built and tested in CI; hardware
 > testing is in progress** (see the [full test plan](docs/testing/full.md)). RasBeacon
 > runs your hotspot (plus an optional guest network), connects it to the
-> internet through Ethernet or Wi-Fi (open, password, or WPA-Enterprise
-> networks such as eduroam, [guide](docs/wpa-enterprise.md)), can send everything through
+> internet through Ethernet, Wi-Fi (open, password, or WPA-Enterprise
+> networks such as eduroam, [guide](docs/wpa-enterprise.md)), or a phone or
+> 4G/5G modem plugged in by USB, can send everything through
 > your own WireGuard VPN with a kill switch, keeping several VPN profiles
 > ([server guide](docs/wireguard-server.md)), lets you log in to hotel login
 > pages without anything leaving the VPN, and installs signed updates with
-> automatic rollback. Its settings pages, designed like Apple's Settings
-> app, also show live traffic and hardware readings, let you pause or
-> disconnect single devices, and run Cloudflare's speed test when you ask.
+> automatic rollback. At home it also works as a simple router, with fixed
+> addresses, port forwarding and priority devices. Its settings pages,
+> designed like Apple's Settings app, also show live traffic and hardware
+> readings, let you pause or disconnect single devices, and run
+> Cloudflare's speed test when you ask.
 
 ## What you need
 
 | Part | Notes |
 |---|---|
 | A Raspberry Pi: **4 or 5** (recommended), or **Zero 2 W, 3B or 3B+** (best effort) | The Pi 4 and 5 get everything, including updates installed from the System page; they are tested before each release. A Pi 4 may need a one-time bootloader update first (see [Troubleshooting](#troubleshooting): 4 short flashes). The Zero 2 W, 3B and 3B+ share a second image with the same features, except that new versions are flashed instead of installed (and the Zero 2 W has no Ethernet port); they are tested when someone can. Older and 32-bit boards don't work. See [docs/compatibility.md](docs/compatibility.md). |
-| A USB Wi-Fi adapter that can run a hotspot | Recommended: one with a **MediaTek MT7612U** chip (e.g. Alfa AWUS036ACM). A TP-Link Archer T3U also works in principle. The Pi's built-in Wi-Fi alone holds only about 8 devices. |
+| A USB Wi-Fi adapter that can run a hotspot | Recommended: one with a **MediaTek MT7612U** chip (e.g. Alfa AWUS036ACM), or an MT7921AU one for Wi-Fi 6. A TP-Link Archer T3U works, but its driver sometimes stops sending data to devices; RasBeacon notices and restarts the hotspot by itself within about two minutes. The Pi's built-in Wi-Fi alone holds only about 8 devices. See [docs/compatibility.md](docs/compatibility.md). |
 | microSD card, 8 GB or larger | |
 | A 5 V / 3 A USB-C power supply | Or a USB power bank, if you want to use it away from an outlet |
 
@@ -128,14 +131,14 @@ hotel login pages.
 | Nothing works and you want to see why | Put the SD card in a computer and create an empty file named `debug` on the `BOOTCONFIG` drive. Boot the Pi and wait 3 minutes, then unplug it. Back on the computer, open `rasbeacon-debug.txt` from the same drive. It holds the startup logs: no passwords (RasBeacon keeps them out of its logs, plugins' included), but device names and MAC addresses, so delete it afterwards. |
 | Want a new admin password | System → **Change admin password**, with the current one. Other devices are logged out. |
 | Forgot the admin password | Factory reset: put the SD card in a computer and create an empty file named `factory-reset` on the `BOOTCONFIG` drive. At the next start, RasBeacon erases all settings and runs first-time setup again. (Or hold the optional reset button for 10 seconds.) |
-| An update didn't install | The System page says why. "not signed by a key this RasBeacon trusts": use update files from the official Releases page; images built before signing was set up can't install updates, so flash the new image once. "for rpi64, but this is a pi4": the device runs an image from before the Pi 4 and Pi 5 shared one; flash the new image once. "older than the version running": RasBeacon doesn't go back to older versions. "needs a fresh install" (or "can't be installed over"): that version changed too much to install over yours; follow [the steps below](#updating). |
+| An update didn't install | The System page says why. "not signed by a key this RasBeacon trusts": use update files from the official Releases page. On v0.1.0, install v0.2.0's update first: newer ones use a key v0.1.0 doesn't know (see [Updating](#updating)). Images built before signing was set up can't install updates, so flash the new image once. "for rpi64, but this is a pi4": the device runs an image from before the Pi 4 and Pi 5 shared one; flash the new image once. "older than the version running": RasBeacon doesn't go back to older versions. "needs a fresh install" (or "can't be installed over"): that version changed too much to install over yours; follow [the steps below](#updating). |
 
 ## Checking your download
 
 Each release lists the SHA-256 checksum of every image in `SHA256SUMS`.
 
-- **macOS/Linux:** `shasum -a 256 rasbeacon-v0.1.0.img.xz`
-- **Windows PowerShell:** `Get-FileHash rasbeacon-v0.1.0.img.xz`
+- **macOS/Linux:** `shasum -a 256 rasbeacon-<version>.img.xz`
+- **Windows PowerShell:** `Get-FileHash rasbeacon-<version>.img.xz`
 
 The result must match the line in `SHA256SUMS`.
 
@@ -147,6 +150,12 @@ update**. RasBeacon itself doesn't need to be online for this. It checks
 that the file was signed by the RasBeacon release key, installs it next to
 the running version, and restarts into it. If the new version doesn't start
 correctly, it goes back to the old one by itself. Your settings are kept.
+
+**From v0.1.0:** v0.3.0 and later are signed with a new release key that
+v0.1.0 doesn't know, so a device on v0.1.0 installs v0.2.0's update file
+first (from the [v0.2.0 release](../../releases/tag/v0.2.0)), then the
+newest one (v0.1.0's System page only says the newest one can't be
+installed over it). Or flash the new image and restore a backup.
 
 RasBeacon can also look for new versions on GitHub by itself (every hour,
 6 hours, day or week; off by default) and tell your phone: enter an
@@ -218,7 +227,9 @@ since their image has one copy of the system.
   once), a HiLink 4G/5G stick, or a modem that needs a modem manager
   (most M.2 and many 5G modems: enter the APN and SIM PIN on the
   **Internet** page). RasBeacon uses it when neither Ethernet nor Wi-Fi has
-  the internet, and tells your devices it is metered.
+  the internet, and tells your devices it is metered. It also counts the
+  data phones and modems use each month (from the day your plan's month
+  starts) and warns on the Status page as you near a limit you set.
 - **More wired devices:** plug a USB Ethernet adapter into RasBeacon and
   it becomes a port of your hotspot (with the same check as the client
   port: a cable that leads to another network is never connected), so the
