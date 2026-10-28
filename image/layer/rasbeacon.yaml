@@ -97,6 +97,10 @@ mmdebstrap:
     # SSH is off until the owner turns it on in the web UI (rbd starts it).
     - chroot $1 systemctl disable ssh.service
     - chroot $1 systemctl mask ssh.socket
+    # iPhone pairing records ("Trust this computer?"): usbmuxd keeps them in
+    # /var/lib/lockdown, on the read-only system. Point it at the settings
+    # partition, so a phone is trusted once and the trust survives updates.
+    - ln -s /persistent/rasbeacon/lockdown $1/var/lib/lockdown
     # Debian's own hostapd service must not start with the default config.
     - chroot $1 systemctl mask hostapd.service
     # Optional factory-reset button between GPIO 17 (pin 11) and ground
