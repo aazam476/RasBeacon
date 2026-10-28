@@ -70,8 +70,10 @@ export function Choice({ value, title, description, icon, mono = false, trailing
   const selected = list.value === value;
 
   return (
-    <div className="group row @container gap-0 py-0 pr-2 pl-0 lg:py-0 lg:pr-1.5 lg:pl-0">
-      <label className="row-pressable relative flex min-h-11 min-w-0 flex-1 cursor-pointer items-center gap-3 self-stretch py-2.5 pl-4 lg:min-h-10 lg:gap-2.5 lg:py-2 lg:pl-3.5 has-[input:focus-visible]:rounded-group has-[input:focus-visible]:outline-2 has-[input:focus-visible]:-outline-offset-2 has-[input:focus-visible]:outline-tint">
+    // With very large text on a narrow phone, buttons after the choice go under it instead of
+    // crushing its words.
+    <div className="group row @container flex-wrap gap-0 py-0 pr-2 pl-0 lg:py-0 lg:pr-1.5 lg:pl-0">
+      <label className="row-pressable relative flex min-h-11 min-w-[min(100%,11rem)] flex-1 cursor-pointer items-center gap-3 self-stretch py-2.5 pl-4 lg:min-h-10 lg:gap-2.5 lg:py-2 lg:pl-3.5 has-[input:focus-visible]:rounded-group has-[input:focus-visible]:outline-2 has-[input:focus-visible]:-outline-offset-2 has-[input:focus-visible]:outline-tint">
         <input
           type="radio"
           name={list.name}
@@ -105,7 +107,7 @@ export function Choice({ value, title, description, icon, mono = false, trailing
           className={cn('shrink-0 text-tint lg:size-[1.125rem]', selected ? 'opacity-100' : 'opacity-0')}
         />
       </label>
-      {trailing}
+      {trailing && <span className="ml-auto flex items-center">{trailing}</span>}
     </div>
   );
 }

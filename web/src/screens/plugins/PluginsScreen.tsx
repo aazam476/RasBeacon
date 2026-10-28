@@ -81,7 +81,7 @@ function KeptData({ kept }: { kept: PluginKept[] }) {
     >
       {kept.map((item) => (
         <ButtonRow key={item.id} tone="danger" value={formatBytes(item.bytes)} onClick={() => setDeleting(item)}>
-          <span className="wrap-anywhere">Delete the data of {item.name}</span>
+          Delete the data of {item.name}
         </ButtonRow>
       ))}
       {deleting && (

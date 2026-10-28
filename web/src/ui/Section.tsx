@@ -86,6 +86,8 @@ interface RowTextProps {
   subtitleId?: string;
   /** Classes for the title, e.g. a tone. */
   titleClassName?: string;
+  /** Classes for the whole text, e.g. a smallest width. */
+  className?: string;
 }
 
 function hasValue(value: ReactNode): boolean {
@@ -111,9 +113,9 @@ function TitleLine({ title, value, valueId }: { title: ReactNode; value?: ReactN
 }
 
 /** Title, subtitle and value of a row. */
-export function RowText({ title, subtitle, value, titleId, subtitleId, titleClassName }: RowTextProps) {
+export function RowText({ title, subtitle, value, titleId, subtitleId, titleClassName, className }: RowTextProps) {
   return (
-    <span className="min-w-0 flex-1">
+    <span className={cn('min-w-0 flex-1', className)}>
       <TitleLine
         title={
           <span id={titleId} className={cn('min-w-0 text-body wrap-break-word text-label', titleClassName)}>
@@ -144,24 +146,32 @@ interface RowProps extends RowTextProps {
 export function Row({ leading, trailing, children, className, ...text }: RowProps) {
   if (children) {
     return (
-      <div className={cn('row flex-col items-stretch gap-2', className)}>
+      <div className={cn('row @container flex-col items-stretch gap-2', className)}>
         <div className="flex items-center gap-3 lg:gap-2.5">
-          <Leading leading={leading} />
+          {/* With very large text on a narrow screen the icon gives its room to the words. */}
+          <span className="contents @max-[14rem]:hidden">
+            <Leading leading={leading} />
+          </span>
           <RowText {...text} />
           {trailing}
         </div>
-        {/* Lined up with the text, past the leading symbol. */}
-        <div className={cn(leading && 'pl-[2.5625rem] lg:pl-[2.125rem]')}>{children}</div>
+        {/* Lined up with the text, past the leading symbol (when it shows). */}
+        <div className={cn(leading && 'pl-[2.5625rem] lg:pl-[2.125rem] @max-[14rem]:pl-0')}>{children}</div>
       </div>
     );
   }
+  const hasTrailing = trailing !== undefined && trailing !== null && trailing !== false;
   return (
-    <div className={cn('row @container', className)}>
+    <div className={cn('row @container', hasTrailing && 'flex-wrap', className)}>
       {/* With very large text on a narrow screen the icon gives its room to the words. */}
       <span className="contents @max-[14rem]:hidden">
         <Leading leading={leading} />
       </span>
-      <RowText {...text} />
+      {/*
+       * The text keeps room for about a dozen letters a line; where a badge or button beside it
+       * would leave less (very large text on a phone), that goes under the text instead.
+       */}
+      <RowText {...text} className={hasTrailing ? 'min-w-[min(100%,9rem)]' : undefined} />
       {trailing}
     </div>
   );
@@ -359,7 +369,8 @@ export function ButtonRow({
         else onClick?.();
       }}
       className={cn(
-        'row row-pressable w-full text-left disabled:cursor-not-allowed disabled:opacity-40',
+        // With very large text on a narrow screen a value goes under the words instead of crushing them.
+        'row row-pressable w-full flex-wrap text-left disabled:cursor-not-allowed disabled:opacity-40',
         busy && 'cursor-wait',
         '@container',
         className,
@@ -368,11 +379,16 @@ export function ButtonRow({
       <span className="contents @max-[14rem]:hidden">
         <Leading leading={leading} />
       </span>
-      <span className={cn('min-w-0 flex-1 text-body wrap-break-word', tone === 'danger' ? 'text-red' : 'text-tint')}>
+      <span
+        className={cn(
+          'min-w-[min(100%,9rem)] flex-1 text-body wrap-break-word',
+          tone === 'danger' ? 'text-red' : 'text-tint',
+        )}
+      >
         {busy && busyLabel ? busyLabel : children}
         {note && <span className="block text-subhead text-label-2">{note}</span>}
       </span>
-      {hasValue(value) && <span className="text-body text-label-2">{value}</span>}
+      {hasValue(value) && <span className="ml-auto text-body text-label-2">{value}</span>}
       {busy && <ActivityIndicator size={18} />}
     </button>
   );

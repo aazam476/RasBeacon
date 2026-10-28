@@ -114,8 +114,9 @@ function NetworkRow({
     .join(' · ');
 
   return (
-    <li className="row flex-col items-stretch gap-2.5">
-      <div className="flex items-center gap-3 lg:gap-2.5">
+    <li className="row @container flex-col items-stretch gap-2.5">
+      {/* With very large text on a narrow phone, the arrows go under the name instead of crushing it. */}
+      <div className="flex flex-wrap items-center gap-3 lg:gap-2.5">
         {/* The place in the order, where other rows have their tile. */}
         <span
           aria-hidden="true"
@@ -124,6 +125,7 @@ function NetworkRow({
           {position}
         </span>
         <RowText
+          className="min-w-[min(100%,9rem)]"
           title={<BreakableText>{network.ssid}</BreakableText>}
           subtitle={
             <>
@@ -135,7 +137,7 @@ function NetworkRow({
         />
         {/* A list of one has no order to change. */}
         {!(isFirst && isLast) && (
-          <span className="-mr-1 flex shrink-0 items-center gap-1.5">
+          <span className="-mr-1 ml-auto flex shrink-0 items-center gap-1.5">
             <IconButton
               icon="arrow_upward"
               ariaLabel={`Move ${network.ssid} up`}
@@ -152,7 +154,8 @@ function NetworkRow({
         )}
       </div>
 
-      <div className="flex flex-col gap-2.5 pl-[2.5625rem] lg:pl-[2.125rem]">
+      {/* Lined up with the name, except where that would leave the details too little room. */}
+      <div className="flex flex-col gap-2.5 pl-[2.5625rem] lg:pl-[2.125rem] @max-[18rem]:pl-0">
         {network.enterprise && <EnterpriseSummary network={network} />}
         <label className="flex cursor-pointer items-center gap-3">
           <span id={randomMacId} className="min-w-0 flex-1 text-subhead text-label">

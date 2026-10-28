@@ -63,8 +63,21 @@ export function Notice({ tone = 'info', icon, title, role, actions, className, c
   const style = TONE[tone];
 
   return (
-    <div role={role} className={cn('flex gap-3 rounded-group px-4 py-3.5 lg:px-3.5 lg:py-3', style.surface, className)}>
-      <Icon name={icon ?? style.defaultIcon} filled size={22} className={cn('mt-px lg:size-5', style.icon)} />
+    <div
+      role={role}
+      className={cn(
+        '@container flex w-full min-w-0 gap-3 rounded-group px-4 py-3.5 lg:px-3.5 lg:py-3',
+        style.surface,
+        className,
+      )}
+    >
+      {/* With very large text on a narrow screen the symbol gives its room to the words. */}
+      <Icon
+        name={icon ?? style.defaultIcon}
+        filled
+        size={22}
+        className={cn('mt-px shrink-0 lg:size-5 @max-[16rem]:hidden', style.icon)}
+      />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         {title && <p className="text-headline wrap-break-word text-label">{title}</p>}
         {children && <div className="flex flex-col gap-1 text-subhead wrap-break-word text-label">{children}</div>}

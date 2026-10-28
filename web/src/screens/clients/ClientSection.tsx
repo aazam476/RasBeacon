@@ -52,10 +52,10 @@ export function ClientSection({ client }: { client: NetworkClient }) {
           disabled={client.limitReached}
         />
       </div>
-      <dl className="row grid grid-cols-2 items-start gap-x-4 gap-y-2.5 py-3 lg:grid-cols-[repeat(auto-fit,minmax(9rem,1fr))]">
+      <dl className="row grid grid-cols-[repeat(auto-fit,minmax(min(100%,7rem),1fr))] items-start gap-x-4 gap-y-2.5 py-3 lg:grid-cols-[repeat(auto-fit,minmax(9rem,1fr))]">
         {clientDetails(client).map((detail) => (
           // The last one (the MAC address) takes a whole line when it would sit alone, so it never wraps.
-          <div key={detail.label} className="min-w-0 last:odd:col-span-2">
+          <div key={detail.label} className="min-w-0 last:odd:col-[1/-1]">
             <dt className="text-footnote text-label-2">{detail.label}</dt>
             <dd className={cn('selectable text-subhead wrap-break-word', detail.alert ? 'text-red' : 'text-label')}>
               {detail.value}
