@@ -140,7 +140,7 @@ describe('the internet speed on the Internet page', () => {
     const { user } = renderScreen(<InternetScreen />, device, '/internet');
     const group = within(speedSection());
     await user.type(group.getByLabelText(/^Download/), 'fast');
-    expect(group.getByText('Use a speed from 1 Mb/s to 10,000 Mb/s, or leave it empty.')).toBeTruthy();
+    expect(group.getByText('Use a speed from 1 to 10,000 Mbps, or leave it empty.')).toBeTruthy();
     expect((group.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true);
     await user.clear(group.getByLabelText(/^Download/));
     await user.type(group.getByLabelText(/^Download/), '50,5');

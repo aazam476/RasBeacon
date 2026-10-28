@@ -54,7 +54,7 @@ function SpeedForm({ qos, lastTest }: { qos: QoSSettings; lastTest: SpeedtestRes
         <Row title="Priority devices" value={state(qos)} />
         <TextField
           label="Download"
-          labelNote="(Mb/s)"
+          labelNote="(Mbps)"
           inputMode="decimal"
           placeholder="Not set"
           value={values.download}
@@ -64,7 +64,7 @@ function SpeedForm({ qos, lastTest }: { qos: QoSSettings; lastTest: SpeedtestRes
         />
         <TextField
           label="Upload"
-          labelNote="(Mb/s)"
+          labelNote="(Mbps)"
           inputMode="decimal"
           placeholder="Not set"
           value={values.upload}

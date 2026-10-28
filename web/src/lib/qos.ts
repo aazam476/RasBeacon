@@ -11,7 +11,7 @@ export const MAX_SPEED_KBPS = 10_000_000;
 /** What is wrong with a speed in kbit/s, as the router says it, or undefined. */
 export function speedProblem(kbps: number): string | undefined {
   if (kbps === 0 || (Number.isInteger(kbps) && kbps >= MIN_SPEED_KBPS && kbps <= MAX_SPEED_KBPS)) return undefined;
-  return 'Use a speed from 1 Mb/s to 10,000 Mb/s, or leave it empty.';
+  return 'Use a speed from 1 to 10,000 Mbps, or leave it empty.';
 }
 
 /**

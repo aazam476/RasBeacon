@@ -153,7 +153,7 @@ const (
 // ValidateSpeed checks one of the speeds (0 is "not set").
 func ValidateSpeed(field string, kbps int) error {
 	if kbps != 0 && (kbps < MinSpeedKbps || kbps > MaxSpeedKbps) {
-		return &ValidationError{Field: field, Message: "Use a speed from 1 Mb/s to 10,000 Mb/s, or leave it empty."}
+		return &ValidationError{Field: field, Message: "Use a speed from 1 to 10,000 Mbps, or leave it empty."}
 	}
 	return nil
 }
