@@ -8,6 +8,7 @@ import type {
   AccessSettings,
   ClaimResponse,
   DNSSettings,
+  MobileData,
   ModemSettings,
   WelcomeSettings,
   PortForwardingSettings,
@@ -303,6 +304,9 @@ export const putPortForwarding = (rules: PortForwardRule[]) =>
 export const getModemSettings = () => request<ModemSettings>('GET', '/settings/modem');
 export const putModemSettings = (settings: ModemSettings) =>
   request<ModemSettings>('PUT', '/settings/modem', { body: settings });
+export const putMobileData = (limitMb: number, resetDay: number) =>
+  request<MobileData>('PUT', '/settings/mobile-data', { body: { limitMb, resetDay } });
+export const resetMobileData = () => request<MobileData>('POST', '/settings/mobile-data/reset');
 
 export const getWelcomeSettings = () => request<WelcomeSettings>('GET', '/settings/welcome');
 /** Reloading the firewall takes a moment. */

@@ -768,7 +768,18 @@ type UplinkConfig struct {
 	// WiFiMAC is the address the Wi-Fi uplink radio shows the networks it
 	// joins (a network set to a random address per join still gets one).
 	WiFiMAC MACChoice `json:"wifiMac,omitempty"`
+	// MobileLimitMB is the data a phone or modem connection may use each
+	// month before the Status page warns (0: no warning). Data plans count
+	// by the month, so RasBeacon counts that way too.
+	MobileLimitMB int `json:"mobileLimitMb,omitempty"`
+	// MobileResetDay is the day of the month (1 to 28) the count starts
+	// again, the day the phone plan's month starts. 0 means the 1st.
+	MobileResetDay int `json:"mobileResetDay,omitempty"`
 }
+
+// MaxMobileResetDay is the last day a month's count can start on: every
+// month has a 28th.
+const MaxMobileResetDay = 28
 
 // SavedNetwork is one upstream Wi-Fi network. Its password (if any) is kept
 // in Secrets.UplinkPasswords under the same ID.

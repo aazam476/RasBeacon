@@ -123,3 +123,21 @@ describe('mobile modem', () => {
     },
   ]);
 });
+
+describe('mobile data', () => {
+  testRequests([
+    {
+      name: 'saves the monthly limit and the day the count starts again',
+      call: () => api.putMobileData(5000, 15),
+      method: 'PUT',
+      path: '/settings/mobile-data',
+      body: { limitMb: 5000, resetDay: 15 },
+    },
+    {
+      name: 'starts the count again',
+      call: api.resetMobileData,
+      method: 'POST',
+      path: '/settings/mobile-data/reset',
+    },
+  ]);
+});

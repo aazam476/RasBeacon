@@ -140,6 +140,9 @@ func (p Paths) WelcomeAcceptedFile() string {
 // UsageFile keeps each device's data use since the counters were reset.
 func (p Paths) UsageFile() string { return filepath.Join(p.DataDir(), "usage.json") }
 
+// MobileDataFile keeps the data used through phones and modems this month.
+func (p Paths) MobileDataFile() string { return filepath.Join(p.DataDir(), "mobile-data.json") }
+
 // HotspotStallsFile keeps the latest times the hotspot stopped delivering
 // data to its devices (see internal/agent/hotspotstall.go). It lives on
 // /persistent so the record survives a power-off.

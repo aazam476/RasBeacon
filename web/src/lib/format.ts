@@ -117,3 +117,13 @@ export function bandOfFrequency(frequencyMhz: number): string {
   if (frequencyMhz < 5925) return `5${NBSP}GHz`;
   return `6${NBSP}GHz`;
 }
+
+/** "1st", "2nd", "3rd", "4th" … "21st" … "28th". */
+export function ordinal(day: number): string {
+  // 11th, 12th and 13th break the rule of the last digit.
+  const teen = day % 100 >= 11 && day % 100 <= 13;
+  if (!teen && day % 10 === 1) return `${day}st`;
+  if (!teen && day % 10 === 2) return `${day}nd`;
+  if (!teen && day % 10 === 3) return `${day}rd`;
+  return `${day}th`;
+}

@@ -390,6 +390,20 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
         await wait(700);
         change((d) => void (d.router.uplinkSettings.phoneMetered = metered));
       },
+      saveMobileData: async (limitMb, resetDay) => {
+        await wait(700);
+        change((d) => {
+          const used = d.router.status.uplink.mobileData;
+          d.router.status.uplink.mobileData = { usedBytes: 0, since: nowIso(), ...used, limitMb, resetDay };
+        });
+      },
+      resetMobileData: async () => {
+        await wait(700);
+        change((d) => {
+          const used = d.router.status.uplink.mobileData;
+          if (used) d.router.status.uplink.mobileData = { ...used, usedBytes: 0, since: nowIso() };
+        });
+      },
       setEthernetRole: async (role) => {
         await wait(1200);
         change((d) => {

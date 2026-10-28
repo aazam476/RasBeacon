@@ -224,6 +224,11 @@ export interface UplinkStatus {
   phones?: PhoneUplinkStatus[] | null;
   /** The mobile broadband modem that needs ModemManager; absent without one. */
   modem?: ModemStatus;
+  /**
+   * The data used through phones and modems this month; absent while nothing was used and no
+   * phone, modem or limit is set.
+   */
+  mobileData?: MobileData;
 
   // Hidden when missing.
   subnetMask?: string;
@@ -1098,6 +1103,21 @@ export type ModemState =
   | 'no-sim'
   | 'starting'
   | 'failed';
+
+/**
+ * The data used through phones and modems this month, and the monthly limit (in the status; also
+ * what PUT /api/v1/settings/mobile-data returns). Going over the limit only warns.
+ */
+export interface MobileData {
+  /** Down and up since `since`. */
+  usedBytes: number;
+  /** When this month's count started (RFC 3339). */
+  since?: string;
+  /** 0 = no limit. */
+  limitMb: number;
+  /** The day of the month the count starts again, 1 to 28. */
+  resetDay: number;
+}
 
 /** A mobile broadband modem (one that needs ModemManager: QMI or MBIM). */
 export interface ModemStatus {

@@ -713,6 +713,8 @@ var forwardedRoutes = map[string]string{
 	"GET /api/v1/settings/usage":                     "/settings/usage",
 	"PUT /api/v1/settings/usage":                     "/settings/usage",
 	"POST /api/v1/clients/usage/reset":               "/clients/usage/reset",
+	"PUT /api/v1/settings/mobile-data":               "/settings/mobile-data",
+	"POST /api/v1/settings/mobile-data/reset":        "/settings/mobile-data/reset",
 	"GET /api/v1/settings/swap":                      "/settings/swap",
 	"PUT /api/v1/settings/swap":                      "/settings/swap",
 	"GET /api/v1/plugins":                            "/plugins",

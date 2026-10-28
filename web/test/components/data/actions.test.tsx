@@ -409,6 +409,17 @@ describe('clients', () => {
       then: (d) => expect(d.usageSettings.data).toEqual({ limitMb: 500, since: '2026-10-19T00:00:00Z' }),
     },
     { name: 'resets the counts', run: (d) => d.resetUsage(), sends: ['POST /clients/usage/reset'] },
+    {
+      name: 'the mobile data limit is saved',
+      run: (d) => d.saveMobileData(5000, 15),
+      sends: ['PUT /settings/mobile-data'],
+      body: { limitMb: 5000, resetDay: 15 },
+    },
+    {
+      name: 'the mobile data count is reset',
+      run: (d) => d.resetMobileData(),
+      sends: ['POST /settings/mobile-data/reset'],
+    },
     { name: 'the radios’ new jobs are kept', run: (d) => d.keepRadioRoles(), sends: ['POST /settings/radios/keep'] },
     {
       name: 'a priority device is saved, then the count of them read again',

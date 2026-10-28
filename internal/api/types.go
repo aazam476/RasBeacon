@@ -338,6 +338,9 @@ type UplinkStatus struct {
 	// Modem is the mobile broadband modem that needs ModemManager (nil
 	// without one). It carries the internet when Kind is "modem".
 	Modem *ModemStatus `json:"modem,omitempty"`
+	// MobileData is the data used through phones and modems this month
+	// (nil while none was used and no phone, modem or limit is set).
+	MobileData *MobileData `json:"mobileData,omitempty"`
 	// SubnetMask and InterfaceMAC describe RasBeacon's address on the
 	// uplink in use ("" when not connected).
 	SubnetMask   string `json:"subnetMask,omitempty"`
@@ -1340,6 +1343,21 @@ type PhoneUplinkStatus struct {
 	// plugged in.
 	ReceivedBytes uint64 `json:"receivedBytes"`
 	SentBytes     uint64 `json:"sentBytes"`
+}
+
+// MobileData is the data used through phones and modems (USB or
+// ModemManager) since the month's count started, and the owner's monthly
+// limit. It is also what PUT /settings/mobile-data takes (LimitMB and
+// ResetDay) and returns.
+type MobileData struct {
+	// UsedBytes is the data down and up since Since (read-only).
+	UsedBytes uint64 `json:"usedBytes"`
+	// Since is when this month's count started, in RFC 3339 (read-only).
+	Since string `json:"since,omitempty"`
+	// LimitMB is the monthly limit (0: none). Going over it only warns.
+	LimitMB int `json:"limitMb"`
+	// ResetDay is the day of the month the count starts again (1 to 28).
+	ResetDay int `json:"resetDay"`
 }
 
 // ModemStatus is a mobile broadband modem (one that needs ModemManager).

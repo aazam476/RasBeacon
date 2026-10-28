@@ -200,8 +200,10 @@ export const SCENARIOS: DemoScenario[] = [
         address: '192.168.42.17',
         gateway: '192.168.42.129',
         phones: [phone],
+        mobileData: { usedBytes: 4_620_000_000, since: '2026-10-01T00:00:00Z', limitMb: 5000, resetDay: 1 },
       });
       d.router.status.hotspot.metered = true;
+      d.router.status.warnings = ['Phones and modems have used 4.62\u00a0GB of your 5\u00a0GB this month.'];
     },
   },
   {
@@ -223,6 +225,7 @@ export const SCENARIOS: DemoScenario[] = [
           signalPercent: 72,
           pinTries: 3,
         },
+        mobileData: { usedBytes: 18_400_000_000, since: '2026-10-15T00:00:00Z', limitMb: 0, resetDay: 15 },
       });
       d.router.status.hotspot.metered = true;
     },

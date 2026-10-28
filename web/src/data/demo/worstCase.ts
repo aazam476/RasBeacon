@@ -354,6 +354,16 @@ export function applyWorstCase(demo: DemoState) {
       sentBytes: 0,
     },
   ];
+  // Far over the smallest monthly limit, counted from the last day a month can start on.
+  router.status.uplink.mobileData = {
+    usedBytes: 987_654_321_000,
+    since: '2026-09-28T00:00:00Z',
+    limitMb: 1,
+    resetDay: 28,
+  };
+  router.status.warnings.push(
+    'Phones and modems have used 988\u00a0GB this month, over your 1\u00a0MB limit. Your plan may charge for more or slow down.',
+  );
   // A modem whose SIM refused the saved PIN, with the longest names.
   router.status.uplink.modem = {
     name: 'Sierra Wireless EM9191 5G NR Sub-6 GHz M.2 Module',

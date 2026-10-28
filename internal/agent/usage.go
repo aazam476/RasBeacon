@@ -100,15 +100,19 @@ func (a *Agent) addUsage(before, now map[string][2]uint64) {
 	a.applyUsageLimit()
 }
 
-// SaveUsage saves each device's data use if it changed since the last
-// save. Totals are otherwise saved at most every usageSaveInterval, so
-// cmd/rbd calls this when the device shuts down: without it, the last few
-// minutes of use would be lost at every reboot or update.
+// SaveUsage saves each device's data use, and the month's data through
+// phones and modems, if they changed since the last save. Totals are
+// otherwise saved at most every usageSaveInterval, so cmd/rbd calls this
+// when the device shuts down: without it, the last few minutes of use
+// would be lost at every reboot or update.
 func (a *Agent) SaveUsage() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.usage.dirty {
 		a.saveUsage()
+	}
+	if a.mobileData.dirty {
+		a.saveMobileData()
 	}
 }
 

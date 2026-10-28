@@ -86,6 +86,9 @@ func (a *Agent) sampleReadings() {
 	r.lanRx, r.lanTx = rx, tx
 	r.traffic.SessionBytes = rx + tx
 
+	// The month's data through phones and modems.
+	a.countMobileData()
+
 	// Each device's rate, from the radio's counters.
 	rates := map[string][2]float64{}
 	bytes := map[string][2]uint64{}

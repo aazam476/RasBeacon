@@ -152,7 +152,13 @@ first if you want them; everything else works from the web pages alone.
     *Trust*: the same; reboot RasBeacon: it isn't asked to trust again.
     **HiLink modem:** the same, listed as the modem's name. Note in the
     report which phones and modems worked, and whether a modem needed a
-    powered USB hub.
+    powered USB hub. **Mobile data:** Internet → *Mobile data* shows the
+    data used since the month started. Note it, load a large page or video
+    on a device for a minute, and check that it grew by about what the
+    phone's own data counter shows. Set *Monthly limit* a little above the
+    count, **Save**, and use more: Status warns at 90% and again once it is
+    over. Reboot RasBeacon: the count is kept (it may be up to a few
+    seconds short). **Reset count**: it starts again from zero.
 12. **A modem that needs ModemManager (new, if you have one: M.2 in a USB
     case, or a 5G stick that isn't HiLink):** plug it in with a SIM.
     **Expect:** Internet → *Mobile modem* shows its name. With a SIM PIN:

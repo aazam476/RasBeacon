@@ -82,6 +82,8 @@ func (a *Agent) Handler() http.Handler {
 	mux.HandleFunc("GET /settings/usage", view(a.UsageSettings))
 	mux.HandleFunc("PUT /settings/usage", call(a.UpdateUsageSettings))
 	mux.HandleFunc("POST /clients/usage/reset", result(a.ResetUsage))
+	mux.HandleFunc("PUT /settings/mobile-data", call(a.UpdateMobileData))
+	mux.HandleFunc("POST /settings/mobile-data/reset", result(a.ResetMobileData))
 
 	// --- Hotspot, who may join, guests and SSH -------------------------
 	mux.HandleFunc("GET /settings/hotspot", view(a.HotspotSettings))

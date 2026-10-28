@@ -216,6 +216,13 @@ export interface DeviceActions {
   saveUplinkMacs: (wifiMac: MACChoice, ethernetMac: MACChoice) => Promise<void>;
   /** Treat a phone or modem connection (USB) as metered while it is in use. */
   setPhoneMetered: (metered: boolean) => Promise<void>;
+  /**
+   * The monthly data limit for phones and modems in MB (0 = none), and the day of the month the
+   * count starts again. Field keys: limitMb, resetDay.
+   */
+  saveMobileData: (limitMb: number, resetDay: number) => Promise<void>;
+  /** Start this month's phone and modem count again from zero (the screen has already asked). */
+  resetMobileData: () => Promise<void>;
   /** Fill `nearbyNetworks` (takes about 5 seconds). */
   scanNearbyNetworks: () => Promise<void>;
   /**

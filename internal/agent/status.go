@@ -75,7 +75,7 @@ func (a *Agent) StatusFor(viewer string) api.Status {
 		Radios:            a.radios,
 		RadioRolesPending: a.radioRolesSecondsLeft(),
 		Clients:           a.connectedClients(),
-		Warnings:          slices.Concat(a.warnings, a.vpnWarnings(), a.uplinkWarnings(), a.enterpriseWarnings(), a.serverCertWarnings(), a.guestWarnings(), a.hotspotWarnings(), a.clockWarnings()),
+		Warnings:          slices.Concat(a.warnings, a.vpnWarnings(), a.uplinkWarnings(), a.enterpriseWarnings(), a.serverCertWarnings(), a.guestWarnings(), a.hotspotWarnings(), a.clockWarnings(), a.mobileDataWarnings()),
 
 		Throughput:          a.readings.traffic,
 		System:              a.systemStats(),
@@ -86,6 +86,7 @@ func (a *Agent) StatusFor(viewer string) api.Status {
 		EthernetDiagnostics: a.ethernetDiagnostics(),
 		LANPorts:            a.lanPortStatus(),
 	}
+	status.Uplink.MobileData = a.mobileDataStatus()
 	// Empty lists are sent as [] rather than null, which is easier for the UI.
 	if status.Radios == nil {
 		status.Radios = []radio.Radio{}

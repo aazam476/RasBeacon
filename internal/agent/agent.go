@@ -32,6 +32,7 @@
 //	uplinkcontrols.go  the Internet page's buttons (disconnect, renew, ...)
 //	phoneuplink.go     internet from a phone or modem over USB
 //	modem.go           mobile broadband modems (through ModemManager)
+//	mobiledata.go      the data used through phones and modems each month
 //	macaddress.go      the MAC address each uplink shows its network
 //	portforward.go     port forwarding to devices and plugins
 //	enterprise.go      certificates for eduroam and other Enterprise networks
@@ -180,7 +181,9 @@ type Agent struct {
 	speedtest speedtestState
 	update    updateState
 	usage     usageState
-	plugins   pluginsState
+	// mobileData is the month's data through phones and modems.
+	mobileData mobileDataState
+	plugins    pluginsState
 	// hotspotCheck is the hotspot's regular self-check (hotspotcheck.go).
 	hotspotCheck hotspotCheckState
 	// serverCert remembers Enterprise login servers (servercert.go).

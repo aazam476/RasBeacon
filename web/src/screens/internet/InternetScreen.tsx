@@ -13,6 +13,7 @@ import { InternetSpeedSection } from './InternetSpeedSection';
 import { LANPortsSection } from './LANPortsSection';
 import { MacAddressSection } from './MacAddressSection';
 import { ModemSection } from './ModemSection';
+import { MobileDataSection } from './MobileDataSection';
 import { PhonesSection } from './PhonesSection';
 import { SavedNetworksSection } from './SavedNetworksSection';
 import { SpeedtestSection } from './SpeedtestSection';
@@ -70,6 +71,7 @@ function NetworkSettings({ settings, status }: { settings: UplinkSettings; statu
       <MacAddressSection settings={settings} clients={status?.clients ?? []} />
       {modemSettings.data && <ModemSection modem={status?.uplink.modem} settings={modemSettings.data} />}
       <PhonesSection phones={status?.uplink.phones ?? []} metered={settings.phoneMetered ?? true} />
+      <MobileDataSection data={status?.uplink.mobileData} />
       <LANPortsSection ports={status?.lanPorts ?? []} />
       <DnsSection />
       <InternetSpeedSection lastTest={status?.speedtest.last} />
