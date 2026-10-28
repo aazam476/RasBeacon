@@ -413,6 +413,12 @@ type UpdateStatus struct {
 	CheckHours     int    `json:"checkHours"`
 	LastChecked    string `json:"lastChecked,omitempty"`
 	CheckError     string `json:"checkError,omitempty"`
+	// CheckResult says what the last check found when it offers nothing
+	// to install: CheckUpToDate (this is the newest release) or
+	// CheckTestBuild (a development build, which isn't compared with
+	// releases). "" before a check, after a failed one, or with a newer
+	// version to show.
+	CheckResult string `json:"checkResult,omitempty"`
 	// LatestVersion is the newest release this RasBeacon can install, and
 	// LatestURL its release page. NewerVersion is set when an even newer
 	// release exists that can only be installed over LatestVersion (or a
@@ -1359,6 +1365,12 @@ type MobileData struct {
 	// ResetDay is the day of the month the count starts again (1 to 28).
 	ResetDay int `json:"resetDay"`
 }
+
+// What the last update check found (UpdateStatus.CheckResult).
+const (
+	CheckUpToDate  = "up-to-date"
+	CheckTestBuild = "test-build"
+)
 
 // ModemStatus is a mobile broadband modem (one that needs ModemManager).
 type ModemStatus struct {

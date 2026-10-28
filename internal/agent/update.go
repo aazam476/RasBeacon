@@ -163,6 +163,16 @@ func (a *Agent) updateStatus() api.UpdateStatus {
 	if a.update.refused != nil {
 		s.Reflash = a.update.refused
 	}
+	// A check that worked but found nothing to offer says so, so "Check
+	// now" always has an answer. A development build ("dev-394ecff") has
+	// no version number to compare, so it can't call itself the newest.
+	if s.LastChecked != "" && s.CheckError == "" && s.LatestVersion == "" && s.Reflash == nil {
+		if _, ok := version.Compare(latest.TagName, version.Version); ok {
+			s.CheckResult = api.CheckUpToDate
+		} else {
+			s.CheckResult = api.CheckTestBuild
+		}
+	}
 	return s
 }
 

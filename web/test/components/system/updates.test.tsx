@@ -32,6 +32,35 @@ describe('updates', () => {
     expect(device.checkForUpdates).toHaveBeenCalledOnce();
   });
 
+  it('says when a check found nothing newer', () => {
+    const device = fakeDevice((router) => {
+      Object.assign(router.status.update, { lastChecked: '2026-10-28T01:00:00Z', checkResult: 'up-to-date' });
+    });
+    renderScreen(<SystemScreen />, device);
+    expect(screen.getByText("No update available. You're on the latest version.")).toBeTruthy();
+  });
+
+  it('says a test build is not compared with releases', () => {
+    const device = fakeDevice((router) => {
+      Object.assign(router.status.update, { lastChecked: '2026-10-28T01:00:00Z', checkResult: 'test-build' });
+    });
+    renderScreen(<SystemScreen />, device);
+    expect(screen.getByText(/This is a test build, so it isn't compared with releases/)).toBeTruthy();
+    expect(screen.queryByText(/latest version/)).toBeNull();
+  });
+
+  it('gives a failed check’s error instead of a result', () => {
+    const device = fakeDevice((router) => {
+      Object.assign(router.status.update, {
+        lastChecked: '2026-10-28T01:00:00Z',
+        checkError: 'Couldn’t ask GitHub: GitHub answered 403 Forbidden',
+      });
+    });
+    renderScreen(<SystemScreen />, device);
+    expect(screen.getByText('Couldn’t ask GitHub: GitHub answered 403 Forbidden')).toBeTruthy();
+    expect(screen.queryByText(/latest version/)).toBeNull();
+  });
+
   it('sends a test to the typed address before it is saved', async () => {
     const device = fakeDevice();
     const { user } = renderScreen(<SystemScreen />, device);

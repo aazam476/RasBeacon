@@ -253,6 +253,12 @@ export interface UpdateStatus {
   /** When it last asked (ISO 8601), and why that failed. */
   lastChecked?: string;
   checkError?: string;
+  /**
+   * What the last check found when it offers nothing to install: `up-to-date`, or `test-build` (a
+   * development build, which isn't compared with releases). Absent before a check, after a failed
+   * one, or with a newer version to show.
+   */
+  checkResult?: 'up-to-date' | 'test-build';
   /** The newest release this RasBeacon can install, and its release page. */
   latestVersion?: string;
   latestUrl?: string;

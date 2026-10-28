@@ -147,13 +147,36 @@ function UpdateCheckRows({ status }: { status: Status }) {
       >
         Check now
       </ButtonRow>
-      {(error || update.checkError) && (
+      {error || update.checkError ? (
         <div className="row">
           <FormError>{error ?? update.checkError}</FormError>
         </div>
+      ) : (
+        <CheckResult result={update.checkResult} />
       )}
     </>
   );
+}
+
+/** What the last check found when there is nothing to install, in the place a failed check's error shows. */
+function CheckResult({ result }: { result: Status['update']['checkResult'] }) {
+  if (result === 'up-to-date') {
+    return (
+      <div className="row">
+        <FormSuccess>No update available. You&apos;re on the latest version.</FormSuccess>
+      </div>
+    );
+  }
+  if (result === 'test-build') {
+    return (
+      <div className="row">
+        <p className="text-subhead text-label-2">
+          This is a test build, so it isn&apos;t compared with releases. Install a release to get update news.
+        </p>
+      </div>
+    );
+  }
+  return null;
 }
 
 /** Where RasBeacon announces a new version: an ntfy topic (a push to your phone) or a webhook. */

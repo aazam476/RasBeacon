@@ -655,7 +655,24 @@ export const SCENARIOS: DemoScenario[] = [
   },
 
   // System
-  { id: 'system', group: 'System', title: 'Up to date', route: '/system' },
+  {
+    id: 'system',
+    group: 'System',
+    title: 'Up to date',
+    route: '/system',
+    apply: (d) =>
+      Object.assign(d.router.status.update, { lastChecked: new Date().toISOString(), checkResult: 'up-to-date' }),
+  },
+  {
+    id: 'update-test-build',
+    group: 'System',
+    title: 'A test build checked for updates',
+    route: '/system',
+    apply: (d) => {
+      d.router.status.version = 'dev-394ecff';
+      Object.assign(d.router.status.update, { lastChecked: new Date().toISOString(), checkResult: 'test-build' });
+    },
+  },
   {
     id: 'update-available',
     group: 'System',

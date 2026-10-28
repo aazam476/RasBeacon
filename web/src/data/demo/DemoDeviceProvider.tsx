@@ -914,6 +914,7 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
           Object.assign(d.router.status.update, {
             lastChecked: new Date().toISOString(),
             checkError: undefined,
+            checkResult: undefined,
             latestVersion: 'v1.1.0',
             latestUrl: 'https://github.com/rasbeacon/rasbeacon/releases/tag/v1.1.0',
           });

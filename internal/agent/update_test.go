@@ -172,6 +172,41 @@ func TestUpdateStatus_OnlineCheckOffersOnlyNewerVersions(t *testing.T) {
 	}
 }
 
+func TestUpdateStatus_SaysWhenACheckFoundNothingNewer(t *testing.T) {
+	e, _ := newUpdateEnv(t)
+	runningVersion(t, "v1.2.0")
+	status := func(latest latestRelease, checkError string) api.UpdateStatus {
+		e.agent.mu.Lock()
+		defer e.agent.mu.Unlock()
+		e.agent.update.lastCheck = e.agent.now()
+		e.agent.update.latest, e.agent.update.checkError = latest, checkError
+		return e.agent.updateStatus()
+	}
+
+	// Never checked: nothing to say.
+	if s := e.agent.Status().Update; s.CheckResult != "" {
+		t.Errorf("before any check: %q", s.CheckResult)
+	}
+	// The newest release is this one, or an older one: up to date.
+	for _, tag := range []string{"v1.2.0", "v1.1.0"} {
+		if s := status(latestRelease{TagName: tag}, ""); s.CheckResult != api.CheckUpToDate {
+			t.Errorf("newest release %s: %q", tag, s.CheckResult)
+		}
+	}
+	// A newer one is offered instead, and a failed check gives its error.
+	if s := status(latestRelease{TagName: "v1.3.0"}, ""); s.CheckResult != "" || s.LatestVersion != "v1.3.0" {
+		t.Errorf("with a newer release: %+v", s)
+	}
+	if s := status(latestRelease{}, "Couldn't ask GitHub: GitHub answered 403 Forbidden"); s.CheckResult != "" {
+		t.Errorf("after a failed check: %q", s.CheckResult)
+	}
+	// A development build can't call itself the newest.
+	runningVersion(t, "dev-394ecff")
+	if s := status(latestRelease{TagName: "v1.2.0"}, ""); s.CheckResult != api.CheckTestBuild {
+		t.Errorf("a test build: %q", s.CheckResult)
+	}
+}
+
 func TestUpdate_InstallWritesTheOtherSlotAndTriesIt(t *testing.T) {
 	e, key := newUpdateEnv(t)
 	boot, system := strings.Repeat("B", 32), strings.Repeat("S", 64)
