@@ -75,13 +75,17 @@ check "opt-in debug log is available" test -L "$root/etc/systemd/system/sysinit.
 check "systemd-networkd runs at boot" sh -c "ls '$root'/etc/systemd/system/*.wants/systemd-networkd.service"
 check "systemd-resolved runs at boot" sh -c "ls '$root'/etc/systemd/system/*.wants/systemd-resolved.service"
 # iPhones over USB: usbmuxd must start with options it has (a wrong one
-# makes it exit at once, and the phone never pairs), and keep pairings on
-# the settings partition.
-usbmuxd_options=$(grep -ho -- '--[a-z-]*' "$root"/usr/lib/systemd/system/usbmuxd.service "$root"/etc/systemd/system/usbmuxd.service.d/*.conf | sort -u)
+# makes it exit at once, and the phone never pairs), and have a folder for
+# its pairing records, kept across updates on the Pi 4/5.
+usbmuxd_options=$(cat "$root"/usr/lib/systemd/system/usbmuxd.service "$root"/etc/systemd/system/usbmuxd.service.d/*.conf 2>/dev/null | grep '^ExecStart=' | grep -o -- '--[a-z-]*' | sort -u)
 for option in $usbmuxd_options; do
   check "usbmuxd knows $option" sh -c "grep -aq -- '$option' '$root/usr/sbin/usbmuxd'"
 done
-check "iPhone pairings are kept on the settings partition" sh -c "[ \"\$(readlink '$root/var/lib/lockdown')\" = /persistent/rasbeacon/lockdown ]"
+check "usbmuxd has a folder for iPhone pairings" test -d "$root/var/lib/lockdown"
+if [ "$board" = rpi64 ]; then
+  check "iPhone pairings are kept across updates" grep -qx 'Path=/var/lib/lockdown' "$root/etc/rpi-image-gen/slot-shared.d/rasbeacon-iphone.conf"
+fi
+
 check "Wi-Fi uplink service is installed" test -f "$root/usr/lib/systemd/system/rasbeacon-wpa@.service"
 check "Debian's wpa_supplicant service is masked" sh -c "[ \"\$(readlink '$root/etc/systemd/system/wpa_supplicant.service')\" = /dev/null ]"
 check "WireGuard is in the kernel (module or built in)" sh -c "find '$root'/usr/lib/modules -name 'wireguard.ko*' | grep -q . || grep -qs wireguard '$root'/usr/lib/modules/*/modules.builtin"
