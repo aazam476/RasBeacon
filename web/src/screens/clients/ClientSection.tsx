@@ -52,17 +52,22 @@ export function ClientSection({ client }: { client: NetworkClient }) {
           disabled={client.limitReached}
         />
       </div>
-      <dl className="row grid grid-cols-[repeat(auto-fit,minmax(min(100%,7rem),1fr))] items-start gap-x-4 gap-y-2.5 py-3 lg:grid-cols-[repeat(auto-fit,minmax(9rem,1fr))]">
-        {clientDetails(client).map((detail) => (
-          // The last one (the MAC address) takes a whole line when it would sit alone, so it never wraps.
-          <div key={detail.label} className="min-w-0 last:odd:col-[1/-1]">
-            <dt className="text-footnote text-label-2">{detail.label}</dt>
-            <dd className={cn('selectable text-subhead wrap-break-word', detail.alert ? 'text-red' : 'text-label')}>
-              {detail.value}
-            </dd>
-          </div>
-        ))}
-      </dl>
+      {/* Columns by the card's own width (a container query): one on the narrowest cards, two
+          on phones, three on wide cards. Only in two columns does the last detail (the MAC
+          address) take a whole line, when it would otherwise sit alone in half of one, so it
+          never wraps there; with three columns there is room for it in its place. */}
+      <div className="row @container py-3">
+        <dl className="grid w-full min-w-0 grid-cols-1 items-start gap-x-4 gap-y-2.5 @min-[14rem]:grid-cols-2 @min-[30rem]:grid-cols-3">
+          {clientDetails(client).map((detail) => (
+            <div key={detail.label} className="min-w-0 @min-[14rem]:@max-[30rem]:last:odd:col-span-2">
+              <dt className="text-footnote text-label-2">{detail.label}</dt>
+              <dd className={cn('selectable text-subhead wrap-break-word', detail.alert ? 'text-red' : 'text-label')}>
+                {detail.value}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </div>
       <SwitchRow
         title="Priority"
         subtitle="Goes first when the internet connection is busy, for calls and games."
