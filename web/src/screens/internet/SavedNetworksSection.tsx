@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useState } from 'react';
 import type { SavedNetwork } from '@/data/types';
 import {
   BreakableText,
@@ -10,7 +10,6 @@ import {
   Row,
   RowText,
   Section,
-  FormSwitch,
   Sheet,
 } from '@/ui';
 import { methodName, SECURITY_NAMES } from './networkDisplay';
@@ -63,7 +62,6 @@ export function SavedNetworksSection({ draft, wifiUplinkAvailable, connectedSsid
                 onMove={(delta) => draft.move(index, delta)}
                 onRemove={() => draft.remove(index)}
                 onChangePassword={() => setChangingPassword(index)}
-                onRandomMac={(randomMac) => draft.setRandomMac(index, randomMac)}
               />
             ))}
           </ol>
@@ -92,7 +90,6 @@ interface NetworkRowProps {
   onMove: (delta: -1 | 1) => void;
   onRemove: () => void;
   onChangePassword: () => void;
-  onRandomMac: (randomMac: boolean) => void;
 }
 
 function NetworkRow({
@@ -105,9 +102,7 @@ function NetworkRow({
   onMove,
   onRemove,
   onChangePassword,
-  onRandomMac,
 }: NetworkRowProps) {
-  const randomMacId = useId();
   const isNew = network.id === '';
   const details = [SECURITY_NAMES[network.security], network.hidden && 'Hidden', network.password && 'New password']
     .filter(Boolean)
@@ -157,12 +152,6 @@ function NetworkRow({
       {/* Lined up with the name, except where that would leave the details too little room. */}
       <div className="flex flex-col gap-2.5 pl-[2.5625rem] lg:pl-[2.125rem] @max-[18rem]:pl-0">
         {network.enterprise && <EnterpriseSummary network={network} />}
-        <label className="flex cursor-pointer items-center gap-3">
-          <span id={randomMacId} className="min-w-0 flex-1 text-subhead text-label">
-            Random MAC address
-          </span>
-          <FormSwitch checked={network.randomMac ?? false} onChange={onRandomMac} labelledBy={randomMacId} />
-        </label>
         <div className="-my-1 flex flex-wrap gap-x-5">
           {network.security !== 'open' && !isNew && (
             <Button

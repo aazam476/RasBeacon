@@ -629,9 +629,9 @@ const (
 // EthernetConfig holds the Ethernet port settings.
 type EthernetConfig struct {
 	Role EthernetRole `json:"role"`
-	// MAC is the address the port shows its network while it is the
-	// uplink.
-	MAC MACChoice `json:"mac,omitempty"`
+	// OldMAC is the port's own MAC address choice from before it was
+	// shared with Wi-Fi (UplinkConfig.MAC); FillDefaults moves it there.
+	OldMAC MACChoice `json:"mac,omitempty"`
 }
 
 // The MAC address choices of an uplink (MACChoice.Mode).
@@ -762,9 +762,12 @@ type UplinkConfig struct {
 	// metered. By default it is: devices are asked to hold back big
 	// downloads while RasBeacon uses one.
 	PhoneNotMetered bool `json:"phoneNotMetered,omitempty"`
-	// WiFiMAC is the address the Wi-Fi uplink radio shows the networks it
-	// joins (a network set to a random address per join still gets one).
-	WiFiMAC MACChoice `json:"wifiMac,omitempty"`
+	// MAC is the address the uplinks show the networks they join, over
+	// Wi-Fi and Ethernet alike (see EthernetMAC for one difference).
+	MAC MACChoice `json:"mac,omitempty"`
+	// OldWiFiMAC is the Wi-Fi uplink's own choice from before it was
+	// shared with Ethernet; FillDefaults moves it to MAC.
+	OldWiFiMAC MACChoice `json:"wifiMac,omitempty"`
 	// MobileLimitMB is the data a phone or modem connection may use each
 	// month before the Status page warns (0: no warning). Data plans count
 	// by the month, so RasBeacon counts that way too.
@@ -789,11 +792,10 @@ type SavedNetwork struct {
 	// Hidden networks don't announce their name, so RasBeacon has to ask
 	// for them by name.
 	Hidden bool `json:"hidden"`
-	// RandomMAC joins this network with a random MAC address instead of
-	// the Pi's own, so the network can't recognize the Pi across visits.
-	// wpa_supplicant 2.10 keeps it while RasBeacon runs and picks a new one
-	// at the next start.
-	RandomMAC bool `json:"randomMac,omitempty"`
+	// OldRandomMAC is the switch that joined this network with a random
+	// MAC address, from before UplinkConfig.MAC covered every network.
+	// FillDefaults turns it into a random address for all of them.
+	OldRandomMAC bool `json:"randomMac,omitempty"`
 	// Enterprise is set only when Security is UplinkEnterprise.
 	Enterprise *EnterpriseConfig `json:"enterprise,omitempty"`
 }
@@ -828,12 +830,53 @@ func (c *Config) FillDefaults() {
 		// "Check online" checked every 6 hours.
 		c.Updates.CheckHours, c.Updates.CheckOnline = 6, false
 	}
+	c.moveOldMACChoices()
 	if c.Version < 4 && !c.VPN.Enabled {
 		// Until v0.2.0 the kill switch did nothing while the VPN was off;
 		// now it blocks devices then. Keep their internet as it was.
 		c.VPN.KillSwitch = false
 	}
 	c.Version = CurrentVersion
+}
+
+// moveOldMACChoices brings the MAC address settings of earlier versions
+// into the one choice Wi-Fi and Ethernet now share: the Wi-Fi uplink's
+// choice if it had one, else the Ethernet port's. A network that joined
+// with a random address makes the shared choice random, so the networks
+// still don't see the Pi's own address.
+func (c *Config) moveOldMACChoices() {
+	if c.Uplink.MAC.Mode == MACOwn {
+		switch {
+		case c.Uplink.OldWiFiMAC.Mode != MACOwn:
+			c.Uplink.MAC = c.Uplink.OldWiFiMAC
+		case c.Ethernet.OldMAC.Mode != MACOwn:
+			c.Uplink.MAC = c.Ethernet.OldMAC
+		}
+	}
+	for i, n := range c.Uplink.Networks {
+		if n.OldRandomMAC && c.Uplink.MAC.Mode == MACOwn {
+			c.Uplink.MAC = MACChoice{Mode: MACRandom, Address: RandomMAC()}
+		}
+		c.Uplink.Networks[i].OldRandomMAC = false
+	}
+	c.Uplink.OldWiFiMAC, c.Ethernet.OldMAC = MACChoice{}, MACChoice{}
+}
+
+// EthernetMAC is the address the Ethernet port shows its network. It is
+// the shared one, except that a random address is one bit apart from the
+// Wi-Fi radio's: should both reach the same network, two interfaces with
+// one address would confuse it. A cloned address stays exactly as typed,
+// since it must match the device the network knows. "" is the port's own.
+func (m MACChoice) EthernetMAC() string {
+	if m.Mode != MACRandom || m.Address == "" {
+		return m.Address
+	}
+	hw, err := net.ParseMAC(m.Address)
+	if err != nil || len(hw) != 6 {
+		return m.Address
+	}
+	hw[5] ^= 1
+	return hw.String()
 }
 
 // Validate checks the Ethernet settings.

@@ -363,7 +363,7 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
             modem.state = 'connecting';
         });
       },
-      saveUplinkMacs: async (wifiMac, ethernetMac) => {
+      saveUplinkMac: async (mac) => {
         await wait(900);
         const check = (choice: MACChoice, field: string): MACChoice => {
           if (choice.mode === 'random') {
@@ -378,11 +378,9 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
           }
           return { mode: '' };
         };
-        const wifi = check(wifiMac, 'wifiMac');
-        const ethernet = check(ethernetMac, 'ethernetMac');
+        const checked = check(mac, 'mac');
         change((d) => {
-          d.router.uplinkSettings.wifiMac = wifi;
-          d.router.uplinkSettings.ethernetMac = ethernet;
+          d.router.uplinkSettings.mac = checked;
         });
       },
       setPhoneMetered: async (metered) => {

@@ -13,7 +13,7 @@ const MODE_OPTIONS: readonly { value: Mode; label: string }[] = [
   { value: 'cloned', label: 'Cloned from another device' },
 ];
 
-/** One uplink's choice as it is being edited. */
+/** The choice as it is being edited. */
 interface Draft {
   mode: Mode;
   /** The cloned address as typed. */
@@ -32,7 +32,7 @@ function choiceOf(draft: Draft, saved: MACChoice | undefined): MACChoice {
   return { mode: '' };
 }
 
-/** One uplink's address: the choice, the random one in use, or the cloned one with a shortcut. */
+/** The choice, the random address in use, or the cloned one with a shortcut. */
 function UplinkMac({
   label,
   draft,
@@ -100,21 +100,19 @@ function UplinkMac({
 }
 
 /**
- * The MAC addresses RasBeacon shows the networks it joins: the Pi's own, a random one, or a
- * cloned one, so a network that only lets in a device it knows (a hotel that registered your
- * laptop, a modem that remembers one device) lets RasBeacon in.
+ * The MAC address RasBeacon shows the networks it joins, over Wi-Fi and Ethernet alike: the Pi's
+ * own, a random one, or a cloned one, so a network that only lets in a device it knows (a hotel
+ * that registered your laptop, a modem that remembers one device) lets RasBeacon in.
  */
 export function MacAddressSection({ settings, clients }: { settings: UplinkSettings; clients: Client[] }) {
-  const { saveUplinkMacs } = useDevice();
-  const [wifi, setWifi] = useState(() => draftOf(settings.wifiMac));
-  const [ethernet, setEthernet] = useState(() => draftOf(settings.ethernetMac));
+  const { saveUplinkMac } = useDevice();
+  const [draft, setDraft] = useState(() => draftOf(settings.mac));
   const [saved, setSaved] = useState(false);
   const saving = useAction(async () => {
     setSaved(false);
-    await saveUplinkMacs(choiceOf(wifi, settings.wifiMac), choiceOf(ethernet, settings.ethernetMac));
+    await saveUplinkMac(choiceOf(draft, settings.mac));
     setSaved(true);
   });
-  const fieldErrors = saving.fieldErrors;
   if (!settings.wifiUplinkAvailable && !settings.ethernetPresent) return null;
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -126,36 +124,21 @@ export function MacAddressSection({ settings, clients }: { settings: UplinkSetti
     <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-7">
       <Section
         title="MAC address"
-        footer="The address the networks RasBeacon joins see. Random hides the Pi from networks that track devices; cloned takes the place of a device the network already knows. A Wi-Fi network set to a random address above still gets its own."
+        footer="The address networks see when RasBeacon joins them, over Wi-Fi and Ethernet. Random hides the Pi from networks that track devices; cloned takes the place of a device the network already knows."
       >
-        {settings.wifiUplinkAvailable && (
-          <UplinkMac
-            label="Wi-Fi"
-            draft={wifi}
-            onChange={(draft) => {
-              setWifi(draft);
-              setSaved(false);
-            }}
-            saved={settings.wifiMac}
-            clients={clients}
-            error={fieldErrors.wifiMac}
-          />
-        )}
-        {settings.ethernetPresent && (
-          <UplinkMac
-            label="Ethernet"
-            draft={ethernet}
-            onChange={(draft) => {
-              setEthernet(draft);
-              setSaved(false);
-            }}
-            saved={settings.ethernetMac}
-            clients={clients}
-            error={fieldErrors.ethernetMac}
-          />
-        )}
+        <UplinkMac
+          label="Address"
+          draft={draft}
+          onChange={(next) => {
+            setDraft(next);
+            setSaved(false);
+          }}
+          saved={settings.mac}
+          clients={clients}
+          error={saving.fieldErrors.mac}
+        />
       </Section>
-      {(wifi.mode !== '' || ethernet.mode !== '') && (
+      {draft.mode !== '' && (
         <Notice tone="info">
           <p>Saving reconnects to the network with the new address. A hotel login page may ask you to log in again.</p>
         </Notice>

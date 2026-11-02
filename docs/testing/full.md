@@ -134,13 +134,7 @@ first if you want them; everything else works from the web pages alone.
    with two saved networks in range: it joins the other within a minute.
 9. **Priority (if you can):** with two networks saved and in range, move
    one up, **Save**. **Expect:** it moves to the top one within a minute.
-10. **Random MAC address (new):** turn on **Random MAC address** for the
-    Wi-Fi network in use, **Save**. **Expect:** it reconnects within about
-    30 s; Status shows a different MAC address for the uplink (and the
-    network's router, if you can see its device list, shows a new device).
-    Reboot: another new address. Turn it off, **Save**: the Pi's own
-    address is back.
-11. **Internet from a phone (new, needs an Android phone, an iPhone or a
+10. **Internet from a phone (new, needs an Android phone, an iPhone or a
     HiLink USB modem):** unplug Ethernet and forget the Wi-Fi networks (or
     take RasBeacon out of their range). Plug in an Android phone with **USB
     tethering** on. **Expect** within about 20 s: Internet → *Phones and
@@ -159,7 +153,7 @@ first if you want them; everything else works from the web pages alone.
     count, **Save**, and use more: Status warns at 90% and again once it is
     over. Reboot RasBeacon: the count is kept (it may be up to a few
     seconds short). **Reset count**: it starts again from zero.
-12. **A modem that needs ModemManager (new, if you have one: M.2 in a USB
+11. **A modem that needs ModemManager (new, if you have one: M.2 in a USB
     case, or a 5G stick that isn't HiLink):** plug it in with a SIM.
     **Expect:** Internet → *Mobile modem* shows its name. With a SIM PIN:
     *Needs the SIM's PIN*; type a **wrong** PIN, **Save**: *The SIM refused
@@ -168,14 +162,15 @@ first if you want them; everything else works from the web pages alone.
     operator, 4G/5G and signal), Status says *Connected through <modem>*,
     devices have internet, and it is metered. An APN from your carrier, if
     it doesn't connect by itself.
-13. **MAC address (new):** Internet → *MAC address* → *Wi-Fi*: **Cloned
+12. **MAC address (new):** Internet → *MAC address* → *Address*: **Cloned
     from another device**, *Copy a device's address*: your laptop (then
     disconnect the laptop from the hotspot), **Save**. **Expect:** the
     hotspot of your phone (or the hotel's device list) shows RasBeacon
     with the laptop's address, and the internet keeps working. **Random**:
     a new `x2:`/`x6:`/`xa:`/`xe:` address shows, and stays the same after a
     reboot. **The Pi's own** brings back the address it had at first.
-    The same for *Ethernet* with a cable to another router.
+    With a cable to another router, Ethernet uses the same choice (a
+    random one differs from Wi-Fi's in its last digit).
 
 ## 5. Your own DNS servers and DNS-over-HTTPS (new)
 

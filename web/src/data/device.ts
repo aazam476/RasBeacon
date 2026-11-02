@@ -207,9 +207,9 @@ export interface DeviceActions {
    */
   saveModemSettings: (settings: ModemSettings) => Promise<void>;
   /**
-   * Save the MAC addresses the uplinks show their networks. Field keys: wifiMac, ethernetMac.
+   * Save the MAC address the uplinks, Wi-Fi and Ethernet, show their networks. Field key: mac.
    */
-  saveUplinkMacs: (wifiMac: MACChoice, ethernetMac: MACChoice) => Promise<void>;
+  saveUplinkMac: (mac: MACChoice) => Promise<void>;
   /** Treat a phone or modem connection (USB) as metered while it is in use. */
   setPhoneMetered: (metered: boolean) => Promise<void>;
   /**

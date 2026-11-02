@@ -201,9 +201,10 @@ since their image has one copy of the system.
   **Internet** page (the last speed test fills it in). When the connection
   is busy, priority devices' traffic goes first, both ways.
 - **MAC address:** on the **Internet** page, choose the address the
-  networks RasBeacon joins see, for Wi-Fi and Ethernet separately: the
-  Pi's own, a random one, or one cloned from another device (for a hotel
-  that registered your laptop, or a modem that remembers one device).
+  networks RasBeacon joins see, over Wi-Fi and Ethernet: the Pi's own, a
+  random one (so networks can't recognize the Pi), or one cloned from
+  another device (for a hotel that registered your laptop, or a modem that
+  remembers one device).
 - **Public IPv6 through the VPN:** if your WireGuard server routes a public
   IPv6 /64 to RasBeacon, enter it on the **VPN** page (under *Server
   details*); devices then get their own public IPv6 addresses.

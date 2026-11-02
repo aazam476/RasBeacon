@@ -387,6 +387,54 @@ func TestDNSConfig_CountsDoHServersTowardTheLimit(t *testing.T) {
 	}
 }
 
+func TestFillDefaults_OneMACChoiceForWiFiAndEthernet(t *testing.T) {
+	// The Wi-Fi uplink's own choice wins over the Ethernet port's.
+	cfg := Config{Uplink: UplinkConfig{OldWiFiMAC: MACChoice{Mode: MACCloned, Address: "3c:22:fb:aa:bb:cc"}},
+		Ethernet: EthernetConfig{OldMAC: MACChoice{Mode: MACRandom, Address: "02:00:00:00:00:02"}}}
+	cfg.FillDefaults()
+	if cfg.Uplink.MAC != (MACChoice{Mode: MACCloned, Address: "3c:22:fb:aa:bb:cc"}) || cfg.Uplink.OldWiFiMAC != (MACChoice{}) || cfg.Ethernet.OldMAC != (MACChoice{}) {
+		t.Errorf("Wi-Fi's choice: %+v %+v %+v", cfg.Uplink.MAC, cfg.Uplink.OldWiFiMAC, cfg.Ethernet.OldMAC)
+	}
+
+	// Only Ethernet had one.
+	cfg = Config{Ethernet: EthernetConfig{OldMAC: MACChoice{Mode: MACRandom, Address: "02:00:00:00:00:02"}}}
+	cfg.FillDefaults()
+	if cfg.Uplink.MAC != (MACChoice{Mode: MACRandom, Address: "02:00:00:00:00:02"}) {
+		t.Errorf("Ethernet's choice: %+v", cfg.Uplink.MAC)
+	}
+
+	// A network that joined with a random address makes the choice random.
+	cfg = Config{Uplink: UplinkConfig{Networks: []SavedNetwork{{SSID: "Hotel", OldRandomMAC: true}, {SSID: "Home"}}}}
+	cfg.FillDefaults()
+	if cfg.Uplink.MAC.Mode != MACRandom || cfg.Uplink.MAC.Validate("mac") != nil || cfg.Uplink.Networks[0].OldRandomMAC {
+		t.Errorf("random from a network: %+v %+v", cfg.Uplink.MAC, cfg.Uplink.Networks)
+	}
+	// ...but not over a choice already made.
+	cfg = Config{Uplink: UplinkConfig{MAC: MACChoice{Mode: MACCloned, Address: "3c:22:fb:aa:bb:cc"},
+		Networks: []SavedNetwork{{SSID: "Hotel", OldRandomMAC: true}}}}
+	cfg.FillDefaults()
+	if cfg.Uplink.MAC.Mode != MACCloned {
+		t.Errorf("a cloned choice stays: %+v", cfg.Uplink.MAC)
+	}
+}
+
+func TestMACChoice_EthernetMAC(t *testing.T) {
+	for _, c := range []struct {
+		choice MACChoice
+		want   string
+	}{
+		{MACChoice{}, ""},
+		{MACChoice{Mode: MACCloned, Address: "3c:22:fb:aa:bb:cc"}, "3c:22:fb:aa:bb:cc"},
+		{MACChoice{Mode: MACRandom, Address: "02:11:22:33:44:54"}, "02:11:22:33:44:55"},
+		{MACChoice{Mode: MACRandom, Address: "02:11:22:33:44:55"}, "02:11:22:33:44:54"},
+		{MACChoice{Mode: MACRandom, Address: "nonsense"}, "nonsense"},
+	} {
+		if got := c.choice.EthernetMAC(); got != c.want {
+			t.Errorf("%+v: %q, want %q", c.choice, got, c.want)
+		}
+	}
+}
+
 func TestFillDefaults_CheckOnlineBecomesASchedule(t *testing.T) {
 	cfg := Config{Version: 3, Updates: UpdatesConfig{CheckOnline: true}}
 	cfg.FillDefaults()

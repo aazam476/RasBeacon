@@ -1,10 +1,10 @@
 package agent
 
-// The MAC address an uplink shows its network: the Pi's own, a random one
-// RasBeacon made, or a cloned one (another device's, so the network takes
-// RasBeacon for it). Ethernet gets it from systemd-networkd (MACAddress=,
-// see applyNetworkdConfig); the Wi-Fi radio from rbd, before wpa_supplicant
-// starts (setWiFiMAC).
+// The MAC address the uplinks show their networks, one choice for Wi-Fi
+// and Ethernet: the Pi's own, a random one RasBeacon made, or a cloned one
+// (another device's, so the network takes RasBeacon for it). Ethernet gets
+// it from systemd-networkd (MACAddress=, see applyNetworkdConfig); the
+// Wi-Fi radio from rbd, before wpa_supplicant starts (setWiFiMAC).
 
 import (
 	"encoding/json"
@@ -16,9 +16,9 @@ import (
 	"rasbeacon/internal/config"
 )
 
-// checkMACChoice checks an uplink's new MAC address choice, making a
-// random address when one is asked for (and keeping the one already made
-// when the choice stays random). field names it in errors.
+// checkMACChoice checks a new MAC address choice, making a random address
+// when one is asked for (and keeping the one already made when the choice
+// stays random). field names it in errors.
 func (a *Agent) checkMACChoice(choice, old config.MACChoice, field string) (config.MACChoice, error) {
 	choice.Address = strings.ToLower(strings.TrimSpace(choice.Address))
 	if choice.Mode == config.MACRandom && choice.Address == "" {
@@ -73,12 +73,10 @@ func (a *Agent) permanentMAC(iface string) string {
 
 // setWiFiMAC gives the Wi-Fi uplink radio the address chosen for it (its
 // own, random or cloned), and reports whether it changed (wpa_supplicant
-// must start again to use it). It acts only when the choice changed: a
-// network set to "random MAC address" makes wpa_supplicant change the
-// address by itself, which must not be undone at every save. The caller
-// holds a.mu.
+// must start again to use it). It acts only when the choice changed. The
+// caller holds a.mu.
 func (a *Agent) setWiFiMAC(iface string) bool {
-	want := a.cfg.Uplink.WiFiMAC.Address
+	want := a.cfg.Uplink.MAC.Address
 	if want == "" {
 		want = a.permanentMAC(iface)
 	}
@@ -101,6 +99,6 @@ func (a *Agent) setWiFiMAC(iface string) bool {
 			return false
 		}
 	}
-	slog.Info("Wi-Fi uplink MAC address set", "address", want, "mode", a.cfg.Uplink.WiFiMAC.Mode)
+	slog.Info("Wi-Fi uplink MAC address set", "address", want, "mode", a.cfg.Uplink.MAC.Mode)
 	return true
 }

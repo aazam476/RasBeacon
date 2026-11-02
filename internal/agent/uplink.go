@@ -163,7 +163,6 @@ func (a *Agent) applyUplinkConfig() error {
 			Security:   n.Security,
 			Password:   a.secrets.UplinkPasswords[n.ID],
 			Hidden:     n.Hidden,
-			RandomMAC:  n.RandomMAC,
 			Enterprise: a.wpaEnterprise(n),
 		})
 	}
@@ -197,7 +196,7 @@ func (a *Agent) applyNetworkdConfig() error {
 
 	if a.hasEthernet() {
 		if a.cfg.Ethernet.Role == config.EthernetUplink {
-			text, err := render.NetworkdUplinkWithMAC(ethernetInterface, render.EthernetRouteMetric, a.cfg.Ethernet.MAC.Address)
+			text, err := render.NetworkdUplinkWithMAC(ethernetInterface, render.EthernetRouteMetric, a.cfg.Uplink.MAC.EthernetMAC())
 			if err != nil {
 				return err
 			}
@@ -657,11 +656,9 @@ func (a *Agent) UplinkSettings() api.UplinkSettings {
 		EthernetPresent:     a.hasEthernet(),
 		WiFiUplinkAvailable: a.wifiUplinkInterface() != "",
 		PhoneMetered:        new(bool),
-		WiFiMAC:             &config.MACChoice{},
-		EthernetMAC:         &config.MACChoice{},
+		MAC:                 &config.MACChoice{},
 	}
-	*settings.WiFiMAC = a.cfg.Uplink.WiFiMAC
-	*settings.EthernetMAC = a.cfg.Ethernet.MAC
+	*settings.MAC = a.cfg.Uplink.MAC
 	*settings.PhoneMetered = !a.cfg.Uplink.PhoneNotMetered
 	for _, n := range a.cfg.Uplink.Networks {
 		settings.Networks = append(settings.Networks, api.SavedNetwork{
@@ -669,7 +666,6 @@ func (a *Agent) UplinkSettings() api.UplinkSettings {
 			SSID:        n.SSID,
 			Security:    n.Security,
 			Hidden:      n.Hidden,
-			RandomMAC:   n.RandomMAC,
 			HasPassword: a.secrets.UplinkPasswords[n.ID] != "",
 			Enterprise:  a.enterpriseSettings(n),
 		})
@@ -698,19 +694,12 @@ func (a *Agent) UpdateUplinkSettings(req api.UplinkSettings) error {
 	if req.PhoneMetered != nil {
 		newCfg.Uplink.PhoneNotMetered = !*req.PhoneMetered
 	}
-	if req.WiFiMAC != nil {
-		choice, err := a.checkMACChoice(*req.WiFiMAC, a.cfg.Uplink.WiFiMAC, "wifiMac")
+	if req.MAC != nil {
+		choice, err := a.checkMACChoice(*req.MAC, a.cfg.Uplink.MAC, "mac")
 		if err != nil {
 			return err
 		}
-		newCfg.Uplink.WiFiMAC = choice
-	}
-	if req.EthernetMAC != nil {
-		choice, err := a.checkMACChoice(*req.EthernetMAC, a.cfg.Ethernet.MAC, "ethernetMac")
-		if err != nil {
-			return err
-		}
-		newCfg.Ethernet.MAC = choice
+		newCfg.Uplink.MAC = choice
 	}
 	newCfg.Uplink.Networks = nil
 	newSecrets.UplinkPasswords = map[string]string{}
@@ -727,7 +716,7 @@ func (a *Agent) UpdateUplinkSettings(req api.UplinkSettings) error {
 			return &config.ValidationError{Field: fmt.Sprintf("networks.%d.ssid", i),
 				Message: "This is RasBeacon's own network. Choose the network RasBeacon should connect to."}
 		}
-		saved := config.SavedNetwork{ID: id, SSID: n.SSID, Security: n.Security, Hidden: n.Hidden, RandomMAC: n.RandomMAC}
+		saved := config.SavedNetwork{ID: id, SSID: n.SSID, Security: n.Security, Hidden: n.Hidden}
 
 		if n.Security == config.UplinkEnterprise && n.Enterprise != nil {
 			e := n.Enterprise

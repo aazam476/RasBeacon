@@ -619,8 +619,6 @@ export interface SavedNetwork {
   ssid: string;
   security: UplinkSecurity;
   hidden: boolean;
-  /** Join with a random MAC address instead of the Pi's own (a new one at each restart). */
-  randomMac?: boolean;
   hasPassword: boolean;
   /** Network password, Enterprise password, or EAP-TLS key passphrase. */
   password?: string;
@@ -637,10 +635,8 @@ export interface UplinkSettings {
   wifiUplinkAvailable: boolean;
   /** Treat a phone or modem connection as metered while in use (absent: unchanged). */
   phoneMetered?: boolean;
-  /** The MAC address the Wi-Fi uplink shows its networks (absent: unchanged). */
-  wifiMac?: MACChoice;
-  /** The MAC address the Ethernet port shows its network as the uplink (absent: unchanged). */
-  ethernetMac?: MACChoice;
+  /** The MAC address the uplinks, Wi-Fi and Ethernet, show their networks (absent: unchanged). */
+  mac?: MACChoice;
 }
 
 /**

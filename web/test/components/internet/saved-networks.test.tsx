@@ -60,13 +60,9 @@ describe('saved networks', () => {
     expect(saved?.password).toBe('new-office-pass');
   });
 
-  it('turns on a random MAC address for one network', async () => {
-    const { device, user } = renderList();
-    const row = screen.getByRole('button', { name: 'Remove Home-Office' }).closest('li')!;
-    await user.click(within(row).getByRole('checkbox', { name: 'Random MAC address' }));
-    await user.click(saveList());
-    const saved = device.saveWifiNetworks.mock.calls[0][0];
-    expect(saved.map((network) => network.randomMac ?? false)).toEqual([false, false, false, true]);
+  it('has no random MAC switch of its own: the MAC address section covers every network', () => {
+    renderList();
+    expect(screen.queryByRole('checkbox', { name: 'Random MAC address' })).toBeNull();
   });
 
   it('puts the router’s error under the network it is about', async () => {

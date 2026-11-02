@@ -400,9 +400,8 @@ export function applyWorstCase(demo: DemoState) {
   });
   // A Wi-Fi 6E adapter, on Wi-Fi 4 for very old devices (Germany allows 6 GHz hotspots).
   router.hotspotSettings = { ...router.hotspotSettings, noWifi6: false, standard: 'wifi4', has6GHz: true };
-  // MAC addresses: Wi-Fi cloned from a device still on the hotspot (the warning), Ethernet random.
-  router.uplinkSettings.wifiMac = { mode: 'cloned', address: 'a4:83:e7:10:9c:20' };
-  router.uplinkSettings.ethernetMac = { mode: 'random', address: '0e:3d:9a:41:c7:52' };
+  // MAC address: cloned from a device still on the hotspot (the warning).
+  router.uplinkSettings.mac = { mode: 'cloned', address: 'a4:83:e7:10:9c:20' };
   // Data kept from an earlier Trip Notes of another author, with a long name.
   router.keptPluginData['trip-notes'] = {
     name: 'Trip Notes & Shared Itinerary Planner for Families',

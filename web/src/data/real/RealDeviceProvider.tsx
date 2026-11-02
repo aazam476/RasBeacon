@@ -500,10 +500,10 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
         store('modemSettings', saved);
         await refreshStatus();
       },
-      saveUplinkMacs: async (wifiMac, ethernetMac) => {
+      saveUplinkMac: async (mac) => {
         const saved = latest.current.uplinkSettings.data;
         if (!saved) throw new Error("The Internet settings haven't loaded yet.");
-        await uplinkChange({ ...saved, wifiMac, ethernetMac }, sameNames('wifiMac', 'ethernetMac'));
+        await uplinkChange({ ...saved, mac }, sameNames('mac'));
       },
       setPhoneMetered: async (phoneMetered) => {
         const saved = latest.current.uplinkSettings.data;

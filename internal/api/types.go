@@ -657,12 +657,10 @@ type UplinkSettings struct {
 	// while it is in use (see config.UplinkConfig.PhoneNotMetered). Absent
 	// in a request: unchanged.
 	PhoneMetered *bool `json:"phoneMetered,omitempty"`
-	// WiFiMAC and EthernetMAC are the MAC addresses the Wi-Fi uplink and
-	// the Ethernet port (as the uplink) show their networks (see
-	// config.MACChoice). Absent in a request: unchanged. Mode "random"
-	// without an address makes a new random one.
-	WiFiMAC     *config.MACChoice `json:"wifiMac,omitempty"`
-	EthernetMAC *config.MACChoice `json:"ethernetMac,omitempty"`
+	// MAC is the MAC address the uplinks, Wi-Fi and Ethernet, show their
+	// networks (see config.MACChoice). Absent in a request: unchanged.
+	// Mode "random" without an address makes a new random one.
+	MAC *config.MACChoice `json:"mac,omitempty"`
 }
 
 // SavedNetwork is one upstream Wi-Fi network in UplinkSettings.
@@ -672,8 +670,6 @@ type SavedNetwork struct {
 	SSID     string                `json:"ssid"`
 	Security config.UplinkSecurity `json:"security"`
 	Hidden   bool                  `json:"hidden"`
-	// RandomMAC joins with a random MAC address (new at each restart).
-	RandomMAC bool `json:"randomMac"`
 	// HasPassword is true when a password is saved (it is never returned).
 	HasPassword bool `json:"hasPassword"`
 	// Password is write-only: set it to add or change the password, leave it
