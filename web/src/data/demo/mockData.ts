@@ -5,7 +5,6 @@ import type {
   DNSSettings,
   WelcomeSettings,
   ModemSettings,
-  PortForwardRule,
   GuestSettings,
   HotspotSettings,
   HTTPSSettings,
@@ -37,8 +36,6 @@ export interface MockRouter {
   vpnSettings: VPNSettings;
   sshSettings: SSHSettings;
   dnsSettings: DNSSettings;
-  /** The port forwarding rules as saved (portForwarding.ts fills in the rest of the page). */
-  portForwardingRules: PortForwardRule[];
   welcomeSettings: WelcomeSettings;
   modemSettings: ModemSettings;
   swapSettings: SwapSettings;
@@ -473,25 +470,6 @@ export function createMockRouter(): MockRouter {
       customPage: '',
       accepted: 0,
     },
-    portForwardingRules: [
-      {
-        id: 'pf-minecraft',
-        name: 'Minecraft server',
-        protocol: 'tcp',
-        outsidePort: 25565,
-        mac: 'a4:83:e7:12:34:56',
-        enabled: true,
-      },
-      {
-        id: 'pf-steam',
-        name: 'Steam games',
-        protocol: 'udp',
-        outsidePort: 27015,
-        outsidePortEnd: 27030,
-        mac: 'a4:83:e7:12:34:56',
-        enabled: false,
-      },
-    ],
     swapSettings: { sizeGb: 2, maxGb: 26 },
     updateSettings: { checkHours: 0, notifyUrl: '' },
     accessSettings: { allowListOn: false, allowed: [], maxDevices: 0 },

@@ -185,10 +185,6 @@ type routerRules struct {
 	upstreamDNS []string
 	portalOnly  bool
 	routedIPv6  netip.Prefix
-	// portForwards are port forwarding rules (the uplink is "eth0").
-	portForwards []render.PortForward
-	// pinholes open ports to devices' addresses in routedIPv6.
-	pinholes []render.Pinhole
 	// guest adds the guest network (see buildGuest).
 	guest bool
 }
@@ -203,10 +199,7 @@ func renderRouterRules(t *testing.T, r routerRules) string {
 		TunnelDNS:       []netip.Addr{netip.MustParseAddr(vpnServerAddress)},
 		PortalOnly:      r.portalOnly,
 		RoutedIPv6:      r.routedIPv6,
-		Uplinks:         []string{"eth0"},
 		LANAddress:      render.DefaultLAN.Prefix.Addr(),
-		PortForwards:    r.portForwards,
-		Pinholes:        r.pinholes,
 		Guest:           r.guest,
 	})
 	if err != nil {

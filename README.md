@@ -44,8 +44,8 @@ hotel login pages.
 > your own WireGuard VPN with a kill switch, keeping several VPN profiles
 > ([server guide](docs/wireguard-server.md)), lets you log in to hotel login
 > pages without anything leaving the VPN, and installs signed updates with
-> automatic rollback. At home it also works as a simple router, with fixed
-> addresses, port forwarding and priority devices. Its settings pages,
+> automatic rollback. Devices can get fixed addresses, and priority
+> devices go first on a busy connection. Its settings pages,
 > designed like Apple's Settings app, also show live traffic and hardware
 > readings, let you pause or disconnect single devices, and run
 > Cloudflare's speed test when you ask.
@@ -234,14 +234,8 @@ since their image has one copy of the system.
   it becomes a port of your hotspot (with the same check as the client
   port: a cable that leads to another network is never connected), so the
   Ethernet port can carry the internet at the same time.
-- **Fixed addresses and port forwarding:** give a device the same address
-  every time (the **Clients** page), and let the internet reach a game
-  server, a camera or a plugin through a port (Internet → **Port
-  forwarding**). This works where the network gives RasBeacon a public
-  address or forwards the ports to it, such as at home; hotel and phone
-  networks usually don't, and the page says so. If your VPN routes a public
-  IPv6 network to RasBeacon, a rule can also open the port on the device's
-  own IPv6 address.
+- **Fixed addresses:** give a device the same address every time (the
+  **Clients** page).
 - **Backups:** the **System** page saves every setting and the plugins in
   a password-encrypted file, to restore or move to another RasBeacon. You
   choose whether it also keeps the plugins' data, and their apps (so a
@@ -252,6 +246,11 @@ since their image has one copy of the system.
   only).
 - **Factory-reset button:** connect a push button between pin 11 (GPIO 17)
   and pin 9 (ground). Holding it for 10 seconds erases all settings.
+
+**What RasBeacon doesn't do:** it is a travel router, not a home
+network's router. Port forwarding, VLANs, mesh networks and several
+internet connections at once are left out on purpose; for those, use
+[OpenWrt](https://openwrt.org).
 
 ## For contributors
 

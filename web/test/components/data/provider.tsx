@@ -4,7 +4,6 @@ import { render } from '@testing-library/react';
 import { useEffect } from 'react';
 import { MemoryRouter } from 'react-router';
 import { vi } from 'vitest';
-import { portForwardingView } from '@/data/demo/portForwarding';
 import { createMockRouter } from '@/data/demo/mockData';
 import { useDevice, type Device } from '@/data/device';
 import { RealDeviceProvider } from '@/data/real/RealDeviceProvider';
@@ -41,7 +40,6 @@ export function fakeRbweb(options: { loggedIn?: boolean; answers?: Record<string
     '/settings/vpn': router.vpnSettings,
     '/settings/ssh': router.sshSettings,
     '/settings/dns': router.dnsSettings,
-    '/settings/port-forwarding': portForwardingView(router),
     '/settings/welcome': router.welcomeSettings,
     '/settings/modem': router.modemSettings,
     '/settings/swap': router.swapSettings,

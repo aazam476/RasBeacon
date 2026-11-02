@@ -9,6 +9,16 @@ import (
 	"rasbeacon/internal/render"
 )
 
+// greeting connects to address:port from namespace ns and returns what the
+// server there says first ("" when nothing answers within two seconds).
+func greeting(ns, address, port string) string {
+	out, ok := tryInNS(ns, 5*time.Second, "busybox", "nc", "-w", "2", address, port)
+	if !ok || strings.Contains(out, "nc: ") { // "nc: timed out" and the like
+		return ""
+	}
+	return strings.TrimSpace(out)
+}
+
 // The welcome page (the owner's own captive portal): until the phone has
 // accepted it, its web requests to anywhere reach the welcome page server
 // (port 2050 on RasBeacon), everything else it sends is refused, and

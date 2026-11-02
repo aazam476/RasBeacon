@@ -34,7 +34,6 @@
 //	modem.go           mobile broadband modems (through ModemManager)
 //	mobiledata.go      the data used through phones and modems each month
 //	macaddress.go      the MAC address each uplink shows its network
-//	portforward.go     port forwarding to devices and plugins
 //	enterprise.go      certificates for eduroam and other Enterprise networks
 //	servercert.go      trusting an Enterprise login server on first connect
 //	dns.go             the owner's DNS servers, plain and DNS-over-HTTPS
@@ -160,10 +159,6 @@ type Agent struct {
 	// routedIPv6 is the public IPv6 network currently on the hotspot bridge
 	// (see vpn.go, applyRoutedIPv6).
 	routedIPv6 netip.Prefix
-	// appliedPinholes is the IPv6 pinholes last loaded into the firewall
-	// (as text), so the uplink monitor notices a device's new address (see
-	// refreshPinholes).
-	appliedPinholes string
 	// qos is the priority devices' queues (see qos.go).
 	qos qosState
 	// hotspotFallback says why the hotspot runs with simpler settings
@@ -802,10 +797,9 @@ func (a *Agent) applyDHCP(captive bool) error {
 
 // bridgeNetfilterOff makes sure frames passing through the hotspot's
 // bridge aren't sent through the IP firewall as well. That happens when
-// the kernel's br_netfilter module is loaded (container tools load it) and
-// breaks port forwarding between two devices on the hotspot ("hairpin"):
-// the bridge would have to send the forwarded frame back out of the port
-// it came in on, which it refuses. RasBeacon's rules don't need it: the
+// the kernel's br_netfilter module is loaded (container tools load it):
+// traffic between two devices on the hotspot would then meet the rules
+// meant for traffic RasBeacon routes. RasBeacon's rules don't need it: the
 // plugins' isolation has its own bridge table (see the firewall). Without
 // the module there is nothing to do.
 func (a *Agent) bridgeNetfilterOff() {
@@ -838,15 +832,8 @@ func (a *Agent) applyFirewall() error {
 	if a.mode == api.ModeNormal {
 		input.Plugins = a.pluginRules()
 		input.LANAddress = a.lan.Prefix.Addr()
-		input.Uplinks = a.uplinkInterfaces()
-		input.PortForwards = a.portForwards()
-		input.Pinholes = a.pinholes()
 		input.Welcome = a.welcomeRule()
 		input.QoS = a.qosRule()
-		a.appliedPinholes = fmt.Sprint(input.Pinholes)
-		if g := a.guestLAN(); g != nil {
-			input.GuestAddress = g.Prefix.Addr()
-		}
 	}
 	if a.browser.uid > 0 {
 		input.Browser = &render.BrowserRule{UID: a.browser.uid, Uplinks: a.uplinkInterfaces()}

@@ -18,7 +18,6 @@ import { DemoIndex } from './DemoIndex';
 import { DemoTag } from './DemoTag';
 import { StressToggle } from './StressToggle';
 import { qosView } from './mockData';
-import { checkPortForwarding, portForwardingView } from './portForwarding';
 import { LOGIN_PAGE_PICTURE } from './loginPagePicture';
 import {
   catalogEntries,
@@ -776,11 +775,6 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
         const ordered = servers.map((server) => (isIp(server) ? server : full(server)!.toLowerCase()));
         change((d) => void (d.router.dnsSettings = { servers: ordered, withVpn }));
       },
-      savePortForwarding: async (rules) => {
-        await wait(800);
-        const saved = checkPortForwarding(currentDemo.router, rules);
-        change((d) => void (d.router.portForwardingRules = saved));
-      },
       saveWelcomeSettings: async (settings) => {
         await wait(800);
         const problems = welcomeProblems(settings);
@@ -1225,7 +1219,6 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
       vpnSettings: loadable('vpnSettings', router.vpnSettings),
       sshSettings: loadable('sshSettings', router.sshSettings),
       dnsSettings: loadable('dnsSettings', router.dnsSettings),
-      portForwarding: loadable('portForwarding', portForwardingView(router)),
       welcomeSettings: loadable('welcomeSettings', router.welcomeSettings),
       modemSettings: loadable('modemSettings', router.modemSettings),
       swapSettings: loadable('swapSettings', router.swapSettings),

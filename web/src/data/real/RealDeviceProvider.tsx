@@ -20,7 +20,6 @@ import type {
   HTTPSSettings,
   NearbyNetwork,
   PortalStatus,
-  PortForwardingSettings,
   SetupState,
   SSHSettings,
   SwapSettings,
@@ -62,7 +61,6 @@ interface DataTypes {
   vpnSettings: VPNSettings;
   sshSettings: SSHSettings;
   dnsSettings: DNSSettings;
-  portForwarding: PortForwardingSettings;
   welcomeSettings: WelcomeSettings;
   modemSettings: ModemSettings;
   swapSettings: SwapSettings;
@@ -85,7 +83,6 @@ const LOADERS: { [K in DataKey]: () => Promise<DataTypes[K]> } = {
   vpnSettings: api.getVPNSettings,
   sshSettings: api.getSSHSettings,
   dnsSettings: api.getDNSSettings,
-  portForwarding: api.getPortForwarding,
   welcomeSettings: api.getWelcomeSettings,
   modemSettings: api.getModemSettings,
   swapSettings: api.getSwapSettings,
@@ -107,7 +104,6 @@ const NO_DATA: AllData = {
   vpnSettings: NOTHING,
   sshSettings: NOTHING,
   dnsSettings: NOTHING,
-  portForwarding: NOTHING,
   welcomeSettings: NOTHING,
   modemSettings: NOTHING,
   swapSettings: NOTHING,
@@ -128,7 +124,6 @@ const SETTINGS: DataKey[] = [
   'vpnSettings',
   'sshSettings',
   'dnsSettings',
-  'portForwarding',
   'welcomeSettings',
   'modemSettings',
   'swapSettings',
@@ -142,8 +137,7 @@ const SETTINGS: DataKey[] = [
 /** What each page loads again when it opens. */
 const PAGE_DATA: Record<string, DataKey[]> = {
   '/': ['status'],
-  '/internet': ['uplinkSettings', 'dnsSettings', 'portForwarding', 'modemSettings', 'qosSettings', 'status'],
-  '/internet/port-forwarding': ['portForwarding', 'status'],
+  '/internet': ['uplinkSettings', 'dnsSettings', 'modemSettings', 'qosSettings', 'status'],
   '/vpn': ['vpnSettings', 'status'],
   '/hotspot': ['hotspotSettings', 'accessSettings', 'status'],
   '/guests': ['guestSettings', 'welcomeSettings'],
@@ -556,13 +550,6 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
           sameNames('servers', 'withVpn'),
         );
         store('dnsSettings', saved);
-      },
-      savePortForwarding: async (rules) => {
-        const saved = await attempt(
-          () => api.putPortForwarding(rules),
-          sameNames('name', 'protocol', 'outsidePort', 'insidePort', 'target', 'ipv6', 'rules'),
-        );
-        store('portForwarding', saved);
       },
       runSpeedtest: async () => {
         // Shown as running at once, on every page, until the router answers.

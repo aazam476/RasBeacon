@@ -10,7 +10,6 @@ import { HotspotScreen } from '@/screens/hotspot/HotspotScreen';
 import { HttpsScreen } from '@/screens/https/HttpsScreen';
 import { WelcomeScreen } from '@/screens/guests/WelcomeScreen';
 import { InternetScreen } from '@/screens/internet/InternetScreen';
-import { PortForwardingScreen } from '@/screens/internet/PortForwardingScreen';
 import { PluginsScreen } from '@/screens/plugins/PluginsScreen';
 import { PortalScreen } from '@/screens/portal/PortalScreen';
 import { SshScreen } from '@/screens/ssh/SshScreen';
@@ -34,7 +33,6 @@ const cases: { key: DataKey; page: string; screen: ReactNode }[] = [
   { key: 'swapSettings', page: 'System', screen: <SystemScreen /> },
   { key: 'updateSettings', page: 'System', screen: <SystemScreen /> },
   { key: 'plugins', page: 'Plugins', screen: <PluginsScreen /> },
-  { key: 'portForwarding', page: 'Port forwarding', screen: <PortForwardingScreen /> },
   { key: 'welcomeSettings', page: 'Welcome page', screen: <WelcomeScreen /> },
   { key: 'portal', page: 'the login page screen', screen: <PortalScreen /> },
 ];

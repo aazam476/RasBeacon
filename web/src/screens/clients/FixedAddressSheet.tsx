@@ -30,9 +30,9 @@ export function FixedAddressSheet({ client, onClose }: { client: NetworkClient; 
           level={3}
           footer={
             <>
-              Other devices, and port forwarding, can then find this one at the same address. It gets the new address
-              the next time it connects. Phones and laptops often use a private address for each Wi-Fi network; this
-              follows <span className="font-mono wrap-anywhere">{client.mac}</span>, the one it uses on this hotspot.
+              Other devices can then find this one at the same address. It gets the new address the next time it
+              connects. Phones and laptops often use a private address for each Wi-Fi network; this follows{' '}
+              <span className="font-mono wrap-anywhere">{client.mac}</span>, the one it uses on this hotspot.
             </>
           }
         >

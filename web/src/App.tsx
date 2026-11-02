@@ -9,7 +9,6 @@ import { GuestsScreen } from '@/screens/guests/GuestsScreen';
 import { HotspotScreen } from '@/screens/hotspot/HotspotScreen';
 import { HttpsScreen } from '@/screens/https/HttpsScreen';
 import { InternetScreen } from '@/screens/internet/InternetScreen';
-import { PortForwardingScreen } from '@/screens/internet/PortForwardingScreen';
 import { WelcomeScreen } from '@/screens/guests/WelcomeScreen';
 import { LoginScreen } from '@/screens/phases/LoginScreen';
 import { LoadingScreen, NoticeScreen } from '@/screens/phases/NoticeScreen';
@@ -98,7 +97,6 @@ export function Pages() {
       <Route element={<Layout />}>
         <Route index element={<StatusScreen />} />
         <Route path="internet" element={<InternetScreen />} />
-        <Route path="internet/port-forwarding" element={<PortForwardingScreen />} />
         <Route path="vpn" element={<VpnScreen />} />
         <Route path="hotspot" element={<HotspotScreen />} />
         <Route path="guests" element={<GuestsScreen />} />

@@ -15,7 +15,7 @@ export function PhonesSection({ phones, metered }: { phones: PhoneUplinkStatus[]
   return (
     <Section
       title="Phones and modems"
-      footer="Used for the internet when neither Ethernet nor Wi-Fi has it. On an iPhone, turn on Personal Hotspot and tap Trust when it asks; on Android, turn on USB tethering. Hotel login pages, the VPN and the kill switch work as on any connection; port forwarding usually doesn't."
+      footer="Used for the internet when neither Ethernet nor Wi-Fi has it. On an iPhone, turn on Personal Hotspot and tap Trust when it asks; on Android, turn on USB tethering. Hotel login pages, the VPN and the kill switch work as on any connection."
     >
       {phones.map((phone) => (
         <Row

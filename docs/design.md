@@ -675,9 +675,9 @@ from upstream what arrives outside the tunnel (the leak checks):
 - guests: the internet only, also through the VPN with its kill switch;
 - plugins: only what their permissions allow, and the internet only through
   the VPN;
-- DNS (plain and DNS-over-HTTPS), the routed IPv6 network and its pinholes,
-  port forwarding, fixed addresses, priority queues, the welcome page, the
-  wired ports and the Ethernet uplink.
+- DNS (plain and DNS-over-HTTPS), the routed IPv6 network (closed to the
+  internet), fixed addresses, priority queues, the welcome page, the wired
+  ports and the Ethernet uplink.
 
 RasBeacon booting under systemd (the early firewall first, then rbd and
 rbweb) is covered by the full-system test (`test/system/`, all of RasBeacon

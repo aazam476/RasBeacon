@@ -589,20 +589,8 @@ type FirewallInput struct {
 	// may reach, and its ports on RasBeacon.
 	Plugins []PluginRule
 	// LANAddress is RasBeacon's address on the hotspot, where devices reach
-	// plugins' ports. Needed with Plugins and PortForwards.
+	// plugins' ports. Needed with Plugins.
 	LANAddress netip.Addr
-	// GuestAddress is RasBeacon's address on the guest network (with Guest).
-	GuestAddress netip.Addr
-	// Uplinks are the interfaces RasBeacon reaches the internet through
-	// without the VPN (Ethernet, Wi-Fi). Port forwarding listens there.
-	Uplinks []string
-	// PortForwards send connections from the internet, arriving on the
-	// uplinks, to a device on the hotspot or a plugin.
-	PortForwards []PortForward
-	// Pinholes let connections from the internet reach a device's public
-	// IPv6 address (in RoutedIPv6) on a port, without NAT. They arrive
-	// through the tunnel, the only way RoutedIPv6 reaches RasBeacon.
-	Pinholes []Pinhole
 	// Welcome, when set, holds devices on some networks at the welcome
 	// page (the owner's own captive portal) until they accept it.
 	Welcome *WelcomeRule
@@ -643,51 +631,12 @@ type WelcomeDevice struct {
 	Seconds int
 }
 
-// Pinhole is one port opened to a device's public IPv6 addresses.
-type Pinhole struct {
-	// Protocol is "tcp" or "udp" (a rule for both becomes two).
-	Protocol string
-	// From and To are the ports (the same for a single port).
-	From, To int
-	// Addresses are the device's addresses in the routed IPv6 network.
-	Addresses []netip.Addr
-}
-
-// PortForward is one port forwarding rule as the firewall needs it.
-type PortForward struct {
-	// Protocol is "tcp" or "udp" (a rule for both becomes two).
-	Protocol string
-	// From and To are the outside ports (the same for a single port).
-	From, To int
-	// Address is where they go: a device on the hotspot or a plugin.
-	Address netip.Addr
-	// InsidePort is the port there; 0 keeps the outside port(s).
-	InsidePort int
-}
-
-// ForwardMark marks connections that came in by port forwarding, so their
-// replies go back out of the uplink (see routing.ForwardMark; the routing
-// package's tests check the two agree).
-const ForwardMark = "0x5246"
-
 // TunnelLabel is the conntrack label (0 to 127, like QoSLabel) the firewall
 // puts on connections that left through the VPN tunnel. Such a connection
 // may never continue anywhere else: in login mode, or after the kill
 // switch was turned off, the routes change, and without this its next
 // packets would leave through the uplink as an "established" connection.
 const TunnelLabel = 65
-
-type pinholeData struct {
-	Protocol  string
-	Ports     string // "8080" or "27015-27030"
-	Addresses []string
-}
-
-type portForwardData struct {
-	Protocol string
-	Ports    string // "8080" or "27015-27030"
-	Target   string // "10.87.0.50:80" or "10.87.0.50" (ports kept)
-}
 
 // PluginRule is one plugin's place in the firewall.
 type PluginRule struct {
@@ -758,13 +707,6 @@ type firewallData struct {
 	PluginLAN         []string
 	PluginPorts       []pluginPortData
 	LANAddress        string
-	// Port forwarding (see FirewallInput.PortForwards).
-	Uplinks      []string
-	PortForwards []portForwardData
-	OwnAddresses []string
-	ForwardMark  string
-	// IPv6 pinholes (see FirewallInput.Pinholes).
-	Pinholes []pinholeData
 	// The welcome page (see FirewallInput.Welcome).
 	Welcome *welcomeData
 	// Priority devices (see FirewallInput.QoS).
@@ -882,12 +824,6 @@ func Firewall(in FirewallInput) (string, error) {
 			data.TunnelDNS6 = append(data.TunnelDNS6, dns.String())
 		}
 	}
-	if err := addPortForwards(&data, in); err != nil {
-		return "", err
-	}
-	if err := addPinholes(&data, in); err != nil {
-		return "", err
-	}
 	if err := addWelcome(&data, in); err != nil {
 		return "", err
 	}
@@ -914,85 +850,6 @@ func addQoS(data *firewallData, in FirewallInput) error {
 		d.PriorityMACs = append(d.PriorityMACs, hw.String())
 	}
 	data.QoS = d
-	return nil
-}
-
-// addPortForwards checks the port forwarding rules and puts them in data.
-// Without an uplink (or without the hotspot's address) there is nothing to
-// forward from, so the rules are left out.
-func addPortForwards(data *firewallData, in FirewallInput) error {
-	if len(in.PortForwards) == 0 || len(in.Uplinks) == 0 || len(in.Egress) == 0 {
-		return nil
-	}
-	if !in.LANAddress.IsValid() {
-		return fmt.Errorf("port forwarding needs RasBeacon's hotspot address")
-	}
-	for _, name := range in.Uplinks {
-		if !isInterfaceName(name) {
-			return fmt.Errorf("invalid interface name %q", name)
-		}
-	}
-	data.Uplinks = in.Uplinks
-	data.ForwardMark = ForwardMark
-	// RasBeacon's own addresses on the hotspot side keep their services
-	// (the settings page on port 80, for example), whatever is forwarded.
-	data.OwnAddresses = []string{in.LANAddress.String()}
-	if in.Guest && in.GuestAddress.IsValid() {
-		data.OwnAddresses = append(data.OwnAddresses, in.GuestAddress.String())
-	}
-	data.LANAddress = in.LANAddress.String()
-	for _, f := range in.PortForwards {
-		if f.Protocol != "tcp" && f.Protocol != "udp" {
-			return fmt.Errorf("invalid protocol %q", f.Protocol)
-		}
-		if f.From < 1 || f.To < f.From || f.To > 65535 || f.InsidePort < 0 || f.InsidePort > 65535 ||
-			(f.InsidePort != 0 && f.To != f.From) {
-			return fmt.Errorf("invalid ports %d-%d to %d", f.From, f.To, f.InsidePort)
-		}
-		if !f.Address.Is4() {
-			return fmt.Errorf("invalid forwarding address %v", f.Address)
-		}
-		d := portForwardData{Protocol: f.Protocol, Ports: strconv.Itoa(f.From), Target: f.Address.String()}
-		if f.To != f.From {
-			d.Ports += "-" + strconv.Itoa(f.To)
-		}
-		if f.InsidePort != 0 {
-			d.Target += ":" + strconv.Itoa(f.InsidePort)
-		}
-		data.PortForwards = append(data.PortForwards, d)
-	}
-	return nil
-}
-
-// addPinholes checks the IPv6 pinholes and puts them in data. They need
-// the routed IPv6 network and the tunnel it arrives through; a pinhole
-// whose device has no address there (yet) is left out.
-func addPinholes(data *firewallData, in FirewallInput) error {
-	if !in.RoutedIPv6.IsValid() || in.TunnelInterface == "" || len(in.Egress) == 0 {
-		return nil
-	}
-	for _, p := range in.Pinholes {
-		if p.Protocol != "tcp" && p.Protocol != "udp" {
-			return fmt.Errorf("invalid protocol %q", p.Protocol)
-		}
-		if p.From < 1 || p.To < p.From || p.To > 65535 {
-			return fmt.Errorf("invalid ports %d-%d", p.From, p.To)
-		}
-		d := pinholeData{Protocol: p.Protocol, Ports: strconv.Itoa(p.From)}
-		if p.To != p.From {
-			d.Ports += "-" + strconv.Itoa(p.To)
-		}
-		for _, addr := range p.Addresses {
-			// Only the device's public addresses, never another network's.
-			if !addr.Is6() || !in.RoutedIPv6.Contains(addr) {
-				return fmt.Errorf("pinhole address %v is not in %v", addr, in.RoutedIPv6)
-			}
-			d.Addresses = append(d.Addresses, addr.String())
-		}
-		if len(d.Addresses) > 0 {
-			data.Pinholes = append(data.Pinholes, d)
-		}
-	}
 	return nil
 }
 

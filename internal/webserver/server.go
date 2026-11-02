@@ -708,8 +708,6 @@ var forwardedRoutes = map[string]string{
 	"GET /api/v1/settings/welcome":                   "/settings/welcome",
 	"PUT /api/v1/settings/welcome":                   "/settings/welcome",
 	"POST /api/v1/clients/welcome-reset":             "/clients/welcome-reset",
-	"GET /api/v1/settings/port-forwarding":           "/settings/port-forwarding",
-	"PUT /api/v1/settings/port-forwarding":           "/settings/port-forwarding",
 	"GET /api/v1/settings/usage":                     "/settings/usage",
 	"PUT /api/v1/settings/usage":                     "/settings/usage",
 	"POST /api/v1/clients/usage/reset":               "/clients/usage/reset",

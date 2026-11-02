@@ -2,7 +2,7 @@ package agent
 
 // Fixed addresses ("Always use this address" on the Clients page): a device
 // that always gets the same address on the hotspot, so that other devices
-// (or a port forwarding rule) can find it there. dnsmasq hands it out
+// can find it there. dnsmasq hands it out
 // (dhcp-host in dnsmasq.conf).
 
 import (
@@ -52,16 +52,7 @@ func (a *Agent) SetFixedAddress(mac, address string) error {
 	slog.Info("fixed address changed", "mac", mac, "address", address)
 	// dnsmasq hands it out from now on. The device itself only asks for an
 	// address when it reconnects or renews its lease.
-	if err := a.applyDHCP(false); err != nil {
-		return err
-	}
-	// Port forwarding rules for this device follow it to its new address.
-	for _, r := range a.cfg.PortForwarding.Rules {
-		if r.MAC == mac {
-			return a.applyFirewall()
-		}
-	}
-	return nil
+	return a.applyDHCP(false)
 }
 
 // checkFixedAddress checks an address the owner chose for device mac: it

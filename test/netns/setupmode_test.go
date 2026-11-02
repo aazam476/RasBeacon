@@ -169,9 +169,6 @@ type routerSettings struct {
 	PausedMACs []string
 	// FixedAddresses are devices that always get the same address.
 	FixedAddresses []render.FixedAddress
-	// PortForwards are port forwarding rules (normal mode only; the
-	// uplink is "eth0").
-	PortForwards []render.PortForward
 	// Welcome is the welcome page (normal mode only).
 	Welcome *render.WelcomeRule
 	// QoS sorts traffic for priority devices (normal mode only).
@@ -191,8 +188,6 @@ func startRouter(t *testing.T, settings routerSettings) (leaseFile string) {
 	firewall := render.FirewallInput{SSHEnabled: settings.SSHEnabled, Guest: settings.Guest, PausedMACs: settings.PausedMACs}
 	if settings.Normal {
 		firewall.Egress = []string{"eth0"}
-		firewall.Uplinks = []string{"eth0"}
-		firewall.PortForwards = settings.PortForwards
 		firewall.Welcome = settings.Welcome
 		firewall.QoS = settings.QoS
 		firewall.LANAddress = render.DefaultLAN.Prefix.Addr()

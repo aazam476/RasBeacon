@@ -22,8 +22,6 @@ import type {
   PortalBrowserFrame,
   PortalKey,
   PortalStatus,
-  PortForwardingSettings,
-  PortForwardRule,
   SavedNetwork,
   SetupForm,
   SetupState,
@@ -76,7 +74,6 @@ export type DataKey =
   | 'vpnSettings'
   | 'sshSettings'
   | 'dnsSettings'
-  | 'portForwarding'
   | 'welcomeSettings'
   | 'modemSettings'
   | 'swapSettings'
@@ -117,7 +114,6 @@ export interface DeviceState {
   vpnSettings: Loadable<VPNSettings>;
   sshSettings: Loadable<SSHSettings>;
   dnsSettings: Loadable<DNSSettings>;
-  portForwarding: Loadable<PortForwardingSettings>;
   welcomeSettings: Loadable<WelcomeSettings>;
   modemSettings: Loadable<ModemSettings>;
   swapSettings: Loadable<SwapSettings>;
@@ -248,12 +244,6 @@ export interface DeviceActions {
    * the network's. `withVpn` uses them while the VPN is on too. Field key: servers.
    */
   saveDnsSettings: (servers: string, withVpn: boolean) => Promise<void>;
-  /**
-   * Save the whole list of port forwarding rules (PortForwardingSettings.rules), with the one
-   * being edited changed, added or left out. Field keys: name, protocol, outsidePort,
-   * insidePort, target, ipv6 (about that rule), rules (about the list).
-   */
-  savePortForwarding: (rules: PortForwardRule[]) => Promise<void>;
   /**
    * Run Cloudflare's speed test (about 20 seconds) and update
    * `status.speedtest`.

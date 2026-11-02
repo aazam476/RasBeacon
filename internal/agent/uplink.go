@@ -305,7 +305,6 @@ func (a *Agent) RunUplinkMonitor() {
 		a.checkUplink()
 		a.checkLANPorts()
 		a.checkHotspot()
-		a.refreshPinholes()
 		a.refreshQoS()
 		a.refreshWelcome()
 		a.renewCertificateIfDue()

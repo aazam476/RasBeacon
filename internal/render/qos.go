@@ -49,8 +49,7 @@ const (
 )
 
 // QoSLabel is the conntrack label (0 to 127) the firewall puts on priority
-// devices' connections, so the answers coming back are known too. A label
-// leaves the connection mark to port forwarding (ForwardMark).
+// devices' connections, so the answers coming back are known too.
 const QoSLabel = 64
 
 // QoSInput says where and how fast to shape. A direction without a speed

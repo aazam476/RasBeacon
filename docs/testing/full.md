@@ -242,25 +242,7 @@ The VPN stays **off** for this section.
    phone B's Wi-Fi off and on. **Expect:** it gets `10.87.0.77`, and keeps
    it after a reboot of RasBeacon. An address another device has, or
    RasBeacon's own `10.87.0.1`, is refused before saving.
-10. **Port forwarding (new):** on the laptop (on the hotspot), start a web
-    server: `python3 -m http.server 8000`. Internet → **Port forwarding** →
-    **Add rule**: name `Test`, *TCP*, outside port `8080`, goes to the
-    laptop, inside port `8000`, **Save**. (The laptop gets a fixed address
-    if it had none; the sheet says so.) **Expect:** from another device on
-    the *uplink's* network (not the hotspot), `http://<outside address>:8080`
-    shows the laptop's folder; so does the same address from phone B on the
-    hotspot. With the VPN on, it still works. Turn the rule off: the page no
-    longer loads. On a hotel or phone hotspot uplink the page says the
-    internet can't reach it (shared address) or that RasBeacon is behind
-    another router. Delete the rule.
-11. **IPv6 pinhole (new, needs a VPN that routes a public IPv6 /64, see
-    section 8):** edit the rule from step 10, turn on **Also open over
-    IPv6**, inside port `8000`, **Save**; run the laptop's server with
-    `python3 -m http.server --bind :: 8000`. **Expect:** the sheet lists
-    the laptop's public IPv6 address, and from an IPv6 connection elsewhere
-    (a phone on mobile data) `http://[that address]:8000` loads; port 8001
-    does not. Turn the switch off: it no longer loads.
-12. **Priority devices (new, needs two devices and a connection you can
+10. **Priority devices (new, needs two devices and a connection you can
     fill):** run the speed test on the Internet page. On Clients, turn on
     **Priority** for phone A. **Expect:** the page says *Set your internet
     speed*. On Internet → *Internet speed*, **Use the last speed test**,
@@ -742,7 +724,7 @@ Board (Pi 4/5/3B/3B+/Zero 2 W) / RAM:     Adapter:          Card size:          
 3  Storage shows full card (__ GB): / swap row 2 GB: / 4 GB, Off, 2 GB save: / SSH swapon+swappiness:
 4  Ethernet: / scan lists networks: / Wi-Fi uplink + switch: / uplink standard + link speed shown: / eduroam: / hotspot move kept working 15 min: / renew, disconnect: / phone over USB (Android, iPhone, modem: which): / ModemManager modem (wrong PIN tried once, connects): / cloned and random MAC (Wi-Fi, Ethernet):
 5  dns.google saved as full address: / leak test shows Google: / rbdoh running: / Cloudflare+1.1.1.1: / bad entry refused: / plain only, rbdoh stopped: / back to network's:
-6  Count + this device: / traffic rates: / pause + reboot-proof: / disconnect: / flush lease: / rename pencil: / data limit without metered: / fixed address: / port forward from uplink side + hotspot, with VPN: / IPv6 pinhole: / priority device ping idle __ ms, busy __ ms, laptop busy __ ms:
+6  Count + this device: / traffic rates: / pause + reboot-proof: / disconnect: / flush lease: / rename pencil: / data limit without metered: / fixed address: / priority device ping idle __ ms, busy __ ms, laptop busy __ ms:
 7  Laptop on client port gets address+internet: / listed with cable icon, no Disconnect: / leaves list: / safety warning: / USB Ethernet for devices + not used on a router:
 8  Import turns VPN on + connect (IP = VPN): / kill switch + VPN off blocks, warns: / rename profile: / DNS = VPN's even with own DNS set: / kill switch on no leak: / off falls back: / boot no leak: / MTU check: / profiles: / clock:
 9  Speed test: down __ up __ ping __ location __, took __ s / speed.cloudflare.com: down __ up __
