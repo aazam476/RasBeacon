@@ -144,7 +144,8 @@ still holds; a version that can install `v2.0.0` usually can install
    two package lists, `SHA256SUMS`), write the notes, and publish (a test version: tick *Set as a
    pre-release* first).
 5. Test the update file on a device running the previous release (System
-   page → Install update), and check it comes back on the new version.
+   page → **Check now** → **Install update**, which downloads it from the
+   release), and check it comes back on the new version.
 
 ## How updates work on the device
 

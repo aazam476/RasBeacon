@@ -425,6 +425,10 @@ type UpdateStatus struct {
 	LatestVersion string `json:"latestVersion,omitempty"`
 	LatestURL     string `json:"latestUrl,omitempty"`
 	NewerVersion  string `json:"newerVersion,omitempty"`
+	// DownloadSize is the size in bytes of LatestVersion's update file
+	// when RasBeacon can download and install it itself (POST
+	// /system/update/download); 0 otherwise.
+	DownloadSize int64 `json:"downloadSize,omitempty"`
 	// Reflash is set when a newer version can't be installed over this one
 	// (the online check found one, or its update file was refused): the
 	// owner backs up the settings, flashes the new image and restores the

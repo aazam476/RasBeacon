@@ -21,6 +21,7 @@ describe('updates', () => {
       body: { checkHours: 24, notifyUrl: 'https://ntfy.sh/rasbeacon' },
     },
     { name: 'checks now', call: api.checkForUpdates, method: 'POST', path: '/system/update/check' },
+    { name: 'downloads the offered update', call: api.downloadUpdate, method: 'POST', path: '/system/update/download' },
     {
       name: 'restarts into an installed update',
       call: api.restartIntoUpdate,

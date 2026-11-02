@@ -268,6 +268,11 @@ export interface UpdateStatus {
    */
   newerVersion?: string;
   /**
+   * The size in bytes of `latestVersion`'s update file when RasBeacon can download and install it
+   * itself ("Install update"); absent otherwise.
+   */
+  downloadSize?: number;
+  /**
    * A newer version that can't be installed over this one: the online check found it, or its
    * update file was refused. The way to it is a backup, the new image, and the backup restored.
    */

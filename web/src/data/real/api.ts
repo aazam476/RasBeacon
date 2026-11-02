@@ -354,6 +354,8 @@ export const putHTTPSSettings = (
 
 /** Uploads and installs an update file; takes minutes on slow Wi-Fi. */
 export const installUpdate = (file: File) => request<UpdateStatus>('POST', '/system/update', { file });
+/** Starts downloading and installing the offered update; answers at once. */
+export const downloadUpdate = () => request<void>('POST', '/system/update/download');
 export const getAccessSettings = () => request<AccessSettings>('GET', '/settings/access');
 export const putAccessSettings = (settings: AccessSettings) =>
   request<AccessSettings>('PUT', '/settings/access', { body: settings });

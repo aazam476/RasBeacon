@@ -158,6 +158,9 @@ func (a *Agent) updateStatus() api.UpdateStatus {
 		} else if a.update.newest != latest.TagName {
 			s.NewerVersion = a.update.newest
 		}
+		if file, ok := latest.updateFile(); ok && s.Reflash == nil && s.CanInstall {
+			s.DownloadSize = file.Size
+		}
 	}
 	// A refused update file says the same more surely (it was signed).
 	if a.update.refused != nil {
@@ -186,38 +189,74 @@ func releaseURL(tag string) string {
 }
 
 // InstallUpdate installs an update file read from r (streamed from the
-// browser through rbweb) and then restarts into it. It takes minutes; other
-// requests keep working meanwhile.
+// browser through rbweb: "Install update from a file…") and then restarts
+// into it. It takes minutes; other requests keep working meanwhile.
 func (a *Agent) InstallUpdate(r io.Reader) error {
+	if err := a.beginInstall("Installing an update…"); err != nil {
+		return err
+	}
+	newVersion, err := a.writeUpdate(r)
+	return a.finishInstall(newVersion, err)
+}
+
+// DownloadUpdate downloads the update the online check offers from GitHub
+// and installs it ("Install update"), like InstallUpdate. It answers at
+// once; the download and the install go on in the background, and the
+// status shows them.
+func (a *Agent) DownloadUpdate() error {
+	if err := a.needInternet(); err != nil {
+		return err
+	}
 	a.mu.Lock()
+	offered := a.updateStatus().DownloadSize > 0
+	asset, _ := a.update.latest.updateFile()
+	tag := a.update.latest.TagName
+	a.mu.Unlock()
+	if !offered {
+		return &config.ValidationError{Field: "update", Message: "There is no update to download. Check for new versions first."}
+	}
+	if err := a.beginInstall(fmt.Sprintf("Downloading and installing RasBeacon %s…", tag)); err != nil {
+		return err
+	}
+	slog.Info("downloading an update", "version", tag, "url", asset.URL)
+	a.background(func() {
+		newVersion, err := a.downloadUpdate(asset.URL)
+		_ = a.finishInstall(newVersion, err)
+	})
+	return nil
+}
+
+// beginInstall checks that an update can be installed now and marks one as
+// being installed, with message for the status. It takes a.mu itself.
+func (a *Agent) beginInstall(message string) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	if a.mode != api.ModeNormal {
-		a.mu.Unlock()
 		return ErrWrongMode
 	}
 	if a.update.installing {
-		a.mu.Unlock()
 		return ErrUpdateBusy
 	}
 	// While a new system is on trial, the other slot holds the old one, the
 	// only way back if the trial fails: it must not be overwritten.
 	if a.update.trying && !a.update.confirmed {
-		a.mu.Unlock()
 		return &config.ValidationError{Field: "update", Message: "The last update is still being tried. Wait a minute until it is confirmed, then install this one."}
 	}
 	// An update that waits for its restart is about to be overwritten: from
 	// here on, restarting into the other slot would start a half-written
 	// system, so it no longer waits.
 	if err := os.Remove(a.paths.UpdatePendingFile()); err != nil && !os.IsNotExist(err) {
-		a.mu.Unlock()
 		return err
 	}
 	a.update.restartPending = false
 	a.update.installing = true
-	a.update.message = "Installing an update…"
-	a.mu.Unlock()
+	a.update.message = message
+	return nil
+}
 
-	newVersion, err := a.writeUpdate(r)
-
+// finishInstall records how writing an update went (newVersion, or err)
+// and, when it worked, restarts into it shortly. It takes a.mu itself.
+func (a *Agent) finishInstall(newVersion string, err error) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.update.installing = false
@@ -240,6 +279,55 @@ func (a *Agent) InstallUpdate(r io.Reader) error {
 	a.update.message = fmt.Sprintf("Update %s installed. RasBeacon is restarting to try it (about 2 minutes).", newVersion)
 	a.afterFunc(switchDelay, func() { _ = a.restartIntoUpdate() })
 	return nil
+}
+
+// downloadStall is how long a download may go without receiving anything
+// before it is given up.
+var downloadStall = 2 * time.Minute
+
+// updateDownloadHTTP downloads update files. A file is hundreds of MB, so
+// there is no limit on the whole download; downloadUpdate gives up on one
+// that stalls instead.
+var updateDownloadHTTP = &http.Client{}
+
+// downloadUpdate downloads an update file from url and writes it into the
+// other slot as it arrives, like an uploaded one (the signature is checked
+// the same way). It returns the new version.
+func (a *Agent) downloadUpdate(url string) (string, error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	// Each piece that arrives pushes the deadline back.
+	stall := time.AfterFunc(downloadStall, cancel)
+	defer stall.Stop()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", "RasBeacon/"+version.Version)
+	resp, err := updateDownloadHTTP.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("downloading the update: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("downloading the update: GitHub answered %s", resp.Status)
+	}
+	return a.writeUpdate(&stallReader{r: resp.Body, timer: stall, after: downloadStall})
+}
+
+// stallReader resets timer each time something is read from r.
+type stallReader struct {
+	r     io.Reader
+	timer *time.Timer
+	after time.Duration
+}
+
+func (s *stallReader) Read(p []byte) (int, error) {
+	n, err := s.r.Read(p)
+	if n > 0 {
+		s.timer.Reset(s.after)
+	}
+	return n, err
 }
 
 // RestartIntoUpdate restarts into an installed update that is waiting for
@@ -626,10 +714,23 @@ type latestRelease struct {
 	minFromVersion string
 }
 
-// releaseAsset is one file of a release.
+// releaseAsset is one file of a release, with its size in bytes.
 type releaseAsset struct {
 	Name string `json:"name"`
 	URL  string `json:"browser_download_url"`
+	Size int64  `json:"size"`
+}
+
+// updateFile is a release's update file for the Pi 4/5 image, the only one
+// that installs updates ("rasbeacon-v1.2.0.rbupdate", see image/build.sh).
+func (r latestRelease) updateFile() (releaseAsset, bool) {
+	want := "rasbeacon-" + r.TagName + ".rbupdate"
+	for _, asset := range r.Assets {
+		if asset.Name == want && asset.Size > 0 {
+			return asset, true
+		}
+	}
+	return releaseAsset{}, false
 }
 
 // githubAPI is GitHub's public API.

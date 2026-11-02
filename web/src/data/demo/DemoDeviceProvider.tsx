@@ -65,6 +65,9 @@ function applyUsageLimit(d: DemoState) {
  * provider once it renders: making it here would run the demo in the router's own build too. */
 let currentDemo!: DemoState;
 
+/** The size of the demo's update files, as GitHub would give it (about 412 MB). */
+const DEMO_UPDATE_SIZE = 412_000_000;
+
 /** A new name for a plugin file waiting in the install sheet. */
 let stagingCount = 0;
 function newStagingId(kind: string): string {
@@ -214,6 +217,30 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
         mutate(draft);
         return draft;
       });
+    }
+
+    /**
+     * An update being installed: the router restarts into the new version a little later, and
+     * then offers the next step, if there is one.
+     */
+    function installDemoUpdate() {
+      change((d) => void (d.router.status.update.installing = true));
+      setTimeout(
+        () =>
+          change((d) => {
+            const { latestVersion = 'v1.1.0', newerVersion } = d.router.status.update;
+            d.router.status.version = latestVersion;
+            Object.assign(d.router.status.update, {
+              installing: false,
+              message: `Updated to ${latestVersion}.`,
+              latestVersion: newerVersion,
+              latestUrl: newerVersion && `https://github.com/rasbeacon/rasbeacon/releases/tag/${newerVersion}`,
+              newerVersion: undefined,
+              downloadSize: newerVersion && DEMO_UPDATE_SIZE,
+            });
+          }),
+        8000,
+      );
     }
 
     function failIfAny(errors: Record<string, string>) {
@@ -849,24 +876,14 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
       installUpdate: async (file) => {
         await wait(4000);
         if (!file.name.endsWith('.rbupdate')) throw new Error('This is not a RasBeacon update file (.rbupdate).');
-        change((d) => void (d.router.status.update.installing = true));
-        // The router restarts into the new version a little later, and then offers the next step,
-        // if there is one.
-        setTimeout(
-          () =>
-            change((d) => {
-              const { latestVersion = 'v1.1.0', newerVersion } = d.router.status.update;
-              d.router.status.version = latestVersion;
-              Object.assign(d.router.status.update, {
-                installing: false,
-                message: `Updated to ${latestVersion}.`,
-                latestVersion: newerVersion,
-                latestUrl: newerVersion && `https://github.com/rasbeacon/rasbeacon/releases/tag/${newerVersion}`,
-                newerVersion: undefined,
-              });
-            }),
-          8000,
-        );
+        installDemoUpdate();
+      },
+      downloadUpdate: async () => {
+        await wait(600);
+        const { latestVersion, downloadSize } = currentDemo.router.status.update;
+        if (!downloadSize) throw new Error('There is no update to download. Check for new versions first.');
+        change((d) => void (d.router.status.update.message = `Downloading and installing RasBeacon ${latestVersion}…`));
+        installDemoUpdate();
       },
       saveUpdateSettings: async (settings) => {
         await wait(600);
@@ -905,6 +922,7 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
             checkResult: undefined,
             latestVersion: 'v1.1.0',
             latestUrl: 'https://github.com/rasbeacon/rasbeacon/releases/tag/v1.1.0',
+            downloadSize: DEMO_UPDATE_SIZE,
           });
         });
       },

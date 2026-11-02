@@ -280,6 +280,7 @@ func (a *Agent) Handler() http.Handler {
 	mux.HandleFunc("POST /settings/updates/test", do(func(req api.NotifyTestRequest) error { return a.SendTestNotification(req.URL) }))
 	mux.HandleFunc("POST /system/update/restart", act(a.RestartIntoUpdate))
 	mux.HandleFunc("POST /system/update/check", result(a.CheckForUpdateNow))
+	mux.HandleFunc("POST /system/update/download", act(a.DownloadUpdate))
 
 	// --- The System page -----------------------------------------------
 	mux.HandleFunc("GET /settings/swap", view(a.SwapSettings))

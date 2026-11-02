@@ -804,3 +804,132 @@ func TestUpdateCheck_AnnouncesANewVersionOnce(t *testing.T) {
 		t.Errorf("test message: %v, %q", err, announced)
 	}
 }
+
+// offerUpdate pretends the online check found v1.3.0 (running v1.2.0),
+// with its update file served at url.
+func offerUpdate(t *testing.T, e *testEnv, url string, size int) {
+	t.Helper()
+	runningVersion(t, "v1.2.0")
+	e.agent.mu.Lock()
+	defer e.agent.mu.Unlock()
+	e.agent.uplink.status.Connected = true
+	e.agent.update.latest = latestRelease{TagName: "v1.3.0", Assets: []releaseAsset{
+		{Name: "rasbeacon-pi3-zero2w-v1.3.0.img.xz", URL: url + "/img", Size: 999},
+		{Name: "rasbeacon-v1.3.0.rbupdate", URL: url, Size: int64(size)},
+	}}
+}
+
+func TestUpdate_DownloadsAndInstallsTheOfferedUpdate(t *testing.T) {
+	e, key := newUpdateEnv(t)
+	system := strings.Repeat("S", 64)
+	file := versionedUpdateFile(t, key, "pi4", "v1.3.0", "", testBundle(strings.Repeat("B", 32), system))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.Header.Get("User-Agent"), "RasBeacon/") {
+			t.Error("GitHub wants a User-Agent")
+		}
+		w.Write(file)
+	}))
+	t.Cleanup(server.Close)
+	offerUpdate(t, e, server.URL, len(file))
+	if got := e.agent.Status().Update.DownloadSize; got != int64(len(file)) {
+		t.Fatalf("downloadSize = %d", got)
+	}
+
+	if err := e.agent.DownloadUpdate(); err != nil {
+		t.Fatal(err)
+	}
+	// It answers at once; the status shows the work.
+	if s := e.agent.Status().Update; !s.Installing || !strings.Contains(s.Message, "v1.3.0") {
+		t.Errorf("while downloading: %+v", s)
+	}
+	if err := e.agent.DownloadUpdate(); !errors.Is(err, ErrUpdateBusy) {
+		t.Errorf("a second download at the same time: %v", err)
+	}
+	e.runBackground()
+	if got := e.readFile(e.paths.SlotDevice("other", "system")); got != system {
+		t.Errorf("system partition = %q", got)
+	}
+	if s := e.agent.Status().Update; s.Installing || !strings.Contains(s.Message, "Update v1.3.0 installed") {
+		t.Errorf("after: %+v", s)
+	}
+	e.timers.runAll()
+	if !e.runner.ran("systemctl reboot --reboot-argument=0 tryboot") {
+		t.Error("RasBeacon should restart into the update")
+	}
+}
+
+func TestUpdate_DownloadIsOnlyOfferedWhenItCanBeInstalled(t *testing.T) {
+	e, _ := newUpdateEnv(t)
+	offerUpdate(t, e, "http://example.com/file", 1000)
+	status := func(change func(*latestRelease)) api.UpdateStatus {
+		e.agent.mu.Lock()
+		defer e.agent.mu.Unlock()
+		change(&e.agent.update.latest)
+		return e.agent.updateStatus()
+	}
+	if s := status(func(r *latestRelease) { r.minFromVersion = "v1.2.5" }); s.DownloadSize != 0 || s.Reflash == nil {
+		t.Errorf("a release that needs a fresh install: %+v", s)
+	}
+	if s := status(func(r *latestRelease) { r.minFromVersion, r.Assets = "", r.Assets[:1] }); s.DownloadSize != 0 {
+		t.Errorf("a release without an update file: %+v", s)
+	}
+	var ve *config.ValidationError
+	if err := e.agent.DownloadUpdate(); !errors.As(err, &ve) || !strings.Contains(ve.Message, "no update to download") {
+		t.Errorf("nothing to download: %v", err)
+	}
+	// Without an update key, nothing can be installed.
+	offerUpdate(t, e, "http://example.com/file", 1000)
+	os.Remove(filepath.Join(e.paths.UpdateKeysDir(), "release.pub"))
+	if s := e.agent.Status().Update; s.DownloadSize != 0 {
+		t.Errorf("without a key: %+v", s)
+	}
+	// And it needs the internet.
+	e.agent.mu.Lock()
+	e.agent.uplink.status.Connected = false
+	e.agent.mu.Unlock()
+	if err := e.agent.DownloadUpdate(); !errors.Is(err, errNoUplink) {
+		t.Errorf("offline: %v", err)
+	}
+}
+
+func TestUpdate_AFailedDownloadSaysWhy(t *testing.T) {
+	e, _ := newUpdateEnv(t)
+	server := httptest.NewServer(http.NotFoundHandler())
+	t.Cleanup(server.Close)
+	offerUpdate(t, e, server.URL, 1000)
+	if err := e.agent.DownloadUpdate(); err != nil {
+		t.Fatal(err)
+	}
+	e.runBackground()
+	if s := e.agent.Status().Update; s.Installing || !strings.Contains(s.Message, "GitHub answered 404") {
+		t.Errorf("after a 404: %+v", s)
+	}
+	if got := e.readFile(e.paths.SlotDevice("other", "system")); got != strings.Repeat("o", 64) {
+		t.Error("the slot must be untouched")
+	}
+}
+
+func TestUpdate_AStalledDownloadIsGivenUp(t *testing.T) {
+	e, _ := newUpdateEnv(t)
+	old := downloadStall
+	downloadStall = 50 * time.Millisecond
+	t.Cleanup(func() { downloadStall = old })
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("RBUP"))
+		w.(http.Flusher).Flush()
+		select {
+		case <-release:
+		case <-r.Context().Done():
+		}
+	}))
+	t.Cleanup(func() { close(release); server.Close() })
+	offerUpdate(t, e, server.URL, 1000)
+	if err := e.agent.DownloadUpdate(); err != nil {
+		t.Fatal(err)
+	}
+	e.runBackground()
+	if s := e.agent.Status().Update; s.Installing || !strings.Contains(s.Message, "was not installed") {
+		t.Errorf("after a stall: %+v", s)
+	}
+}

@@ -497,6 +497,11 @@ describe('System', () => {
       answer: { body: { state: 'installed' } },
       then: (d) => expect(d.status.data?.update).toEqual({ state: 'installed' }),
     },
+    {
+      name: 'starts the download of the offered update',
+      run: (d) => d.downloadUpdate(),
+      sends: ['POST /system/update/download'],
+    },
     { name: 'resizes the swap file', run: (d) => d.saveSwapSettings(2), sends: ['PUT /settings/swap'] },
     {
       name: 'keeps the saved update schedule',

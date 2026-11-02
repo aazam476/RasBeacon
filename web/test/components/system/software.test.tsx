@@ -81,7 +81,52 @@ describe('software', () => {
   it('says an installing update takes devices offline for a while', () => {
     renderSoftware({ installing: true });
     expect(screen.getByText('Installing an update…')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Install update from a file…' })).toHaveProperty('disabled', true);
+  });
+
+  it('shows the download’s progress', () => {
+    renderSoftware({
+      canInstall: true,
+      installing: true,
+      latestVersion: 'v0.3.0',
+      message: 'Downloading and installing RasBeacon v0.3.0…',
+      downloadSize: 1,
+    });
+    expect(screen.getByText('Downloading and installing RasBeacon v0.3.0…')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Install update' })).toHaveProperty('disabled', true);
+  });
+
+  it('downloads and installs the offered version after asking, with its size', async () => {
+    const { device, user } = renderSoftware({
+      canInstall: true,
+      latestVersion: 'v0.3.0',
+      downloadSize: 412_000_000,
+    });
+    expect(screen.getByText('Install it below: RasBeacon downloads it by itself.')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Install update' }));
+    const alert = within(screen.getByRole('dialog', { name: 'Install RasBeacon v0.3.0?' }));
+    expect(alert.getByText(/downloads it \(412 MB\) from GitHub/)).toBeTruthy();
+    expect(alert.queryByText(/metered/)).toBeNull();
+    await user.click(alert.getByRole('button', { name: 'Install' }));
+    expect(device.downloadUpdate).toHaveBeenCalledOnce();
+  });
+
+  it('warns that the download uses data on a metered connection', async () => {
+    const device = fakeDevice((router) => {
+      Object.assign(router.status.update, { canInstall: true, latestVersion: 'v0.3.0', downloadSize: 412_000_000 });
+      router.status.hotspot.metered = true;
+    });
+    const { user } = renderScreen(<SystemScreen />, device);
+    await user.click(screen.getByRole('button', { name: 'Install update' }));
+    expect(screen.getByText('This connection is metered: the download uses 412 MB of data.')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(device.downloadUpdate).not.toHaveBeenCalled();
+  });
+
+  it('offers only the file without a version to download', () => {
+    renderSoftware({ canInstall: true, latestVersion: 'v0.3.0' });
+    expect(screen.queryByRole('button', { name: 'Install update' })).toBeNull();
+    expect(screen.getByText(/then install it below from the file/)).toBeTruthy();
   });
 
   it('explains how one-system boards move to a new version', () => {
@@ -98,9 +143,7 @@ describe('software', () => {
   it('installs a chosen file after asking, and says it is restarting', async () => {
     const { device, user } = renderSoftware({ canInstall: true, installing: false });
     const file = new File(['x'], 'rasbeacon-0.3.0-rpi64.rbupdate');
-    expect(screen.getByRole('button', { name: 'Install update' })).toHaveProperty('disabled', true);
     await user.upload(screen.getByLabelText(/Update file/), file);
-    await user.click(screen.getByRole('button', { name: 'Install update' }));
     const alert = within(screen.getByRole('dialog', { name: 'Install the update?' }));
     await user.click(alert.getByRole('button', { name: 'Install' }));
     expect(device.installUpdate).toHaveBeenCalledWith(file);
@@ -117,7 +160,6 @@ describe('software', () => {
       },
     );
     await user.upload(screen.getByLabelText(/Update file/), new File(['x'], 'bad.rbupdate'));
-    await user.click(screen.getByRole('button', { name: 'Install update' }));
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Install' }));
     expect(await screen.findByText('The update is not signed by RasBeacon.')).toBeTruthy();
   });

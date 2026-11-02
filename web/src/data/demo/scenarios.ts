@@ -683,6 +683,7 @@ export const SCENARIOS: DemoScenario[] = [
         checkHours: 24,
         latestVersion: 'v1.1.0',
         latestUrl: 'https://github.com/rasbeacon/rasbeacon/releases/tag/v1.1.0',
+        downloadSize: 412_000_000,
       });
     },
   },
@@ -697,6 +698,7 @@ export const SCENARIOS: DemoScenario[] = [
         latestVersion: 'v1.1.0',
         latestUrl: 'https://github.com/rasbeacon/rasbeacon/releases/tag/v1.1.0',
         newerVersion: 'v1.2.0',
+        downloadSize: 398_500_000,
       });
     },
   },

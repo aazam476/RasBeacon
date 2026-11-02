@@ -685,6 +685,7 @@ var forwardedRoutes = map[string]string{
 	"PUT /api/v1/settings/updates":                   "/settings/updates",
 	"POST /api/v1/settings/updates/test":             "/settings/updates/test",
 	"POST /api/v1/system/update/check":               "/system/update/check",
+	"POST /api/v1/system/update/download":            "/system/update/download",
 	"POST /api/v1/system/update/restart":             "/system/update/restart",
 	"POST /api/v1/system/reboot":                     "/system/reboot",
 	"POST /api/v1/system/shutdown":                   "/system/shutdown",

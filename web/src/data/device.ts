@@ -331,6 +331,11 @@ export interface DeviceActions {
 
   /** Upload and install a .rbupdate file; resolves when the router has accepted it. */
   installUpdate: (file: File) => Promise<void>;
+  /**
+   * Have the router download the update it offers (status.update.downloadSize) and install it;
+   * resolves once it started. status.update.installing and message show how it goes.
+   */
+  downloadUpdate: () => Promise<void>;
   /** Save how often to look for a new version and where to announce it. Field keys: checkHours, notifyUrl. */
   saveUpdateSettings: (settings: UpdateSettings) => Promise<void>;
   /** Save the allow list and device limit; the hotspot restarts. Field keys: allowed, maxDevices. */

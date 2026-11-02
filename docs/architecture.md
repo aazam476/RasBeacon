@@ -237,7 +237,10 @@ details are in [plugins.md](plugins.md#how-it-works)).
 Updates use the two copies ("slots", A and B) of the system on the SD card
 (`internal/update`, `internal/agent/update.go`):
 
-1. The owner uploads a `.rbupdate` file on the System page. Its manifest
+1. The owner uploads a `.rbupdate` file on the System page ("Install
+   update from a file…"), or rbd downloads the one the online check offers
+   from the GitHub release ("Install update"); both stream into the same
+   checks. Its manifest
    is signed with the release key (Ed25519); the public key is built into
    the image. Nothing is written until the signature and board check out,
    and until the version does: never older than the one running, and the
@@ -263,7 +266,7 @@ newest release that can be installed over the running version: when the
 newest one needs a newer starting version (a new signing key, say), the
 device moves up one step at a time, and the System page names the version
 that comes after the step. Only when no step exists does it say the new
-version needs a fresh install, before anyone downloads it. Installing still needs the signed `.rbupdate` file. A new
+version needs a fresh install, before anyone downloads it. Installing still checks the signed `.rbupdate` file, whether downloaded or uploaded. A new
 version is announced once to the owner's ntfy topic or webhook
 (`internal/notify`).
 

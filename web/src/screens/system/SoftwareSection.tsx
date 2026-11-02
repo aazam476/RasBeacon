@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useDevice } from '@/data/device';
 import { errorText } from '@/data/errors';
 import type { Status, UpdateReflash, UpdateSettings } from '@/data/types';
+import { formatBytes } from '@/lib/format';
 import { useForm } from '@/lib/useForm';
 import { Loaded } from '@/shell/Loaded';
 import { useAction } from '@/lib/useAction';
@@ -11,7 +12,6 @@ import {
   Button,
   ButtonRow,
   buttonClasses,
-  FileField,
   FormError,
   FormSuccess,
   Icon,
@@ -52,7 +52,11 @@ export function SoftwareSection({ status }: { status: Status }) {
             title={`Version ${update.latestVersion} is available`}
             actions={update.latestUrl && <ReleaseLink url={update.latestUrl} />}
           >
-            <p>Download its .rbupdate file for your board, then install it below.</p>
+            <p>
+              {update.downloadSize
+                ? 'Install it below: RasBeacon downloads it by itself.'
+                : 'Download its .rbupdate file for your board, then install it below from the file.'}
+            </p>
             {update.newerVersion && (
               <p>
                 {update.newerVersion} is out too, but can&apos;t be installed over this RasBeacon yet. Install this one
@@ -69,9 +73,11 @@ export function SoftwareSection({ status }: { status: Status }) {
           title={`RasBeacon ${version}`}
           subtitle={board ? `For ${board}` : undefined}
         />
-        {update.message && !update.restartPending && <Row title="Last update" subtitle={update.message} />}
+        {update.message && !update.restartPending && !update.installing && (
+          <Row title="Last update" subtitle={update.message} />
+        )}
         {update.canCheckOnline && <UpdateCheckRows status={status} />}
-        {update.canInstall && <InstallUpdate busy={update.installing} />}
+        {update.canInstall && <InstallUpdate status={status} />}
       </Section>
       {update.canCheckOnline && <NotificationsSection />}
 
@@ -355,38 +361,51 @@ function ReflashNotice({
 }
 
 /**
- * Choose a .rbupdate file and install it. Uploading and checking take minutes, so after the
- * confirmation the alert closes and the group shows the progress.
+ * "Install update" (RasBeacon downloads the version the check offers, shown only when there is
+ * one) and, next to it, "Install update from a file…" (a .rbupdate file from the Releases page,
+ * for a router without internet or a version of your choice). Both are confirmed first. Uploading
+ * and checking take minutes, so after the confirmation the alert closes and the group shows the
+ * progress.
  */
-function InstallUpdate({ busy }: { busy: boolean }) {
-  const { installUpdate } = useDevice();
+function InstallUpdate({ status }: { status: Status }) {
+  const { installUpdate, downloadUpdate } = useDevice();
+  const { update } = status;
+  const input = useRef<HTMLInputElement>(null);
+  // The file chosen, until its install is confirmed or cancelled.
   const [file, setFile] = useState<File | null>(null);
-  const [confirming, setConfirming] = useState(false);
+  const [confirmingDownload, setConfirmingDownload] = useState(false);
   const [installed, setInstalled] = useState(false);
   const installing = useAction(async (chosen: File) => {
     await installUpdate(chosen);
     setInstalled(true);
   });
+  const busy = installing.pending || update.installing;
+  const offered = update.downloadSize ? update.latestVersion : undefined;
+  const size = formatBytes(update.downloadSize ?? 0);
 
   return (
     <>
-      <FileField
-        label="Update file"
-        labelNote="(.rbupdate, from the Releases page)"
+      <input
+        ref={input}
+        type="file"
         accept=".rbupdate"
-        disabled={installing.pending || busy}
-        onChange={(files) => {
-          setFile(files[0] ?? null);
+        hidden
+        aria-label="Update file (.rbupdate)"
+        onChange={(event) => {
+          setFile(event.target.files?.[0] ?? null);
           setInstalled(false);
+          event.target.value = '';
         }}
       />
-      {(installing.pending || installing.error || (installed && !installing.pending)) && (
+      {(busy || installing.error || installed) && (
         <div className="row">
           {installing.pending ? (
             <ActivityIndicator
               label="Uploading and checking the update… keep this page open (a few minutes)."
               className="text-subhead text-label"
             />
+          ) : update.installing ? (
+            <ActivityIndicator label={update.message ?? 'Installing the update…'} className="text-subhead text-label" />
           ) : installing.error ? (
             <FormError>{installing.error}</FormError>
           ) : (
@@ -396,18 +415,40 @@ function InstallUpdate({ busy }: { busy: boolean }) {
           )}
         </div>
       )}
-      <div className="row">
+      <div className="row flex-wrap gap-2">
+        {offered && (
+          <Button icon="system_update_alt" disabled={busy} onClick={() => setConfirmingDownload(true)}>
+            Install update
+          </Button>
+        )}
         <Button
-          icon="system_update_alt"
+          variant={offered ? 'secondary' : 'primary'}
+          icon="upload"
           loading={installing.pending}
-          disabled={!file || busy}
-          onClick={() => setConfirming(true)}
+          disabled={busy}
+          onClick={() => input.current?.click()}
         >
-          {installing.pending ? 'Installing…' : 'Install update'}
+          {installing.pending ? 'Installing…' : 'Install update from a file…'}
         </Button>
       </div>
 
-      {confirming && file && (
+      {confirmingDownload && offered && (
+        <AlertDialog
+          title={`Install RasBeacon ${offered}?`}
+          confirmLabel="Install"
+          busyLabel="Starting…"
+          onConfirm={downloadUpdate}
+          onClose={() => setConfirmingDownload(false)}
+        >
+          <p>
+            RasBeacon downloads it ({size}) from GitHub and installs it, then restarts; connected devices are offline
+            for about two minutes. If the new version doesn&apos;t start correctly, RasBeacon goes back to this one by
+            itself.
+          </p>
+          {status.hotspot.metered && <p>This connection is metered: the download uses {size} of data.</p>}
+        </AlertDialog>
+      )}
+      {file && (
         <AlertDialog
           title="Install the update?"
           confirmLabel="Install"
@@ -416,7 +457,7 @@ function InstallUpdate({ busy }: { busy: boolean }) {
             // The group shows the progress; the alert closes at once.
             void installing.run(file);
           }}
-          onClose={() => setConfirming(false)}
+          onClose={() => setFile(null)}
         >
           <p>
             Install <span className="font-mono wrap-anywhere">{file.name}</span>? RasBeacon restarts afterwards;

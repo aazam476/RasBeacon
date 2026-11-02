@@ -704,6 +704,10 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
         const update = await attempt(() => api.installUpdate(file));
         patchStatus((status) => ({ ...status, update }));
       },
+      downloadUpdate: async () => {
+        await attempt(api.downloadUpdate);
+        await refreshStatus();
+      },
       saveSwapSettings: async (sizeGb) => {
         store('swapSettings', await attempt(() => api.putSwapSettings(sizeGb), sameNames('sizeGb')));
         await refreshStatus();
