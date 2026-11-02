@@ -8,7 +8,7 @@
 //   await user.click(screen.getByRole('button', { name: 'Save' }));
 //   expect(device.saveVpnDetails).toHaveBeenCalledWith(...);
 
-import { createEvent, fireEvent, render, screen } from '@testing-library/react';
+import { createEvent, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
@@ -108,6 +108,11 @@ export async function openRow(user: ReturnType<typeof userEvent.setup>, title: s
  * The group of rows under a heading (a Section), to look inside with `within(…)`. Sections
  * aren't labelled regions (see web/src/ui/Section.tsx), so this finds them by their heading.
  */
+/** The Internet page's one Save, on the bar at the bottom that shows while there are changes. */
+export function pageSave(): HTMLElement {
+  return within(screen.getByRole('region', { name: 'Unsaved changes' })).getByRole('button', { name: 'Save' });
+}
+
 export function section(title: string): HTMLElement {
   const group = screen.getByRole('heading', { name: title }).closest('section');
   if (!group) throw new Error(`"${title}" is not a section's heading`);

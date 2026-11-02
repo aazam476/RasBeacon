@@ -1,4 +1,4 @@
-// Internet page: the list of Wi-Fi networks to join. Changes collect in the list and are saved
+// Internet page: the list of saved Wi-Fi networks. Changes collect in the list and are saved
 // together with the bar at the bottom.
 import { screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
@@ -11,11 +11,11 @@ function renderList(change?: Parameters<typeof fakeDevice>[0], actions?: Paramet
 }
 
 const order = () =>
-  within(section('Wi-Fi networks to join'))
+  within(section('Saved Wi-Fi networks'))
     .getAllByRole('listitem')
     .map((row) => row.textContent?.match(/^\d+(\S+?)(Connected|Open|Username|WPA)/)?.[1]);
 
-/** Save on the bar at the bottom (the DNS row has a Save of its own). */
+/** Save on the bar at the bottom. */
 const saveList = () =>
   within(screen.getByRole('region', { name: 'Unsaved changes' })).getByRole('button', { name: 'Save' });
 
@@ -101,7 +101,7 @@ describe('saved networks', () => {
       router.uplinkSettings.networks = [];
       router.uplinkSettings.wifiUplinkAvailable = false;
     });
-    expect(screen.getByText('No networks saved yet. Add one below.')).toBeTruthy();
+    expect(screen.getByText('No networks saved yet.')).toBeTruthy();
     expect(screen.getAllByRole('alert').some((alert) => alert.textContent?.includes('No Wi-Fi radio is free'))).toBe(
       true,
     );

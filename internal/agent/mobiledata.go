@@ -151,14 +151,11 @@ func (a *Agent) mobileDataNow() api.MobileData {
 	}
 }
 
-// mobileDataStatus is the month's total for the status, or nil when there
-// is nothing to show: no phone or modem plugged in, nothing used this
-// month and no limit set. The caller holds a.mu.
+// mobileDataStatus is the month's total for the status. It is always
+// there: the Internet page shows it with or without a phone plugged in,
+// to set the limit before a trip. The caller holds a.mu.
 func (a *Agent) mobileDataStatus() *api.MobileData {
 	data := a.mobileDataNow()
-	if data.UsedBytes == 0 && data.LimitMB == 0 && len(a.mobileInterfaces()) == 0 {
-		return nil
-	}
 	return &data
 }
 

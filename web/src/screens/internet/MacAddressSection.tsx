@@ -1,9 +1,10 @@
-import { useState, type FormEvent } from 'react';
 import { useDevice } from '@/data/device';
 import type { Client, MACChoice, UplinkSettings } from '@/data/types';
-import { useAction } from '@/lib/useAction';
-import { FormActions, Notice, Row, Section, SelectField, TextField } from '@/ui';
+import { usePagePart } from '@/lib/pageForm';
+import { useForm } from '@/lib/useForm';
+import { Row, Section, SelectField, TextField } from '@/ui';
 import { clientName } from '../common/clientDisplay';
+import { PART_ORDER } from './partOrder';
 
 type Mode = '' | 'random' | 'cloned';
 
@@ -102,54 +103,36 @@ function UplinkMac({
 /**
  * The MAC address RasBeacon shows the networks it joins, over Wi-Fi and Ethernet alike: the Pi's
  * own, a random one, or a cloned one, so a network that only lets in a device it knows (a hotel
- * that registered your laptop, a modem that remembers one device) lets RasBeacon in.
+ * that registered your laptop, a modem that remembers one device) lets RasBeacon in. The page's
+ * Save saves it.
  */
 export function MacAddressSection({ settings, clients }: { settings: UplinkSettings; clients: Client[] }) {
   const { saveUplinkMac } = useDevice();
-  const [draft, setDraft] = useState(() => draftOf(settings.mac));
-  const [saved, setSaved] = useState(false);
-  const saving = useAction(async () => {
-    setSaved(false);
-    await saveUplinkMac(choiceOf(draft, settings.mac));
-    setSaved(true);
+  const form = useForm(draftOf(settings.mac), (draft) => saveUplinkMac(choiceOf(draft, settings.mac)));
+  usePagePart('mac', {
+    order: PART_ORDER.mac,
+    dirty: form.dirty,
+    pending: form.pending,
+    error: form.error,
+    submit: form.submit,
+    discard: form.discard,
+    title: 'MAC address',
   });
   if (!settings.wifiUplinkAvailable && !settings.ethernetPresent) return null;
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    saving.run();
-  }
-
   return (
-    <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-7">
-      <Section
-        title="MAC address"
-        footer="The address networks see when RasBeacon joins them, over Wi-Fi and Ethernet. Random hides the Pi from networks that track devices; cloned takes the place of a device the network already knows."
-      >
-        <UplinkMac
-          label="Address"
-          draft={draft}
-          onChange={(next) => {
-            setDraft(next);
-            setSaved(false);
-          }}
-          saved={settings.mac}
-          clients={clients}
-          error={saving.fieldErrors.mac}
-        />
-      </Section>
-      {draft.mode !== '' && (
-        <Notice tone="info">
-          <p>Saving reconnects to the network with the new address. A hotel login page may ask you to log in again.</p>
-        </Notice>
-      )}
-      <FormActions
-        label="Save"
-        busyLabel="Saving…"
-        pending={saving.pending}
-        error={saving.error}
-        success={saved && 'Saved.'}
+    <Section
+      title="MAC address"
+      footer="The address networks see when RasBeacon joins them, over Wi-Fi and Ethernet. Random hides the Pi from networks that track devices; cloned takes the place of a device the network already knows. Changing it reconnects, so a hotel login page may ask you to log in again."
+    >
+      <UplinkMac
+        label="Address"
+        draft={form.values}
+        onChange={(next) => form.update(() => next, ['mac'])}
+        saved={settings.mac}
+        clients={clients}
+        error={form.fieldErrors.mac}
       />
-    </form>
+    </Section>
   );
 }

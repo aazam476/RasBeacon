@@ -1,10 +1,10 @@
 // The data phones and modems carried this month, with a monthly limit that only warns.
-import { screen, within } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { MobileData } from '@/data/types';
 import { ordinal } from '@/lib/format';
 import { InternetScreen } from '@/screens/internet/InternetScreen';
-import { fakeDevice, renderScreen, section } from '../render';
+import { fakeDevice, pageSave, renderScreen } from '../render';
 
 const october: MobileData = { usedBytes: 4_620_000_000, since: '2026-10-01T00:00:00Z', limitMb: 0, resetDay: 1 };
 
@@ -14,15 +14,17 @@ const withData = (data: Partial<MobileData> = {}) =>
   });
 
 describe('mobile data', () => {
-  it('shows nothing without a phone, a modem or a limit', () => {
+  it('shows zero before anything was counted, with no limit', () => {
     renderScreen(<InternetScreen />, fakeDevice(), '/internet');
-    expect(screen.queryByRole('heading', { name: 'Mobile data' })).toBeNull();
+    expect(screen.getByText('Data used this month')).toBeTruthy();
+    expect(screen.getByText(/^0\sB$/)).toBeTruthy();
+    expect(screen.queryByRole('meter')).toBeNull();
   });
 
   it('shows what was used since the month started', () => {
     renderScreen(<InternetScreen />, withData(), '/internet');
     expect(screen.getByText(/^4\.6\sGB$/)).toBeTruthy();
-    expect(screen.getByText(/since October 1\./)).toBeTruthy();
+    expect(screen.getByText(/counted since October 1;/)).toBeTruthy();
     expect(screen.queryByRole('meter')).toBeNull();
   });
 
@@ -42,7 +44,7 @@ describe('mobile data', () => {
     const { user } = renderScreen(<InternetScreen />, device, '/internet');
     await user.type(screen.getByLabelText('Monthly limit'), '2.5');
     await user.selectOptions(screen.getByLabelText('Month starts on the'), '15');
-    await user.click(within(section('Mobile data')).getByRole('button', { name: 'Save' }));
+    await user.click(pageSave());
     expect(device.saveMobileData).toHaveBeenCalledWith(2500, 15);
   });
 
@@ -53,7 +55,7 @@ describe('mobile data', () => {
     await user.clear(amount);
     await user.type(amount, 'lots');
     expect(screen.getByText('Enter an amount up to 1,000 GB, or leave it empty for no limit.')).toBeTruthy();
-    expect(within(section('Mobile data')).getByRole('button', { name: 'Save' })).toHaveProperty('disabled', true);
+    expect(pageSave()).toHaveProperty('disabled', true);
   });
 
   it('resets the count after asking', async () => {

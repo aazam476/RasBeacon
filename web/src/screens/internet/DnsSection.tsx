@@ -1,27 +1,22 @@
-import type { FormEvent } from 'react';
 import { useDevice } from '@/data/device';
 import type { DNSSettings } from '@/data/types';
+import { usePagePart } from '@/lib/pageForm';
 import { useForm } from '@/lib/useForm';
 import { Loaded } from '@/shell/Loaded';
-import { Disclosure, FormActions, FormSwitchRow, Section, TextAreaField } from '@/ui';
+import { Disclosure, FormSwitchRow, Section, TextAreaField } from '@/ui';
+import { PART_ORDER } from './partOrder';
 
 /**
  * The DNS servers devices use: while their traffic isn't going through the VPN, and, with the
  * switch on, while it is (then reached through the VPN). Few people change them, so they are one
- * level down; the list shows when the row is opened.
+ * level down; the list shows when the row is opened. The page's Save saves them.
  */
 export function DnsSection() {
   const { dnsSettings, reload } = useDevice();
 
   return (
     <Loaded data={dnsSettings} what="the DNS servers" onRetry={() => reload('dnsSettings')}>
-      {(settings) => (
-        <Section>
-          <Disclosure title="DNS servers" leading={{ icon: 'dns' }} content="rows">
-            <DnsForm settings={settings} />
-          </Disclosure>
-        </Section>
-      )}
+      {(settings) => <DnsForm settings={settings} />}
     </Loaded>
   );
 }
@@ -32,44 +27,45 @@ function DnsForm({ settings }: { settings: DNSSettings }) {
     saveDnsSettings(values.servers, values.withVpn),
   );
   const { values, setField, fieldErrors } = form;
-
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    form.submit();
-  }
+  usePagePart('dns', {
+    order: PART_ORDER.dns,
+    dirty: form.dirty,
+    pending: form.pending,
+    error: form.error,
+    submit: form.submit,
+    discard: form.discard,
+    title: 'DNS servers',
+  });
 
   return (
-    <form onSubmit={handleSubmit} noValidate className="row-group">
-      <TextAreaField
-        label="DNS servers"
-        labelNote="(up to 4, one per line)"
-        hint="Enter DNS or DNS-over-HTTPS addresses, such as 1.1.1.1 or https://cloudflare-dns.com/dns-query. Your devices' lookups go to the first server, then to the next if it doesn't answer. Leave empty to use the network's DNS servers. Login pages, such as a hotel's, always use the network's DNS."
-        mono
-        rows={rowsFor(settings.servers)}
-        placeholder={'https://cloudflare-dns.com/dns-query\n1.1.1.1'}
-        value={values.servers}
-        onChange={(servers) => setField('servers', servers)}
-        error={fieldErrors.servers}
-      />
-      <FormSwitchRow
-        label="Use these servers while the VPN is on"
-        description="Overrides the DNS servers in the WireGuard profile."
-        checked={values.withVpn}
-        onChange={(withVpn) => setField('withVpn', withVpn)}
-        disabled={values.servers.trim() === ''}
-      />
-      <div className="row">
-        <FormActions
-          inRow
-          className="w-full"
-          label="Save"
-          busyLabel="Saving…"
-          pending={form.pending}
-          error={form.error}
-          success={form.saved && 'Saved.'}
+    <Section>
+      {/* Opens by itself when the router refused the servers, so the reason shows. */}
+      <Disclosure
+        title="DNS servers"
+        leading={{ icon: 'dns' }}
+        content="rows"
+        defaultOpen={Boolean(fieldErrors.servers)}
+      >
+        <TextAreaField
+          label="DNS servers"
+          labelNote="(up to 4, one per line)"
+          hint="Enter DNS or DNS-over-HTTPS addresses, such as 1.1.1.1 or https://cloudflare-dns.com/dns-query. Your devices' lookups go to the first server, then to the next if it doesn't answer. Leave empty to use the network's DNS servers. Login pages, such as a hotel's, always use the network's DNS."
+          mono
+          rows={rowsFor(settings.servers)}
+          placeholder={'https://cloudflare-dns.com/dns-query\n1.1.1.1'}
+          value={values.servers}
+          onChange={(servers) => setField('servers', servers)}
+          error={fieldErrors.servers}
         />
-      </div>
-    </form>
+        <FormSwitchRow
+          label="Use these servers while the VPN is on"
+          description="Overrides the DNS servers in the WireGuard profile."
+          checked={values.withVpn}
+          onChange={(withVpn) => setField('withVpn', withVpn)}
+          disabled={values.servers.trim() === ''}
+        />
+      </Disclosure>
+    </Section>
   );
 }
 

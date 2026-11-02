@@ -338,8 +338,7 @@ type UplinkStatus struct {
 	// Modem is the mobile broadband modem that needs ModemManager (nil
 	// without one). It carries the internet when Kind is "modem".
 	Modem *ModemStatus `json:"modem,omitempty"`
-	// MobileData is the data used through phones and modems this month
-	// (nil while none was used and no phone, modem or limit is set).
+	// MobileData is the data used through phones and modems this month.
 	MobileData *MobileData `json:"mobileData,omitempty"`
 	// SubnetMask and InterfaceMAC describe RasBeacon's address on the
 	// uplink in use ("" when not connected).

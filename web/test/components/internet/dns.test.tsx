@@ -1,8 +1,8 @@
 // Internet page: the DNS servers.
-import { within } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { InternetScreen } from '@/screens/internet/InternetScreen';
-import { fakeDevice, openRow, renderScreen } from '../render';
+import { fakeDevice, openRow, pageSave, renderScreen } from '../render';
 
 describe('DNS servers', () => {
   it('keeps the list out of the row until it is opened', () => {
@@ -25,8 +25,31 @@ describe('DNS servers', () => {
     const row = within(await openRow(user, 'DNS servers'));
     await user.type(row.getByLabelText(/^DNS servers/), 'https://cloudflare-dns.com/dns-query\n1.1.1.1');
     await user.click(row.getByLabelText('Use these servers while the VPN is on'));
-    await user.click(row.getByRole('button', { name: 'Save' }));
+    await user.click(pageSave());
     expect(device.saveDnsSettings).toHaveBeenCalledWith('https://cloudflare-dns.com/dns-query\n1.1.1.1', true);
+  });
+
+  it('opens by itself to show why the router refused the servers', async () => {
+    const device = fakeDevice(
+      (router) => {
+        router.dnsSettings = { servers: [], withVpn: false };
+      },
+      {
+        saveDnsSettings: async () => {
+          const { FieldErrors } = await import('@/data/errors');
+          throw new FieldErrors({ servers: 'Not a DNS server: nope' });
+        },
+      },
+    );
+    const { user, container } = renderScreen(<InternetScreen />, device, '/internet');
+    const row = within(await openRow(user, 'DNS servers'));
+    await user.type(row.getByLabelText(/^DNS servers/), 'nope');
+    const details = [...container.querySelectorAll('details')].find((d) => d.textContent?.includes('DNS servers'))!;
+    details.open = false;
+    await user.click(pageSave());
+    expect(await screen.findByText('Not a DNS server: nope')).toBeTruthy();
+    expect(details.open).toBe(true);
+    expect(screen.getByText('Check DNS servers.')).toBeTruthy();
   });
 
   it('can’t use the servers with the VPN while there are none', async () => {

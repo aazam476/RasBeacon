@@ -25,8 +25,8 @@ interface SavedNetworksSectionProps {
 
 /**
  * The Wi-Fi networks RasBeacon joins, most preferred first: it uses a plugged-in Ethernet cable
- * when there is one, otherwise the first network in this list that is in range. Changes are
- * saved together, with the bar at the bottom of the page.
+ * when there is one, then the first network in this list that is in range, then a phone or modem.
+ * Changes are saved with the page's bar at the bottom.
  */
 export function SavedNetworksSection({ draft, wifiUplinkAvailable, connectedSsid }: SavedNetworksSectionProps) {
   const [changingPassword, setChangingPassword] = useState<number | null>(null);
@@ -43,11 +43,11 @@ export function SavedNetworksSection({ draft, wifiUplinkAvailable, connectedSsid
         </Notice>
       )}
       <Section
-        title="Wi-Fi networks to join"
-        footer="Most preferred first. RasBeacon uses a plugged-in Ethernet cable first, otherwise the first network in range. With a random MAC address, the network sees a made-up address instead of the Pi's, new at each restart."
+        title="Saved Wi-Fi networks"
+        footer="Most preferred first. RasBeacon uses a plugged-in Ethernet cable first, then the first of these networks in range, then a phone or modem plugged in by USB."
       >
         {networks.length === 0 ? (
-          <Row title={<span className="text-label-2">No networks saved yet. Add one below.</span>} />
+          <Row title={<span className="text-label-2">No networks saved yet.</span>} />
         ) : (
           <ol className="rows">
             {networks.map((network, index) => (

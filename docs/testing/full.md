@@ -146,17 +146,18 @@ first if you want them; everything else works from the web pages alone.
     *Trust*: the same; reboot RasBeacon: it isn't asked to trust again.
     **HiLink modem:** the same, listed as the modem's name. Note in the
     report which phones and modems worked, and whether a modem needed a
-    powered USB hub. **Mobile data:** Internet → *Mobile data* shows the
-    data used since the month started. Note it, load a large page or video
+    powered USB hub. **Mobile data:** Internet → *Phones and modems* shows
+    the data used since the month started. Note it, load a large page or video
     on a device for a minute, and check that it grew by about what the
     phone's own data counter shows. Set *Monthly limit* a little above the
-    count, **Save**, and use more: Status warns at 90% and again once it is
+    count, **Save** (on the bar at the bottom), and use more: Status warns at 90% and again once it is
     over. Reboot RasBeacon: the count is kept (it may be up to a few
     seconds short). **Reset count**: it starts again from zero.
 11. **A modem that needs ModemManager (new, if you have one: M.2 in a USB
     case, or a 5G stick that isn't HiLink):** plug it in with a SIM.
-    **Expect:** Internet → *Mobile modem* shows its name. With a SIM PIN:
-    *Needs the SIM's PIN*; type a **wrong** PIN, **Save**: *The SIM refused
+    **Expect:** Internet → *Phones and modems* shows its name. With a SIM
+    PIN: *Needs the SIM's PIN*, and *Modem settings* open by themselves;
+    type a **wrong** PIN, **Save**: *The SIM refused
     the PIN*, and waiting 5 minutes doesn't use up more tries (the tries
     left stay the same). The right PIN: it connects (*Connected*, the
     operator, 4G/5G and signal), Status says *Connected through <modem>*,
@@ -171,13 +172,17 @@ first if you want them; everything else works from the web pages alone.
     reboot. **The Pi's own** brings back the address it had at first.
     With a cable to another router, Ethernet uses the same choice (a
     random one differs from Wi-Fi's in its last digit).
+    **One Save:** change the MAC address and the DNS servers, then a
+    saved network's order; **expect** one bar at the bottom whose
+    **Save** saves all three, and **Discard changes** throws them away.
 
 ## 5. Your own DNS servers and DNS-over-HTTPS (new)
 
 The VPN stays **off** for this section.
 
-1. Internet → **DNS servers** row. **Expect:** the row lists no servers;
-   opening it shows an empty box.
+1. Internet → **DNS servers** row (the last on the page). **Expect:** the
+   row lists no servers; opening it shows an empty box. Its changes are
+   saved with the bar at the bottom of the page.
 2. Type `dns.google`, **Save**. **Expect:** *Saved.*; the box now shows
    `https://dns.google/dns-query`.
 3. On phone A, open <https://dnsleaktest.com> (standard test) or

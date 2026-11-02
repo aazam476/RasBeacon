@@ -1,15 +1,27 @@
 import { useDevice } from '@/data/device';
 import type { SavedNetwork, UplinkSettings } from '@/data/types';
+import { usePagePart } from '@/lib/pageForm';
 import { useForm } from '@/lib/useForm';
+import { PART_ORDER } from './partOrder';
 
 /**
- * The list of Wi-Fi networks to join, as edited on the Internet page. Changes collect here and
- * are saved together, because the router stores the whole list at once.
+ * The list of saved Wi-Fi networks, as edited on the Internet page. Changes collect here and
+ * are saved together, because the router stores the whole list at once, with the page's Save.
  */
 export function useNetworkDraft(settings: UplinkSettings) {
   const { saveWifiNetworks } = useDevice();
   const form = useForm(settings.networks, saveWifiNetworks);
   const networks = form.values;
+  usePagePart('networks', {
+    order: PART_ORDER.networks,
+    dirty: form.dirty,
+    pending: form.pending,
+    error: form.error,
+    submit: form.submit,
+    discard: form.discard,
+    savedNote: 'RasBeacon is joining the networks now; see the Status page.',
+    title: 'Saved Wi-Fi networks',
+  });
 
   /** Applies a change to the list; old error messages about list positions no longer apply. */
   function change(edit: (list: SavedNetwork[]) => SavedNetwork[]) {

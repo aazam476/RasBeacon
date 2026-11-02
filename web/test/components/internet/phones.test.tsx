@@ -23,9 +23,10 @@ const onPhone = () =>
   });
 
 describe('phones and modems', () => {
-  it('show nothing without one', () => {
+  it('say when none is plugged in, so the section is always there', () => {
     renderScreen(<InternetScreen />, fakeDevice(), '/internet');
-    expect(screen.queryByRole('heading', { name: 'Phones and modems' })).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Phones and modems' })).toBeTruthy();
+    expect(screen.getByText('No phone or modem plugged in')).toBeTruthy();
   });
 
   it('show the phone in use, with its data', () => {

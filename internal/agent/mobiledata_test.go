@@ -60,8 +60,8 @@ func TestMobileData_CountsWhatPhonesCarry(t *testing.T) {
 	c := &fakeClock{now: time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)}
 	e.agent.now = func() time.Time { return c.now }
 
-	// Nothing plugged in or used: nothing to show.
-	if got := e.agent.Status().Uplink.MobileData; got != nil {
+	// Nothing plugged in or used: the count is still there, at zero.
+	if got := e.agent.Status().Uplink.MobileData; got == nil || got.UsedBytes != 0 || got.LimitMB != 0 {
 		t.Errorf("without a phone: %+v", got)
 	}
 
@@ -165,9 +165,9 @@ func TestMobileData_LimitWarnsAndCanBeReset(t *testing.T) {
 		}
 	}
 
-	// A limit alone shows the count, with nothing plugged in.
+	// A limit can be set with nothing plugged in.
 	got, err := e.agent.UpdateMobileData(api.MobileData{LimitMB: 1000, ResetDay: 1})
-	if err != nil || got.LimitMB != 1000 || e.agent.Status().Uplink.MobileData == nil {
+	if err != nil || got.LimitMB != 1000 || e.agent.Status().Uplink.MobileData.LimitMB != 1000 {
 		t.Fatalf("saved = %+v, %v", got, err)
 	}
 	warnings := func() string { return strings.Join(e.agent.Status().Warnings, "\n") }

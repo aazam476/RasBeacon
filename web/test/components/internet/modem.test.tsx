@@ -1,11 +1,11 @@
 // Internet page: a 4G/5G modem that needs ModemManager.
-import { screen, within } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { ModemStatus } from '@/data/types';
 import { FieldErrors } from '@/data/errors';
 import { InternetScreen } from '@/screens/internet/InternetScreen';
 import { StatusScreen } from '@/screens/status/StatusScreen';
-import { fakeDevice, renderScreen } from '../render';
+import { fakeDevice, pageSave, renderScreen } from '../render';
 
 const connected: ModemStatus = {
   name: 'Quectel RM520N-GL',
@@ -24,13 +24,11 @@ function withModem(modem: ModemStatus, actions = {}) {
   }, actions);
 }
 
-/** The modem's form (the page has other Save buttons). */
-const modemForm = () => screen.getByLabelText(/^APN/).closest('form')!;
-
 describe('mobile modem', () => {
-  it('shows nothing without one', () => {
+  it('shows nothing of a modem without one', () => {
     renderScreen(<InternetScreen />, fakeDevice(), '/internet');
-    expect(screen.queryByRole('heading', { name: 'Mobile modem' })).toBeNull();
+    expect(screen.queryByText('Modem settings')).toBeNull();
+    expect(screen.queryByLabelText(/^APN/)).toBeNull();
   });
 
   it('shows the connected modem and its network', () => {
@@ -49,7 +47,7 @@ describe('mobile modem', () => {
   });
 
   it.each([
-    ['pin-needed', /Enter its PIN below; RasBeacon tries it once\. The SIM has 1 try left\./],
+    ['pin-needed', /Enter its PIN under Modem settings; RasBeacon tries it once\. The SIM has 1 try left\./],
     ['pin-refused', /RasBeacon won’t try that PIN again/],
     ['puk-needed', /unblock it with its PUK code/],
     ['no-sim', /Put a SIM card in the modem/],
@@ -71,9 +69,10 @@ describe('mobile modem', () => {
   it('saves the APN and the PIN', async () => {
     const device = withModem({ ...connected, state: 'pin-needed' });
     const { user } = renderScreen(<InternetScreen />, device, '/internet');
+    // Modem settings open by themselves while the SIM needs its PIN.
     await user.type(screen.getByLabelText(/^APN/), 'fast.t-mobile.com');
     await user.type(screen.getByLabelText(/^SIM PIN/), '4711');
-    await user.click(within(modemForm()).getByRole('button', { name: 'Save' }));
+    await user.click(pageSave());
     expect(device.saveModemSettings).toHaveBeenCalledWith(
       expect.objectContaining({ apn: 'fast.t-mobile.com', pin: '4711', password: '' }),
     );
@@ -89,7 +88,9 @@ describe('mobile modem', () => {
       },
     );
     const { user } = renderScreen(<InternetScreen />, device, '/internet');
-    await user.click(within(modemForm()).getByRole('button', { name: 'Save' }));
+    await user.type(screen.getByLabelText(/^SIM PIN/), '1');
+    await user.click(pageSave());
     expect(await screen.findByText('A SIM PIN is 4 to 8 digits.')).toBeTruthy();
+    expect(screen.getByText('Check Modem settings.')).toBeTruthy();
   });
 });

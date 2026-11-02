@@ -3,10 +3,10 @@ import { screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { FieldErrors } from '@/data/errors';
 import { InternetScreen } from '@/screens/internet/InternetScreen';
-import { fakeDevice, renderScreen } from '../render';
+import { fakeDevice, pageSave, renderScreen, section } from '../render';
 
-/** The MAC address form (the page has other Save buttons). */
-const macForm = () => screen.getByRole('heading', { name: 'MAC address' }).closest('form')!;
+/** The MAC address section. */
+const macForm = () => section('MAC address');
 
 describe('MAC address', () => {
   it('starts with the Pi’s own address, one choice for Wi-Fi and Ethernet, and no reconnect note', () => {
@@ -15,7 +15,6 @@ describe('MAC address', () => {
     expect((form.getByLabelText('Address') as HTMLSelectElement).value).toBe('');
     expect(form.queryByLabelText('Wi-Fi')).toBeNull();
     expect(form.queryByLabelText('Ethernet')).toBeNull();
-    expect(screen.queryByText(/Saving reconnects/)).toBeNull();
   });
 
   it('is hidden when there is neither a Wi-Fi uplink nor an Ethernet port', () => {
@@ -33,7 +32,6 @@ describe('MAC address', () => {
     });
     renderScreen(<InternetScreen />, device, '/internet');
     expect(within(macForm()).getByText('06:11:22:33:44:55')).toBeTruthy();
-    expect(screen.getByText(/Saving reconnects/)).toBeTruthy();
   });
 
   it('clones a device’s address and warns while that device is on the hotspot', async () => {
@@ -44,7 +42,7 @@ describe('MAC address', () => {
     await user.selectOptions(form.getByLabelText('Copy a device’s address'), 'f4:d4:88:62:3b:01');
     expect((form.getByLabelText('Address to use') as HTMLInputElement).value).toBe('f4:d4:88:62:3b:01');
     expect(form.getByText(/Work laptop on your hotspot uses this address/)).toBeTruthy();
-    await user.click(form.getByRole('button', { name: 'Save' }));
+    await user.click(pageSave());
     expect(device.saveUplinkMac).toHaveBeenCalledWith({ mode: 'cloned', address: 'f4:d4:88:62:3b:01' });
     expect(await screen.findByText('Saved.')).toBeTruthy();
   });
@@ -55,11 +53,14 @@ describe('MAC address', () => {
     });
     const { user } = renderScreen(<InternetScreen />, device, '/internet');
     const form = within(macForm());
-    await user.click(form.getByRole('button', { name: 'Save' }));
+    // Away and back: still the random address it had.
+    await user.selectOptions(form.getByLabelText('Address'), 'cloned');
+    await user.selectOptions(form.getByLabelText('Address'), 'random');
+    await user.click(pageSave());
     expect(device.saveUplinkMac).toHaveBeenLastCalledWith({ mode: 'random', address: '06:11:22:33:44:55' });
     await user.selectOptions(form.getByLabelText('Address'), 'cloned');
     await user.type(form.getByLabelText('Address to use'), ' 3A:1F:22:AA:BB:CC ');
-    await user.click(form.getByRole('button', { name: 'Save' }));
+    await user.click(pageSave());
     expect(device.saveUplinkMac).toHaveBeenLastCalledWith({ mode: 'cloned', address: '3a:1f:22:aa:bb:cc' });
   });
 
@@ -68,7 +69,7 @@ describe('MAC address', () => {
     const { user } = renderScreen(<InternetScreen />, device, '/internet');
     const form = within(macForm());
     await user.selectOptions(form.getByLabelText('Address'), 'random');
-    await user.click(form.getByRole('button', { name: 'Save' }));
+    await user.click(pageSave());
     expect(device.saveUplinkMac).toHaveBeenCalledWith({ mode: 'random', address: undefined });
   });
 
@@ -82,7 +83,7 @@ describe('MAC address', () => {
     const form = within(macForm());
     await user.selectOptions(form.getByLabelText('Address'), 'cloned');
     await user.type(form.getByLabelText('Address to use'), '01:00:5e:00:00:01');
-    await user.click(form.getByRole('button', { name: 'Save' }));
+    await user.click(pageSave());
     expect(await form.findByText('Type a MAC address like 3a:1f:22:aa:bb:cc.')).toBeTruthy();
     expect(screen.queryByText('Saved.')).toBeNull();
   });

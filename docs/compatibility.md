@@ -61,7 +61,8 @@ A phone sharing its connection over USB, or a "HiLink" modem (one that
 works like a small router with its own DHCP server), carries the internet
 when neither Ethernet nor Wi-Fi has it. Modems that need a modem manager
 (QMI or MBIM: most M.2 and many 5G modems) work through ModemManager: the
-Internet page's *Mobile modem* takes the carrier's APN and the SIM's PIN
+Internet page's *Phones and modems* → *Modem settings* takes the carrier's APN
+and the SIM's PIN
 (tried once: a refused PIN is never sent again, so it can't block the
 SIM). A Pi 4's USB
 ports give 1.2 A in total: a modem that draws more needs a powered USB hub.

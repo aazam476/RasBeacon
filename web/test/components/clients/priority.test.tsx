@@ -7,7 +7,7 @@ import { FieldErrors } from '@/data/errors';
 import type { DeviceActions } from '@/data/device';
 import { ClientsScreen } from '@/screens/clients/ClientsScreen';
 import { InternetScreen } from '@/screens/internet/InternetScreen';
-import { fakeDevice, renderScreen } from '../render';
+import { fakeDevice, pageSave, renderScreen } from '../render';
 
 function renderClients(change?: (router: MockRouter) => void, actions: Partial<DeviceActions> = {}) {
   const device = fakeDevice(change, actions);
@@ -126,9 +126,9 @@ describe('the internet speed on the Internet page', () => {
     const { user } = renderScreen(<InternetScreen />, device, '/internet');
     const group = within(speedSection());
     await user.click(group.getByRole('button', { name: /Use the last speed test \(94\.4 down, 21 up\)/ }));
-    await user.click(group.getByRole('button', { name: 'Save' }));
+    await user.click(pageSave());
     expect(device.saveQoSSettings).toHaveBeenCalledWith({ downloadKbps: 94_400, uploadKbps: 21_000 });
-    expect(await group.findByText('Saved.')).toBeTruthy();
+    expect(await screen.findByText('Saved.')).toBeTruthy();
   });
 
   it('checks the speeds as they are typed, and shows the router’s answer', async () => {
@@ -141,11 +141,11 @@ describe('the internet speed on the Internet page', () => {
     const group = within(speedSection());
     await user.type(group.getByLabelText(/^Download/), 'fast');
     expect(group.getByText('Use a speed from 1 to 10,000 Mbps, or leave it empty.')).toBeTruthy();
-    expect((group.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((pageSave() as HTMLButtonElement).disabled).toBe(true);
     await user.clear(group.getByLabelText(/^Download/));
     await user.type(group.getByLabelText(/^Download/), '50,5');
     await user.type(group.getByLabelText(/^Upload/), '9000');
-    await user.click(group.getByRole('button', { name: 'Save' }));
+    await user.click(pageSave());
     expect(device.saveQoSSettings).toHaveBeenCalledWith({ downloadKbps: 50_500, uploadKbps: 9_000_000 });
     expect(await group.findByText('Too fast for this.')).toBeTruthy();
   });
