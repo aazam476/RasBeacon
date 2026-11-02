@@ -993,16 +993,13 @@ export interface LANPortStatus {
   foreignDhcpServer?: string;
 }
 
-/** Where the welcome page is shown. */
-export type WelcomeNetworks = 'hotspot' | 'guest' | 'both';
-
 /**
- * GET/PUT /api/v1/settings/welcome: the welcome page, the owner's own captive portal. Until a
- * device on `networks` accepts it, its web requests show the page and it gets no internet.
+ * GET/PUT /api/v1/settings/welcome: the welcome page, the owner's own captive portal on the guest
+ * network. Until a guest's device accepts it, its web requests show the page and it gets no
+ * internet. The hotspot never shows it.
  */
 export interface WelcomeSettings {
   enabled: boolean;
-  networks: WelcomeNetworks;
   /** 1 to 60 characters. */
   title: string;
   /** Up to 1,000 characters; "" for none. */
@@ -1013,8 +1010,6 @@ export interface WelcomeSettings {
   accessCode: string;
   /** How long an acceptance lasts; 0 until the owner asks again on the Clients page. */
   askAgainHours: number;
-  /** Also show it to devices on wired ports (otherwise they are let through). */
-  includeWired: boolean;
   /** The page's color, like "#0c8a9c". */
   color: string;
   /** A PNG or JPEG data: URL (up to about 100 KB); "" for none. */

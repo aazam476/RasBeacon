@@ -5,13 +5,11 @@ import { welcomeProblems } from '@/lib/welcome';
 
 const good: WelcomeSettings = {
   enabled: true,
-  networks: 'both',
   title: 'Welcome',
   message: '',
   terms: '',
   accessCode: '',
   askAgainHours: 24,
-  includeWired: false,
   color: '#0C8A9C',
   logo: 'data:image/jpeg;base64,/9j/4AAQ',
   customPage: '',

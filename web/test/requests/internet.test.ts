@@ -57,13 +57,11 @@ describe('DNS', () => {
 describe('welcome page', () => {
   const settings: WelcomeSettings = {
     enabled: true,
-    networks: 'guest',
     title: 'Welcome',
     message: '',
     terms: 'Be kind.',
     accessCode: '4711',
     askAgainHours: 24,
-    includeWired: false,
     color: '#0c8a9c',
     logo: '',
     customPage: '',

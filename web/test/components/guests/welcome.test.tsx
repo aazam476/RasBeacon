@@ -20,7 +20,6 @@ describe('welcome page', () => {
     const device = fakeDevice();
     const { user } = renderScreen(<WelcomeScreen />, device, PATH);
     await user.click(screen.getByRole('checkbox', { name: 'Show a welcome page' }));
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Show it on' }), 'Both');
     const title = screen.getByRole('textbox', { name: 'Title' });
     await user.clear(title);
     await user.type(title, 'Cabin Wi-Fi');
@@ -31,27 +30,25 @@ describe('welcome page', () => {
     fireEvent.input(screen.getByLabelText('Color'), { target: { value: '#ff3b30' } });
     await user.type(screen.getByRole('textbox', { name: /Access code/ }), '4711');
     await user.selectOptions(screen.getByRole('combobox', { name: 'Ask again' }), 'Only once');
-    await user.click(screen.getByRole('checkbox', { name: /Also for wired devices/ }));
     await user.click(screen.getByRole('button', { name: 'Save' }));
     expect(device.saveWelcomeSettings).toHaveBeenCalledWith(
       expect.objectContaining({
         enabled: true,
-        networks: 'both',
         title: 'Cabin Wi-Fi',
         message: 'Hello',
         terms: 'Be kind.',
         color: '#ff3b30',
         accessCode: '4711',
         askAgainHours: 0,
-        includeWired: true,
       }),
     );
   });
 
-  it('only offers wired devices where the hotspot has the page', () => {
+  it('is for the guest network only', () => {
     renderScreen(<WelcomeScreen />, fakeDevice(), PATH);
-    // The sample's page is on the guest network only.
-    expect(screen.queryByRole('checkbox', { name: /Also for wired devices/ })).toBeNull();
+    expect(screen.getByText(/Your own devices on the hotspot never see it/)).toBeTruthy();
+    expect(screen.queryByRole('combobox', { name: 'Show it on' })).toBeNull();
+    expect(screen.queryByRole('checkbox', { name: /wired devices/ })).toBeNull();
   });
 
   it('shows the router’s answer next to its field', async () => {
@@ -108,14 +105,13 @@ describe('welcome page', () => {
     expect(await screen.findByText('Use an HTML page of up to 64 KB.')).toBeTruthy();
   });
 
-  it('says how many devices are in while it is on, and that your own devices see it too', () => {
+  it('says how many devices are in while it is on', () => {
     const device = fakeDevice((router) => {
-      router.welcomeSettings = { ...router.welcomeSettings, enabled: true, networks: 'hotspot', accepted: 3 };
+      router.welcomeSettings = { ...router.welcomeSettings, enabled: true, accepted: 3 };
     });
     renderScreen(<WelcomeScreen />, device, PATH);
     expect(screen.getByText('Devices let in')).toBeTruthy();
     expect(screen.getByText('3')).toBeTruthy();
-    expect(screen.getByText(/Your own devices on the hotspot see the page too/)).toBeTruthy();
   });
 
   it('notes when the guest network is off', () => {
@@ -130,8 +126,9 @@ describe('welcome page', () => {
 describe('welcome page on the Clients page', () => {
   it('shows who accepted, and asks a device again', async () => {
     const device = fakeDevice((router) => {
-      router.status.clients[0].welcome = 'accepted';
-      router.status.clients[1].welcome = 'waiting';
+      const [guest] = router.status.guest.clients;
+      guest.welcome = 'accepted';
+      router.status.guest.clients.push({ ...guest, mac: '3a:1f:22:aa:bb:99', welcome: 'waiting' });
     });
     const { user } = renderScreen(<ClientsScreen />, device, '/clients');
     expect(screen.getByText('Accepted')).toBeTruthy();
@@ -139,6 +136,6 @@ describe('welcome page on the Clients page', () => {
     const buttons = screen.getAllByRole('button', { name: 'Ask again' });
     expect(buttons).toHaveLength(1);
     await user.click(buttons[0]);
-    await waitFor(() => expect(device.resetWelcome).toHaveBeenCalledWith(device.status.data!.clients[0].mac));
+    await waitFor(() => expect(device.resetWelcome).toHaveBeenCalledWith(device.status.data!.guest.clients[0].mac));
   });
 });

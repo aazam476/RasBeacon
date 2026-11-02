@@ -1244,13 +1244,11 @@ type RestoreResult struct {
 // config.WelcomeConfig for each field).
 type WelcomeSettings struct {
 	Enabled       bool   `json:"enabled"`
-	Networks      string `json:"networks"`
 	Title         string `json:"title"`
 	Message       string `json:"message"`
 	Terms         string `json:"terms"`
 	AccessCode    string `json:"accessCode"`
 	AskAgainHours int    `json:"askAgainHours"`
-	IncludeWired  bool   `json:"includeWired"`
 	Color         string `json:"color"`
 	// Logo is a data: URL ("" for none).
 	Logo string `json:"logo"`

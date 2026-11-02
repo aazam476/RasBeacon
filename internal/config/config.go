@@ -1355,13 +1355,6 @@ func ValidateHostname(name string) error {
 	return nil
 }
 
-// Which networks the welcome page is shown on.
-const (
-	WelcomeOnHotspot = "hotspot"
-	WelcomeOnGuest   = "guest"
-	WelcomeOnBoth    = "both"
-)
-
 // Limits for the welcome page's content.
 const (
 	maxWelcomeTitle   = 60
@@ -1374,13 +1367,13 @@ const (
 	MaxWelcomePage = 64_000
 )
 
-// WelcomeConfig is the welcome page (the owner's own captive portal): until
-// a device accepts it, its web requests show the page and nothing else
-// reaches the internet.
+// WelcomeConfig is the welcome page (the owner's own captive portal) on
+// the guest network: until a guest's device accepts it, its web requests
+// show the page and nothing else reaches the internet. The hotspot is for
+// the owner's own, trusted devices, so it never shows the page. (Older
+// settings also had "networks" and "includeWired"; they are ignored.)
 type WelcomeConfig struct {
 	Enabled bool `json:"enabled"`
-	// Networks is WelcomeOnHotspot, WelcomeOnGuest or WelcomeOnBoth.
-	Networks string `json:"networks"`
 	// Title, Message and Terms are the page's text. With Terms, the page
 	// has an "I agree" box.
 	Title   string `json:"title"`
@@ -1392,9 +1385,6 @@ type WelcomeConfig struct {
 	// AskAgainHours is how long an acceptance lasts (0: until the owner
 	// asks again from the Clients page).
 	AskAgainHours int `json:"askAgainHours"`
-	// IncludeWired also shows the page to devices on wired ports;
-	// otherwise they are let through.
-	IncludeWired bool `json:"includeWired,omitempty"`
 	// Color is the page's accent color ("#0c8a9c").
 	Color string `json:"color,omitempty"`
 	// Logo is a PNG or JPEG picture as a data: URL ("" for none).
@@ -1414,8 +1404,6 @@ var (
 func (w WelcomeConfig) Validate() error {
 	invalid := func(field, message string) error { return &ValidationError{Field: field, Message: message} }
 	switch {
-	case w.Networks != WelcomeOnHotspot && w.Networks != WelcomeOnGuest && w.Networks != WelcomeOnBoth:
-		return invalid("networks", "Choose your hotspot, the guest network or both.")
 	case strings.TrimSpace(w.Title) == "" || utf8.RuneCountInString(w.Title) > maxWelcomeTitle:
 		return invalid("title", fmt.Sprintf("Give the page a title of up to %d characters.", maxWelcomeTitle))
 	case utf8.RuneCountInString(w.Message) > maxWelcomeMessage:
@@ -1441,7 +1429,6 @@ func (w WelcomeConfig) Validate() error {
 // DefaultWelcome is the welcome page before the owner changes it.
 func DefaultWelcome() WelcomeConfig {
 	return WelcomeConfig{
-		Networks:      WelcomeOnGuest,
 		Title:         "Welcome",
 		Message:       "Please read and accept the house rules to use the internet.",
 		AskAgainHours: 24,

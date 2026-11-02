@@ -1,7 +1,8 @@
 package agent
 
-// The welcome page: the owner's own captive portal (Guests page → Welcome
-// page). Until a device accepts it, its web requests show the page (served
+// The welcome page: the owner's own captive portal on the guest network
+// (Guests page → Welcome page). The hotspot is for the owner's own devices,
+// so it never shows the page. Until a guest's device accepts it, its web requests show the page (served
 // by rbweb on render.WelcomePort) and nothing else of it is forwarded; see
 // welcome_ok in firewall.nft.tmpl. Devices that accepted are kept, with
 // when to ask again, in WelcomeAcceptedFile.
@@ -47,9 +48,6 @@ type welcomeState struct {
 	// from WelcomeAcceptedFile on first use.
 	accepted map[string]time.Time
 	loaded   bool
-	// wired are devices on wired ports, let through without the page
-	// unless the owner includes them (see refreshWelcome).
-	wired map[string]bool
 	// failures counts wrong codes per device, and until when it must wait.
 	failures map[string]codeFailures
 }
@@ -60,10 +58,10 @@ type codeFailures struct {
 }
 
 // welcomeConfig is the welcome page's settings, or the defaults before the
-// owner saved any (settings from before the page existed). The caller
-// holds a.mu.
+// owner saved any (settings from before the page existed have no title,
+// which a saved page always has). The caller holds a.mu.
 func (a *Agent) welcomeConfig() config.WelcomeConfig {
-	if a.cfg.Welcome.Networks == "" {
+	if a.cfg.Welcome.Title == "" {
 		return config.DefaultWelcome()
 	}
 	return a.cfg.Welcome
@@ -75,9 +73,8 @@ func (a *Agent) WelcomeSettings() api.WelcomeSettings {
 	defer a.mu.Unlock()
 	w := a.welcomeConfig()
 	return api.WelcomeSettings{
-		Enabled: w.Enabled, Networks: w.Networks, Title: w.Title, Message: w.Message, Terms: w.Terms,
-		AccessCode: w.AccessCode, AskAgainHours: w.AskAgainHours, IncludeWired: w.IncludeWired,
-		Color: w.Color, Logo: w.Logo, CustomPage: w.CustomPage,
+		Enabled: w.Enabled, Title: w.Title, Message: w.Message, Terms: w.Terms,
+		AccessCode: w.AccessCode, AskAgainHours: w.AskAgainHours, Color: w.Color, Logo: w.Logo, CustomPage: w.CustomPage,
 		Accepted: len(a.acceptedDevices()),
 	}
 }
@@ -91,10 +88,10 @@ func (a *Agent) UpdateWelcomeSettings(req api.WelcomeSettings) error {
 		return ErrWrongMode
 	}
 	w := config.WelcomeConfig{
-		Enabled: req.Enabled, Networks: req.Networks, Title: strings.TrimSpace(req.Title),
+		Enabled: req.Enabled, Title: strings.TrimSpace(req.Title),
 		Message: strings.TrimSpace(req.Message), Terms: strings.TrimSpace(req.Terms),
 		AccessCode: strings.TrimSpace(req.AccessCode), AskAgainHours: req.AskAgainHours,
-		IncludeWired: req.IncludeWired, Color: req.Color, Logo: req.Logo, CustomPage: req.CustomPage,
+		Color: req.Color, Logo: req.Logo, CustomPage: req.CustomPage,
 	}
 	if err := w.Validate(); err != nil {
 		return err
@@ -105,7 +102,7 @@ func (a *Agent) UpdateWelcomeSettings(req api.WelcomeSettings) error {
 		return err
 	}
 	a.cfg = newCfg
-	slog.Info("welcome page saved", "enabled", w.Enabled, "networks", w.Networks)
+	slog.Info("welcome page saved", "enabled", w.Enabled)
 	return a.applyFirewall()
 }
 
@@ -140,33 +137,21 @@ func (a *Agent) saveWelcome() error {
 	return config.WriteJSON(a.paths.WelcomeAcceptedFile(), a.welcome.accepted, 0o600)
 }
 
-// welcomeInterfaces are the bridges the welcome page is on now (none while
-// it is off). The caller holds a.mu.
-func (a *Agent) welcomeInterfaces() []string {
-	w := a.welcomeConfig()
-	if !w.Enabled || a.mode != api.ModeNormal {
-		return nil
-	}
-	var names []string
-	if w.Networks != config.WelcomeOnGuest {
-		names = append(names, render.BridgeName)
-	}
-	if w.Networks != config.WelcomeOnHotspot && a.guestActive() {
-		names = append(names, render.GuestBridgeName)
-	}
-	return names
+// welcomeOn reports whether the welcome page is shown now: it is turned
+// on and the guest network is up. The caller holds a.mu.
+func (a *Agent) welcomeOn() bool {
+	return a.welcomeConfig().Enabled && a.mode == api.ModeNormal && a.guestActive()
 }
 
 // welcomeRule is the welcome page for the firewall, or nil while it is
 // off. The caller holds a.mu.
 func (a *Agent) welcomeRule() *render.WelcomeRule {
-	interfaces := a.welcomeInterfaces()
-	if len(interfaces) == 0 {
+	g := a.guestLAN()
+	if !a.welcomeOn() || g == nil {
 		return nil
 	}
-	rule := &render.WelcomeRule{Interfaces: interfaces, OwnAddresses: []netip.Addr{a.lan.Prefix.Addr()}}
-	if g := a.guestLAN(); g != nil && a.guestActive() {
-		rule.OwnAddresses = append(rule.OwnAddresses, g.Prefix.Addr())
+	rule := &render.WelcomeRule{
+		Interfaces: []string{render.GuestBridgeName}, OwnAddresses: []netip.Addr{g.Prefix.Addr()},
 	}
 	now := a.now()
 	for _, mac := range sortedKeys(a.acceptedDevices()) {
@@ -176,36 +161,7 @@ func (a *Agent) welcomeRule() *render.WelcomeRule {
 		}
 		rule.Accepted = append(rule.Accepted, device)
 	}
-	for _, mac := range sortedKeys(a.welcome.wired) {
-		if _, done := a.welcome.accepted[mac]; !done {
-			rule.Accepted = append(rule.Accepted, render.WelcomeDevice{MAC: mac})
-		}
-	}
 	return rule
-}
-
-// refreshWelcome lets devices on wired ports through without the page
-// (unless the owner includes them), loading the firewall again when one
-// appears. The uplink monitor calls it; the caller holds a.mu.
-func (a *Agent) refreshWelcome() {
-	w := a.welcomeConfig()
-	wired := map[string]bool{}
-	if w.Enabled && !w.IncludeWired && w.Networks != config.WelcomeOnGuest {
-		for _, c := range a.wiredClients() {
-			wired[c.MAC] = true
-		}
-	}
-	changed := len(wired) != len(a.welcome.wired)
-	for mac := range wired {
-		changed = changed || !a.welcome.wired[mac]
-	}
-	if !changed {
-		return
-	}
-	a.welcome.wired = wired
-	if err := a.applyFirewall(); err != nil {
-		slog.Error("could not update the welcome page's devices", "error", err)
-	}
 }
 
 // welcomeDevice finds the device at ip on RasBeacon's networks: its MAC
@@ -231,18 +187,9 @@ func (a *Agent) welcomeDevice(ip string) (mac string, guest bool, ok bool) {
 }
 
 // welcomeNeeded reports whether a device on that network must accept the
-// welcome page. The caller holds a.mu.
+// welcome page: only guests do. The caller holds a.mu.
 func (a *Agent) welcomeNeeded(guest bool) bool {
-	bridge := render.BridgeName
-	if guest {
-		bridge = render.GuestBridgeName
-	}
-	for _, name := range a.welcomeInterfaces() {
-		if name == bridge {
-			return true
-		}
-	}
-	return false
+	return guest && a.welcomeOn()
 }
 
 // WelcomePage is what the welcome page shows the device at ip.
@@ -256,7 +203,7 @@ func (a *Agent) WelcomePage(ip string) api.WelcomePage {
 	w := a.welcomeConfig()
 	_, accepted := a.acceptedDevices()[mac]
 	return api.WelcomePage{
-		Active: true, Accepted: accepted || a.welcome.wired[mac],
+		Active: true, Accepted: accepted,
 		Title: w.Title, Message: w.Message, Terms: w.Terms, NeedCode: w.AccessCode != "",
 		Color: w.Color, Logo: w.Logo, CustomPage: w.CustomPage,
 	}
@@ -329,7 +276,7 @@ func (a *Agent) setWelcome(c *stations.Station, guest bool) {
 		return
 	}
 	_, accepted := a.acceptedDevices()[c.MAC]
-	if accepted || a.welcome.wired[c.MAC] {
+	if accepted {
 		c.Welcome = welcomeAccepted
 	} else {
 		c.Welcome = welcomeWaiting

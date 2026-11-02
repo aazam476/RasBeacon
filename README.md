@@ -216,9 +216,10 @@ since their image has one copy of the system.
   its own with only the permissions you allow, and reaches the internet
   through the VPN. See [docs/plugins.md](docs/plugins.md).
 - **A welcome page** for visitors (your own captive portal): Guests →
-  **Welcome page**. Devices see your message and house rules, and type an
-  access code if you set one, before they get the internet. You can upload
-  a logo or a page of your own.
+  **Welcome page**. Devices on the guest network see your message and house
+  rules, and type an access code if you set one, before they get the
+  internet; your own devices on the hotspot never see it. You can upload a
+  logo or a page of your own.
 - **Your own DNS servers**, also through the VPN: the **Internet** page.
 - **Share the Wi-Fi with a QR code:** the **Hotspot** and **Guests** pages.
 - **Name your devices, see their data use** and set a data limit per

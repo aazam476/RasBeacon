@@ -381,21 +381,20 @@ export function applyWorstCase(demo: DemoState) {
     { name: 'enx3c18a0b1c2d3', cablePlugged: true, connected: false, foreignDhcpServer: '192.168.178.1' },
     { name: 'eth1', cablePlugged: false, connected: false },
   ];
-  // The welcome page on both networks, with the longest title and long rules; some devices
-  // accepted it, some not yet.
+  // The welcome page with the longest title and long rules; some guests accepted it, some not
+  // yet.
   router.welcomeSettings = {
     ...router.welcomeSettings,
     enabled: true,
-    networks: 'both',
     title: 'Willkommen im Ferienhaus Sonnenblick am See'.slice(0, 60),
     message: 'WLAN für Gäste. Bitte lesen Sie die Hausordnung.',
     terms: 'Keine illegalen Downloads. '.repeat(40).trim(),
     accessCode: 'SONNENBLICK-2026-SEEBLICK',
     askAgainHours: 168,
-    includeWired: true,
     accepted: 7,
   };
-  router.status.clients.forEach((client, index) => {
+  // Only guests see the page.
+  router.status.guest.clients.forEach((client, index) => {
     client.welcome = index % 3 === 0 ? 'waiting' : 'accepted';
   });
   // A Wi-Fi 6E adapter, on Wi-Fi 4 for very old devices (Germany allows 6 GHz hotspots).

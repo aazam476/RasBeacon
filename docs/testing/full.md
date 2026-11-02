@@ -449,14 +449,14 @@ Keep the VPN on with the kill switch.
    `guest0`), phones on both networks have internet again, and
    `journalctl -u rbd -b | grep -i uplink` names no `guest0`.
    **Welcome page (new):** Guests → **Welcome page** → **Show a welcome
-   page**, *Show it on* **Guest network**, house rules `Be kind`, access
-   code `4711`, **Save**. Phone B (forget and rejoin the guest network):
+   page**, house rules `Be kind`, access code `4711`, **Save**. Phone B (forget and rejoin the guest network):
    **Expect** the phone opens the page by itself (or any `http://` website
    shows it); nothing else loads. A wrong code says so; ticking *I agree*
    with `4711` says *You're connected* and websites load. Clients shows
    phone B *Accepted*; **Ask again** brings the page back at once. Upload a
    logo: the page shows it. Phone A on the hotspot never sees the page.
-   Turn it off at the end.
+   Turn the guest network off: the Welcome page says it starts when the
+   guest network is on again. Turn the page off at the end.
 8. **Public IPv6 (if your WireGuard server routes a /64 to RasBeacon, and
    its `.conf` gives RasBeacon an IPv6 address and `::/0`):** VPN →
    *Server details* → *Public IPv6 network* → the /64 (like

@@ -458,13 +458,11 @@ export function createMockRouter(): MockRouter {
     modemSettings: { apn: '', username: '', hasPassword: false, hasPin: false },
     welcomeSettings: {
       enabled: false,
-      networks: 'guest',
       title: 'Welcome',
       message: 'Please read and accept the house rules to use the internet.',
       terms: '',
       accessCode: '',
       askAgainHours: 24,
-      includeWired: false,
       color: '#0c8a9c',
       logo: '',
       customPage: '',

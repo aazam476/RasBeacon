@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useDevice } from '@/data/device';
-import type { WelcomeNetworks, WelcomeSettings } from '@/data/types';
+import type { WelcomeSettings } from '@/data/types';
 import { useForm } from '@/lib/useForm';
 import { ASK_AGAIN_OPTIONS, MAX_LOGO, MAX_PAGE } from '@/lib/welcome';
 import { Loaded } from '@/shell/Loaded';
@@ -12,7 +12,6 @@ import {
   FileField,
   FormActions,
   FormSwitchRow,
-  Notice,
   Row,
   Section,
   SelectField,
@@ -20,15 +19,10 @@ import {
   TextField,
 } from '@/ui';
 
-const NETWORK_OPTIONS: readonly { value: WelcomeNetworks; label: string }[] = [
-  { value: 'guest', label: 'Guest network' },
-  { value: 'hotspot', label: 'Your hotspot' },
-  { value: 'both', label: 'Both' },
-];
-
 /**
- * Guests → Welcome page: your own captive portal. Devices see it before they get the internet,
- * with your message, house rules and an access code if you like.
+ * Guests → Welcome page: your own captive portal on the guest network. Guests see it before they
+ * get the internet, with your message, house rules and an access code if you like. Your hotspot
+ * is for your own devices, so it never shows the page.
  */
 export function WelcomeScreen() {
   usePageTitle('Welcome page');
@@ -58,7 +52,7 @@ function WelcomeForm({ settings }: { settings: WelcomeSettings }) {
   const [fileError, setFileError] = useState<{ logo?: string; customPage?: string }>({});
   // A file input can't be emptied from code; a new key makes a new one.
   const [fileKey, setFileKey] = useState(0);
-  const guestOff = values.networks !== 'hotspot' && guestSettings.data?.enabled === false;
+  const guestOff = guestSettings.data?.enabled === false;
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -89,20 +83,13 @@ function WelcomeForm({ settings }: { settings: WelcomeSettings }) {
 
   return (
     <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-7">
-      <Section footer="Until a device accepts the page, it is all the device sees: every website shows the page, and nothing else reaches the internet. These settings stay reachable from your hotspot.">
+      <Section footer="Shown to devices on the guest network before they get the internet: every website shows the page until they accept it. Your own devices on the hotspot never see it.">
         <FormSwitchRow
           leading={{ tile: 'article', color: 'teal' }}
           label="Show a welcome page"
+          description={guestOff ? 'The guest network is off; the page starts when you turn it on.' : undefined}
           checked={values.enabled}
           onChange={(enabled) => setField('enabled', enabled)}
-        />
-        <SelectField
-          label="Show it on"
-          options={NETWORK_OPTIONS}
-          value={values.networks}
-          onChange={(networks) => setField('networks', networks)}
-          hint={guestOff ? 'The guest network is off, so only its part waits for it to be turned on.' : undefined}
-          error={fieldErrors.networks}
         />
       </Section>
 
@@ -154,14 +141,6 @@ function WelcomeForm({ settings }: { settings: WelcomeSettings }) {
           hint="“Only once” lasts until you ask a device again on the Clients page."
           error={fieldErrors.askAgainHours}
         />
-        {values.networks !== 'guest' && (
-          <FormSwitchRow
-            label="Also for wired devices"
-            description="Otherwise devices plugged in by cable get in without it."
-            checked={values.includeWired}
-            onChange={(includeWired) => setField('includeWired', includeWired)}
-          />
-        )}
       </Section>
 
       <Section title="Look" footer="Phones and laptops open the page by themselves when they join.">
@@ -231,11 +210,6 @@ function WelcomeForm({ settings }: { settings: WelcomeSettings }) {
         <Section title="Now">
           <Row title="Devices let in" value={settings.accepted} />
         </Section>
-      )}
-      {values.enabled && values.networks !== 'guest' && (
-        <Notice tone="info">
-          <p>Your own devices on the hotspot see the page too. Accept it on each of them once.</p>
-        </Notice>
       )}
 
       <FormActions

@@ -783,13 +783,9 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
             title: settings.title.trim(),
             accepted: d.router.welcomeSettings.accepted,
           };
-          // Devices on the page's networks show whether they accepted it.
-          const on = (guest: boolean) =>
-            settings.enabled && (settings.networks === 'both' || settings.networks === (guest ? 'guest' : 'hotspot'));
-          for (const client of d.router.status.clients)
-            client.welcome = on(false) ? (client.welcome ?? 'waiting') : undefined;
+          // Guests show whether they accepted it; the hotspot never has the page.
           for (const client of d.router.status.guest.clients)
-            client.welcome = on(true) ? (client.welcome ?? 'waiting') : undefined;
+            client.welcome = settings.enabled ? (client.welcome ?? 'waiting') : undefined;
         });
       },
       resetWelcome: async (mac) => {

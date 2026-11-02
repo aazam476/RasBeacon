@@ -8,12 +8,13 @@ import (
 
 	"rasbeacon/internal/api"
 	"rasbeacon/internal/config"
+	"rasbeacon/internal/stations"
 )
 
 // welcomeOn is the welcome page on the guest network with house rules and
 // an access code, asked again every 24 hours.
 var welcomeOn = api.WelcomeSettings{
-	Enabled: true, Networks: config.WelcomeOnGuest, Title: "Welcome to the cabin", Message: "Enjoy your stay.",
+	Enabled: true, Title: "Welcome to the cabin", Message: "Enjoy your stay.",
 	Terms: "No streaming 4K all night.", AccessCode: "4711", AskAgainHours: 24, Color: "#0c8a9c",
 }
 
@@ -41,7 +42,7 @@ func TestWelcome_DefaultsBeforeSaving(t *testing.T) {
 	e.agent.mu.Lock()
 	e.agent.cfg.Welcome = config.WelcomeConfig{}
 	e.agent.mu.Unlock()
-	if s := e.agent.WelcomeSettings(); s.Enabled || s.Networks != config.WelcomeOnGuest || s.Title != "Welcome" || s.AskAgainHours != 24 {
+	if s := e.agent.WelcomeSettings(); s.Enabled || s.Title != "Welcome" || s.AskAgainHours != 24 {
 		t.Errorf("defaults = %+v", s)
 	}
 	if strings.Contains(e.readFile(e.paths.FirewallRules()), "welcome") {
@@ -55,7 +56,6 @@ func TestWelcome_SettingsAreChecked(t *testing.T) {
 		t.Errorf("settings = %+v", s)
 	}
 	bad := map[string]func(*api.WelcomeSettings){
-		"networks":      func(s *api.WelcomeSettings) { s.Networks = "everywhere" },
 		"title":         func(s *api.WelcomeSettings) { s.Title = " " },
 		"message":       func(s *api.WelcomeSettings) { s.Message = strings.Repeat("x", 1001) },
 		"terms":         func(s *api.WelcomeSettings) { s.Terms = strings.Repeat("x", 10001) },
@@ -85,7 +85,7 @@ func TestWelcome_GuestsAcceptWithTheCode(t *testing.T) {
 
 	rules := e.readFile(e.paths.FirewallRules())
 	if !strings.Contains(rules, `set welcome_lans {`) || !strings.Contains(rules, `elements = { "br-guest" }`) ||
-		!strings.Contains(rules, "ip daddr != { 10.87.0.1, 10.87.1.1 } tcp dport 80 redirect to :2050") {
+		!strings.Contains(rules, "ip daddr != { 10.87.1.1 } tcp dport 80 redirect to :2050") {
 		t.Fatalf("firewall:\n%s", rules)
 	}
 
@@ -125,9 +125,9 @@ func TestWelcome_GuestsAcceptWithTheCode(t *testing.T) {
 		t.Error("the acceptance should run out")
 	}
 
-	// The device can't accept for itself on a network without the page.
+	// The hotspot never has the page: its devices are the owner's own.
 	if err := e.agent.AcceptWelcome(api.WelcomeAcceptRequest{IP: "10.87.0.23", Code: "4711"}); err == nil {
-		t.Error("the hotspot has no page here")
+		t.Error("the hotspot has no page")
 	}
 }
 
@@ -147,35 +147,36 @@ func TestWelcome_TooManyWrongCodesWait(t *testing.T) {
 
 func TestWelcome_AskAgainAndForever(t *testing.T) {
 	settings := welcomeOn
-	settings.Networks, settings.AccessCode, settings.AskAgainHours = config.WelcomeOnBoth, "", 0
+	settings.AccessCode, settings.AskAgainHours = "", 0
 	e, _ := newWelcomeEnv(t, settings)
-	if err := e.agent.AcceptWelcome(api.WelcomeAcceptRequest{IP: "10.87.0.23"}); err != nil {
+	if err := e.agent.AcceptWelcome(api.WelcomeAcceptRequest{IP: "10.87.1.23"}); err != nil {
 		t.Fatal(err)
 	}
 	// Without "ask again", no timeout.
-	if !strings.Contains(e.readFile(e.paths.FirewallRules()), "elements = { 3a:1f:22:aa:bb:02 }") {
+	if !strings.Contains(e.readFile(e.paths.FirewallRules()), "elements = { 3a:1f:22:aa:bb:01 }") {
 		t.Errorf("firewall:\n%s", e.readFile(e.paths.FirewallRules()))
 	}
-	// The Clients page shows who accepted and who still has to.
-	mustWrite(t, e.paths.DnsmasqLeases(), "1790800000 3a:1f:22:aa:bb:02 10.87.0.23 Alis-iPhone *\n")
-	e.runner.outputs["iw dev ap0 station dump"] = "Station 3a:1f:22:aa:bb:02 (on ap0)\n\tinactive time:\t10 ms\n"
-	var found bool
-	for _, c := range e.agent.Status().Clients {
-		if c.MAC == "3a:1f:22:aa:bb:02" {
-			found = c.Welcome == welcomeAccepted
-		}
-	}
-	if !found {
-		t.Errorf("the device should show as accepted: %+v", e.agent.Status().Clients)
+	// The Clients page shows who accepted and who still has to; the
+	// owner's devices on the hotspot have no welcome state.
+	guest := &stations.Station{MAC: "3a:1f:22:aa:bb:01"}
+	waiting := &stations.Station{MAC: "3a:1f:22:aa:bb:03"}
+	own := &stations.Station{MAC: "3a:1f:22:aa:bb:02"}
+	e.agent.mu.Lock()
+	e.agent.setWelcome(guest, true)
+	e.agent.setWelcome(waiting, true)
+	e.agent.setWelcome(own, false)
+	e.agent.mu.Unlock()
+	if guest.Welcome != welcomeAccepted || waiting.Welcome != welcomeWaiting || own.Welcome != "" {
+		t.Errorf("welcome states: %q %q %q", guest.Welcome, waiting.Welcome, own.Welcome)
 	}
 
-	if err := e.agent.ResetWelcome("3A:1F:22:AA:BB:02"); err != nil {
+	if err := e.agent.ResetWelcome("3A:1F:22:AA:BB:01"); err != nil {
 		t.Fatal(err)
 	}
-	if e.agent.WelcomePage("10.87.0.23").Accepted {
+	if e.agent.WelcomePage("10.87.1.23").Accepted {
 		t.Error("asked again")
 	}
-	if err := e.agent.ResetWelcome("3a:1f:22:aa:bb:02"); err != nil {
+	if err := e.agent.ResetWelcome("3a:1f:22:aa:bb:01"); err != nil {
 		t.Error("asking again twice is fine")
 	}
 	if err := e.agent.ResetWelcome("nope"); err == nil {
@@ -183,39 +184,22 @@ func TestWelcome_AskAgainAndForever(t *testing.T) {
 	}
 }
 
-func TestWelcome_WiredDevicesPassUnlessIncluded(t *testing.T) {
-	settings := welcomeOn
-	settings.Networks = config.WelcomeOnHotspot
-	e, _ := newWelcomeEnv(t, settings)
-	const port = "enx00e04c680001"
-	e.addWiredPort(port, "r8152", true, "1")
-	e.runner.outputs["bridge -json fdb show br br-lan brport "+port] = `[{"mac":"aa:bb:cc:00:00:01","flags":[]}]`
-	e.checkLANPorts()
-
-	e.agent.mu.Lock()
-	e.agent.refreshWelcome()
-	e.agent.mu.Unlock()
-	if !strings.Contains(e.readFile(e.paths.FirewallRules()), "elements = { aa:bb:cc:00:00:01 }") {
-		t.Errorf("the wired device should pass:\n%s", e.readFile(e.paths.FirewallRules()))
-	}
-	// Nothing new: no reload.
-	loads := e.runner.count("nft -f")
-	e.agent.mu.Lock()
-	e.agent.refreshWelcome()
-	e.agent.mu.Unlock()
-	if e.runner.count("nft -f") != loads {
-		t.Error("no reload without a change")
-	}
-
-	settings.IncludeWired = true
-	if err := e.agent.UpdateWelcomeSettings(settings); err != nil {
+func TestWelcome_OffWhileTheGuestNetworkIs(t *testing.T) {
+	e, _ := newWelcomeEnv(t, welcomeOn)
+	off := guestOn
+	off.Enabled = false
+	if err := e.agent.UpdateGuestSettings(off); err != nil {
 		t.Fatal(err)
 	}
-	e.agent.mu.Lock()
-	e.agent.refreshWelcome()
-	e.agent.mu.Unlock()
-	if strings.Contains(e.readFile(e.paths.FirewallRules()), "aa:bb:cc:00:00:01") {
-		t.Error("with wired devices included, they see the page too")
+	if strings.Contains(e.readFile(e.paths.FirewallRules()), "welcome_lans") {
+		t.Error("no welcome rules without the guest network")
+	}
+	if e.agent.WelcomePage("10.87.1.23").Active {
+		t.Error("no page without the guest network")
+	}
+	// The settings are kept for the next time.
+	if !e.agent.WelcomeSettings().Enabled {
+		t.Error("the page stays turned on")
 	}
 }
 
