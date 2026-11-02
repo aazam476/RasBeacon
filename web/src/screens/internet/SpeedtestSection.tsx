@@ -1,23 +1,23 @@
+import { useState } from 'react';
 import { useDevice } from '@/data/device';
 import type { Status } from '@/data/types';
 import { formatAgo, mbpsValue } from '@/lib/format';
-import { ButtonRow, Row, Section, StatRow } from '@/ui';
+import { useAction } from '@/lib/useAction';
+import { AlertDialog, ButtonRow, Row, Section, StatRow, useErrorToast } from '@/ui';
 import { NEEDS_INTERNET } from '../common/describe';
 
 /**
  * The last speed test and a way to run a new one. It only runs when asked, one at a time: while
- * one runs, the button says so, also after leaving the page and coming back.
+ * one runs, the button says so, also after leaving the page and coming back. On a metered
+ * connection (a phone, a paid plan) it asks first, since a test downloads a lot.
  */
 export function SpeedtestSection({ status }: { status: Status }) {
   const { runSpeedtest } = useDevice();
+  const running = useAction(runSpeedtest, useErrorToast());
+  const [confirming, setConfirming] = useState(false);
+  const metered = status.hotspot.metered;
   const { provider, last } = status.speedtest;
-  // On a metered connection (a phone's hotspot, a paid plan), the data a test downloads counts.
-  const footer = [
-    `Uses ${provider} Speedtest. A test uses the internet connection for about 20 seconds.`,
-    status.hotspot.metered && 'A test can use several hundred MB of data.',
-  ]
-    .filter(Boolean)
-    .join(' ');
+  const footer = `Uses ${provider} Speedtest. A test uses the internet connection for about 20 seconds.`;
 
   return (
     <Section title="Speed test" footer={footer}>
@@ -38,15 +38,27 @@ export function SpeedtestSection({ status }: { status: Status }) {
       )}
       <ButtonRow
         leading={{ icon: 'speed', className: 'text-tint' }}
-        action={runSpeedtest}
+        onClick={() => (metered ? setConfirming(true) : void running.run())}
         // Also while a test started earlier (before leaving this page) or elsewhere still runs.
-        busy={status.speedtest.running}
+        busy={status.speedtest.running || running.pending}
         busyLabel="Running…"
         disabled={!status.uplink.connected}
         note={!status.uplink.connected && NEEDS_INTERNET}
       >
         Run speed test
       </ButtonRow>
+      {confirming && (
+        <AlertDialog
+          title="Run a speed test?"
+          confirmLabel="Run test"
+          busyLabel="Starting…"
+          // The test runs on without the dialog, which closes at once.
+          onConfirm={async () => void running.run()}
+          onClose={() => setConfirming(false)}
+        >
+          <p>This connection is metered. A test can use several hundred MB of data.</p>
+        </AlertDialog>
+      )}
     </Section>
   );
 }

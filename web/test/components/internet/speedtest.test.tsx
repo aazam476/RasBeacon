@@ -65,14 +65,31 @@ describe('speed test', () => {
     expect(device.runSpeedtest).toHaveBeenCalledOnce();
   });
 
-  it.each([
-    [true, true],
-    [false, false],
-  ])('warns about the data a test uses only on a metered connection (metered: %s)', (metered, warns) => {
+  it('runs at once on an ordinary connection, without asking', async () => {
     const device = fakeDevice((router) => {
-      router.status.hotspot.metered = metered;
+      router.status.hotspot.metered = false;
     });
-    renderScreen(<InternetScreen />, device, '/internet');
-    expect(within(section('Speed test')).queryByText(/several hundred MB of data/) !== null).toBe(warns);
+    const { user } = renderScreen(<InternetScreen />, device, '/internet');
+    await user.click(within(section('Speed test')).getByRole('button', { name: 'Run speed test' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(device.runSpeedtest).toHaveBeenCalledOnce();
+  });
+
+  it('asks first on a metered connection, since a test uses a lot of data', async () => {
+    const device = fakeDevice((router) => {
+      router.status.hotspot.metered = true;
+    });
+    const { user } = renderScreen(<InternetScreen />, device, '/internet');
+    await user.click(within(section('Speed test')).getByRole('button', { name: 'Run speed test' }));
+    const dialog = within(screen.getByRole('dialog', { name: 'Run a speed test?' }));
+    expect(dialog.getByText(/several hundred MB of data/)).toBeTruthy();
+    await user.click(dialog.getByRole('button', { name: 'Cancel' }));
+    expect(device.runSpeedtest).not.toHaveBeenCalled();
+
+    await user.click(within(section('Speed test')).getByRole('button', { name: 'Run speed test' }));
+    await user.click(
+      within(screen.getByRole('dialog', { name: 'Run a speed test?' })).getByRole('button', { name: 'Run test' }),
+    );
+    expect(device.runSpeedtest).toHaveBeenCalledOnce();
   });
 });
