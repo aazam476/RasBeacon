@@ -19,6 +19,7 @@ export function ClientSection({ client }: { client: NetworkClient }) {
   const [fixingAddress, setFixingAddress] = useState(false);
   const paused = !client.internetAccess;
   const name = clientName(client);
+  const details = clientDetails(client);
 
   return (
     <section className="overflow-hidden rounded-group bg-cell">
@@ -52,14 +53,22 @@ export function ClientSection({ client }: { client: NetworkClient }) {
           disabled={client.limitReached}
         />
       </div>
-      {/* Columns by the card's own width (a container query): one on the narrowest cards, two
-          on phones, three on wide cards. Only in two columns does the last detail (the MAC
-          address) take a whole line, when it would otherwise sit alone in half of one, so it
-          never wraps there; with three columns there is room for it in its place. */}
+      {/* Columns by the card's own width (a container query): one on the narrowest cards, two on
+          phones, three on wide cards. A MAC address needs about 8 rem, so on cards too narrow
+          for it in half a line (under 18 rem, as on a 320 px phone) it takes a whole line, and
+          the detail before it does too when it would otherwise sit alone. On wider cards it
+          stays in its place, with no line of its own. */}
       <div className="row @container py-3">
         <dl className="grid w-full min-w-0 grid-cols-1 items-start gap-x-4 gap-y-2.5 @min-[14rem]:grid-cols-2 @min-[30rem]:grid-cols-3">
-          {clientDetails(client).map((detail) => (
-            <div key={detail.label} className="min-w-0 @min-[14rem]:@max-[30rem]:last:odd:col-span-2">
+          {details.map((detail, index) => (
+            <div
+              key={detail.label}
+              className={cn(
+                'min-w-0',
+                (index === details.length - 1 || (index === details.length - 2 && details.length % 2 === 0)) &&
+                  '@min-[14rem]:@max-[18rem]:col-span-2',
+              )}
+            >
               <dt className="text-footnote text-label-2">{detail.label}</dt>
               <dd className={cn('selectable text-subhead wrap-break-word', detail.alert ? 'text-red' : 'text-label')}>
                 {detail.value}

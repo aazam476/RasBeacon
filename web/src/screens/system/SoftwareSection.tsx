@@ -415,7 +415,9 @@ function InstallUpdate({ status }: { status: Status }) {
           )}
         </div>
       )}
-      <div className="row flex-wrap gap-2">
+      {/* Side by side when they fit, else one under the other at full width (on phones), so
+          neither label wraps inside its capsule. */}
+      <div className="row flex-wrap gap-2 *:grow *:basis-[15rem]">
         {offered && (
           <Button icon="system_update_alt" disabled={busy} onClick={() => setConfirmingDownload(true)}>
             Install update
@@ -423,7 +425,7 @@ function InstallUpdate({ status }: { status: Status }) {
         )}
         <Button
           variant={offered ? 'secondary' : 'primary'}
-          icon="upload"
+          // No icon: the label just fits a phone's width without it.
           loading={installing.pending}
           disabled={busy}
           onClick={() => input.current?.click()}
