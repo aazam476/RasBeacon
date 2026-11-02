@@ -41,10 +41,11 @@ export function clientDetails(client: Client): ClientDetail[] {
     ? { label: 'Connection', value: 'Ethernet cable' }
     : { label: 'Radio', value: `${formatBand(client.band)}, ${formatDbm(client.signalDbm)}` };
   const mac = { label: 'MAC address', value: client.mac };
-  // Data use is counted per device on the Wi-Fi only.
-  const used: ClientDetail[] = client.wired
-    ? []
-    : [{ label: 'Data used', value: `↓\u00a0${formatBytes(client.downBytes)} ↑\u00a0${formatBytes(client.upBytes)}` }];
+  // Counted for every device: by the radio on the Wi-Fi, by the firewall on a cable.
+  const used = {
+    label: 'Data used',
+    value: `↓\u00a0${formatBytes(client.downBytes)} ↑\u00a0${formatBytes(client.upBytes)}`,
+  };
   // With a name of the owner's, the one the device sends is still worth knowing.
   const own: ClientDetail[] = client.name && client.hostname ? [{ label: 'Calls itself', value: client.hostname }] : [];
 
@@ -59,7 +60,7 @@ export function clientDetails(client: Client): ClientDetail[] {
             label: 'Paused',
             value: client.pausedSeconds ? `${formatDuration(client.pausedSeconds)} ago` : 'just now',
           },
-      ...used,
+      used,
       ...own,
       mac,
     ];
@@ -67,11 +68,10 @@ export function clientDetails(client: Client): ClientDetail[] {
 
   return [
     address,
-    // Traffic is measured per device on the Wi-Fi only.
-    { label: 'Traffic', value: client.wired ? 'Not measured' : formatClientRate(client) },
+    { label: 'Traffic', value: formatClientRate(client) },
     radio,
     { label: 'Connected for', value: formatDuration(client.connectedSeconds) },
-    ...used,
+    used,
     ...own,
     mac,
   ];

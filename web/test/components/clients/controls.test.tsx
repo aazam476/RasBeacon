@@ -26,6 +26,16 @@ describe('a device’s controls', () => {
     expect(device.disconnectClient).toHaveBeenCalledWith(client.mac);
   });
 
+  it('shows the data use and traffic of a device on a cable too', () => {
+    const { device } = renderClients();
+    const laptop = device.status.data!.clients.find((c) => c.wired)!;
+    const details = within(card(laptop.name || laptop.hostname));
+    expect(details.getByText('Ethernet cable')).toBeTruthy();
+    expect(details.getByText('Data used')).toBeTruthy();
+    expect(details.getByText(/^↓ 3\.4 GB ↑ 241 MB$/)).toBeTruthy();
+    expect(details.queryByText('Not measured')).toBeNull();
+  });
+
   it('a paused device can have its lease flushed instead', async () => {
     const { device, user } = renderClients((router) => {
       router.status.clients[0].internetAccess = false;

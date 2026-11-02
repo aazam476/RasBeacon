@@ -155,10 +155,46 @@ table inet rasbeacon {
 # came in on a plugin's port leaves each plugin only what the rules above
 # allow it: RasBeacon itself, and (with permission) the internet and your
 # devices. Replaced the same way as the table above.
+#
+# The same table also counts the bytes of each device by its MAC address,
+# for the data use of devices on a cable (the Wi-Fi radio counts its own
+# devices; rbd reads these with "nft -j list set bridge rasbeacon up" and
+# "... down"). The "input" hook sees what a device sends to RasBeacon (and
+# through it, the internet): "up". The "output" hook sees what RasBeacon
+# sends to a device: "down". Every bridge is counted, but rbd only uses the
+# counts of devices on a cable. A device not seen for a day is dropped from
+# the sets, and reloading the firewall starts the counts again from zero;
+# rbd adds up the differences, so neither loses what it already counted.
 table bridge rasbeacon
 delete table bridge rasbeacon
 
 table bridge rasbeacon {
+	set up {
+		type ether_addr
+		size 1024
+		flags dynamic,timeout
+		timeout 1d
+		counter
+	}
+
+	set down {
+		type ether_addr
+		size 1024
+		flags dynamic,timeout
+		timeout 1d
+		counter
+	}
+
+	chain input {
+		type filter hook input priority filter; policy accept;
+		update @up { ether saddr }
+	}
+
+	chain output {
+		type filter hook output priority filter; policy accept;
+		update @down { ether daddr }
+	}
+
 	chain forward {
 		type filter hook forward priority filter; policy accept;
 		iifname "rbport*" drop

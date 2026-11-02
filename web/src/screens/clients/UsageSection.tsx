@@ -46,7 +46,7 @@ function UsageForm({ settings }: { settings: UsageSettings }) {
     if (reading.ok) form.submit();
   }
 
-  let footer = `Counted for each Wi-Fi device since ${sinceLabel(settings.since)}. `;
+  let footer = `Counted for each device, on the Wi-Fi and on a cable, since ${sinceLabel(settings.since)}. `;
   footer +=
     settings.limitMb > 0 && settings.devicesPaused > 0
       ? `${settings.devicesPaused === 1 ? 'One device has' : `${settings.devicesPaused} devices have`} used up ${settings.devicesPaused === 1 ? 'its' : 'their'} data, so ${settings.devicesPaused === 1 ? 'its' : 'their'} traffic is blocked until you reset the counts or raise the limit.`

@@ -228,6 +228,42 @@ func ParseBridgeFDB(out string) ([]string, error) {
 	return macs, nil
 }
 
+// ParseSetCounters reads `nft -j list set <family> <table> <set>` for a set
+// of MAC addresses with a counter on each (the firewall's "up" and "down"
+// sets): the bytes counted for each address. Addresses are written the way
+// net.HardwareAddr writes them ("3a:1f:22:aa:bb:cc").
+func ParseSetCounters(out string) (map[string]uint64, error) {
+	var answer struct {
+		Nftables []struct {
+			Set *struct {
+				Elem []struct {
+					Elem struct {
+						Val     string `json:"val"`
+						Counter struct {
+							Bytes uint64 `json:"bytes"`
+						} `json:"counter"`
+					} `json:"elem"`
+				} `json:"elem"`
+			} `json:"set"`
+		} `json:"nftables"`
+	}
+	if err := json.Unmarshal([]byte(out), &answer); err != nil {
+		return nil, fmt.Errorf("reading the firewall's counters: %w", err)
+	}
+	counts := map[string]uint64{}
+	for _, item := range answer.Nftables {
+		if item.Set == nil {
+			continue // the "metainfo" item
+		}
+		for _, e := range item.Set.Elem {
+			if hw, err := net.ParseMAC(e.Elem.Val); err == nil {
+				counts[hw.String()] = e.Elem.Counter.Bytes
+			}
+		}
+	}
+	return counts, nil
+}
+
 // Neighbor is one entry of the kernel's neighbor table: an address a
 // device on a local network uses, and the device's MAC address.
 type Neighbor struct {

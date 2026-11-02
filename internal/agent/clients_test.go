@@ -2,6 +2,8 @@ package agent
 
 import (
 	"errors"
+	"fmt"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -42,7 +44,7 @@ func TestClients_PauseAllowDisconnectAndFlush(t *testing.T) {
 	if err := e.agent.SetClientInternetAccess("3a:1f:22:aa:bb:cc", true); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(e.readFile(e.paths.FirewallRules()), "ether saddr") {
+	if strings.Contains(e.readFile(e.paths.FirewallRules()), "ether saddr {") {
 		t.Error("device should be allowed again")
 	}
 	if cl := e.agent.Status().Clients[0]; !cl.InternetAccess || cl.PausedSeconds != 0 {
@@ -152,5 +154,65 @@ func TestClients_GroupAddressesAreRefused(t *testing.T) {
 		if err := e.agent.SetClientInternetAccess(mac, false); !errors.As(err, &refused) {
 			t.Errorf("pausing %s = %v, want refused", mac, err)
 		}
+	}
+}
+
+// nftCounters is `nft -j list set bridge rasbeacon <set>` with one counter
+// for mac.
+func nftCounters(mac string, bytes int) string {
+	return fmt.Sprintf(`{"nftables": [{"metainfo": {"version": "1.0.9"}}, {"set": {"family": "bridge", "name": "x",
+		"elem": [{"elem": {"val": %q, "counter": {"packets": 1, "bytes": %d}}}]}}]}`, mac, bytes)
+}
+
+func TestClients_WiredDevicesDataUseIsCounted(t *testing.T) {
+	e := newClaimedEnv(t, true)
+	c := &fakeClock{now: time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)}
+	e.agent.now = func() time.Time { return c.now }
+	const laptop = "a4:83:e7:12:34:56"
+	e.runner.outputs["bridge -json fdb show br br-lan brport eth0"] = `[{"mac":"a4:83:e7:12:34:56","state":""}]`
+	e.agent.mu.Lock()
+	e.agent.uplink.ethernet.inBridge = true
+	e.agent.mu.Unlock()
+	sample := func(down, up int) {
+		e.runner.outputs["nft -j list set bridge rasbeacon down"] = nftCounters(laptop, down)
+		e.runner.outputs["nft -j list set bridge rasbeacon up"] = nftCounters(laptop, up)
+		e.agent.mu.Lock()
+		e.agent.sampleReadings()
+		e.agent.mu.Unlock()
+		c.advance(5 * time.Second)
+	}
+	sample(1_000_000, 100_000)
+	// 2.5 MB down and 625 kB up in 5 seconds: 4 and 1 Mbps.
+	sample(3_500_000, 725_000)
+	// The firewall was reloaded: its counts start again.
+	sample(500_000, 25_000)
+
+	clients := e.agent.Status().Clients
+	if len(clients) != 1 || !clients[0].Wired {
+		t.Fatalf("clients = %+v", clients)
+	}
+	got := clients[0]
+	if got.DownBytes != 2_500_000+500_000 || got.UpBytes != 625_000+25_000 {
+		t.Errorf("data use = %d down, %d up", got.DownBytes, got.UpBytes)
+	}
+
+	// Rates come from two samples that count up.
+	sample(3_000_000, 650_000)
+	got = e.agent.Status().Clients[0]
+	if math.Round(got.DownMbps) != 4 || math.Round(got.UpMbps) != 1 {
+		t.Errorf("rates = %v down, %v up", got.DownMbps, got.UpMbps)
+	}
+
+	// Counters that can't be read are skipped, keeping the last ones.
+	e.runner.failing = []string{"nft -j list set bridge rasbeacon down"}
+	e.agent.mu.Lock()
+	delete(e.runner.outputs, "nft -j list set bridge rasbeacon down")
+	e.agent.sampleReadings()
+	e.runner.failing = nil
+	e.runner.outputs["nft -j list set bridge rasbeacon down"] = "not json"
+	e.agent.sampleReadings()
+	e.agent.mu.Unlock()
+	if after := e.agent.Status().Clients[0]; after.DownBytes != got.DownBytes {
+		t.Errorf("unreadable counters changed the count: %d", after.DownBytes)
 	}
 }

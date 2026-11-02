@@ -116,23 +116,10 @@ func (a *Agent) connectedClients() []stations.Station {
 // bridge has seen behind those ports, with their DHCP leases.
 // "Connected for" counts from when RasBeacon first saw each one.
 func (a *Agent) wiredClients() []stations.Station {
-	ports := a.bridgedWiredPorts()
-	if len(ports) == 0 {
+	macs := a.wiredMACs()
+	if macs == nil {
 		a.uplink.wiredSince = nil
 		return nil
-	}
-	var macs []string
-	for _, port := range ports {
-		out, err := a.runner.Run("bridge", "-json", "fdb", "show", "br", render.BridgeName, "brport", port)
-		if err != nil {
-			continue
-		}
-		found, err := stations.ParseBridgeFDB(out)
-		if err != nil {
-			slog.Warn("could not list the devices on a wired port", "port", port, "error", err)
-			continue
-		}
-		macs = append(macs, found...)
 	}
 	seen := map[string]time.Time{}
 	var wired []stations.Station
@@ -150,10 +137,36 @@ func (a *Agent) wiredClients() []stations.Station {
 	for i := range wired {
 		c := &wired[i]
 		c.Wired = true
+		rate := a.readings.stationRates[c.MAC]
+		c.DownMbps, c.UpMbps = rate[0], rate[1]
 		a.setInternetAccess(c)
 		a.setUsage(c)
 	}
 	return wired
+}
+
+// wiredMACs are the MAC addresses of the devices on the wired ports (nil
+// while no wired port is on the hotspot network), as the bridge has
+// learned them. The caller holds a.mu.
+func (a *Agent) wiredMACs() []string {
+	ports := a.bridgedWiredPorts()
+	if len(ports) == 0 {
+		return nil
+	}
+	macs := []string{}
+	for _, port := range ports {
+		out, err := a.runner.Run("bridge", "-json", "fdb", "show", "br", render.BridgeName, "brport", port)
+		if err != nil {
+			continue
+		}
+		found, err := stations.ParseBridgeFDB(out)
+		if err != nil {
+			slog.Warn("could not list the devices on a wired port", "port", port, "error", err)
+			continue
+		}
+		macs = append(macs, found...)
+	}
+	return macs
 }
 
 // setInternetAccess fills in whether the owner paused the device.

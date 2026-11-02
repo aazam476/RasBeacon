@@ -12,6 +12,7 @@ package agent
 import (
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"math"
 	"os"
 	"path/filepath"
@@ -111,12 +112,57 @@ func (a *Agent) sampleReadings() {
 			}
 		}
 	}
+	// Devices on a cable: the firewall counts their bytes by MAC address
+	// (the bridge table in firewall.nft.tmpl).
+	if wired := a.wiredMACs(); len(wired) > 0 {
+		counters, ok := a.wiredCounters()
+		if !ok {
+			return // keep the last counters, as for the radios above
+		}
+		for _, mac := range wired {
+			c, counted := counters[mac]
+			if !counted {
+				continue
+			}
+			bytes[mac] = c
+			if before, ok := r.stationBytes[mac]; ok && elapsed > 0 && c[0] >= before[0] && c[1] >= before[1] {
+				rates[mac] = [2]float64{mbps(c[0]-before[0], elapsed), mbps(c[1]-before[1], elapsed)}
+			}
+		}
+	}
 	// Each device's data use (not on the first sample: the counters then
 	// include whatever a device used before RasBeacon restarted).
 	if !first {
 		a.addUsage(r.stationBytes, bytes)
 	}
 	r.stationBytes, r.stationRates = bytes, rates
+}
+
+// wiredCounters reads the firewall's byte counts per device: what each
+// one received (down) and sent (up). ok is false when they couldn't be
+// read. The caller holds a.mu.
+func (a *Agent) wiredCounters() (counts map[string][2]uint64, ok bool) {
+	var sets [2]map[string]uint64
+	for i, name := range []string{"down", "up"} {
+		out, err := a.runner.Run("nft", "-j", "list", "set", "bridge", "rasbeacon", name)
+		if err != nil {
+			return nil, false
+		}
+		if sets[i], err = stations.ParseSetCounters(out); err != nil {
+			slog.Warn("could not read the wired devices' data use", "error", err)
+			return nil, false
+		}
+	}
+	counts = map[string][2]uint64{}
+	for mac, down := range sets[0] {
+		counts[mac] = [2]uint64{down, sets[1][mac]}
+	}
+	for mac, up := range sets[1] {
+		if _, seen := counts[mac]; !seen {
+			counts[mac] = [2]uint64{0, up}
+		}
+	}
+	return counts, true
 }
 
 // mbps turns a byte count over some seconds into megabits per second.

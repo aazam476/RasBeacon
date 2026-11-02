@@ -2,7 +2,8 @@ package netns
 
 // Devices on the Ethernet client port show up on the Clients page: rbd asks
 // the real bridge which devices it has seen behind the port
-// (`bridge -json fdb show`), and matches them with dnsmasq's leases.
+// (`bridge -json fdb show`), matches them with dnsmasq's leases, and reads
+// their data use from the firewall's counters.
 //
 //	[phone]  eth0 ═══ ap0  ─┐
 //	                        ├ br-lan 10.87.0.1  [router]
@@ -73,5 +74,18 @@ func TestWiredDevice_FoundBehindTheBridgePort(t *testing.T) {
 	wired := stations.Merge([]stations.Station{{MAC: laptopMAC}}, stations.ParseLeases(string(leases)))
 	if len(wired) != 1 || !strings.HasPrefix(wired[0].IP, "10.87.0.") {
 		t.Errorf("the laptop's address from the lease: %+v\nleases:\n%s", wired, leases)
+	}
+
+	// The firewall counts the laptop's bytes both ways (its data use):
+	// what rbd reads in internal/agent/readings.go, wiredCounters.
+	// (udhcpc above only asked for a lease; this gives the laptop an address.)
+	inNS(t, laptopNS, "ip", "address", "add", "10.87.0.98/24", "dev", "eth0")
+	inNS(t, laptopNS, "ping", "-c", "3", "-i", "0.2", "-s", "1000", "-W", "2", "10.87.0.1")
+	for _, set := range []string{"up", "down"} {
+		out := inNS(t, routerNS, "nft", "-j", "list", "set", "bridge", "rasbeacon", set)
+		counts, err := stations.ParseSetCounters(out)
+		if err != nil || counts[laptopMAC] < 3000 {
+			t.Errorf("%s: the laptop's bytes = %d, want at least 3 pings of 1000 bytes (%v)\n%s", set, counts[laptopMAC], err, out)
+		}
 	}
 }

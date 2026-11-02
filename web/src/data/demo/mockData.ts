@@ -85,7 +85,7 @@ const clients: Client[] = [
     internetAccess: true,
   },
   {
-    // On the Ethernet client port: no band, signal or measured traffic.
+    // On the Ethernet client port: no band or signal; the firewall counts its traffic.
     hostname: 'desktop-office.lan',
     mac: 'a4:83:e7:12:34:56',
     ip: '192.168.8.131',
@@ -93,10 +93,10 @@ const clients: Client[] = [
     signalDbm: 0,
     connectedSeconds: 7_260,
     band: '',
-    downMbps: 0,
-    upMbps: 0,
-    downBytes: 0,
-    upBytes: 0,
+    downMbps: 12.4,
+    upMbps: 0.8,
+    downBytes: 3_412_000_000,
+    upBytes: 241_000_000,
     internetAccess: true,
     wired: true,
   },

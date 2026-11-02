@@ -100,3 +100,21 @@ func TestParseNeighbors(t *testing.T) {
 		t.Error("broken output should be an error")
 	}
 }
+
+func TestParseSetCounters(t *testing.T) {
+	out := `{"nftables": [{"metainfo": {"version": "1.0.9", "json_schema_version": 1}},
+		{"set": {"family": "bridge", "name": "up", "table": "rasbeacon", "type": "ether_addr",
+		"elem": [{"elem": {"val": "C6:16:94:AD:C5:1C", "expires": 86399, "counter": {"packets": 4, "bytes": 3112}}},
+		{"elem": {"val": "not a mac", "counter": {"bytes": 1}}}]}}]}`
+	got, err := ParseSetCounters(out)
+	if err != nil || len(got) != 1 || got["c6:16:94:ad:c5:1c"] != 3112 {
+		t.Errorf("got %v, %v", got, err)
+	}
+	// An empty set has no "elem".
+	if got, err := ParseSetCounters(`{"nftables": [{"set": {"name": "up"}}]}`); err != nil || len(got) != 0 {
+		t.Errorf("empty set: %v, %v", got, err)
+	}
+	if _, err := ParseSetCounters("nft: command not found"); err == nil {
+		t.Error("not JSON")
+	}
+}

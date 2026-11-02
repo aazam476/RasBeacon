@@ -80,7 +80,7 @@ func TestClients_DataUseIsCountedAndTheLimitBlocksADevice(t *testing.T) {
 	if _, err := e.agent.UpdateUsageSettings(api.UsageSettings{LimitMB: 1}); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(e.readFile(e.paths.FirewallRules()), "ether saddr") {
+	if strings.Contains(e.readFile(e.paths.FirewallRules()), "ether saddr {") {
 		t.Error("nobody is over the limit yet")
 	}
 	e.agent.mu.Lock()

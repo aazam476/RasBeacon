@@ -261,7 +261,8 @@ The VPN stays **off** for this section.
 2. Plug the laptop into the Pi's Ethernet port, laptop Wi-Fi off.
    **Expect:** a `10.87.0.x` address, internet, and it can ping phone A.
 3. **New:** Clients lists the laptop with a **cable icon** and
-   *Connection: Ethernet cable*, and *Traffic: Not measured*. There is no
+   *Connection: Ethernet cable*. Download a large file on it: its
+   *Traffic* shows the rate, and *Data used* grows. There is no
    Disconnect button for it. Pausing its internet access works (step 6.3).
    On Status, it is counted among the connected devices.
 4. Unplug the laptop. **Expect:** it leaves the list within about a minute.
