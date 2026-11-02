@@ -15,8 +15,8 @@ import { VpnSection } from './VpnSection';
 
 /**
  * The home screen: whether your devices are protected, then anything that needs attention,
- * then a group for each part of RasBeacon. On wide computer screens the groups flow into two
- * columns.
+ * then a group for each part of RasBeacon. On wide computer screens the groups sit in two
+ * columns, each one stacked under the other.
  */
 export function StatusScreen() {
   const { status, refreshStatus } = useDevice();
@@ -43,17 +43,40 @@ export function StatusScreen() {
           )}
           <RadioRolesNotice secondsLeft={status.radioRolesPending} />
           {status.warnings.length > 0 && <NoticeList tone="warning" ariaLabel="Warnings" messages={status.warnings} />}
-          {/* Two columns on wide screens, in rows (as on Clients): the sections side by side always
-              start at the same height. */}
-          <div className="flex flex-col gap-7 xl:grid xl:grid-cols-2 xl:items-start">
-            <VpnSection vpn={status.vpn} />
-            <InternetSection status={status} />
-            <TrafficSection throughput={status.throughput} />
-            <DevicesSection clients={status.clients} guests={status.guest.clients.length} />
-            <HotspotSection hotspot={status.hotspot} />
-            <GuestSection guest={status.guest} />
-            <PluginsSection plugins={status.plugins} />
-            <HardwareSection status={status} />
+          {/* Two columns on wide screens that start at the same height, each a stack of its own
+              sections. On narrower screens the columns dissolve into one list, in this order. */}
+          <div className="flex flex-col gap-7 xl:flex-row xl:items-start">
+            <div className="contents xl:flex xl:min-w-0 xl:flex-1 xl:flex-col xl:gap-7">
+              <div className="order-1 xl:order-none">
+                <VpnSection vpn={status.vpn} />
+              </div>
+              <div className="order-3 xl:order-none">
+                <TrafficSection throughput={status.throughput} />
+              </div>
+              <div className="order-5 xl:order-none">
+                <HotspotSection hotspot={status.hotspot} />
+              </div>
+              {/* Without plugins there is no section, and so no empty gap. */}
+              {status.plugins.length > 0 && (
+                <div className="order-7 xl:order-none">
+                  <PluginsSection plugins={status.plugins} />
+                </div>
+              )}
+            </div>
+            <div className="contents xl:flex xl:min-w-0 xl:flex-1 xl:flex-col xl:gap-7">
+              <div className="order-2 xl:order-none">
+                <InternetSection status={status} />
+              </div>
+              <div className="order-4 xl:order-none">
+                <DevicesSection clients={status.clients} guests={status.guest.clients.length} />
+              </div>
+              <div className="order-6 xl:order-none">
+                <GuestSection guest={status.guest} />
+              </div>
+              <div className="order-8 xl:order-none">
+                <HardwareSection status={status} />
+              </div>
+            </div>
           </div>
         </>
       )}
