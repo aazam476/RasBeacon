@@ -273,6 +273,10 @@ func (a *Agent) finishInstall(newVersion string, err error) error {
 	a.update.refused = nil
 	pending, _ := json.Marshal(pendingUpdate{Version: newVersion, FromVersion: version.Version})
 	if err := config.WriteFileAtomic(a.paths.UpdatePendingFile(), pending, 0o644); err != nil {
+		// Without this note the restart wouldn't start the new system on
+		// trial. Say so, rather than keep showing "Installing…".
+		slog.Error("update written, but the note for the restart could not be saved", "error", err)
+		a.update.message = "The update was not installed: " + err.Error()
 		return err
 	}
 	slog.Warn("update installed; restarting to try it", "version", newVersion)
@@ -312,7 +316,15 @@ func (a *Agent) downloadUpdate(url string) (string, error) {
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("downloading the update: GitHub answered %s", resp.Status)
 	}
-	return a.writeUpdate(&stallReader{r: resp.Body, timer: stall, after: downloadStall})
+	newVersion, err := a.writeUpdate(&stallReader{r: resp.Body, timer: stall, after: downloadStall})
+	if err != nil && ctx.Err() != nil {
+		// The stall timer stopped the download. What writeUpdate made of
+		// the cut-off file ("not a RasBeacon update file", a wrong
+		// checksum) would blame the file instead of the connection.
+		return "", fmt.Errorf("nothing arrived from GitHub for %.0f minutes, so the download was stopped. "+
+			"Check the internet connection, then try again", downloadStall.Minutes())
+	}
+	return newVersion, err
 }
 
 // stallReader resets timer each time something is read from r.

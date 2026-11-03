@@ -392,7 +392,7 @@ function UpdateActions({ status }: { status: Status }) {
       <div className="row">
         <div className="flex w-full flex-col gap-2 lg:flex-row lg:items-center">
           {offered ? (
-            <Button icon="system_update_alt" disabled={busy} onClick={() => setConfirmingDownload(true)}>
+            <Button icon="system_update_alt" disabled={!online || busy} onClick={() => setConfirmingDownload(true)}>
               Update now
             </Button>
           ) : (
@@ -415,7 +415,8 @@ function UpdateActions({ status }: { status: Status }) {
           )}
         </div>
       </div>
-      {update.canCheckOnline && !offered && !online && (
+      {/* Both Update now and Check now need the internet. */}
+      {update.canCheckOnline && !online && (
         <div className="row">
           <p className="text-subhead text-label-2">{NEEDS_INTERNET}</p>
         </div>

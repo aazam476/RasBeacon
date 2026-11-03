@@ -45,10 +45,11 @@ type readingsState struct {
 	lanRx, lanTx uint64
 	traffic      api.Throughput
 
-	// Per device (by MAC address): byte counters at the last sample, and
-	// the rates worked out from them.
+	// Per device (by MAC address): byte counters at the last sample that
+	// could read them all (stationsAt), and the rates worked out from them.
 	stationBytes map[string][2]uint64
 	stationRates map[string][2]float64
+	stationsAt   time.Time
 }
 
 // sampleReadings takes one sample of the counters. The caller holds a.mu.
@@ -90,7 +91,10 @@ func (a *Agent) sampleReadings() {
 	// The month's data through phones and modems.
 	a.countMobileData()
 
-	// Each device's rate, from the radio's counters.
+	// Each device's rate, from the radio's counters, over the time since
+	// they were last read (a sample that failed to read them kept the old
+	// ones, so this can be longer than elapsed).
+	sinceStations := now.Sub(r.stationsAt).Seconds()
 	rates := map[string][2]float64{}
 	bytes := map[string][2]uint64{}
 	for _, iface := range []string{"ap0", render.GuestInterface} {
@@ -107,8 +111,8 @@ func (a *Agent) sampleReadings() {
 		}
 		for _, s := range stations.ParseStationDump(dump) {
 			bytes[s.MAC] = [2]uint64{s.TxBytes, s.RxBytes}
-			if before, ok := r.stationBytes[s.MAC]; ok && elapsed > 0 && s.TxBytes >= before[0] && s.RxBytes >= before[1] {
-				rates[s.MAC] = [2]float64{mbps(s.TxBytes-before[0], elapsed), mbps(s.RxBytes-before[1], elapsed)}
+			if before, ok := r.stationBytes[s.MAC]; ok && sinceStations > 0 && s.TxBytes >= before[0] && s.RxBytes >= before[1] {
+				rates[s.MAC] = [2]float64{mbps(s.TxBytes-before[0], sinceStations), mbps(s.RxBytes-before[1], sinceStations)}
 			}
 		}
 	}
@@ -125,8 +129,8 @@ func (a *Agent) sampleReadings() {
 				continue
 			}
 			bytes[mac] = c
-			if before, ok := r.stationBytes[mac]; ok && elapsed > 0 && c[0] >= before[0] && c[1] >= before[1] {
-				rates[mac] = [2]float64{mbps(c[0]-before[0], elapsed), mbps(c[1]-before[1], elapsed)}
+			if before, ok := r.stationBytes[mac]; ok && sinceStations > 0 && c[0] >= before[0] && c[1] >= before[1] {
+				rates[mac] = [2]float64{mbps(c[0]-before[0], sinceStations), mbps(c[1]-before[1], sinceStations)}
 			}
 		}
 	}
@@ -135,7 +139,7 @@ func (a *Agent) sampleReadings() {
 	if !first {
 		a.addUsage(r.stationBytes, bytes)
 	}
-	r.stationBytes, r.stationRates = bytes, rates
+	r.stationBytes, r.stationRates, r.stationsAt = bytes, rates, now
 }
 
 // wiredCounters reads the firewall's byte counts per device: what each
