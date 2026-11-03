@@ -28,7 +28,8 @@ describe('without internet', () => {
 
   it('the update check can’t run', () => {
     renderScreen(<SystemScreen />, offline());
-    expectBlocked(screen.getByRole('button', { name: /Check now/ }));
+    expect(screen.getByRole('button', { name: 'Check now' })).toHaveProperty('disabled', true);
+    expect(screen.getByText('Needs an internet connection')).toBeTruthy();
   });
 
   it('Browse plugins still shows the saved list, but can’t check again', async () => {

@@ -362,6 +362,10 @@
     text-size-adjust: 100%;
     /* Keeps Android's pull-to-refresh from reloading the page; iOS keeps its bounce. */
     overscroll-behavior-y: contain;
+    /* Keeps the scroll bar's room even while a dialog hides the bar (below), so the page
+       doesn't shift sideways when one opens. Phones and Macs, whose bars float over the page,
+       have no room to keep. */
+    scrollbar-gutter: stable;
     /* Controls reached by Tab stop clear of the bars that float over the content. */
     scroll-padding-top: calc(4rem + env(safe-area-inset-top));
     scroll-padding-bottom: calc(6rem + env(safe-area-inset-bottom));

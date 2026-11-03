@@ -81,7 +81,7 @@ describe('software', () => {
   it('says an installing update takes devices offline for a while', () => {
     renderSoftware({ installing: true });
     expect(screen.getByText('Installing an update…')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Install update from a file…' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: 'Update from a file' })).toHaveProperty('disabled', true);
   });
 
   it('shows the download’s progress', () => {
@@ -93,7 +93,7 @@ describe('software', () => {
       downloadSize: 1,
     });
     expect(screen.getByText('Downloading and installing RasBeacon v0.3.0…')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Install update' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: 'Update now' })).toHaveProperty('disabled', true);
   });
 
   it('downloads and installs the offered version after asking, with its size', async () => {
@@ -102,8 +102,8 @@ describe('software', () => {
       latestVersion: 'v0.3.0',
       downloadSize: 412_000_000,
     });
-    expect(screen.getByText('Install it below: RasBeacon downloads it by itself.')).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: 'Install update' }));
+    expect(screen.getByText('Press Update now below: RasBeacon downloads and installs it by itself.')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Update now' }));
     const alert = within(screen.getByRole('dialog', { name: 'Install RasBeacon v0.3.0?' }));
     expect(alert.getByText(/downloads it \(412 MB\) from GitHub/)).toBeTruthy();
     expect(alert.queryByText(/metered/)).toBeNull();
@@ -117,7 +117,7 @@ describe('software', () => {
       router.status.hotspot.metered = true;
     });
     const { user } = renderScreen(<SystemScreen />, device);
-    await user.click(screen.getByRole('button', { name: 'Install update' }));
+    await user.click(screen.getByRole('button', { name: 'Update now' }));
     expect(screen.getByText('This connection is metered: the download uses 412 MB of data.')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(device.downloadUpdate).not.toHaveBeenCalled();
@@ -125,8 +125,8 @@ describe('software', () => {
 
   it('offers only the file without a version to download', () => {
     renderSoftware({ canInstall: true, latestVersion: 'v0.3.0' });
-    expect(screen.queryByRole('button', { name: 'Install update' })).toBeNull();
-    expect(screen.getByText(/then install it below from the file/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Update now' })).toBeNull();
+    expect(screen.getByText(/then press Update from a file below/)).toBeTruthy();
   });
 
   it('explains how one-system boards move to a new version', () => {

@@ -5,6 +5,7 @@ import { useScrollEdge } from '@/lib/useScrollEdge';
 import { Icon } from '@/ui';
 import { isSubPage, useCurrentPage, usePageTitleOverride } from './navigation';
 import { Sidebar } from './Sidebar';
+import { StaleNotice } from './StaleNotice';
 
 /**
  * Computers (1024px and wider), laid out like macOS System Settings: the sidebar, and the page
@@ -63,6 +64,7 @@ export function DesktopLayout() {
             {title}
           </h1>
           <div className="flex flex-col gap-7">
+            <StaleNotice />
             <Outlet />
           </div>
         </div>

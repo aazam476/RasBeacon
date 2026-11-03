@@ -3,6 +3,7 @@
 import { screen, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { describe, expect, it } from 'vitest';
+import { Pages } from '@/App';
 import type { DataKey } from '@/data/device';
 import { ClientsScreen } from '@/screens/clients/ClientsScreen';
 import { GuestsScreen } from '@/screens/guests/GuestsScreen';
@@ -56,5 +57,21 @@ describe('Try again', () => {
     expect(screen.getByRole('switch', { name: /Kill switch/ })).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Try again' }));
     expect(device.reload).toHaveBeenCalledWith('vpnSettings');
+  });
+
+  it('says a failed refresh once per page, and Try again loads everything again', async () => {
+    const device = fakeDevice();
+    const failed = 'Can’t reach RasBeacon. Check that this device is connected to its Wi-Fi.';
+    Object.assign(device, {
+      status: { data: device.status.data, error: failed },
+      swapSettings: { data: device.swapSettings.data, error: failed },
+      updateSettings: { data: device.updateSettings.data, error: failed },
+    });
+    const { user } = renderScreen(<Pages />, device, '/system');
+    expect(await screen.findAllByText(`Last refresh failed: ${failed}`)).toHaveLength(1);
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(device.refreshStatus).toHaveBeenCalled();
+    expect(device.reload).toHaveBeenCalledWith('swapSettings');
+    expect(device.reload).toHaveBeenCalledWith('updateSettings');
   });
 });

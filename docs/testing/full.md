@@ -565,8 +565,8 @@ install updates (on the Pi 3/Zero 2 W image, check instead that System says
 *New versions are flashed* and skip the rest).
 
 1. **System → Software:** note the version (like `dev-a64bc3b`). There is an
-   **Install update from a file…** button, and no warning about a missing
-   key. (A test build is never offered a download: **Install update** only
+   **Update from a file** button next to **Check now**, and no warning about
+   a missing key. (A test build is never offered a download: **Update now** only
    shows on a release that a newer release can update; see step 7.)
 2. **Bad files are refused:** try each of these; **expect** a message saying
    why, no restart, and the same version afterwards:
@@ -574,7 +574,7 @@ install updates (on the Pi 3/Zero 2 W image, check instead that System says
    - a copy of the good `.rbupdate` with one byte changed near the end (Mac
      or Linux:
      `cp good.rbupdate bad.rbupdate && printf 'X' | dd of=bad.rbupdate bs=1 seek=100000000 conv=notrunc`).
-3. **A good update installs:** **Install update from a file…**, choose the
+3. **A good update installs:** **Update from a file**, choose the
    newer build's `.rbupdate`, confirm. Keep the page open: uploading takes a minute
    or two, then RasBeacon restarts (the hotspot is gone for about 2
    minutes). **Expect:** *Updated to <new version>*, and every setting kept
@@ -602,9 +602,9 @@ install updates (on the Pi 3/Zero 2 W image, check instead that System says
    steps, open the demo (`npm run demo`) state *New version needs a fresh
    install*: **Back up settings** opens the backup sheet, **Release page**
    opens the release.
-7. **Install update downloads it (released images only, new):** on a device
-   running a release older than the newest one, **Check now**, then
-   **Install update**. **Expect:** the alert names the version and the
+7. **Update now downloads it (released images only, new):** on a device
+   running a release older than the newest one, **Check now**: the button
+   turns into **Update now**; press it. **Expect:** the alert names the version and the
    download's size (on a metered connection it also says the download uses
    that much data); after **Install**, Software shows *Downloading and
    installing RasBeacon <version>…*, then RasBeacon restarts into it as in
@@ -742,7 +742,7 @@ Board (Pi 4/5/3B/3B+/Zero 2 W) / RAM:     Adapter:          Card size:          
 11 SSH: / pages OK phone+laptop+dark: / rounded focus outline: / readings: / stay logged in: / unsaved bar:
 12 Hotspot password check + 5 GHz: / UK refused, GB saves: / JP channels end at 48: / show password (no admin password): / WPA3 only: / Wi-Fi standard (6 if the adapter can, 4 for old devices): / 6 GHz hotspot (country __), 6E device joins, none in US: / radio details show standard: / allowed devices + lockout warning: / device limit: / metered: / guests isolated: / welcome page + code + ask again: / guest radio of its own + keep + goes back by itself: / rbd restart with guests, uplink not guest0: / IPv6: / HTTPS fingerprint + redirect: / iPhone Safari accepts the certificate:
 13 Plugins: catalog install AdGuard: / isolation: / ports: / Samba: / crash stop: / changed byte refused: / image with another plugin's name refused, AdGuard unchanged: / kept data asked about: / rbport + bridge table:
-14 Version before __ / renamed image refused: / changed byte refused: / update installed, settings kept, took __ min: / rollback: / check schedule + Check now: / ntfy test + new-version notice: / Install update downloads + offline fails:
+14 Version before __ / renamed image refused: / changed byte refused: / update installed, settings kept, took __ min: / rollback: / check schedule + Check now: / ntfy test + new-version notice: / Update now downloads + offline fails:
 15 Power cuts x3: / reboot dialog: / shut down + power on: / rename to travel-pi.lan: / long run __ devices __ min, drops: / memory: / diagnostics clean:
 16 Backup Plugin data restored, app downloaded again: / cut-off backup says incomplete: / Everything restored offline: / Admin password changed, other device logged out: / Factory reset: / setup.txt password + broken-file LED + deleted: / factory-reset file: / button:
 17 Power idle __ W, load __ W / iperf3:

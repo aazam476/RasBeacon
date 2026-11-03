@@ -144,11 +144,12 @@ The result must match the line in `SHA256SUMS`.
 
 ## Updating
 
-When **Check now** on the **System** page finds a new version, tap
-**Install update**: RasBeacon downloads it from GitHub and installs it. Or,
+When **Check now** on the **System** page finds a new version, the button
+turns into **Update now**: tap it, and RasBeacon downloads the update from
+GitHub and installs it. Or,
 when RasBeacon isn't online (or you want a version of your choice), download
 the release's `rasbeacon-<version>.rbupdate` file on any phone or computer
-and tap **Install update from a file…**. Either way RasBeacon checks that the
+and tap **Update from a file**. Either way RasBeacon checks that the
 update was signed by the RasBeacon release key, installs it next to the
 running version, and restarts into it. If the new version doesn't start
 correctly, it goes back to the old one by itself. Your settings are kept.

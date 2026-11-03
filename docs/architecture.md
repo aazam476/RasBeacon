@@ -237,9 +237,9 @@ details are in [plugins.md](plugins.md#how-it-works)).
 Updates use the two copies ("slots", A and B) of the system on the SD card
 (`internal/update`, `internal/agent/update.go`):
 
-1. The owner uploads a `.rbupdate` file on the System page ("Install
-   update from a file…"), or rbd downloads the one the online check offers
-   from the GitHub release ("Install update"); both stream into the same
+1. The owner uploads a `.rbupdate` file on the System page ("Update
+   from a file"), or rbd downloads the one the online check offers from
+   the GitHub release ("Update now"); both stream into the same
    checks. Its manifest
    is signed with the release key (Ed25519); the public key is built into
    the image. Nothing is written until the signature and board check out,

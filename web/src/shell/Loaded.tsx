@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import type { Loadable } from '@/data/device';
 import { ActionButton, ActivityIndicator, Notice } from '@/ui';
+import { useStaleReport } from './staleNotices';
 
 interface LoadedProps<T> {
   data: Loadable<T>;
@@ -14,9 +15,11 @@ interface LoadedProps<T> {
 /**
  * Shows `children` with the data once it has loaded. Until then it shows that the data is
  * loading, or why it couldn't be loaded with a "Try again" button. When a later refresh fails,
- * the older data stays and a note above it says so.
+ * the older data stays and the page says so once, above everything (see staleNotices.ts); a
+ * screen shown on its own says so above this data instead.
  */
 export function Loaded<T>({ data, what, onRetry, children }: LoadedProps<T>) {
+  const hosted = useStaleReport(data.data !== undefined && data.error ? data.error : undefined, onRetry);
   const retry = (
     <ActionButton variant="secondary" size="sm" icon="refresh" action={onRetry}>
       Try again
@@ -40,7 +43,7 @@ export function Loaded<T>({ data, what, onRetry, children }: LoadedProps<T>) {
 
   return (
     <>
-      {data.error && (
+      {data.error && !hosted && (
         <Notice tone="warning" role="alert" actions={retry}>
           <p>Last refresh failed: {data.error}</p>
         </Notice>

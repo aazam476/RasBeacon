@@ -5,6 +5,7 @@ import { useScrollEdge } from '@/lib/useScrollEdge';
 import { Icon } from '@/ui';
 import { LogoutButton } from './LogoutButton';
 import { isSubPage, MORE_ITEM, MORE_ITEMS, useCurrentPage, usePageTitleOverride } from './navigation';
+import { StaleNotice } from './StaleNotice';
 import { TabBar } from './TabBar';
 
 /**
@@ -67,6 +68,7 @@ export function PhoneLayout() {
           {title}
         </h1>
         <div className="flex flex-col gap-7">
+          <StaleNotice />
           <Outlet />
         </div>
       </main>
