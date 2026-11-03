@@ -63,6 +63,7 @@ func (s *StandIn) limit(r io.Reader) io.Reader {
 	return &slowReader{r: r, bytesPerSecond: s.RateMbps * 1e6 / 8, start: time.Now()}
 }
 
+// zeros is an endless stream of zero bytes: the stand-in's download.
 type zeros struct{}
 
 // Read fills p with zeros, endlessly.
@@ -71,6 +72,9 @@ func (zeros) Read(p []byte) (int, error) {
 	return len(p), nil
 }
 
+// slowReader reads r no faster than bytesPerSecond, like a slow
+// connection: start is when reading began and done how many bytes it has
+// passed on since.
 type slowReader struct {
 	r              io.Reader
 	bytesPerSecond float64

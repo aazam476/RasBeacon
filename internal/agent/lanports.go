@@ -14,10 +14,10 @@ import (
 	"rasbeacon/internal/api"
 )
 
-// notLANDrivers are the drivers of USB network devices that bring the
-// internet rather than take devices: phones sharing their connection and
-// modems (see phoneDrivers), and modems that need a modem manager. They
-// are never LAN ports.
+// notLANDriver reports whether driver belongs to a USB network device that
+// brings the internet rather than takes devices: a phone sharing its
+// connection or a modem (see phoneDrivers), or a modem that needs a modem
+// manager. Such a device is never a LAN port.
 func notLANDriver(driver string) bool {
 	_, phone := phoneDrivers[driver]
 	return phone || driver == "qmi_wwan" || driver == "cdc_mbim"

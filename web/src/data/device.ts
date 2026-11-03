@@ -95,6 +95,9 @@ export interface PortalBrowserState {
   error: string | null;
 }
 
+/** RasBeacon's browser while it is closed: no picture yet, and no problem. */
+export const CLOSED_BROWSER: PortalBrowserState = { frame: undefined, imageSrc: '', error: null };
+
 /**
  * How much of the plugins a backup holds: their settings; also their data; or also their apps,
  * so a restore works offline. Apps left out are downloaded again after a restore.
@@ -415,8 +418,10 @@ export interface DeviceActions {
   savePluginSources: (sources: string[]) => Promise<void>;
 }
 
+/** Everything a screen can read from the router, and everything it can ask it to do. */
 export type Device = DeviceState & DeviceActions;
 
+/** Holds the Device for useDevice; the real or the demo provider fills it in. */
 export const DeviceContext = createContext<Device | null>(null);
 
 /** Read router data and call router actions from any screen. */

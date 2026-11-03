@@ -98,6 +98,7 @@ export function ConnectionSection({ status }: { status: Status }) {
   );
 }
 
+/** Why there is no internet, as the notice shows it: its look, its title and what to do. */
 interface Problem {
   tone: NoticeTone;
   icon: BaseIconName;
@@ -154,6 +155,7 @@ function describeProblem(uplink: UplinkStatus): Problem {
   }
 }
 
+/** Why there is no internet, and what to do, as a notice. */
 function UplinkProblem({ uplink }: { uplink: UplinkStatus }) {
   const problem = describeProblem(uplink);
   const urgent = problem.tone === 'danger' || problem.tone === 'warning';

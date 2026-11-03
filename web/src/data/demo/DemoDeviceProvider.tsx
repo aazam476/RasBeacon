@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router';
 import {
+  CLOSED_BROWSER,
   DeviceContext,
   type DataKey,
   type Device,
@@ -13,6 +14,14 @@ import { MAX_PRIORITY_DEVICES, speedProblem } from '@/lib/qos';
 import { assignRoles, rolesProblem, savedChoices, type RadioChoice } from '@/lib/radios';
 import { welcomeProblems } from '@/lib/welcome';
 import { FieldErrors } from '../errors';
+import { UNREACHABLE } from '../real/api';
+import {
+  checkAdminPasswordForm,
+  checkGuestForm,
+  checkNewNetwork,
+  checkSetupForm,
+  checkWifiPassword,
+} from '../real/logic';
 import type { MACChoice, Plugin, PluginChoices, PluginPreview, Radio, SavedNetwork, VPNProfile } from '../types';
 import { DemoIndex } from './DemoIndex';
 import { DemoTag } from './DemoTag';
@@ -30,17 +39,8 @@ import {
   previewOf,
 } from './plugins';
 import { demoQrSvg } from './qrPicture';
-import {
-  checkGuestSettings,
-  checkHotspotSettings,
-  checkNewAdminPassword,
-  checkNewNetwork,
-  checkSetupForm,
-  checkWifiPassword,
-  checkWireGuardFile,
-  demoHotspotChannels,
-} from './rules';
-import { CLOSED_BROWSER, createDemoState, SCENARIOS, UNREACHABLE, type DemoState } from './scenarios';
+import { checkHotspotSettings, checkWireGuardFile, demoHotspotChannels } from './rules';
+import { createDemoState, SCENARIOS, type DemoState } from './scenarios';
 
 /**
  * Like the router: devices that used the data limit are paused until the counters are reset or the
@@ -70,6 +70,7 @@ const DEMO_UPDATE_SIZE = 412_000_000;
 
 /** A new name for a plugin file waiting in the install sheet. */
 let stagingCount = 0;
+/** A new id for a plugin waiting to be installed, like the router hands out. */
 function newStagingId(kind: string): string {
   stagingCount += 1;
   return `${kind}-${stagingCount}`;
@@ -162,6 +163,7 @@ function randomKey(): string {
   return btoa(String.fromCharCode(...bytes));
 }
 
+/** A made-up SHA-256 fingerprint for a new HTTPS certificate. */
 function randomFingerprint(): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(32)), (byte) =>
     byte.toString(16).padStart(2, '0').toUpperCase(),
@@ -667,7 +669,7 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
       },
       saveGuestSettings: async (settings) => {
         await wait(1500);
-        failIfAny(checkGuestSettings(settings));
+        failIfAny(checkGuestForm(settings));
         change((d) => {
           const { password, ...rest } = settings;
           d.router.guestSettings = { ...rest, hasPassword: rest.hasPassword || Boolean(password) };
@@ -1196,7 +1198,7 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
 
       changeAdminPassword: async (form) => {
         await wait(1200);
-        const errors = checkNewAdminPassword(form);
+        const errors = checkAdminPasswordForm(form);
         if (form.currentPassword === 'wrong') errors.currentPassword = 'Wrong password.';
         failIfAny(errors);
       },

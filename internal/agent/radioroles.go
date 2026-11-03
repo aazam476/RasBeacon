@@ -261,6 +261,7 @@ func (a *Agent) RevertRadioRoles() error {
 	return a.revertRadioRoles()
 }
 
+// revertRadioRoles is RevertRadioRoles for callers that hold a.mu.
 func (a *Agent) revertRadioRoles() error {
 	pending, ok := a.readRadioRolesPending()
 	if !ok {
@@ -322,6 +323,7 @@ func (a *Agent) radioByMAC(mac string) *radio.Radio {
 	return nil
 }
 
+// hasRole reports whether one of radios has role.
 func hasRole(radios []radio.Radio, role radio.Role) bool {
 	for _, r := range radios {
 		if r.Role == role {

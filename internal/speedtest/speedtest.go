@@ -28,9 +28,6 @@ const Provider = "Cloudflare"
 // DefaultServer is Cloudflare's speed test service.
 const DefaultServer = "https://speed.cloudflare.com"
 
-// LibraryVersion is the vendored library's version (see cloudflare/README.md).
-const LibraryVersion = "1.14.1"
-
 //go:embed cloudflare/speedtest.js
 var library string
 

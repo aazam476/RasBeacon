@@ -4,8 +4,10 @@ import { ActivityIndicator } from './ActivityIndicator';
 import { buttonClasses, type ButtonSize, type ButtonVariant } from './buttonStyles';
 import { Icon, type BaseIconName } from './Icon';
 
+/** The icon's size in px for each button size. */
 const ICON_SIZE: Record<ButtonSize, number> = { lg: 20, md: 18, sm: 16 };
 
+/** A button's look (variant, size, icon), and whether it is busy; the rest is a <button>'s own. */
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
   size?: ButtonSize;

@@ -40,6 +40,7 @@ export function SystemScreen() {
   );
 }
 
+/** The processor, memory, swap and temperature readings. */
 function HardwareSection({ status }: { status: Status }) {
   const { system } = status;
 
@@ -60,6 +61,7 @@ function HardwareSection({ status }: { status: Status }) {
   );
 }
 
+/** About this RasBeacon: its name (with Rename), board, model, device ID, kernel, the drive it starts from, and how long it has been up. */
 function AboutSection({ status }: { status: Status }) {
   const { saveHostname } = useDevice();
   const { device } = status;

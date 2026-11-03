@@ -2,10 +2,11 @@ package agent
 
 // The welcome page: the owner's own captive portal on the guest network
 // (Guests page → Welcome page). The hotspot is for the owner's own devices,
-// so it never shows the page. Until a guest's device accepts it, its web requests show the page (served
-// by rbweb on render.WelcomePort) and nothing else of it is forwarded; see
-// welcome_ok in firewall.nft.tmpl. Devices that accepted are kept, with
-// when to ask again, in WelcomeAcceptedFile.
+// so it never shows the page. Until a guest's device accepts it, its web
+// requests show the page (served by rbweb on render.WelcomePort) and
+// nothing else of it is forwarded; see welcome_ok in firewall.nft.tmpl.
+// Devices that accepted are kept, with when to ask again, in
+// WelcomeAcceptedFile.
 
 import (
 	"crypto/subtle"
@@ -52,6 +53,8 @@ type welcomeState struct {
 	failures map[string]codeFailures
 }
 
+// codeFailures is how many wrong access codes a device typed in a row,
+// and until when it must wait after too many.
 type codeFailures struct {
 	count int
 	until time.Time

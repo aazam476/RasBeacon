@@ -41,6 +41,9 @@ type welcomeView struct {
 	Done  bool
 }
 
+// welcomeTemplate is the built-in welcome page that a device on the guest
+// network sees before it may use the internet: the owner's title, text,
+// color and logo, an access code field if there is one, and "I agree".
 var welcomeTemplate = template.Must(template.New("welcome").Parse(`<!doctype html>
 <html lang="en">
 <head>

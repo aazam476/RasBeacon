@@ -586,7 +586,8 @@ func (a *Agent) readSysNet(iface, file string) string {
 
 // moveLAN switches the hotspot to another network range because the
 // upstream network uses the current one. Devices lose their old address and
-// ask for a new one; RasBeacon's address changes too (see lanWarning).
+// ask for a new one; RasBeacon's address changes too (uplinkWarnings tells
+// the owner the new one).
 func (a *Agent) moveLAN(prefix netip.Prefix) {
 	slog.Warn("the upstream network uses the hotspot's addresses; moving the hotspot network",
 		"from", a.lan.Prefix, "to", prefix)

@@ -41,6 +41,7 @@ interface SheetProps {
   children?: ReactNode | ((fieldErrors: Readonly<Record<string, string>>) => ReactNode);
 }
 
+/** A drag of the sheet in progress: which pointer, where it started, and where it has been. */
 interface Drag {
   pointerId: number;
   startY: number;

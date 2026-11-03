@@ -21,6 +21,7 @@ export function DnsSection() {
   );
 }
 
+/** The DNS servers, once loaded; the page's Save saves them. */
 function DnsForm({ settings }: { settings: DNSSettings }) {
   const { saveDnsSettings } = useDevice();
   const form = useForm({ servers: settings.servers.join('\n'), withVpn: settings.withVpn }, (values) =>

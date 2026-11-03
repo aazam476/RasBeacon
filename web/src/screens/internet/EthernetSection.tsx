@@ -3,6 +3,7 @@ import { useDevice } from '@/data/device';
 import type { EthernetDiagnostics, EthernetRole, EthernetUplinkStatus } from '@/data/types';
 import { AlertDialog, Badge, ButtonRow, Choice, ChoiceList, Notice, Row, Section, type BaseIconName } from '@/ui';
 
+/** The Ethernet port's two jobs, as the choice lists them. */
 const ROLES: Record<EthernetRole, { title: string; description: string; icon: BaseIconName }> = {
   uplink: {
     title: 'Uplink',

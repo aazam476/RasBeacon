@@ -51,6 +51,7 @@ export function GuestsScreen() {
 /** Typing settings for names: no capitals, corrections or suggestions. */
 const PLAIN_INPUT = { autoComplete: 'off', autoCapitalize: 'none', autoCorrect: 'off', spellCheck: false } as const;
 
+/** The guest network's settings, once loaded, and their Save (which restarts the hotspot). */
 function GuestForm({ settings }: { settings: GuestSettings }) {
   const { saveGuestSettings } = useDevice();
   const form = useForm({ ...settings, password: '' }, saveGuestSettings);
@@ -137,6 +138,7 @@ function GuestNow({ guest }: { guest: GuestStatus }) {
   );
 }
 
+/** What a device on the guest network can reach, and what it cannot. */
 const REACH: { icon: BaseIconName; text: string; allowed: boolean }[] = [
   { icon: 'public', text: 'The internet, through the VPN if it is on', allowed: true },
   { icon: 'devices', text: 'Your devices', allowed: false },

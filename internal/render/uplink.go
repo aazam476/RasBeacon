@@ -75,6 +75,10 @@ type WPAInput struct {
 	Networks []WPANetwork
 }
 
+// wpaNetworkData is one saved network as wpa_supplicant.conf.tmpl writes
+// it: its name in hex (any bytes are safe that way) and as a readable
+// comment, its priority (higher is tried first), and its WPA-Enterprise
+// login.
 type wpaNetworkData struct {
 	WPANetwork
 	SSIDHex        string
@@ -89,6 +93,7 @@ type wpaNetworkData struct {
 	PasswordHex          string
 }
 
+// wpaData is what wpa_supplicant.conf.tmpl fills in.
 type wpaData struct {
 	Country  string
 	Networks []wpaNetworkData

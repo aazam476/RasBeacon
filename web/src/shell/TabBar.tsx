@@ -56,6 +56,7 @@ export function TabBar() {
   );
 }
 
+/** A tab's symbol (filled when it is the open page) and label. */
 function Tab({ item, selected = false }: { item: NavItem; selected?: boolean }) {
   return (
     <>

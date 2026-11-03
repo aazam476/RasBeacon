@@ -1,4 +1,5 @@
-import type { AppPhase, DataKey, PortalBrowserState } from '../device';
+import { CLOSED_BROWSER, type AppPhase, type DataKey, type PortalBrowserState } from '../device';
+import { UNREACHABLE } from '../real/api';
 import type { NearbyNetwork, PortalStatus } from '../types';
 import { LOGIN_PAGE_PICTURE } from './loginPagePicture';
 import { createMockRouter, type MockRouter } from './mockData';
@@ -18,6 +19,7 @@ export interface DemoState {
   failActions: boolean;
 }
 
+/** A state of the router the demo page can open, to look at a screen in it. */
 export interface DemoScenario {
   id: string;
   /** Heading on the demo page, e.g. "Status". */
@@ -27,10 +29,6 @@ export interface DemoScenario {
   route: string;
   apply?: (demo: DemoState) => void;
 }
-
-export const UNREACHABLE = "Can't reach RasBeacon. Check that this device is connected to it.";
-
-export const CLOSED_BROWSER: PortalBrowserState = { frame: undefined, imageSrc: '', error: null };
 
 /** The demo as it starts: logged in, everything working. */
 export function createDemoState(): DemoState {
@@ -62,6 +60,7 @@ function detectLoginPage(demo: DemoState, portal: Partial<PortalStatus> = {}) {
   status.vpn = { ...status.vpn, state: 'connecting', handshakeAgeSeconds: -1, receivedBytes: 0, sentBytes: 2_048 };
 }
 
+/** Opens RasBeacon's browser on a login page, with or without its picture yet. */
 function openBrowser(demo: DemoState, withPicture: boolean) {
   detectLoginPage(demo, { browsing: true });
   demo.portalBrowser = withPicture
@@ -80,6 +79,7 @@ function openBrowser(demo: DemoState, withPicture: boolean) {
     : CLOSED_BROWSER;
 }
 
+/** Takes the demo router offline: no uplink, Wi-Fi looking for a network. */
 function disconnectUplink(demo: DemoState) {
   const { uplink } = demo.router.status;
   Object.assign(uplink, { connected: false, kind: '', interface: '', address: '', gateway: '' });
@@ -94,6 +94,7 @@ function disconnectUplink(demo: DemoState) {
   demo.router.status.vpn = { ...demo.router.status.vpn, state: 'connecting', handshakeAgeSeconds: -1 };
 }
 
+/** The router's warnings while the tunnel is broken (internal/agent/vpn.go), with the kill switch on and off. */
 const VPN_DOWN_WARNING =
   'The VPN tunnel is not working, and the kill switch is on: your devices have no internet until it works again.';
 const VPN_DIRECT_WARNING =

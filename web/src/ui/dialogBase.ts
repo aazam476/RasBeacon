@@ -1,6 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
-
-const EASE_OUT = 'cubic-bezier(0.23, 1, 0.32, 1)';
+import { EASE_OUT } from '@/lib/spring';
 
 /**
  * Fades the dimming layer to fully shown or hidden, from whatever it shows right now (a drag
@@ -52,6 +51,7 @@ export function popOut(panel: HTMLElement, reducedMotion: boolean): Promise<void
   );
 }
 
+/** What useModalDialog needs from the dialog. */
 interface ModalDialogOptions {
   /** True while the dialog's action runs: it can't be closed then. */
   busy: boolean;

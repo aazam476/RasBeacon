@@ -100,6 +100,7 @@ interface SettingFieldProps {
   error?: string;
 }
 
+/** One setting of a plugin, as the field its type calls for: a switch, a choice, a number or text. */
 function SettingField({ setting, value, onChange, error }: SettingFieldProps) {
   const label = setting.unit ? `${setting.label} (${setting.unit})` : setting.label;
   switch (setting.type) {

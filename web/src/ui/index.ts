@@ -35,5 +35,6 @@ export {
 export { RenameSheet } from './RenameSheet';
 export { Sheet } from './Sheet';
 export { SignalIcon } from './SignalIcon';
+export { SIGNAL_BARS } from './icons';
 export { StatRow, type Stat } from './StatRow';
 export { FormSwitch, Switch } from './Switch';

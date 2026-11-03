@@ -32,6 +32,7 @@ export function VpnScreen() {
   );
 }
 
+/** The notice's look for each color a VPN state has. */
 const NOTICE_TONES: Record<Tone, NoticeTone> = {
   green: 'success',
   orange: 'warning',
@@ -40,6 +41,7 @@ const NOTICE_TONES: Record<Tone, NoticeTone> = {
   tint: 'info',
 };
 
+/** The tunnel's state (or that no VPN is set up yet) with its two switches: the VPN and the kill switch. */
 function TunnelSections({ vpn, online, settings }: { vpn: VPNStatus; online: boolean; settings: VPNSettings }) {
   const { setVpnEnabled, setKillSwitch } = useDevice();
   const view = vpnStateView(vpn);

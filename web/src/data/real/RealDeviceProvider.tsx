@@ -3,6 +3,7 @@ import { useLocation } from 'react-router';
 import { loginPageAddress } from '../constants';
 import { currentHostname, openAddress, renameHost } from '@/lib/navigate';
 import {
+  CLOSED_BROWSER,
   DeviceContext,
   type AppPhase,
   type DataKey,
@@ -73,8 +74,10 @@ interface DataTypes {
   portal: PortalStatus;
 }
 
+/** Every piece of data the pages load, each with its own loading and error state. */
 type AllData = { [K in DataKey]: Loadable<DataTypes[K]> };
 
+/** How each piece of data is loaded: one API call each. */
 const LOADERS: { [K in DataKey]: () => Promise<DataTypes[K]> } = {
   status: api.getStatus,
   hotspotSettings: api.getHotspotSettings,
@@ -95,7 +98,9 @@ const LOADERS: { [K in DataKey]: () => Promise<DataTypes[K]> } = {
   portal: api.getPortalStatus,
 };
 
+/** Nothing loaded yet, and no error: how every piece of data starts. */
 const NOTHING = { data: undefined, error: null };
+/** Every piece of data before anything is loaded. */
 const NO_DATA: AllData = {
   status: NOTHING,
   hotspotSettings: NOTHING,
@@ -149,12 +154,12 @@ const PAGE_DATA: Record<string, DataKey[]> = {
   '/more': ['sshSettings', 'httpsSettings'],
 };
 
+/** How often the status is refreshed while logged in. */
 const STATUS_EVERY_MS = 10_000;
 /** The plugins' pages follow installs, starts and metrics. */
 const PLUGINS_EVERY_MS = 4_000;
+/** How often the login page screen (/portal) refreshes what RasBeacon found. */
 const PORTAL_EVERY_MS = 5_000;
-
-const CLOSED_BROWSER: PortalBrowserState = { frame: undefined, imageSrc: '', error: null };
 
 /** Has the browser download a file from RasBeacon and save it, with its own progress. */
 function downloadFile(url: string, name: string) {
@@ -164,10 +169,12 @@ function downloadFile(url: string, name: string) {
   link.click();
 }
 
+/** Waits `ms` milliseconds. */
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** The message of whatever was thrown. */
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }

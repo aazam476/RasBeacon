@@ -149,6 +149,8 @@ const pluginRulePriority = firstRulePriority + 2
 // downloads, the catalog), so they take the tunnel too.
 const PluginMark = "0x5242"
 
+// pluginMarkPriority is the rule that sends PluginMark's connections into
+// the tunnel, right after the programs' rule (programRulePriority).
 const pluginMarkPriority = "111"
 
 // ClientsThroughTunnel returns the commands that send devices' traffic

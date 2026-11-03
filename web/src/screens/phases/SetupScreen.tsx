@@ -34,6 +34,7 @@ export function SetupScreen() {
 /** Typing settings for the network name: no capitals, corrections or suggestions. */
 const PLAIN_INPUT = { autoComplete: 'off', autoCapitalize: 'none', autoCorrect: 'off', spellCheck: false } as const;
 
+/** The setup form: the admin password and the hotspot's name, password and band. */
 function SetupWizard({
   setup,
   onDone,
@@ -167,6 +168,7 @@ function ClosingNotice({ seconds }: { seconds: number }) {
   );
 }
 
+/** One numbered step of what to do after setting up. */
 function Step({ number, children }: { number: number; children: ReactNode }) {
   return (
     <li className="row items-start">
@@ -181,6 +183,7 @@ function Step({ number, children }: { number: number; children: ReactNode }) {
   );
 }
 
+/** After setting up: how to join the new hotspot, and the address of these pages. */
 function SetupComplete({ result, place }: { result: ClaimResponse; place: SetupPlace }) {
   const secondsLeft = useCountdown(result.switchInSeconds);
   const adminLink = (

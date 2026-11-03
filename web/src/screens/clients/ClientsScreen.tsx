@@ -22,6 +22,7 @@ export function ClientsScreen() {
   );
 }
 
+/** The counts and the device cards, with the filters. */
 function ClientList({ status }: { status: Status }) {
   const { refreshStatus } = useDevice();
   const [filter, setFilter] = useState<ClientFilter>('all');

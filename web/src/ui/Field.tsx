@@ -11,6 +11,7 @@ export interface FieldControlProps {
   'aria-invalid'?: true;
 }
 
+/** The label, note, hint and error every field has. */
 export interface FieldTextProps {
   label: string;
   /**
@@ -70,6 +71,7 @@ export function FieldRow({ label, labelNote, hint, error, stacked = false, child
   );
 }
 
+/** The look of a text input inside its row: no box of its own, the row is the field. */
 const INPUT_CLASSES =
   'w-full min-w-0 bg-transparent py-0.5 text-body text-label outline-none placeholder:text-label-3 focus-visible:outline-none disabled:opacity-40';
 

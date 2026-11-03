@@ -13,7 +13,7 @@
 //     empty profile that is deleted afterwards, so it can't read
 //     RasBeacon's settings, and nothing is remembered between logins.
 //   - The firewall only lets that user reach the uplink (see
-//     render.FirewallInput.BrowserUID): not the VPN, not your devices,
+//     render.FirewallInput.Browser): not the VPN, not your devices,
 //     not RasBeacon's own web UI.
 //   - It is controlled through a pipe, not a network port, so no other
 //     program can take it over.

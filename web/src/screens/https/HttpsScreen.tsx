@@ -33,6 +33,7 @@ export function HttpsScreen() {
   );
 }
 
+/** The switch that turns HTTPS on or off, and says at which address to continue. */
 function HttpsSwitch({ settings }: { settings: HTTPSSettings }) {
   const { setup, status, setHttpsEnabled } = useDevice();
   const [message, setMessage] = useState<string | null>(null);

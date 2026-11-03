@@ -10,6 +10,7 @@ interface MeterProps {
   className?: string;
 }
 
+/** The color of the meter's filled part for each tone. */
 const TONE_CLASSES = {
   tint: 'bg-tint-fill',
   gray: 'bg-label-3',

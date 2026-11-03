@@ -61,6 +61,7 @@ export function PortalScreen() {
   );
 }
 
+/** The ways to get past the login page: RasBeacon's own browser first, login mode as the other way. */
 function WaysToLogIn({ status }: { status: PortalStatus }) {
   return (
     <>
@@ -116,6 +117,7 @@ function OptionCard({ icon, color, title, badge, children }: OptionCardProps) {
   );
 }
 
+/** Logging in through RasBeacon's own browser, so no device of yours touches the login page. */
 function ZeroLeakLogin() {
   const { openPortalBrowser, portalBrowser } = useDevice();
   const opening = useAction(openPortalBrowser);
@@ -139,6 +141,7 @@ function ZeroLeakLogin() {
   );
 }
 
+/** Login mode, offered: for 10 minutes every device on the hotspot reaches this network directly, outside the VPN, to log in. */
 function LoginModeOffer() {
   const { startLoginMode } = useDevice();
 
@@ -163,6 +166,7 @@ function LoginModeOffer() {
   );
 }
 
+/** While login mode is on: the login page's link, the time left, and buttons for more time or to stop. */
 function LoginModeOn({ status }: { status: PortalStatus }) {
   const { extendLoginMode, stopLoginMode } = useDevice();
   const secondsLeft = useCountdown(status.secondsLeft);
@@ -209,6 +213,7 @@ function LoginModeOn({ status }: { status: PortalStatus }) {
   );
 }
 
+/** When there is no login page to get past (any more). */
 function NothingToDo({ detected }: { detected: boolean }) {
   return (
     <>

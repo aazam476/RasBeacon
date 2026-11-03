@@ -26,6 +26,7 @@ import "time"
 // State is where the tunnel is (see the package comment).
 type State string
 
+// The tunnel's states; the package comment says what each one means.
 const (
 	Off        State = "off"
 	Connecting State = "connecting"

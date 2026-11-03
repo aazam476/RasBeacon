@@ -24,6 +24,7 @@ export type AddNetworkStart =
   /** "Add manually": for hidden networks or ones not in range now. */
   | { from: 'manual' };
 
+/** The form for typing in a network by hand: everything empty, WPA personal. */
 const EMPTY_FORM: NewNetworkForm = {
   ssid: '',
   security: 'personal',
@@ -39,6 +40,7 @@ const EMPTY_FORM: NewNetworkForm = {
   allowNoCertificateCheck: false,
 };
 
+/** The form as it opens: filled in from the network chosen in the scan, or empty to type one in. */
 function initialForm(start: AddNetworkStart): NewNetworkForm {
   switch (start.from) {
     case 'scan':

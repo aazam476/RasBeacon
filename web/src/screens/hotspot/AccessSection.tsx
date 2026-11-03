@@ -56,6 +56,7 @@ export function AccessSection() {
   );
 }
 
+/** The allow list switch and its MAC addresses, and their Save. */
 function AllowListForm({ settings }: { settings: AccessSettings }) {
   const { status, saveAccessSettings } = useDevice();
   const form = useForm({ on: settings.allowListOn, list: settings.allowed.join('\n') }, (values) =>
@@ -167,6 +168,7 @@ function AllowListForm({ settings }: { settings: AccessSettings }) {
   );
 }
 
+/** The device limit (empty for none), and its Save. */
 function LimitForm({ settings }: { settings: AccessSettings }) {
   const { saveAccessSettings } = useDevice();
   // Empty means no limit; the number is checked as it is typed.
@@ -212,6 +214,7 @@ function LimitForm({ settings }: { settings: AccessSettings }) {
   );
 }
 
+/** "1 device", "3 devices". */
 function countDevices(count: number): string {
   return count === 1 ? '1 device' : `${count} devices`;
 }

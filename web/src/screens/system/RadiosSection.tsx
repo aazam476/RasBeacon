@@ -13,6 +13,7 @@ import {
 } from '@/lib/radios';
 import { ActionButton, Badge, ButtonRow, Notice, NoticeList, Row, Section, SelectField, Sheet, type Tone } from '@/ui';
 
+/** The color of each job's badge. */
 const TONES: Record<RadioRole, Tone> = { hotspot: 'green', uplink: 'tint', guest: 'orange', unused: 'gray' };
 
 /** What a radio is, after its name: its driver and how many networks it can broadcast. */

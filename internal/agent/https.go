@@ -21,16 +21,19 @@ import (
 	"rasbeacon/internal/tlscert"
 )
 
+// rbwebService is rbweb's systemd unit, restarted so rbweb picks up a new
+// certificate.
 const rbwebService = "rbweb.service"
 
 // rbwebRestartDelay lets the answer to the settings request reach the
 // browser before rbweb restarts.
 const rbwebRestartDelay = 2 * time.Second
 
-// tlsCertFile and tlsKeyFile are where the HTTPS certificate and its key
-// are kept.
+// tlsCertFile is where the HTTPS certificate is kept.
 func (a *Agent) tlsCertFile() string { return filepath.Join(a.paths.TLSDir(), "cert.pem") }
-func (a *Agent) tlsKeyFile() string  { return filepath.Join(a.paths.TLSDir(), "key.pem") }
+
+// tlsKeyFile is where the HTTPS certificate's private key is kept.
+func (a *Agent) tlsKeyFile() string { return filepath.Join(a.paths.TLSDir(), "key.pem") }
 
 // applyHTTPS puts (or removes) the copy of the certificate for rbweb. It
 // returns whether anything changed.

@@ -62,7 +62,7 @@ error states, and one where every change fails. Each one also opens directly wit
 
 The buttons work against an in-memory router with short delays, so busy states, errors and
 confirmations can be tried: the password `wrong` is refused, invalid inputs get the router's
-messages (`src/data/demo/rules.ts`), a WireGuard file with a `PostUp` line is refused, and the
+messages (the real provider's checks in `src/data/real/logic.ts`, plus `src/data/demo/rules.ts`), a WireGuard file with a `PostUp` line is refused, and the
 Enter button under the login page picture "logs in".
 
 **Stress test.** Three of the states feed the screens the hardest data the router can send
@@ -94,10 +94,10 @@ src/
       mockData.ts              One consistent sample router
       scenarios.ts             The demo states listed on /#/demo
       worstCase.ts             The stress-test data
-      rules.ts                 Stand-ins for the router's input checks
+      rules.ts                 The router's input checks only the demo needs (the rest are logic.ts's)
       DemoIndex.tsx, DemoTag.tsx, StressToggle.tsx, loginPagePicture.ts
-  lib/               Helpers: class names, formatting, springs, useAction, useForm, useCountdown,
-                     useMediaQuery, useScrollEdge
+  lib/               Helpers: class names, formatting, springs and motion, useAction, useForm,
+                     useCountdown, useMediaQuery, useScrollEdge
   ui/                The design system: Section and its rows, Switch, Button, Sheet, AlertDialog,
                      ErrorToast, Notice, Badge, Meter, StatRow, ChoiceList, Disclosure, fields, icons
   shell/             Around the pages: PhoneLayout (title bar, tab bar), DesktopLayout (sidebar),

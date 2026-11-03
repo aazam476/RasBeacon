@@ -23,14 +23,15 @@ import (
 	"io"
 )
 
+// The sparse format's numbers (see the format above).
 const (
-	sparseMagic    = 0xED26FF3A
-	chunkRaw       = 0xCAC1
+	sparseMagic    = 0xED26FF3A // the first 4 bytes of every sparse image
+	chunkRaw       = 0xCAC1     // the four chunk types
 	chunkFill      = 0xCAC2
 	chunkDontCare  = 0xCAC3
 	chunkCRC32     = 0xCAC4
-	fileHeaderSize = 28
-	chunkHeadSize  = 12
+	fileHeaderSize = 28 // bytes in the file header
+	chunkHeadSize  = 12 // bytes in each chunk's header
 	// maxBlockSize is the largest block size accepted. rpi-image-gen uses
 	// 4096 bytes. The image is read before its checksum can be checked,
 	// so a broken or hostile one must not make rbd set aside gigabytes
@@ -51,6 +52,8 @@ type sparseHeader struct {
 	ImageChecksum  uint32
 }
 
+// chunkHeader starts each chunk of a sparse image: raw data, a fill
+// value, a run of blocks to skip ("don't care"), or a checksum.
 type chunkHeader struct {
 	Type      uint16
 	Reserved  uint16

@@ -1,8 +1,11 @@
 import { cn } from '@/lib/cn';
 
+/** How a button looks: filled, gray, red, or plain text. */
 export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'danger-filled' | 'plain' | 'plain-danger';
+/** How big a button is: lg for a screen's main action, sm inside rows and notices. */
 export type ButtonSize = 'lg' | 'md' | 'sm';
 
+/** The look of each variant. */
 const VARIANT_CLASSES: Record<ButtonVariant, string> = {
   /** The main action of a screen or form: filled with the tint. Hover darkens, keeping the contrast. */
   primary:
@@ -20,6 +23,7 @@ const VARIANT_CLASSES: Record<ButtonVariant, string> = {
   'plain-danger': 'font-semibold text-red hover:not-disabled:text-red/80',
 };
 
+/** The height, spacing and text of each size. */
 const SIZE_CLASSES: Record<ButtonSize, string> = {
   /** Form buttons and the main action of full pages: 50px tall on phones, 36px on computers. */
   lg: 'min-h-[3.125rem] gap-2 py-2 text-headline lg:min-h-9',

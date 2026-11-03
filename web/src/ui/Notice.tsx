@@ -5,6 +5,7 @@ import { Icon, type BaseIconName } from './Icon';
 /** What a notice is about: information, something to look at, a problem, or good news. */
 export type NoticeTone = 'info' | 'warning' | 'danger' | 'success' | 'neutral';
 
+/** Each tone's background, icon color and default icon. */
 const TONE: Record<NoticeTone, { surface: string; icon: string; defaultIcon: BaseIconName }> = {
   info: { surface: 'bg-tint/12', icon: 'text-tint', defaultIcon: 'info' },
   warning: { surface: 'bg-orange-fill/14', icon: 'text-orange', defaultIcon: 'warning' },

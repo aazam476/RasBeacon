@@ -16,14 +16,18 @@ import (
 	"time"
 )
 
+// The rules above, as numbers.
 const (
-	freeAttempts        = 5
-	maxBackoff          = 5 * time.Minute
-	globalFailureLimit  = 20
-	globalFailureWindow = 5 * time.Minute
-	globalLockout       = 5 * time.Minute
+	freeAttempts        = 5               // wrong passwords per device before it must wait
+	maxBackoff          = 5 * time.Minute // the longest wait for one device
+	globalFailureLimit  = 20              // wrong passwords from all devices together...
+	globalFailureWindow = 5 * time.Minute // ...within this long...
+	globalLockout       = 5 * time.Minute // ...pause all logins for this long
 )
 
+// loginLimiter slows down password guessing: it counts failed logins per
+// address and for everyone together, and refuses logins for a while after
+// too many.
 type loginLimiter struct {
 	mu  sync.Mutex
 	now func() time.Time

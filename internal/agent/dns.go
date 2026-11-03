@@ -36,6 +36,8 @@ func dohUID() (int, bool) {
 }
 
 const (
+	// dohService is the systemd unit that runs rbdoh, the DNS-over-HTTPS
+	// forwarder.
 	dohService = "rasbeacon-doh.service"
 	// dohForwarder is where the DoH forwarder answers dnsmasq.
 	dohForwarder = "127.0.0.1#5053"

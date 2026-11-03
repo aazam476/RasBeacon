@@ -6,6 +6,7 @@ export const MAX_PRIORITY_DEVICES = 16;
 
 /** The speeds the router accepts, in kbit/s: 1 Mb/s to 10 Gb/s (0 is "not set"). */
 export const MIN_SPEED_KBPS = 1_000;
+/** The fastest speed the router accepts, in kbit/s (10 Gbit/s). */
 export const MAX_SPEED_KBPS = 10_000_000;
 
 /** What is wrong with a speed in kbit/s, as the router says it, or undefined. */

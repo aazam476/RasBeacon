@@ -46,6 +46,7 @@ interface ErrorResponse {
   field?: string;
 }
 
+/** POST /setup/claim: the first setup, which sets the admin password and names the hotspot. */
 export interface ClaimRequest {
   adminPassword: string;
   hotspotSsid: string;
@@ -53,6 +54,7 @@ export interface ClaimRequest {
   hotspotBand: string;
 }
 
+/** GET/POST /session: whether this browser is logged in, and its CSRF token when it is. */
 export interface SessionInfo {
   loggedIn: boolean;
   csrfToken?: string;
@@ -100,6 +102,7 @@ export class ApiError extends Error {
   }
 }
 
+/** What the pages say when no request reaches RasBeacon at all. */
 export const UNREACHABLE = "Can't reach RasBeacon. Check that this device is connected to its Wi-Fi.";
 
 // The CSRF token of this browser's session. Every request that changes something sends it
@@ -109,6 +112,7 @@ let csrfToken = '';
 /** How long a request may take unless the route says otherwise. */
 const DEFAULT_TIMEOUT_MS = 20_000;
 
+/** How one request is sent: its JSON body or a raw file, and how long to wait for the answer. */
 interface RequestOptions {
   body?: unknown;
   /** Sent as the raw body (update files). */
@@ -204,6 +208,7 @@ async function request<T>(method: string, path: string, options: RequestOptions 
   return (await response.json()) as T;
 }
 
+/** Keeps the session's CSRF token for the requests that follow, and passes the session on. */
 function rememberSession(session: SessionInfo): SessionInfo {
   csrfToken = session.csrfToken ?? '';
   return session;
@@ -211,8 +216,10 @@ function rememberSession(session: SessionInfo): SessionInfo {
 
 // --- No login needed -----------------------------------------------------------------------------
 
+/** Whether RasBeacon is set up yet, and what the setup page needs to know. */
 export const getSetupState = () => request<SetupState>('GET', '/setup');
 
+/** Sets RasBeacon up (POST /setup/claim) and logs this browser in. */
 export async function claim(req: ClaimRequest): Promise<ClaimResponse> {
   const answer = await request<ClaimResponse>('POST', '/setup/claim', { body: req });
   // Claiming also logs this browser in; fetch the CSRF token for later requests.
@@ -220,19 +227,23 @@ export async function claim(req: ClaimRequest): Promise<ClaimResponse> {
   return answer;
 }
 
+/** Asks whether this browser is logged in, keeping its CSRF token. */
 export async function getSession(): Promise<SessionInfo> {
   return rememberSession(await request<SessionInfo>('GET', '/session'));
 }
 
+/** Logs in with the admin password; `stayLoggedIn` keeps this browser logged in when RasBeacon restarts. */
 export async function logIn(password: string, stayLoggedIn: boolean): Promise<SessionInfo> {
   return rememberSession(await request<SessionInfo>('POST', '/session', { body: { password, stayLoggedIn } }));
 }
 
+/** Logs out, and forgets the CSRF token. */
 export async function logOut(): Promise<void> {
   await request<void>('DELETE', '/session');
   csrfToken = '';
 }
 
+/** Login mode (for a hotel's login page): whether it is on, and what RasBeacon found. */
 export const getPortalStatus = () => request<PortalStatus>('GET', '/portal');
 
 /** Login mode: start, add 10 minutes, stop; "check" looks for a login page again right away. */
@@ -240,40 +251,61 @@ export const portalAction = (action: 'start' | 'extend' | 'stop' | 'check') =>
   // An empty JSON body: rbweb only accepts JSON for these public actions.
   request<PortalStatus>('POST', `/portal/${action}`, { body: {}, timeoutMs: 30_000 });
 
+/** Opens the login page in RasBeacon's own browser, at this screen's size, and closes it. */
 export const startPortalBrowser = (size: { width: number; height: number }) =>
   request<PortalStatus>('POST', '/portal/browser/start', { body: size, timeoutMs: 45_000 });
-
 export const stopPortalBrowser = () => request<PortalStatus>('POST', '/portal/browser/stop', { body: {} });
 
 /** Waits (about 10 seconds at most) for a picture newer than `after`. */
 export const getPortalBrowserFrame = (after: number) =>
   request<FrameResponse>('GET', `/portal/browser/frame?after=${after}`, { timeoutMs: 25_000 });
 
+/** A tap, scroll or typing on the picture, passed on to RasBeacon's browser. */
 export const sendPortalBrowserInput = (input: BrowserInput) =>
   request<void>('POST', '/portal/browser/input', { body: input });
 
 // --- Login required ------------------------------------------------------------------------------
 
+/** Everything the Status page and most others show, refreshed every few seconds. */
 export const getStatus = () => request<Status>('GET', '/status');
 
+// The hotspot: its settings (restarting it takes a while), its password shown on request, the
+// channels a country allows, and a QR code to join it (or the guest network).
 export const getHotspotSettings = () => request<HotspotSettings>('GET', '/settings/hotspot');
 export const putHotspotSettings = (settings: HotspotSettings) =>
   request<HotspotSettings>('PUT', '/settings/hotspot', { body: settings, timeoutMs: 45_000 });
 export const revealHotspotPassword = () =>
   request<{ hotspotPassword: string }>('POST', '/settings/hotspot/reveal-password', { body: {} });
-/** A QR code to join the hotspot or the guest network. */
 export const getHotspotChannels = (country: string) =>
   request<HotspotChannelsResponse>('POST', '/settings/hotspot/channels', { body: { country } });
+/** A QR code to join the hotspot or the guest network. */
 export const wifiQr = (network: 'hotspot' | 'guest') => request<WiFiQR>('POST', '/wifi-qr', { body: { network } });
 
+// Who may join the hotspot: the allow list and the device limit.
+export const getAccessSettings = () => request<AccessSettings>('GET', '/settings/access');
+export const putAccessSettings = (settings: AccessSettings) =>
+  request<AccessSettings>('PUT', '/settings/access', { body: settings });
+
+// The guest network (saving restarts the hotspot too).
 export const getGuestSettings = () => request<GuestSettings>('GET', '/settings/guest');
 export const putGuestSettings = (settings: GuestSettings) =>
   request<GuestSettings>('PUT', '/settings/guest', { body: settings, timeoutMs: 45_000 });
 
+// The welcome page on the guest network, and asking a device to accept it again.
+export const getWelcomeSettings = () => request<WelcomeSettings>('GET', '/settings/welcome');
+/** Reloading the firewall takes a moment. */
+export const putWelcomeSettings = (settings: WelcomeSettings) =>
+  request<WelcomeSettings>('PUT', '/settings/welcome', { body: settings, timeoutMs: 30_000 });
+export const resetWelcome = (mac: string) => request<void>('POST', '/clients/welcome-reset', { body: { mac } });
+
+// SSH access.
 export const getSSHSettings = () => request<SSHSettings>('GET', '/settings/ssh');
 export const putSSHSettings = (settings: SSHSettings) =>
   request<SSHSettings>('PUT', '/settings/ssh', { body: settings });
 
+// The internet connection: the saved networks and the MAC address (rejoining takes a while),
+// nearby networks, the connection's buttons (Disconnect, Renew, look again for a DHCP server on
+// the Ethernet port), and the speed test.
 export const getUplinkSettings = () => request<UplinkSettings>('GET', '/settings/uplink');
 export const putUplinkSettings = (settings: UplinkSettings) =>
   request<UplinkSettings>('PUT', '/settings/uplink', { body: settings, timeoutMs: 45_000 });
@@ -285,15 +317,12 @@ export const uplinkAction = (action: 'disconnect' | 'renew' | 'ethernet/scan') =
 /** Cloudflare's speed test: about 20 seconds; the router stops it after 3 minutes. */
 export const runSpeedtest = () => request<Speedtest>('POST', '/speedtest', { timeoutMs: 200_000 });
 
-export const getSwapSettings = () => request<SwapSettings>('GET', '/settings/swap');
-/** Making a large swap file can take a little while on a slow card. */
-export const putSwapSettings = (sizeGb: number) =>
-  request<SwapSettings>('PUT', '/settings/swap', { body: { sizeGb, maxGb: 0 }, timeoutMs: 120_000 });
-
+// The DNS servers devices use.
 export const getDNSSettings = () => request<DNSSettings>('GET', '/settings/dns');
 export const putDNSSettings = (settings: DNSSettings) =>
   request<DNSSettings>('PUT', '/settings/dns', { body: settings, timeoutMs: 30_000 });
 
+// Phones and modems: the modem's carrier settings, and this month's mobile data with its limit.
 export const getModemSettings = () => request<ModemSettings>('GET', '/settings/modem');
 export const putModemSettings = (settings: ModemSettings) =>
   request<ModemSettings>('PUT', '/settings/modem', { body: settings });
@@ -301,12 +330,8 @@ export const putMobileData = (limitMb: number, resetDay: number) =>
   request<MobileData>('PUT', '/settings/mobile-data', { body: { limitMb, resetDay } });
 export const resetMobileData = () => request<MobileData>('POST', '/settings/mobile-data/reset');
 
-export const getWelcomeSettings = () => request<WelcomeSettings>('GET', '/settings/welcome');
-/** Reloading the firewall takes a moment. */
-export const putWelcomeSettings = (settings: WelcomeSettings) =>
-  request<WelcomeSettings>('PUT', '/settings/welcome', { body: settings, timeoutMs: 30_000 });
-export const resetWelcome = (mac: string) => request<void>('POST', '/clients/welcome-reset', { body: { mac } });
-
+// The VPN: its two switches, and its profiles (import a .conf file, save the details by hand,
+// use, remove, rename, or make a new key for one). Restarting the tunnel takes a moment.
 export const getVPNSettings = () => request<VPNSettings>('GET', '/settings/vpn');
 export const putVPNSwitches = (switches: { enabled: boolean; killSwitch: boolean }) =>
   request<VPNSettings>('PUT', '/settings/vpn', { body: switches, timeoutMs: 30_000 });
@@ -316,10 +341,11 @@ export const saveVPNProfile = (details: VPNProfileDetails) =>
   request<VPNSettings>('POST', '/settings/vpn/profile/save', { body: details, timeoutMs: 30_000 });
 export const vpnProfileAction = (action: 'activate' | 'remove' | 'generate-key', name: string) =>
   request<VPNSettings>('POST', `/settings/vpn/profile/${action}`, { body: { name }, timeoutMs: 30_000 });
-
 export const renameVPNProfile = (name: string, newName: string) =>
   request<VPNSettings>('POST', '/settings/vpn/profile/rename', { body: { name, newName } });
 
+// One device at a time (by its MAC address): send it off or flush its lease, pause its
+// internet, name it, fix its address, and let it go first (priority).
 export const clientAction = (action: 'disconnect' | 'flush-lease', mac: string) =>
   request<void>('POST', `/clients/${action}`, { body: { mac } });
 export const setClientInternetAccess = (mac: string, allowed: boolean) =>
@@ -328,45 +354,56 @@ export const renameClient = (mac: string, name: string) =>
   request<void>('POST', '/clients/name', { body: { mac, name } });
 export const setFixedAddress = (mac: string, address: string) =>
   request<void>('POST', '/clients/fixed-address', { body: { mac, address } });
+export const setClientPriority = (mac: string, priority: boolean) =>
+  request<void>('POST', '/clients/priority', { body: { mac, priority } });
 
+// The connection's speeds for priority (QoS).
+export const getQoSSettings = () => request<QoSSettings>('GET', '/settings/qos');
+export const putQoSSettings = (speeds: { uploadKbps: number; downloadKbps: number }) =>
+  request<QoSSettings>('PUT', '/settings/qos', { body: speeds });
+
+// The data limit per device, and starting every device's count again.
+export const getUsageSettings = () => request<UsageSettings>('GET', '/settings/usage');
+export const putUsageSettings = (limitMb: number) =>
+  request<UsageSettings>('PUT', '/settings/usage', { body: { limitMb } });
+export const resetUsage = () => request<UsageSettings>('POST', '/clients/usage/reset');
+
+// What each Wi-Fi radio does: new roles are tried first, then kept or reverted.
 /** Radio MAC address to its role; radios left out are automatic. */
 export const putRadioRoles = (roles: Record<string, RadioRole>) =>
   request<void>('PUT', '/settings/radios', { body: { roles } });
 export const keepRadioRoles = () => request<void>('POST', '/settings/radios/keep');
 export const revertRadioRoles = () => request<void>('POST', '/settings/radios/revert');
 
-export const setClientPriority = (mac: string, priority: boolean) =>
-  request<void>('POST', '/clients/priority', { body: { mac, priority } });
-export const getQoSSettings = () => request<QoSSettings>('GET', '/settings/qos');
-export const putQoSSettings = (speeds: { uploadKbps: number; downloadKbps: number }) =>
-  request<QoSSettings>('PUT', '/settings/qos', { body: speeds });
-
-export const getUsageSettings = () => request<UsageSettings>('GET', '/settings/usage');
-export const putUsageSettings = (limitMb: number) =>
-  request<UsageSettings>('PUT', '/settings/usage', { body: { limitMb } });
-export const resetUsage = () => request<UsageSettings>('POST', '/clients/usage/reset');
-
+// HTTPS for these pages.
 export const getHTTPSSettings = () => request<HTTPSSettings>('GET', '/settings/https');
 /** `generateNew`, `certificate` and `privateKey` are write-only actions. */
 export const putHTTPSSettings = (
   settings: Pick<HTTPSSettings, 'enabled'> & { generateNew?: boolean; certificate?: string; privateKey?: string },
 ) => request<HTTPSSettings>('PUT', '/settings/https', { body: settings, timeoutMs: 45_000 });
 
+// Updates: installing one (from a file, or downloaded by RasBeacon), restarting into one that
+// waits, and the online check with its schedule and notifications.
 /** Uploads and installs an update file; takes minutes on slow Wi-Fi. */
 export const installUpdate = (file: File) => request<UpdateStatus>('POST', '/system/update', { file });
 /** Starts downloading and installing the offered update; answers at once. */
 export const downloadUpdate = () => request<void>('POST', '/system/update/download');
-export const getAccessSettings = () => request<AccessSettings>('GET', '/settings/access');
-export const putAccessSettings = (settings: AccessSettings) =>
-  request<AccessSettings>('PUT', '/settings/access', { body: settings });
+export const restartIntoUpdate = () => request<void>('POST', '/system/update/restart');
+export const checkForUpdates = () => request<UpdateStatus>('POST', '/system/update/check', { timeoutMs: 60_000 });
 export const getUpdateSettings = () => request<UpdateSettings>('GET', '/settings/updates');
 export const putUpdateSettings = (settings: UpdateSettings) =>
   request<UpdateStatus>('PUT', '/settings/updates', { body: settings });
-export const checkForUpdates = () => request<UpdateStatus>('POST', '/system/update/check', { timeoutMs: 60_000 });
 export const testUpdateNotification = (url: string) =>
   request<void>('POST', '/settings/updates/test', { body: { url }, timeoutMs: 30_000 });
+
+// The swap file.
+export const getSwapSettings = () => request<SwapSettings>('GET', '/settings/swap');
+/** Making a large swap file can take a little while on a slow card. */
+export const putSwapSettings = (sizeGb: number) =>
+  request<SwapSettings>('PUT', '/settings/swap', { body: { sizeGb, maxGb: 0 }, timeoutMs: 120_000 });
+
+// The device itself: restart, turn off, rename, the admin password, and the factory reset.
 export const reboot = () => request<void>('POST', '/system/reboot');
-export const restartIntoUpdate = () => request<void>('POST', '/system/update/restart');
 export const shutDown = () => request<void>('POST', '/system/shutdown');
 export const saveHostname = (hostname: string) => request<void>('POST', '/system/hostname', { body: { hostname } });
 export const changeAdminPassword = (currentPassword: string, newPassword: string) =>
@@ -379,19 +416,27 @@ export const DIAGNOSTICS_URL = '/api/v1/diagnostics';
 
 // --- Plugins (slow ones: GitHub and image registries through the VPN) ------------------------
 
+/** The installed plugins, the data kept from removed ones, and the catalog's sources. */
 export const getPlugins = () => request<PluginsState>('GET', '/plugins');
 /** Uploads a .rba; it is checked before the install sheet opens. */
 export const uploadPlugin = (file: File) => request<PluginPreview>('POST', '/plugins/upload', { file });
+// Plugins from the catalog: the list (from RasBeacon's copy unless `refresh`), downloading one
+// to install, and downloading an installed one's update. Each download is checked before the
+// install sheet opens.
 export const getPluginCatalog = (refresh: boolean) =>
   request<PluginCatalog>('POST', '/plugins/catalog', { body: { refresh }, timeoutMs: 120_000 });
 export const downloadCatalogPlugin = (source: string, file: string) =>
   request<PluginPreview>('POST', '/plugins/catalog/download', { body: { source, file }, timeoutMs: NO_TIME_LIMIT });
 export const downloadPluginUpdate = (id: string) =>
   request<PluginPreview>('POST', '/plugins/update', { body: { id }, timeoutMs: NO_TIME_LIMIT });
+// A checked plugin waiting to be installed (`stagingId`): install it with the owner's choices,
+// or throw it away.
 export const installPlugin = (stagingId: string, choices: PluginChoices, useKeptData = false) =>
   request<Plugin>('POST', '/plugins/install', { body: { stagingId, ...choices, useKeptData } });
 export const cancelPluginInstall = (stagingId: string) =>
   request<void>('POST', '/plugins/cancel', { body: { stagingId } });
+// An installed plugin: its settings, starting or stopping it, and removing it (keeping its data
+// or not). Each restarts its container, which can take a while.
 export const putPluginSettings = (id: string, choices: PluginChoices) =>
   request<Plugin>('PUT', '/plugins/settings', { body: { id, ...choices }, timeoutMs: 120_000 });
 export const pluginAction = (action: 'start' | 'stop', id: string) =>
@@ -401,8 +446,11 @@ export const removePlugin = (id: string, keepData: boolean) =>
 /** Deletes the data kept from a removed plugin, for good. */
 export const forgetKeptPluginData = (id: string) =>
   request<PluginsState>('POST', '/plugins/kept/forget', { body: { id } });
+/** A plugin's recent log lines. */
 export const getPluginLogs = (id: string) => request<PluginLogsResponse>('POST', '/plugins/logs', { body: { id } });
+/** The drives plugged in, that a plugin may be given. */
 export const getPluginDrives = () => request<{ drives: PluginDrive[] }>('GET', '/plugins/drives');
+/** The GitHub repositories the catalog lists plugins from. */
 export const putPluginSources = (sources: string[]) =>
   request<PluginsState>('PUT', '/plugins/sources', { body: { sources } });
 
@@ -416,6 +464,7 @@ export const prepareBackup = (password: string, plugins: string) =>
   request<{ token: string; fileName: string }>('POST', '/system/backup', { body: { password, plugins } });
 /** Where the browser downloads a backup asked for with `prepareBackup`. */
 export const backupDownloadUrl = (token: string) => `/api/v1/system/backup/${encodeURIComponent(token)}`;
+/** Restoring is two steps: upload the file, then open it with its password. */
 export const uploadBackup = (file: File) => request<void>('POST', '/system/restore/upload', { file });
 export const restoreBackup = (password: string) =>
   request<{ version: string; created: string; plugins: boolean }>('POST', '/system/restore', {

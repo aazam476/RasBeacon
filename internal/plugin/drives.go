@@ -23,6 +23,8 @@ var DriveFilesystems = []string{"vfat", "exfat", "ext4", "ntfs", "btrfs"}
 // LsblkArgs ask lsblk for the block devices, as ParseDrives reads them.
 var LsblkArgs = []string{"--json", "--bytes", "--tree", "--output", "NAME,PATH,SIZE,FSTYPE,LABEL,UUID,TRAN,TYPE"}
 
+// lsblkDevice is one block device (a disk or a partition) in lsblk's
+// JSON answer, with its partitions as children.
 type lsblkDevice struct {
 	Path     string        `json:"path"`
 	Size     int64         `json:"size"`

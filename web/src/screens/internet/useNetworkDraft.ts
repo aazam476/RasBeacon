@@ -55,4 +55,5 @@ export function useNetworkDraft(settings: UplinkSettings) {
   };
 }
 
+/** The saved networks as edited, with the ways to edit them (useNetworkDraft). */
 export type NetworkDraft = ReturnType<typeof useNetworkDraft>;

@@ -17,11 +17,13 @@ import type {
  * each .rba).
  */
 
+/** A plugin icon for the demo: a white glyph on a rounded square of `background`, as a data: URL. */
 function svgIcon(background: string, glyph: string): string {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${background}" stop-opacity="0.85"/><stop offset="1" stop-color="${background}"/></linearGradient></defs><rect width="128" height="128" rx="28" fill="url(#g)"/>${glyph}</svg>`;
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
+/** The demo plugins' icons. */
 export const PLUGIN_ICONS = {
   adguard: svgIcon(
     '#2f9e5b',
@@ -41,6 +43,7 @@ export const PLUGIN_ICONS = {
   ),
 };
 
+/** Every permission a demo plugin can ask for, in plain words. */
 export const PERMISSIONS: Record<string, PluginPermission> = {
   internet: { id: 'internet', title: 'Use the internet', detail: 'Through the VPN when it is on, like your devices.' },
   'lan-access': {
@@ -63,6 +66,7 @@ export const PERMISSIONS: Record<string, PluginPermission> = {
   temperature: { id: 'temperature', title: 'Read the temperature', detail: "Read the processor's temperature." },
 };
 
+/** The catalog's own source, as on the router (BuiltInSource in internal/plugin/catalog.go). */
 const BUILT_IN = 'aazam476/RasBeacon-plugins';
 
 /** Everything the demo knows about a plugin, installed or not. */
@@ -96,6 +100,7 @@ interface PluginDefinition {
   boards: string[];
 }
 
+/** A number setting of the fan plugin, such as the temperature the fan starts at. */
 const fanSetting = (key: string, label: string, value: string, unit: string, max: number): PluginSetting => ({
   key,
   label,
@@ -106,6 +111,7 @@ const fanSetting = (key: string, label: string, value: string, unit: string, max
   max,
 });
 
+/** The demo's plugins, as their .rba files would describe them. */
 export const PLUGIN_DEFINITIONS: PluginDefinition[] = [
   {
     id: 'adguard-home',
@@ -233,12 +239,15 @@ export const PLUGIN_DEFINITIONS: PluginDefinition[] = [
   },
 ];
 
+/** The demo plugin with this id, if there is one. */
 export function definitionOf(id: string): PluginDefinition | undefined {
   return PLUGIN_DEFINITIONS.find((definition) => definition.id === id);
 }
 
+/** The demo router's address on the hotspot, which a plugin's {address} becomes. */
 const LAN_ADDRESS = '192.168.8.1';
 
+/** Fills in a plugin's placeholders ({address}, {host} and its ports) in a text of its manifest. */
 function expand(text: string | undefined, plugin: { address: string; ports: Plugin['ports'] }): string | undefined {
   return text
     ?.replaceAll('{address}', plugin.address)
@@ -442,11 +451,13 @@ export function previewOf(
   };
 }
 
+/** The drives plugged into the demo router. */
 export const DEMO_DRIVES: PluginDrive[] = [
   { uuid: '6A1F-22C9', label: 'TRAVEL', fsType: 'exfat', size: 64_000_000_000, usedBy: 'Samba' },
   { uuid: '0d8e5b2a-4f3c-4c1e-9d55-81b0c6f2e9a7', label: '', fsType: 'ext4', size: 500_107_862_016 },
 ];
 
+/** The lines a demo plugin's log shows. */
 export const DEMO_LOG: PluginLogLine[] = [
   { time: '2026-10-19T08:12:03Z', text: '[info] AdGuard Home, version v0.107.57' },
   { time: '2026-10-19T08:12:03Z', text: '[info] home: this is the first launch of AdGuard Home' },

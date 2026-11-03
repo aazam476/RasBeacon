@@ -52,6 +52,7 @@ export function PluginScreen() {
   );
 }
 
+/** A plugin's page: the broken one when it can't be read, else the usual one. */
 function PluginPage({ plugin }: { plugin: Plugin }) {
   if (plugin.broken) return <BrokenPluginPage plugin={plugin} />;
   return <WorkingPluginPage plugin={plugin} />;
@@ -73,6 +74,7 @@ function BrokenPluginPage({ plugin }: { plugin: Plugin }) {
   );
 }
 
+/** A plugin that can be read: its state and buttons, what to do next, settings, permissions and details. */
 function WorkingPluginPage({ plugin }: { plugin: Plugin }) {
   const busy = isBusy(plugin.state);
   // What to do next only applies once it is installed and works (not while it installs, or
@@ -189,6 +191,7 @@ function RunningSection({ plugin }: { plugin: Plugin }) {
   );
 }
 
+/** The plugin's settings, ports and drive, and their Save (which restarts it). */
 function SettingsForm({ plugin }: { plugin: Plugin }) {
   const { savePluginSettings, status } = useDevice();
   const form = useForm(draftOf(plugin.ports, plugin.settings, plugin.drive), (draft) =>
@@ -225,6 +228,7 @@ function SettingsForm({ plugin }: { plugin: Plugin }) {
   );
 }
 
+/** What the plugin was allowed to do, in plain words. */
 function PermissionsSection({ plugin }: { plugin: Plugin }) {
   return (
     <Section title="It can">
@@ -296,6 +300,7 @@ function LogSection({ plugin }: { plugin: Plugin }) {
   );
 }
 
+/** The plugin's details: version, where it came from and its signature, address, memory, storage and website. */
 function AboutSection({ plugin }: { plugin: Plugin }) {
   return (
     <Section title="Details">

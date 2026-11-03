@@ -93,6 +93,8 @@ func ipChecksum(header []byte) uint16 {
 	return ^uint16(sum)
 }
 
+// errNotAnOffer is parseOffer's answer for any packet it skips: not IPv4
+// UDP, not DHCP, or not an offer for this probe.
 var errNotAnOffer = errors.New("not a DHCP offer for us")
 
 // parseOffer checks whether packet (a raw IPv4 packet) is a DHCPOFFER

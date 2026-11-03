@@ -25,6 +25,7 @@ function state(qos: QoSSettings): string {
   return 'Not working';
 }
 
+/** The connection's download and upload speeds; the page's Save saves them. */
 function SpeedForm({ qos, lastTest }: { qos: QoSSettings; lastTest: SpeedtestResult | null | undefined }) {
   const { saveQoSSettings } = useDevice();
   const form = useForm({ download: textFromKbps(qos.downloadKbps), upload: textFromKbps(qos.uploadKbps) }, (values) =>

@@ -11,6 +11,7 @@ export const ASK_AGAIN_OPTIONS: readonly { value: string; label: string }[] = [
 
 /** The largest logo, as a data: URL, and page the router keeps (internal/config). */
 export const MAX_LOGO = 140_000;
+/** The largest page of the owner's own, in bytes (as the router allows). */
 export const MAX_PAGE = 64_000;
 
 /** The problems the router finds in the welcome page's settings (config.WelcomeConfig.Validate). */

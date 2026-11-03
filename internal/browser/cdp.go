@@ -35,6 +35,7 @@ type message struct {
 	SessionID string          `json:"sessionId,omitempty"`
 }
 
+// cdpError is the error Chromium answers a DevTools command with.
 type cdpError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`

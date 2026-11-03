@@ -5,7 +5,7 @@ import { cn } from '@/lib/cn';
 import { bandOfFrequency, formatDbm, signalLevel } from '@/lib/format';
 import { standardLabel } from '../common/wifiOptions';
 import { useAction } from '@/lib/useAction';
-import { BreakableText, ButtonRow, FormError, Icon, Row, Section } from '@/ui';
+import { BreakableText, ButtonRow, FormError, Icon, Row, Section, SIGNAL_BARS } from '@/ui';
 import type { AddNetworkStart } from './AddNetworkSheet';
 import { canJoin } from './networkDisplay';
 import type { NetworkDraft } from './useNetworkDraft';
@@ -65,13 +65,6 @@ export function AddNetworkSection({ draft, wifiUplinkAvailable, connectedSsid, o
   );
 }
 
-const WIFI_BARS = {
-  1: 'network_wifi_1_bar',
-  2: 'network_wifi_2_bar',
-  3: 'network_wifi_3_bar',
-  4: 'signal_wifi_4_bar',
-} as const;
-
 interface NearbyRowProps {
   network: NearbyNetwork;
   /** In use, in the list already, can be added, or a kind RasBeacon can't join (WEP and the like). */
@@ -113,7 +106,7 @@ function NearbyRow({ network, state, onPick }: NearbyRowProps) {
     >
       <span className="row-tile grid w-[1.8125rem] shrink-0 place-items-center lg:w-6">
         <Icon
-          name={WIFI_BARS[signalLevel(network.signalDbm).bars]}
+          name={SIGNAL_BARS[signalLevel(network.signalDbm).bars]}
           size={22}
           className={cn('lg:size-[1.125rem]', state === 'connected' ? 'text-tint' : 'text-label-2')}
         />

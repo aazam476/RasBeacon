@@ -8,7 +8,7 @@ import {
   type PointerEvent,
   type ReactNode,
 } from 'react';
-import { currentY, prefersReducedMotion, rubberband, setY, springY } from '@/lib/spring';
+import { currentY, EASE_OUT, prefersReducedMotion, rubberband, setY, springY } from '@/lib/spring';
 import { DESKTOP_QUERY, useMediaQuery } from '@/lib/useMediaQuery';
 import { ErrorToastContext } from './errorToastContext';
 import { Icon } from './Icon';
@@ -19,8 +19,8 @@ const SHOW_FOR_MS = 10_000;
 /** A swipe this far (px), or this fast (px/ms), sends the message away. */
 const SWIPE_DISTANCE = 40;
 const SWIPE_VELOCITY = 0.11;
-const EASE_OUT = 'cubic-bezier(0.23, 1, 0.32, 1)';
 
+/** A message on the toast; `id` is new for each one, so the same message twice still shows again. */
 interface ToastMessage {
   message: string;
   id: number;
@@ -56,6 +56,7 @@ export function ErrorToastProvider({ children }: { children: ReactNode }) {
   );
 }
 
+/** Whether the page is hidden (another tab, or the phone locked), so a toast waits to be seen. */
 function useDocumentHidden(): boolean {
   return useSyncExternalStore(
     (onChange) => {
@@ -66,6 +67,7 @@ function useDocumentHidden(): boolean {
   );
 }
 
+/** One error toast: it slides in, stays a few seconds while the page is shown, and slides away. */
 function Toast({ toast, onGone }: { toast: ToastMessage; onGone: (id: number) => void }) {
   const ref = useRef<HTMLDivElement>(null);
   const desktop = useMediaQuery(DESKTOP_QUERY);

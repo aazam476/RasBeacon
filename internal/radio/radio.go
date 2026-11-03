@@ -107,8 +107,8 @@ type Radio struct {
 type PhyInfoFunc func(phy string) (string, error)
 
 // Detect lists the Wi-Fi radios under sysClassNet (normally
-// /sys/class/net): one interface per radio, sorted by interface name. Roles are not assigned yet; see
-// AssignRoles.
+// /sys/class/net): one interface per radio, sorted by interface name.
+// Roles are not assigned yet; see AssignRoles.
 func Detect(sysClassNet string, phyInfo PhyInfoFunc) ([]Radio, error) {
 	entries, err := os.ReadDir(sysClassNet)
 	if err != nil {

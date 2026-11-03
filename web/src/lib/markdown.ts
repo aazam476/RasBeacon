@@ -22,6 +22,7 @@ export type Block =
 
 // Closing #s ("## Title ##") are dropped only after a space, so "## Using C#" keeps its "#".
 const HEADING = /^(#{1,6})\s+(.*?)(?:\s+#+)?\s*$/;
+// A list item: "-", "*" or "+", or a number followed by "." or ")", then a space.
 const LIST_ITEM = /^\s{0,3}([-*+]|\d{1,9}[.)])\s+(.*)$/;
 
 /** Reads Markdown text into blocks. */

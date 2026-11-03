@@ -24,6 +24,7 @@ import {
 import { NEEDS_INTERNET } from '../common/describe';
 import { BackupSheet } from './BackupSection';
 
+/** The boards each image is for, by the name the update reports (others are shown as they are). */
 const BOARDS: Record<string, string> = {
   rpi64: 'Raspberry Pi 4 and 5',
   rpi3: 'Raspberry Pi Zero 2 W, 3B and 3B+',
@@ -113,6 +114,7 @@ function lastCheckedText(lastChecked: string | undefined): string | undefined {
   return `Last checked ${when}.`;
 }
 
+/** How often RasBeacon can check for updates, in hours (0: only when asked). */
 const CHECK_OPTIONS = [
   { value: '0', label: 'Manually' },
   { value: '1', label: 'Every hour' },
@@ -171,6 +173,7 @@ function NotificationsSection() {
   );
 }
 
+/** The notification address, its Save, and a test message. */
 function NotificationsForm({ settings }: { settings: UpdateSettings }) {
   const { saveUpdateSettings, testUpdateNotification } = useDevice();
   const form = useForm({ notifyUrl: settings.notifyUrl }, (values) =>

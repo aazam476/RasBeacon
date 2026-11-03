@@ -189,7 +189,7 @@ func releaseURL(tag string) string {
 }
 
 // InstallUpdate installs an update file read from r (streamed from the
-// browser through rbweb: "Install update from a file…") and then restarts
+// browser through rbweb: "Update from a file") and then restarts
 // into it. It takes minutes; other requests keep working meanwhile.
 func (a *Agent) InstallUpdate(r io.Reader) error {
 	if err := a.beginInstall("Installing an update…"); err != nil {
@@ -200,7 +200,7 @@ func (a *Agent) InstallUpdate(r io.Reader) error {
 }
 
 // DownloadUpdate downloads the update the online check offers from GitHub
-// and installs it ("Install update"), like InstallUpdate. It answers at
+// and installs it ("Update now" on the System page), like InstallUpdate. It answers at
 // once; the download and the install go on in the background, and the
 // status shows them.
 func (a *Agent) DownloadUpdate() error {
@@ -303,19 +303,11 @@ func (a *Agent) downloadUpdate(url string) (string, error) {
 	// Each piece that arrives pushes the deadline back.
 	stall := time.AfterFunc(downloadStall, cancel)
 	defer stall.Stop()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("User-Agent", "RasBeacon/"+version.Version)
-	resp, err := updateDownloadHTTP.Do(req)
+	resp, err := askGitHub(ctx, updateDownloadHTTP, url, "")
 	if err != nil {
 		return "", fmt.Errorf("downloading the update: %w", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("downloading the update: GitHub answered %s", resp.Status)
-	}
 	newVersion, err := a.writeUpdate(&stallReader{r: resp.Body, timer: stall, after: downloadStall})
 	if err != nil && ctx.Err() != nil {
 		// The stall timer stopped the download. What writeUpdate made of
@@ -334,6 +326,8 @@ type stallReader struct {
 	after time.Duration
 }
 
+// Read reads from r, and pushes the stall deadline back when something
+// arrived.
 func (s *stallReader) Read(p []byte) (int, error) {
 	n, err := s.r.Read(p)
 	if n > 0 {
@@ -766,20 +760,11 @@ const releasesToRead = 30
 // empty.
 func fetchUpdateRelease(client *http.Client, apiURL, repository, running string) (latestRelease, string, error) {
 	url := fmt.Sprintf("%s/repos/%s/releases?per_page=%d", apiURL, repository, releasesToRead)
-	req, err := http.NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		return latestRelease{}, "", err
-	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "RasBeacon/"+version.Version)
-	resp, err := client.Do(req)
+	resp, err := askGitHub(context.Background(), client, url, "application/vnd.github+json")
 	if err != nil {
 		return latestRelease{}, "", err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return latestRelease{}, "", fmt.Errorf("GitHub answered %s", resp.Status)
-	}
 	var releases []latestRelease
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&releases); err != nil {
 		return latestRelease{}, "", err
@@ -845,20 +830,37 @@ func canInstallOver(release latestRelease, running string) bool {
 
 // fetchUpdateInfo downloads a release's small .update.json file.
 func fetchUpdateInfo(client *http.Client, url string) (update.Info, error) {
-	req, err := http.NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		return update.Info{}, err
-	}
-	req.Header.Set("User-Agent", "RasBeacon/"+version.Version)
-	resp, err := client.Do(req)
+	resp, err := askGitHub(context.Background(), client, url, "")
 	if err != nil {
 		return update.Info{}, err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return update.Info{}, fmt.Errorf("GitHub answered %s", resp.Status)
-	}
 	var info update.Info
 	err = json.NewDecoder(io.LimitReader(resp.Body, 64*1024)).Decode(&info)
 	return info, err
+}
+
+// askGitHub sends a GET request for url to GitHub with RasBeacon's name
+// and version as the User-Agent (GitHub refuses requests without one),
+// and accept as the Accept header unless it is "". It returns the answer
+// only when GitHub answered 200 OK; the caller closes its body. ctx can
+// cancel the request, also while the body is being read.
+func askGitHub(ctx context.Context, client *http.Client, url, accept string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "RasBeacon/"+version.Version)
+	if accept != "" {
+		req.Header.Set("Accept", accept)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		return nil, fmt.Errorf("GitHub answered %s", resp.Status)
+	}
+	return resp, nil
 }

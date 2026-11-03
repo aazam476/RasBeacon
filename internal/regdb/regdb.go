@@ -24,8 +24,8 @@ import (
 )
 
 const (
-	magic   = 0x52474442 // "RGDB"
-	version = 20
+	magic   = 0x52474442 // "RGDB", the first 4 bytes of the file
+	version = 20         // the only file format version this reader knows
 )
 
 // Rule flags (FWDB_FLAG_* in the kernel).

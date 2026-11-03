@@ -2,10 +2,11 @@ import { useLayoutEffect, useRef } from 'react';
 import type { Status } from '@/data/types';
 import { cn } from '@/lib/cn';
 import { formatMbps } from '@/lib/format';
-import { prefersReducedMotion } from '@/lib/spring';
+import { EASE_OUT, prefersReducedMotion } from '@/lib/spring';
 import { Icon, type Tone } from '@/ui';
 import { vpnStateView, phoneInUse, phoneName } from '../common/describe';
 
+/** The colors of the state's round symbol. */
 const SYMBOL_CLASSES: Record<Tone, string> = {
   green: 'bg-green-fill/15 text-green',
   orange: 'bg-orange-fill/15 text-orange',
@@ -38,7 +39,7 @@ export function StatusHero({ status }: { status: Status }) {
             { opacity: 0, transform: 'scale(0.9)', filter: 'blur(3px)' },
             { opacity: 1, transform: 'none', filter: 'none' },
           ],
-      { duration: 300, easing: 'cubic-bezier(0.23, 1, 0.32, 1)' },
+      { duration: 300, easing: EASE_OUT },
     );
   }, [view.title]);
 

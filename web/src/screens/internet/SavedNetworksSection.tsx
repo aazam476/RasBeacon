@@ -92,6 +92,7 @@ interface NetworkRowProps {
   onChangePassword: () => void;
 }
 
+/** One saved network: its place in the order and name, with buttons to move it up or down, change its password, or remove it. */
 function NetworkRow({
   network,
   position,

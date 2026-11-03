@@ -3,6 +3,7 @@ import { useLocation } from 'react-router';
 import { useDocumentTitle } from '@/lib/useDocumentTitle';
 import type { BaseIconName, TileColor } from '@/ui';
 
+/** A page in the sidebar, the tab bar or More. */
 export interface NavItem {
   path: string;
   label: string;
@@ -13,12 +14,14 @@ export interface NavItem {
   wide?: boolean;
 }
 
+/** A group of pages in the desktop sidebar. */
 interface NavGroup {
   /** Heading in the desktop sidebar; the first group has none. */
   heading?: string;
   items: NavItem[];
 }
 
+// The pages, each with its address, name, symbol and tile color.
 const STATUS: NavItem = { path: '/', label: 'Status', icon: 'dashboard', tile: 'indigo', wide: true };
 const INTERNET: NavItem = {
   path: '/internet',
@@ -98,6 +101,7 @@ export const TAB_ITEMS: readonly NavItem[] = [STATUS, INTERNET, VPN, CLIENTS, MO
 /** The pages listed on the More page. */
 export const MORE_ITEMS: readonly NavItem[] = [HOTSPOT, GUESTS, PLUGINS, SSH, HTTPS, SYSTEM];
 
+/** Every page, to find the one an address belongs to. */
 const ALL_ITEMS = [...NAV_GROUPS.flatMap((group) => group.items), MORE_ITEM];
 
 /** The page an address belongs to: its own, or the one it is a sub-page of (/plugins/x). */
@@ -116,6 +120,7 @@ export function isSubPage(pathname: string): boolean {
 // A sub-page's own title (a plugin's name), set by the screen with usePageTitle.
 let titleOverride: string | undefined;
 const titleListeners = new Set<() => void>();
+/** Lets a component hear when a page changes its title (useSyncExternalStore). */
 function subscribeTitle(listener: () => void) {
   titleListeners.add(listener);
   return () => titleListeners.delete(listener);

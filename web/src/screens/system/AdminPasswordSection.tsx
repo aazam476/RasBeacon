@@ -3,6 +3,7 @@ import { useDevice } from '@/data/device';
 import type { AdminPasswordForm } from '@/data/types';
 import { ButtonRow, FormSuccess, PasswordField, Section, Sheet } from '@/ui';
 
+/** The form as it opens: every field empty. */
 const EMPTY: AdminPasswordForm = { currentPassword: '', newPassword: '', newPasswordConfirm: '' };
 
 /** A new admin password, given the current one. Other devices are logged out. */
@@ -31,6 +32,7 @@ export function AdminPasswordSection() {
   );
 }
 
+/** The sheet that changes the admin password: the current one, then the new one twice. */
 function AdminPasswordSheet({ onChanged, onClose }: { onChanged: () => void; onClose: () => void }) {
   const { changeAdminPassword } = useDevice();
   const [form, setForm] = useState(EMPTY);

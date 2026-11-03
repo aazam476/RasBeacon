@@ -252,7 +252,6 @@ type hostapdData struct {
 	HE6Center int
 }
 
-// Hostapd produces hostapd.conf text for the hotspot.
 // bssColor picks the hotspot's Wi-Fi 6 "BSS color" (1 to 63) from its name,
 // so it stays the same across restarts. Devices use it to tell this
 // network's signals from a neighbor's on the same channel.
@@ -264,6 +263,7 @@ func bssColor(ssid string) int {
 	return sum%63 + 1
 }
 
+// Hostapd produces hostapd.conf text for the hotspot.
 func Hostapd(in HotspotInput) (string, error) {
 	if in.Channel == 0 {
 		in.Channel = config.DefaultChannel(in.Band)
@@ -411,8 +411,8 @@ func commentSafe(s string) string {
 	}, s)
 }
 
-// PluginSubnet is the network RasBeacon's plugins run in (see
-// internal/plugins). Each plugin has a fixed address in it.
+// PluginSubnet is the network RasBeacon's plugins run in. Each plugin has
+// a fixed address in it (see nextPluginAddress in internal/agent/plugins.go).
 var PluginSubnet = netip.MustParsePrefix("10.89.0.0/24")
 
 // --- dnsmasq (DHCP and DNS) ---
@@ -460,6 +460,7 @@ type DnsmasqInput struct {
 	FixedAddresses []FixedAddress
 }
 
+// dnsmasqData is what dnsmasq.conf.tmpl fills in.
 type dnsmasqData struct {
 	FixedAddresses   []FixedAddress
 	Metered          bool
@@ -666,6 +667,8 @@ const (
 	PluginPortPrefix = "rbport"
 )
 
+// pluginPortData is one port of a plugin forwarded from RasBeacon, for
+// the firewall template.
 type pluginPortData struct {
 	Protocol  string
 	Host      int
@@ -682,6 +685,7 @@ type BrowserRule struct {
 	Uplinks []string
 }
 
+// firewallData is what firewall.nft.tmpl fills in.
 type firewallData struct {
 	PausedMACs      []string
 	PausedIPv4      []string
@@ -713,6 +717,9 @@ type firewallData struct {
 	QoS *qosData
 }
 
+// qosData is the priority devices' part of firewallData: their MAC
+// addresses, which directions are shaped, the conntrack label put on
+// their connections, and the two classes the queues sort packets into.
 type qosData struct {
 	PriorityMACs     []string
 	Upload, Download bool
@@ -721,6 +728,7 @@ type qosData struct {
 	NormalClass      string
 }
 
+// welcomeData is the welcome page's part of firewallData.
 type welcomeData struct {
 	Interfaces   []string
 	Accepted     []string // "aa:bb:cc:dd:ee:ff" or "aa:bb:cc:dd:ee:ff timeout 3600s"

@@ -86,6 +86,7 @@ export function checkAdminPassword(password: string): string | null {
   return null;
 }
 
+/** Error messages by field name: what a form shows under each field. */
 type Errors = Record<string, string>;
 
 /** Keeps the problems that were found (null means fine). */
@@ -182,6 +183,7 @@ export function certificatesToUpload(files: Uint8Array[]): string {
     .join('');
 }
 
+/** A chosen file's contents. */
 async function readBytes(file: File): Promise<Uint8Array> {
   return new Uint8Array(await file.arrayBuffer());
 }

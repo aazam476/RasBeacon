@@ -4,12 +4,14 @@ import { useAction } from '@/lib/useAction';
 import { useErrorToast } from './errorToastContext';
 import { Icon, type BaseIconName } from './Icon';
 
+/** What every option of a list needs from it: the group name, the picked value, and what to call. */
 interface ChoiceListState {
   name: string;
   value: string;
   onChange: (value: string) => void;
 }
 
+/** Hands the list's state to its options. */
 const ChoiceListContext = createContext<ChoiceListState | null>(null);
 
 interface ChoiceListProps<T extends string> {
@@ -62,6 +64,7 @@ interface ChoiceProps {
   trailing?: ReactNode;
 }
 
+/** One choice of a ChoiceList: a row with its title, description and a check mark when chosen. */
 export function Choice({ value, title, description, icon, mono = false, trailing }: ChoiceProps) {
   const list = useContext(ChoiceListContext);
   if (!list) {

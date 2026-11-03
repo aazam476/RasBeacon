@@ -1,7 +1,7 @@
 /**
- * Reading the limits typed into the device limit (Hotspot) and the data limit (Clients) fields,
- * so a mistake shows while typing. The router checks them again
- * (internal/config/config.go MaxDevicesLimit, MaxUsageLimitMB).
+ * Reading the limits typed into the device limit (Hotspot) and the data limit fields (per device
+ * on Clients, for phones and modems on Internet), so a mistake shows while typing. The router
+ * checks them again (internal/config/config.go MaxDevicesLimit, MaxUsageLimitMB).
  */
 
 /** The most devices on a network at once: the addresses DHCP hands out. */
@@ -26,6 +26,9 @@ export function readDeviceLimit(text: string): LimitReading {
 
 /** The units the data limit can be typed in. */
 export type DataUnit = 'MB' | 'GB';
+
+/** The units in the order the unit menu lists them. */
+export const DATA_UNITS: readonly DataUnit[] = ['GB', 'MB'];
 
 /** The data limit as typed, in MB: empty means no limit (0). "1.5" GB is 1,500 MB. */
 export function readDataLimit(text: string, unit: DataUnit): LimitReading {

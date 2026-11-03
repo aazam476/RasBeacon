@@ -9,8 +9,11 @@
  * A spring starts from where the element is now and at the speed it is moving, so an
  * animation can be grabbed or reversed at any moment without a jump. The motion is played
  * with the Web Animations API on `transform`, so it runs off the main thread.
+ *
+ * Also here, for all motion played from code: the ease-out curve and "Reduce motion".
  */
 
+/** How a spring moves: how much it overshoots, and how long it takes. */
 export interface SpringOptions {
   /** 1 = no overshoot (default). Use about 0.8 only when a flick preceded the motion. */
   dampingRatio?: number;
@@ -20,6 +23,7 @@ export interface SpringOptions {
   velocity?: number;
 }
 
+/** A spring playing on an element: where it goes, how, and since when. */
 interface RunningSpring {
   animation: Animation;
   from: number;
@@ -28,6 +32,7 @@ interface RunningSpring {
   startedAt: number;
 }
 
+/** The spring each element is playing, so a new one starts from its position and speed. */
 const running = new WeakMap<HTMLElement, RunningSpring>();
 
 /** Displacement from the target and velocity of a spring `t` seconds after it started. */
@@ -133,6 +138,12 @@ export function project(velocity: number, decelerationRate = 0.998): number {
 export function rubberband(overshoot: number, dimension: number, constant = 0.55): number {
   return (overshoot * dimension * constant) / (dimension + constant * Math.abs(overshoot));
 }
+
+/**
+ * The ease-out curve for things that appear or settle in place (the same as `--ease-out` in
+ * index.css): quick at first, then gently slowing down.
+ */
+export const EASE_OUT = 'cubic-bezier(0.23, 1, 0.32, 1)';
 
 /** True when the person asked their device for less motion. */
 export function prefersReducedMotion(): boolean {

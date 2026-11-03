@@ -1,6 +1,7 @@
 import { cn } from '@/lib/cn';
 import { Icon } from './Icon';
 
+/** The three sizes of the app icon. */
 const SIZE_CLASSES = {
   /** The desktop sidebar. */
   sm: 'size-7 [&_svg]:size-[1.125rem]',

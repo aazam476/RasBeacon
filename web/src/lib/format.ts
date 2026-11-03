@@ -1,5 +1,6 @@
 import type { Client } from '@/data/types';
 
+/** How good a Wi-Fi signal is, as bars and in words. */
 interface SignalLevel {
   /** Lit bars on a four-bar meter. */
   bars: 1 | 2 | 3 | 4;

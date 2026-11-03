@@ -23,6 +23,7 @@ export function PluginsScreen() {
   );
 }
 
+/** The installed plugins, the data kept from removed ones, and the ways to add one. */
 function PluginList({ state }: { state: PluginsState }) {
   const sources = state.sources.length;
 
@@ -103,6 +104,7 @@ function KeptData({ kept }: { kept: PluginKept[] }) {
   );
 }
 
+/** What the page says before any plugin is installed. */
 function NoPlugins() {
   return (
     <div className="flex flex-col items-center gap-2 px-6 pt-4 pb-2 text-center">

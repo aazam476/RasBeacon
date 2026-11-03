@@ -14,6 +14,7 @@ export interface StaleEntry {
   retry: () => Promise<void>;
 }
 
+/** What the store hands to React: it changes as a whole, so React notices each change. */
 interface Snapshot {
   /** The failures, in the order they were reported. */
   entries: StaleEntry[];
@@ -21,6 +22,8 @@ interface Snapshot {
   hosted: boolean;
 }
 
+// The store: the failures by the id of the Loaded that reported them, how many StaleNotices
+// are on screen, the snapshot React reads, and who to tell about changes.
 const entries = new Map<string, StaleEntry>();
 let hosts = 0;
 let snapshot: Snapshot = { entries: [], hosted: false };
@@ -32,11 +35,13 @@ function changed() {
   for (const listener of listeners) listener();
 }
 
+/** Lets a component hear about every change (useSyncExternalStore). */
 function subscribe(listener: () => void) {
   listeners.add(listener);
   return () => listeners.delete(listener);
 }
 
+/** The current snapshot (useSyncExternalStore). */
 const getSnapshot = () => snapshot;
 
 /**

@@ -55,6 +55,7 @@ export function ServerDetailsSection({ profile }: { profile: VPNProfile }) {
 /** Typing settings for keys and addresses: no capitals, corrections or suggestions. */
 const PLAIN_INPUT = { autoComplete: 'off', autoCapitalize: 'none', autoCorrect: 'off', spellCheck: false } as const;
 
+/** A profile's server details, filled in from the profile, and their Save. */
 function ServerDetailsForm({ profile }: { profile: VPNProfile }) {
   const { saveVpnDetails } = useDevice();
   const form = useForm(toForm(profile), (values) => saveVpnDetails(profile.name, values));

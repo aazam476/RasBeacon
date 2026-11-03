@@ -7,5 +7,5 @@ RasBeacon's headless browser.
 
 To update: download the new package (`npm pack @cloudflare/speedtest`),
 copy `dist/speedtest.js` and `LICENSE` here, update the version above and
-in internal/speedtest, and run `go test ./internal/speedtest/` (it checks
-that the file still ends with the export RasBeacon replaces).
+in `LICENSES/THIRD_PARTY.md`, and run `go test ./internal/speedtest/` (it
+checks that the file still ends with the export RasBeacon replaces).

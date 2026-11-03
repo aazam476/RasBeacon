@@ -1,5 +1,6 @@
 import type { Band, Security, UplinkStandard, WiFiStandard } from '@/data/types';
 
+/** Every band, as the band menus offer it (bandOptions leaves out what the radio lacks). */
 const BAND_OPTIONS: { value: Band; label: string }[] = [
   { value: '2.4GHz', label: '2.4 GHz (works with every device, longer range)' },
   { value: '5GHz', label: '5 GHz (faster, shorter range)' },
@@ -18,6 +19,7 @@ export function bandOptions(no5GHz: boolean | undefined, offer6GHz = false): { v
   );
 }
 
+/** Every security setting, as the menu offers it (securityOptions leaves out what the radio lacks). */
 const SECURITY_OPTIONS: { value: Security; label: string }[] = [
   { value: 'wpa2-wpa3', label: 'WPA2/WPA3 (recommended)' },
   { value: 'wpa3', label: 'WPA3 only (safest; newer devices only)' },
@@ -55,6 +57,7 @@ export function standardOptions(band: Band, noWifi6: boolean | undefined): { val
   );
 }
 
+/** What each Wi-Fi standard is called on the pages. */
 const STANDARD_LABELS: Record<UplinkStandard, string> = {
   wifi7: 'Wi-Fi 7',
   wifi6e: 'Wi-Fi 6E',

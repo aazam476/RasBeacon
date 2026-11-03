@@ -133,6 +133,7 @@ export function InstallSheet({ preview, onDone }: InstallSheetProps) {
   );
 }
 
+/** A share of the processor in words: "one core", "50% of a core", "2 cores". */
 function formatCores(cpus: number): string {
   if (cpus === 1) return 'one core';
   if (cpus < 1) return `${Math.round(cpus * 100)}% of a core`;

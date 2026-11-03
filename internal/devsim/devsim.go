@@ -125,6 +125,8 @@ const iwPhyInfo = "Wiphy phy1\n\tSupported interface modes:\n\t\t * managed\n\t\
 	// The cipher that lets hostapd run WPA3 (see radio.SupportsWPA3AP).
 	"\tSupported Ciphers:\n\t\t* CCMP-128 (00-0f-ac:4)\n\t\t* CMAC (00-0f-ac:6)\n"
 
+// stationDump is what `iw dev ap0 station dump` prints on the simulated
+// device: one phone on the hotspot.
 const stationDump = `Station 3a:1f:22:aa:bb:cc (on ap0)
 	signal:  	-48 [-50, -52] dBm
 	connected time:	367 seconds
@@ -209,6 +211,8 @@ func StartHotel(address string) error {
 	return nil
 }
 
+// hotelLoginPage is the simulated hotel's login page, for trying
+// RasBeacon's own browser: a room number and a Connect button.
 const hotelLoginPage = `<!doctype html>
 <meta name="viewport" content="width=device-width">
 <title>Grand Hotel Wi-Fi</title>
@@ -224,6 +228,8 @@ button{position:absolute;left:24px;top:180px;font-size:20px}
 <button>Connect</button>
 </form>`
 
+// hotelWelcomePage is the page after the hotel's login (%s is the room
+// number typed).
 const hotelWelcomePage = `<!doctype html>
 <meta name="viewport" content="width=device-width">
 <title>Connected</title>

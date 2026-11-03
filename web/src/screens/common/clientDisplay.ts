@@ -24,6 +24,7 @@ export function clientName(client: Client): string {
   return client.name || client.hostname || client.mac;
 }
 
+/** One reading on a device's card: "IP address", "192.168.8.102". */
 export interface ClientDetail {
   label: string;
   value: string;

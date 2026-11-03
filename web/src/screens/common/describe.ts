@@ -49,6 +49,7 @@ export function describeEthernet(ethernet: EthernetUplinkStatus): string {
   return `${ethernet.role === 'uplink' ? 'Uplink' : 'Client port'}, ${ethernet.cablePlugged ? 'cable plugged in' : 'no cable'}`;
 }
 
+/** A hotspot security setting as people know it: "WPA2/WPA3". */
 export function describeSecurity(security: Security): string {
   switch (security) {
     case 'wpa2-wpa3':
@@ -74,6 +75,7 @@ export function uplinkBadge(uplink: UplinkStatus): { label: string; tone: Tone; 
   return { label: 'Not connected', tone: 'gray' };
 }
 
+/** How a VPN state looks on the pages: its color, symbol, and words. */
 export interface VpnStateView {
   /** The color of the state's symbol and badge. */
   tone: Tone;

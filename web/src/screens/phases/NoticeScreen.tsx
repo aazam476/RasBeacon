@@ -2,8 +2,10 @@ import { useDevice } from '@/data/device';
 import { FullPage, FullPageHeader } from '@/shell/FullPage';
 import { ActionButton, ActivityIndicator, AppIcon, Icon, type BaseIconName } from '@/ui';
 
+/** The full-page notices: RasBeacon unreachable, setup closed or failing, no radio, shut down. */
 export type NoticeKind = 'unreachable' | 'setup-closed' | 'setup-error' | 'no-radio' | 'off';
 
+/** What each full-page notice says, and its symbol and color. */
 const NOTICES: Record<
   NoticeKind,
   { title: string; body: string; icon: BaseIconName; tone: 'gray' | 'orange' | 'red' }
@@ -40,6 +42,7 @@ const NOTICES: Record<
   },
 };
 
+/** The colors of the notice's round symbol. */
 const TONES = {
   gray: 'bg-fill text-label-2',
   orange: 'bg-orange-fill/15 text-orange',

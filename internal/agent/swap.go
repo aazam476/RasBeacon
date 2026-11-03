@@ -21,6 +21,7 @@ import (
 	"rasbeacon/internal/config"
 )
 
+// gigabyte is 2^30 bytes, the unit the swap size is chosen in.
 const gigabyte = int64(1) << 30
 
 // swapReserve is kept free on the data partition whatever the swap size.

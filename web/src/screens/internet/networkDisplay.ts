@@ -21,6 +21,7 @@ export const METHOD_OPTIONS: { value: EAPMethod; label: string }[] = [
   { value: 'tls', label: 'TLS (certificate)' },
 ];
 
+/** An Enterprise login method as the form names it. */
 export function methodName(method: EAPMethod): string {
   return METHOD_OPTIONS.find((option) => option.value === method)?.label ?? method;
 }

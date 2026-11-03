@@ -33,6 +33,9 @@ const (
 	maxIconBytes  = 128 << 10
 )
 
+// sourcePattern is a GitHub repository name, "owner/repo": an owner of up
+// to 39 letters, digits and hyphens (not starting with a hyphen), and a
+// repository of up to 100 letters, digits, dots, underscores and hyphens.
 var sourcePattern = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9._-]{1,100}$`)
 
 // CheckSource checks an "owner/repo" name, also accepting a GitHub address.
@@ -101,6 +104,8 @@ func (e *RateLimited) Error() string {
 	return "GitHub asks to wait before checking again (until " + e.Until.Local().Format("15:04") + ")"
 }
 
+// githubRelease is the part of GitHub's answer about one release that
+// the catalog reads: its tag and its files.
 type githubRelease struct {
 	TagName string `json:"tag_name"`
 	Assets  []struct {

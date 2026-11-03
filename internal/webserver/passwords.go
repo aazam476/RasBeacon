@@ -26,7 +26,10 @@ const (
 	// passwordUnknown: no answer (rbd unreachable, a refusal for another
 	// reason). Nothing is recorded.
 	passwordUnknown passwordResult = iota
+	// passwordWrong: rbd said the password is wrong. The limiter counts it.
 	passwordWrong
+	// passwordRight: rbd accepted the password. The limiter forgets this
+	// device's wrong ones.
 	passwordRight
 )
 

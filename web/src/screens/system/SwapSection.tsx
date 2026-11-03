@@ -29,6 +29,7 @@ export function SwapSection() {
   );
 }
 
+/** The swap file's size, once loaded, and its Save. */
 function SwapForm({ settings }: { settings: SwapSettings }) {
   const { saveSwapSettings } = useDevice();
   const form = useForm({ sizeGb: String(settings.sizeGb) }, (values) => saveSwapSettings(Number(values.sizeGb)));
@@ -85,6 +86,7 @@ function swapSizes({ sizeGb, maxGb }: SwapSettings): number[] {
   return [...sizes].sort((a, b) => a - b);
 }
 
+/** "2 GB". */
 function formatGb(gb: number) {
   // A no-break space, as elsewhere, so the unit never wraps away from the number.
   return `${gb.toLocaleString('en-US')}\u00a0GB`;

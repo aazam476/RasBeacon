@@ -71,6 +71,8 @@ func (s *Server) refuseOverHTTP(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusForbidden, api.ErrorResponse{Error: "HTTPS is on: use https://" + lan + "/"})
 }
 
+// stateCacheTime is how long rbweb reuses its copy of rbd's /state (see
+// Server.cachedState).
 const stateCacheTime = 2 * time.Second
 
 // hostName is the friendly name for the device on the hotspot.

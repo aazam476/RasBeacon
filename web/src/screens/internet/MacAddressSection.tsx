@@ -6,8 +6,10 @@ import { Row, Section, SelectField, TextField } from '@/ui';
 import { clientName } from '../common/clientDisplay';
 import { PART_ORDER } from './partOrder';
 
+/** The MAC address the uplink uses: the Pi's own (''), a random one, or another device's. */
 type Mode = '' | 'random' | 'cloned';
 
+/** The three choices, as the menu lists them. */
 const MODE_OPTIONS: readonly { value: Mode; label: string }[] = [
   { value: '', label: 'The Pi’s own' },
   { value: 'random', label: 'Random' },
@@ -21,6 +23,7 @@ interface Draft {
   cloned: string;
 }
 
+/** The form's values for a saved choice: the mode, and the cloned address when there is one. */
 function draftOf(choice: MACChoice | undefined): Draft {
   const mode = choice?.mode ?? '';
   return { mode, cloned: mode === 'cloned' ? (choice?.address ?? '') : '' };

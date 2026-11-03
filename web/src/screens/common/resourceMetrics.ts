@@ -2,6 +2,7 @@ import type { SystemStats } from '@/data/types';
 import { NBSP, percentOf } from '@/lib/format';
 import type { BaseIconName } from '@/ui';
 
+/** One hardware reading (processor, memory, temperature) with its meter. */
 export interface ResourceMetric {
   label: string;
   icon: BaseIconName;

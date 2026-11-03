@@ -1,7 +1,9 @@
 import type { NetworkClient } from '../common/clientDisplay';
 
+/** Which devices the Clients page lists. */
 export type ClientFilter = 'all' | '5ghz' | '2.4ghz' | 'guests' | 'blocked';
 
+/** One filter button: its label, and which devices it lets through. */
 interface ClientFilterOption {
   value: ClientFilter;
   label: string;
@@ -17,6 +19,7 @@ export const CLIENT_FILTERS: readonly ClientFilterOption[] = [
   { value: 'blocked', label: 'Paused', matches: (client) => !client.internetAccess },
 ];
 
+/** The devices `filter` lets through. */
 export function filterClients(clients: NetworkClient[], filter: ClientFilter): NetworkClient[] {
   const option = CLIENT_FILTERS.find((candidate) => candidate.value === filter);
   return option ? clients.filter(option.matches) : clients;

@@ -55,6 +55,7 @@ export type RowLeading =
   | { icon: BaseIconName; className?: string }
   | { image: string; fallback?: BaseIconName };
 
+/** The symbol at the start of a row: a colored tile, a picture (with a tile when it is missing), or a plain icon. */
 export function Leading({ leading }: { leading?: RowLeading }) {
   if (!leading) return null;
   if ('tile' in leading) return <IconTile icon={leading.tile} color={leading.color} />;
@@ -90,6 +91,7 @@ interface RowTextProps {
   className?: string;
 }
 
+/** Whether a row was given something to show on its right. */
 function hasValue(value: ReactNode): boolean {
   return value !== undefined && value !== null && value !== '';
 }

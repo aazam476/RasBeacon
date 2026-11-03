@@ -44,6 +44,7 @@ function readDataUrl(file: File): Promise<string> {
   });
 }
 
+/** The welcome page's settings, once loaded, and their Save. */
 function WelcomeForm({ settings }: { settings: WelcomeSettings }) {
   const { saveWelcomeSettings, guestSettings } = useDevice();
   const form = useForm(settings, saveWelcomeSettings);

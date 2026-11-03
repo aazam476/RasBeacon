@@ -1395,9 +1395,12 @@ type WelcomeConfig struct {
 	CustomPage string `json:"customPage,omitempty"`
 }
 
+// The welcome page's color and logo, as Validate accepts them.
 var (
+	// welcomeColor is a color like "#0c8a9c".
 	welcomeColor = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
-	welcomeLogo  = regexp.MustCompile(`^data:image/(png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$`)
+	// welcomeLogo is a PNG or JPEG picture as a data: URL.
+	welcomeLogo = regexp.MustCompile(`^data:image/(png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$`)
 )
 
 // Validate checks the welcome page's settings.

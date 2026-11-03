@@ -148,6 +148,7 @@ func (a *Agent) QoSSettings() api.QoSSettings {
 	return a.qosSettings()
 }
 
+// qosSettings is QoSSettings for callers that hold a.mu.
 func (a *Agent) qosSettings() api.QoSSettings {
 	return api.QoSSettings{
 		UploadKbps:      a.cfg.QoS.UploadKbps,

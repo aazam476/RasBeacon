@@ -2,17 +2,16 @@ import { useState } from 'react';
 import { useDevice } from '@/data/device';
 import type { MobileData } from '@/data/types';
 import { formatBytes, ordinal, percentOf } from '@/lib/format';
-import { readDataLimit, showDataLimit, type DataUnit } from '@/lib/limits';
+import { DATA_UNITS, readDataLimit, showDataLimit } from '@/lib/limits';
 import { usePagePart } from '@/lib/pageForm';
 import { useForm } from '@/lib/useForm';
 import { AlertDialog, AmountField, ButtonRow, Meter, RowText, SelectField } from '@/ui';
 import { PART_ORDER } from './partOrder';
 
-const UNITS: readonly DataUnit[] = ['GB', 'MB'];
-
 /** The days a month's count can start on: every month has a 28th. */
 const MAX_RESET_DAY = 28;
 
+/** The days of the month the count can start again on: "1st" to "28th". */
 const DAYS = Array.from({ length: MAX_RESET_DAY }, (_, i) => ({ value: String(i + 1), label: ordinal(i + 1) }));
 
 /**
@@ -65,7 +64,7 @@ export function MobileDataRows({ data }: { data: MobileData }) {
         value={values.text}
         onChange={(text) => setField('text', text)}
         unit={values.unit}
-        units={UNITS}
+        units={DATA_UNITS}
         onUnitChange={(unit) => setField('unit', unit)}
         error={(reading.ok ? undefined : reading.error) ?? fieldErrors.limitMb}
         disabled={form.pending}

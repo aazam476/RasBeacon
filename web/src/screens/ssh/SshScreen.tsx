@@ -26,6 +26,7 @@ export function SshScreen() {
   );
 }
 
+/** The SSH settings, once loaded, and their Save. */
 function SshForm({ settings }: { settings: SSHSettings }) {
   const { saveSshSettings } = useDevice();
   const form = useForm(settings, saveSshSettings);

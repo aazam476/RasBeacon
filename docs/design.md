@@ -706,21 +706,8 @@ and during `iperf3`.
 
 ## 9. Repository layout
 
-```
-cmd/rbd/            privileged agent (state machine, renderers, drivers)
-cmd/rbweb/          web server + API
-internal/config/    schema, validation, atomic store
-internal/render/    hostapd / wpa_supplicant / dnsmasq / nft / wg generators (+ testdata golden files)
-internal/fsm/       uplink/tunnel/portal state machine
-internal/wgconf/    wg-quick parser
-web/                static UI (HTML/CSS/ES modules)
-image/              rpi-image-gen config, overlays, systemd units, sysctl, partition layout
-test/netns/         namespace harness + leak tests
-test/hwsim/         hwsim/EAP tests, test CA generator
-docs/               architecture, wpa-enterprise, wireguard-server, compatibility table, updating, redistribution
-.github/workflows/  ci.yml, release.yml
-LICENSE, LICENSES/THIRD_PARTY.md, CONTRIBUTING.md, SECURITY.md
-```
+The folders, with what each one holds, are listed in
+[CONTRIBUTING.md](../CONTRIBUTING.md#repository-layout).
 
 **Commit messages** start with a type prefix and a colon, with no scope in
 parentheses (`docs: …`, not `docs(readme): …`), as `CONTRIBUTING.md` says:

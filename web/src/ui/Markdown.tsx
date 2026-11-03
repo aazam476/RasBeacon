@@ -18,6 +18,7 @@ export function Markdown({ source, className }: { source: string; className?: st
   );
 }
 
+/** One block of the text (a heading, a paragraph, a list or code), as HTML. */
 function BlockView({ block }: { block: Block }) {
   switch (block.kind) {
     case 'heading':

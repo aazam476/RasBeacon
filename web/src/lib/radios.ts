@@ -5,6 +5,7 @@ import type { Radio, RadioRole } from '@/data/types';
 /** The owner's choice for one radio: a role, or "auto" to let RasBeacon pick. */
 export type RadioChoice = RadioRole | 'auto';
 
+/** What each job of a radio is called on the pages. */
 export const ROLE_LABELS: Record<RadioRole, string> = {
   hotspot: 'Hotspot',
   uplink: 'Internet',

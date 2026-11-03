@@ -70,7 +70,12 @@ func (q QoSInput) Active() bool {
 	return q.uploads() || q.downloads()
 }
 
-func (q QoSInput) uploads() bool   { return q.UploadKbps > 0 && len(q.Upload) > 0 }
+// uploads reports whether uploads are shaped: an upload speed is set and
+// there is an interface to shape them on (an uplink or the VPN tunnel).
+func (q QoSInput) uploads() bool { return q.UploadKbps > 0 && len(q.Upload) > 0 }
+
+// downloads reports whether downloads are shaped: a download speed is set
+// and there is a network of devices (a LAN) to shape them on.
 func (q QoSInput) downloads() bool { return q.DownloadKbps > 0 && len(q.LANs) > 0 }
 
 // Command is one command to run. Optional ones may fail without harm (a

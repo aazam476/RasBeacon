@@ -79,6 +79,8 @@ type Forwarder struct {
 // that is down doesn't slow every lookup by a whole timeout.
 const failurePause = 30 * time.Second
 
+// knownAddrs are the addresses a name had when it was last looked up, and
+// when that was.
 type knownAddrs struct {
 	addrs []netip.Addr
 	at    time.Time

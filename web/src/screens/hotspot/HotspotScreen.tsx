@@ -86,6 +86,7 @@ function countryProblem(problem: unknown): string | undefined {
   return undefined; // RasBeacon didn't answer: nothing to say about the code, and every channel stays
 }
 
+/** The hotspot settings, once loaded, and their Save (which restarts the hotspot). */
 function HotspotForm({ settings }: { settings: HotspotSettings }) {
   const { status, saveHotspotSettings } = useDevice();
   // A hotspot saved on a band its radio can't use runs on the next one down (after the adapter

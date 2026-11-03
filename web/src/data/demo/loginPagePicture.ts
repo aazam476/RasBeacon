@@ -20,4 +20,5 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="390" height="591" vi
 <text x="24" y="560" font-family="Helvetica, Arial, sans-serif" font-size="12" fill="#888">Need help? Call the front desk: dial 0.</text>
 </svg>`;
 
+/** The made-up hotel login page as a data: URL, for the picture of RasBeacon's browser. */
 export const LOGIN_PAGE_PICTURE = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;

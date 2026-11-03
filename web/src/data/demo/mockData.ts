@@ -55,6 +55,7 @@ export interface MockRouter {
   hotspotPassword: string;
 }
 
+/** The sample devices on the hotspot (and one on the Ethernet port), in every state worth showing. */
 const clients: Client[] = [
   {
     hostname: 'iphone-15-pro-personal-icloud-private-relay.lan',
@@ -142,6 +143,7 @@ const clients: Client[] = [
   },
 ];
 
+/** The sample devices on the guest network. */
 const guestClients: Client[] = [
   {
     hostname: 'visitor-pixel-8.lan',

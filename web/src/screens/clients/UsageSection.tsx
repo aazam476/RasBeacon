@@ -1,12 +1,10 @@
 import { useState, type FormEvent } from 'react';
 import { useDevice } from '@/data/device';
 import type { UsageSettings } from '@/data/types';
-import { readDataLimit, showDataLimit, type DataUnit } from '@/lib/limits';
+import { DATA_UNITS, readDataLimit, showDataLimit } from '@/lib/limits';
 import { useForm } from '@/lib/useForm';
 import { Loaded } from '@/shell/Loaded';
 import { AlertDialog, AmountField, ButtonRow, FormActions, Section } from '@/ui';
-
-const UNITS: readonly DataUnit[] = ['GB', 'MB'];
 
 /** "October 19, 2026" (in the browser's language and order). */
 function sinceLabel(since: string | undefined): string {
@@ -29,6 +27,7 @@ export function UsageSection() {
   );
 }
 
+/** The data limit per device and resetting the counts, once the settings are loaded. */
 function UsageForm({ settings }: { settings: UsageSettings }) {
   const { saveUsageLimit, resetUsage } = useDevice();
   // The limit as typed ("5" and GB), checked as it is typed; the router keeps MB.
@@ -61,7 +60,7 @@ function UsageForm({ settings }: { settings: UsageSettings }) {
           value={values.text}
           onChange={(text) => setField('text', text)}
           unit={values.unit}
-          units={UNITS}
+          units={DATA_UNITS}
           onUnitChange={(unit) => setField('unit', unit)}
           error={(reading.ok ? undefined : reading.error) ?? fieldErrors.limitMb}
           disabled={form.pending}

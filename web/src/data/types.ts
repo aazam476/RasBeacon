@@ -15,6 +15,7 @@ export type Mode =
   | 'normal' // setup is done, the hotspot is running
   | 'no-radio'; // no Wi-Fi radio that can run a hotspot
 
+/** A Wi-Fi band. */
 export type Band = '2.4GHz' | '5GHz' | '6GHz';
 
 /** "wpa2-wpa3" lets new devices use WPA3; "wpa2" is for old devices. */
@@ -137,6 +138,7 @@ export interface Client {
   limitReached?: boolean;
 }
 
+/** The hotspot as it runs now (part of the status). */
 export interface HotspotStatus {
   running: boolean;
   ssid: string;
@@ -169,6 +171,7 @@ export interface GuestStatus {
 /** What the Wi-Fi uplink radio is doing. */
 export type WiFiUplinkState = 'connected' | 'connecting' | 'searching' | 'login-failed' | 'not-configured' | 'off';
 
+/** The radio that joins Wi-Fi networks for the internet, and what it is doing. */
 export interface WiFiUplinkStatus {
   /** False when there is no second radio for joining Wi-Fi networks. */
   available: boolean;
@@ -192,8 +195,10 @@ export interface WiFiUplinkStatus {
 /** The Wi-Fi standard of a connection or of a nearby network. */
 export type UplinkStandard = 'wifi7' | 'wifi6e' | 'wifi6' | 'wifi5' | 'wifi4';
 
+/** The Ethernet port's job: the internet (uplink), or a port for a device (client port). */
 export type EthernetRole = 'uplink' | 'client-port';
 
+/** The Ethernet port, and what is plugged into it. */
 export interface EthernetUplinkStatus {
   present: boolean;
   role: EthernetRole;
@@ -314,6 +319,7 @@ export interface PortalStatus {
  */
 export type VPNState = 'off' | 'connecting' | 'up' | 'down' | 'direct' | 'blocked';
 
+/** The VPN tunnel as it runs now. */
 export interface VPNStatus {
   enabled: boolean;
   killSwitch: boolean;
@@ -417,6 +423,7 @@ export interface Speedtest {
   last: SpeedtestResult | null;
 }
 
+/** GET /api/v1/status: everything the pages show about RasBeacon now. */
 export interface Status {
   version: string;
   boardModel: string;
@@ -568,6 +575,7 @@ export interface QoSSettings {
 /** The channels a country allows a hotspot on, by band (POST /settings/hotspot/channels). */
 export type ChannelsByBand = Record<Band, number[]>;
 
+/** POST /api/v1/settings/hotspot/channels: the channels a country allows, by band. */
 export interface HotspotChannelsResponse {
   channels: ChannelsByBand;
 }
@@ -585,6 +593,7 @@ export interface SSHSettings {
   authorizedKeys: string;
 }
 
+/** How a saved Wi-Fi network is joined: open, with a password, or with a username (Enterprise). */
 export type UplinkSecurity = 'open' | 'personal' | 'enterprise';
 
 /** How RasBeacon logs in to an Enterprise network. */
@@ -778,6 +787,7 @@ export interface PictureBox {
   height: number;
 }
 
+/** The special keys passed on to RasBeacon's browser. */
 export type PortalKey = 'Enter' | 'Backspace' | 'Tab';
 
 // --- Plugins (docs/plugins.md) ------------------------------------------------------------------
@@ -815,6 +825,7 @@ export interface PluginSetting {
   hasValue?: boolean;
 }
 
+/** What a plugin is doing. */
 export type PluginState = 'installing' | 'waiting' | 'starting' | 'running' | 'stopped' | 'crashed' | 'failed';
 
 /** An installed plugin (GET /api/v1/plugins). */
@@ -857,6 +868,7 @@ export interface Plugin {
   broken?: boolean;
 }
 
+/** GET /api/v1/plugins: the installed plugins, the catalog's sources, and what this board offers them. */
 export interface PluginsState {
   plugins: Plugin[];
   sources: { source: string; builtIn: boolean }[];
@@ -940,6 +952,7 @@ export interface PluginChoices {
   drive: string;
 }
 
+/** One plugin in the catalog, from one of its sources. */
 export interface PluginCatalogEntry {
   source: string;
   file: string;
@@ -959,6 +972,7 @@ export interface PluginCatalogEntry {
   needsRasBeacon?: string;
 }
 
+/** POST /api/v1/plugins/catalog: the plugins found, when, and the sources that couldn't be read. */
 export interface PluginCatalog {
   entries: PluginCatalogEntry[];
   checkedAt?: string;
@@ -966,6 +980,7 @@ export interface PluginCatalog {
   errors?: Record<string, string>;
 }
 
+/** A drive plugged in, that a plugin may be given (and which plugin has it). */
 export interface PluginDrive {
   uuid: string;
   label: string;
@@ -974,6 +989,7 @@ export interface PluginDrive {
   usedBy?: string;
 }
 
+/** POST /api/v1/plugins/logs: a plugin's recent log lines. */
 export interface PluginLogsResponse {
   lines: PluginLogLine[];
 }

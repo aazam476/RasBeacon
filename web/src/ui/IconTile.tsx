@@ -4,6 +4,7 @@ import { Icon, type BaseIconName } from './Icon';
 /** The tile colors, as in the Settings app. */
 export type TileColor = 'blue' | 'indigo' | 'teal' | 'green' | 'purple' | 'orange' | 'red' | 'gray';
 
+/** The background of each tile color. */
 const COLOR_CLASSES: Record<TileColor, string> = {
   blue: 'bg-tile-blue',
   indigo: 'bg-tile-indigo',

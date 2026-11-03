@@ -5,6 +5,8 @@
  * match to Apple's SF Symbols). `name` is the outline glyph; `name_fill` the filled one, used
  * for the colored tiles, the selected tab and status symbols. Paths use the 0 -960 960 960
  * viewBox, like the SVG download on fonts.google.com/icons (choose Rounded, Fill on or off).
+ *
+ * At the end: which icon shows a Wi-Fi signal's bars.
  */
 export const ICON_PATHS = {
   add: 'M440 -440H240Q223 -440 212 -452Q200 -463 200 -480Q200 -497 212 -508Q223 -520 240 -520H440V-720Q440 -737 452 -748Q463 -760 480 -760Q497 -760 508 -748Q520 -737 520 -720V-520H720Q737 -520 748 -508Q760 -497 760 -480Q760 -463 748 -452Q737 -440 720 -440H520V-240Q520 -223 508 -212Q497 -200 480 -200Q463 -200 452 -212Q440 -223 440 -240Z',
@@ -207,4 +209,13 @@ export const ICON_PATHS = {
     'M233 -179Q221 -167 204 -167Q187 -167 176 -180Q131 -233 106 -299Q80 -365 80 -440Q80 -523 112 -596Q143 -669 197 -723Q251 -777 324 -808Q397 -840 480 -840Q563 -840 636 -808Q709 -777 763 -723Q817 -669 848 -596Q880 -523 880 -440Q880 -365 854 -299Q829 -233 784 -180Q773 -167 756 -166Q740 -166 728 -178Q717 -189 717 -206Q717 -223 728 -236Q762 -278 781 -330Q800 -382 800 -440Q800 -574 707 -667Q614 -760 480 -760Q346 -760 253 -667Q160 -574 160 -440Q160 -382 179 -330Q198 -279 233 -237Q244 -224 244 -208Q245 -191 233 -179ZM346 -292Q334 -280 317 -280Q300 -279 290 -293Q267 -324 254 -361Q240 -398 240 -440Q240 -540 310 -610Q380 -680 480 -680Q580 -680 650 -610Q720 -540 720 -440Q720 -398 706 -360Q693 -323 670 -293Q660 -280 643 -280Q626 -279 614 -291Q603 -302 602 -319Q602 -336 612 -350Q625 -370 632 -392Q640 -415 640 -440Q640 -506 593 -553Q546 -600 480 -600Q414 -600 367 -553Q320 -506 320 -440Q320 -414 328 -392Q335 -370 348 -350Q358 -336 358 -320Q357 -303 346 -292ZM480 -360Q447 -360 424 -384Q400 -407 400 -440Q400 -473 424 -496Q447 -520 480 -520Q513 -520 536 -496Q560 -473 560 -440Q560 -407 536 -384Q513 -360 480 -360Z',
 } as const;
 
+/** The name of an icon in ICON_PATHS, filled variants included. */
 export type IconName = keyof typeof ICON_PATHS;
+
+/** The icon for a Wi-Fi signal of 1 to 4 lit bars (see signalLevel in lib/format.ts). */
+export const SIGNAL_BARS = {
+  1: 'network_wifi_1_bar',
+  2: 'network_wifi_2_bar',
+  3: 'network_wifi_3_bar',
+  4: 'signal_wifi_4_bar',
+} as const satisfies Record<1 | 2 | 3 | 4, IconName>;

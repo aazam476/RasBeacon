@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 
+/** One number in a StatRow: its label, the number, and its unit. */
 export interface Stat {
   label: string;
   /** The number, large: "48.8". */

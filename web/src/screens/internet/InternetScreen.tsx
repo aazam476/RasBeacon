@@ -49,6 +49,7 @@ export function InternetScreen() {
   );
 }
 
+/** The sections that need the uplink settings, once they are loaded. */
 function NetworkSettings({ settings, status }: { settings: UplinkSettings; status: Status | undefined }) {
   const { modemSettings } = useDevice();
   const draft = useNetworkDraft(settings);

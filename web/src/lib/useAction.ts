@@ -1,7 +1,9 @@
 import { useCallback, useRef, useState } from 'react';
 import { FieldErrors } from '@/data/errors';
 
+/** What a failure says when it comes without a message of its own. */
 const FALLBACK_ERROR = 'Something went wrong. Please try again.';
+/** No field errors: one shared empty object, so it stays the same from one render to the next. */
 const NO_FIELD_ERRORS: Readonly<Record<string, string>> = {};
 
 /**

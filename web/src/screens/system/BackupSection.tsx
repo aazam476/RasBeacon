@@ -112,6 +112,7 @@ export function BackupSheet({ hasPlugins, onClose }: { hasPlugins: boolean; onCl
   );
 }
 
+/** Restoring a backup: choose the file, type its password, confirm. */
 function RestoreSheet({ onClose, onRestored }: { onClose: () => void; onRestored: () => void }) {
   const { restore } = useDevice();
   const [file, setFile] = useState<File | null>(null);

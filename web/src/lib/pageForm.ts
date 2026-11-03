@@ -29,6 +29,7 @@ export interface PagePart {
   title: string;
 }
 
+/** The list of a page's parts that the page's one Save works on. */
 export interface Registry {
   set: (id: string, part: PagePart) => void;
   remove: (id: string) => void;
@@ -37,6 +38,7 @@ export interface Registry {
   version: number;
 }
 
+/** Holds the page's Registry; PageFormProvider fills it in. */
 export const PageFormContext = createContext<Registry | null>(null);
 
 /** Registers a section's form as part `id` of the page, for as long as the section is shown. */
