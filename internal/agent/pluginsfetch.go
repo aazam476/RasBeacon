@@ -1,8 +1,9 @@
 package agent
 
-// This file downloads a plugin's app (its container image) again after a
-// restore from a backup that didn't hold it, checking that the download is
-// the same plugin, version and author.
+// This file downloads a plugin's app (its container image) again when it
+// isn't in Podman's storage: after a restore from a backup that didn't hold
+// it, or when it went missing otherwise. The download is checked to be the
+// same plugin, version and author.
 
 import (
 	"encoding/base64"
@@ -16,18 +17,34 @@ import (
 	"rasbeacon/internal/plugin"
 )
 
-// fetchPluginImage downloads a plugin's image again after a restore from a
-// backup that didn't hold it (see InstalledPlugin.Fetch). It does nothing
-// for other plugins. Called without a.mu, from runPlugin.
+// errPluginImageMissing means a plugin's image isn't in Podman's storage
+// and RasBeacon has nowhere to download it from (it was installed from a
+// file, or the catalog no longer has this version).
+var errPluginImageMissing = errors.New("its app is missing from RasBeacon's storage")
+
+// fetchPluginImage makes sure a plugin's image is in Podman's storage
+// before it starts, downloading it again when it isn't: from where a
+// restore said (InstalledPlugin.Fetch), or else from where a backup would
+// (pluginFetch). Podman is never left to look for it in a registry. Called
+// without a.mu, from runPlugin.
 func (a *Agent) fetchPluginImage(id string) error {
 	a.mu.Lock()
 	p := a.cfg.Plugins.Installed[id]
-	a.mu.Unlock()
+	restored := p.Fetch != nil
 	if p.Fetch == nil {
-		return nil
+		p.Fetch = a.pluginFetch(id)
 	}
-	// Still here from before the restore?
+	a.mu.Unlock()
+	if p.Image == "" {
+		return nil // not installed yet
+	}
+	// Still here (from before a restore, or as usual)?
 	if _, err := a.plugins.runner.Run("podman", "image", "exists", p.Image); err != nil {
+		if p.Fetch == nil {
+			slog.Error("plugin's image is missing and can't be downloaded again", "plugin", id, "image", p.Image)
+			return errPluginImageMissing
+		}
+		slog.Warn("plugin's image is missing; downloading it again", "plugin", id, "image", p.Image)
 		a.mu.Lock()
 		a.setPluginState(id, api.PluginInstalling, "Downloading its app again…")
 		a.mu.Unlock()
@@ -42,10 +59,13 @@ func (a *Agent) fetchPluginImage(id string) error {
 		if err != nil {
 			return err
 		}
+		slog.Info("plugin's image is back", "plugin", id)
+	}
+	if !restored {
+		return nil
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	slog.Info("plugin's image is back", "plugin", id)
 	return a.savePluginConfig(id, func(p *config.InstalledPlugin) { p.Fetch = nil })
 }
 
@@ -122,7 +142,11 @@ func (a *Agent) loadPluginImage(tarFile, image string) error {
 	}
 	for _, name := range names {
 		if name != image {
-			_, _ = a.plugins.runner.Run("podman", "untag", name)
+			// `podman untag IMAGE NAME` takes NAME off IMAGE. With the
+			// name alone (`podman untag NAME`), Podman takes every name
+			// off the image, RasBeacon's too, and the plugin could no
+			// longer start.
+			_, _ = a.plugins.runner.Run("podman", "untag", name, name)
 		}
 	}
 	return nil

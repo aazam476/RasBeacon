@@ -89,6 +89,9 @@ func RunArgs(s RunSpec) []string {
 		"--pids-limit", "512",
 		// RasBeacon restarts it itself (with a crash count); Podman doesn't.
 		"--restart", "no",
+		// Its image is always in RasBeacon's own storage (loaded or
+		// downloaded at install); Podman must never look for it elsewhere.
+		"--pull", "never",
 		// No program in it can gain more privileges (like set-user-ID ones).
 		"--security-opt", "no-new-privileges",
 		// Its output goes to a file in memory, at most 256 KB.

@@ -308,10 +308,16 @@ func writeIntoVolume(volumeDir, relative string, content []byte, once bool) erro
 // It must be marked busy by the caller, and is called without a.mu.
 func (a *Agent) runPlugin(id string) error {
 	if err := a.fetchPluginImage(id); err != nil {
-		slog.Error("plugin's image couldn't be downloaded again", "plugin", id, "error", err)
+		message := "Its app couldn't be downloaded again (" + err.Error() +
+			"). RasBeacon tries again every few minutes, or start it once the internet works."
+		if errors.Is(err, errPluginImageMissing) {
+			message = "Its app is missing from RasBeacon's storage, and RasBeacon can't download it again. " +
+				"Install the plugin again (from Browse plugins, or its file): its settings are kept."
+		} else {
+			slog.Error("plugin's image couldn't be downloaded again", "plugin", id, "error", err)
+		}
 		a.mu.Lock()
-		a.setPluginState(id, api.PluginFailed, "Its app couldn't be downloaded again ("+err.Error()+
-			"). RasBeacon tries again every few minutes, or start it once the internet works.")
+		a.setPluginState(id, api.PluginFailed, message)
 		a.mu.Unlock()
 		return err
 	}
