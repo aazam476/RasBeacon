@@ -746,7 +746,10 @@ export const SCENARIOS: DemoScenario[] = [
     title: 'Last update failed',
     route: '/system',
     apply: (d) => {
-      d.router.status.update.message = 'This file is not signed by a key this RasBeacon trusts. Nothing was changed.';
+      Object.assign(d.router.status.update, {
+        message: 'The update was not installed: this file is not signed by a key this RasBeacon trusts.',
+        failed: true,
+      });
     },
   },
   {

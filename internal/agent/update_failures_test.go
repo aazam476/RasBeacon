@@ -4,6 +4,7 @@ package agent
 // that are not the update file's fault.
 
 import (
+	"bytes"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -69,5 +70,25 @@ func TestUpdate_UnsavedRestartNoteIsReportedNotLeftInstalling(t *testing.T) {
 	s := e.agent.Status().Update
 	if s.Installing || !strings.HasPrefix(s.Message, "The update was not installed: ") {
 		t.Errorf("update status = installing %v, message %q", s.Installing, s.Message)
+	}
+}
+
+// The System page tells a failed update from one RasBeacon is restarting
+// into by these two flags, not by the wording of the message.
+func TestUpdate_StatusSaysWhetherTheUpdateFailedOrIsRestarting(t *testing.T) {
+	e, key := newUpdateEnv(t)
+	if err := e.agent.InstallUpdate(strings.NewReader("not an update")); err == nil {
+		t.Fatal("a file that isn't an update must be refused")
+	}
+	if s := e.agent.Status().Update; !s.Failed || s.Restarting || !strings.HasPrefix(s.Message, "The update was not installed: ") {
+		t.Errorf("after a refused file: failed %v, restarting %v, message %q", s.Failed, s.Restarting, s.Message)
+	}
+
+	file := updateFile(t, key, "pi4", testBundle(strings.Repeat("B", 32), strings.Repeat("S", 64)))
+	if err := e.agent.InstallUpdate(bytes.NewReader(file)); err != nil {
+		t.Fatal(err)
+	}
+	if s := e.agent.Status().Update; s.Failed || !s.Restarting {
+		t.Errorf("after installing: failed %v, restarting %v (the earlier failure is over)", s.Failed, s.Restarting)
 	}
 }

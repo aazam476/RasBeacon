@@ -23,6 +23,7 @@ import {
 } from '@/ui';
 import { NEEDS_INTERNET } from '../common/describe';
 import { BackupSheet } from './BackupSection';
+import { noteUpdateStarted, useUpdateWatch } from './updateWatch';
 
 /** The boards each image is for, by the name the update reports (others are shown as they are). */
 const BOARDS: Record<string, string> = {
@@ -30,7 +31,7 @@ const BOARDS: Record<string, string> = {
   rpi3: 'Raspberry Pi Zero 2 W, 3B and 3B+',
 };
 
-/** The running version, news of a newer one, the result of the last update, and installing one. */
+/** The running version, news of a newer one, and installing one (with how it went). */
 export function SoftwareSection({ status }: { status: Status }) {
   const { update, version } = status;
   const board = BOARDS[update.board] ?? update.board;
@@ -42,7 +43,7 @@ export function SoftwareSection({ status }: { status: Status }) {
           <p>RasBeacon restarts when it&apos;s done. Connected devices are offline for about two minutes.</p>
         </Notice>
       )}
-      {update.restartPending && <RestartPendingNotice message={update.message} />}
+      {update.restartPending && <RestartPendingNotice message={update.message} version={version} />}
       {update.reflash ? (
         <ReflashNotice reflash={update.reflash} running={version} hasPlugins={status.plugins.length > 0} />
       ) : (
@@ -74,9 +75,6 @@ export function SoftwareSection({ status }: { status: Status }) {
           title={`RasBeacon ${version}`}
           subtitle={board ? `For ${board}` : undefined}
         />
-        {update.message && !update.restartPending && !update.installing && (
-          <Row title="Last update" subtitle={update.message} />
-        )}
         {update.canCheckOnline && <CheckScheduleRow checkHours={update.checkHours} />}
         {(update.canCheckOnline || update.canInstall) && <UpdateActions status={status} />}
       </Section>
@@ -249,7 +247,7 @@ function NotificationsForm({ settings }: { settings: UpdateSettings }) {
  * An installed update that RasBeacon hasn't restarted into yet (the restart failed, or the power
  * went off first): why, and the restart that finishes it, asked first like Reboot.
  */
-function RestartPendingNotice({ message }: { message?: string }) {
+function RestartPendingNotice({ message, version }: { message?: string; version: string }) {
   const { restartIntoUpdate } = useDevice();
   const [confirming, setConfirming] = useState(false);
 
@@ -271,7 +269,10 @@ function RestartPendingNotice({ message }: { message?: string }) {
           title="Restart RasBeacon?"
           confirmLabel="Restart"
           busyLabel="Restarting…"
-          onConfirm={restartIntoUpdate}
+          onConfirm={async () => {
+            await restartIntoUpdate();
+            noteUpdateStarted(version);
+          }}
           onClose={() => setConfirming(false)}
         >
           <p>It starts the new version. Connected devices disconnect for about two minutes.</p>
@@ -356,8 +357,10 @@ function UpdateActions({ status }: { status: Status }) {
   const [installed, setInstalled] = useState(false);
   const installing = useAction(async (chosen: File) => {
     await installUpdate(chosen);
+    noteUpdateStarted(status.version);
     setInstalled(true);
   });
+  const completedVersion = useUpdateWatch(status);
   const busy = installing.pending || update.installing;
   const offered = update.canInstall && update.downloadSize ? update.latestVersion : undefined;
   const size = formatBytes(update.downloadSize ?? 0);
@@ -377,10 +380,18 @@ function UpdateActions({ status }: { status: Status }) {
     );
   } else if (installing.error) {
     below = <FormError>{installing.error}</FormError>;
-  } else if (installed) {
+  } else if (update.failed && update.message) {
+    below = <FormError>{update.message}</FormError>;
+  } else if (installed || update.restarting) {
+    // Until RasBeacon answers on the new version: then the page loads again (updateWatch.ts).
     below = (
-      <FormSuccess>Update installed. RasBeacon is restarting to try it; reconnect in about two minutes.</FormSuccess>
+      <ActivityIndicator
+        label="Update installed. RasBeacon is restarting to try it; this page reloads by itself when it's back (about two minutes)."
+        className="text-subhead text-label"
+      />
     );
+  } else if (completedVersion) {
+    below = <FormSuccess>Update completed. RasBeacon is now on {completedVersion}.</FormSuccess>;
   } else if (update.canCheckOnline && update.checkError) {
     below = <FormError>{update.checkError}</FormError>;
   } else if (update.canCheckOnline && !offered) {
@@ -446,7 +457,10 @@ function UpdateActions({ status }: { status: Status }) {
           title={`Install RasBeacon ${offered}?`}
           confirmLabel="Install"
           busyLabel="Starting…"
-          onConfirm={downloadUpdate}
+          onConfirm={async () => {
+            await downloadUpdate();
+            noteUpdateStarted(status.version);
+          }}
           onClose={() => setConfirmingDownload(false)}
         >
           <p>

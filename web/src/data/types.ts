@@ -249,8 +249,12 @@ export interface UpdateStatus {
   /** The Pi Zero 2 W image: one copy of the system, so new versions are flashed, not installed. */
   singleSystem?: boolean;
   installing: boolean;
-  /** The last update's result, e.g. "Updated to v1.2.0." */
+  /** The last update's result, e.g. "Updated to v1.2.0.", or why it failed. */
   message?: string;
+  /** True when `message` says why the last update failed. */
+  failed?: boolean;
+  /** True once an update is installed, until RasBeacon restarts into it. */
+  restarting?: boolean;
   /** The optional online check for new releases. */
   canCheckOnline: boolean;
   /** How often it asks GitHub: 0 (only with Check now), 1, 6, 24 or 168 hours. */

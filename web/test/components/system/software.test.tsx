@@ -59,7 +59,8 @@ describe('software', () => {
   it('shows no restart notice when nothing waits', () => {
     renderSoftware({ message: 'Updated to 0.2.0.' });
     expect(screen.queryByText('Restart to finish the update')).toBeNull();
-    expect(screen.getByText('Last update')).toBeTruthy();
+    // The version row already says which version runs: no "Last update" row repeats it.
+    expect(screen.queryByText('Last update')).toBeNull();
   });
 
   it('gives the steps for a version that needs a fresh install, with Back up settings', async () => {
@@ -72,9 +73,9 @@ describe('software', () => {
     expect(screen.getByRole('dialog')).toBeTruthy();
   });
 
-  it('shows the last update’s result and a failed check', () => {
+  it('shows a failed check, not a successful update the version row already shows', () => {
     renderSoftware({ message: 'Updated to 0.2.0.', checkError: 'GitHub did not answer.' });
-    expect(screen.getByText('Updated to 0.2.0.')).toBeTruthy();
+    expect(screen.queryByText('Updated to 0.2.0.')).toBeNull();
     expect(screen.getByText('GitHub did not answer.')).toBeTruthy();
   });
 

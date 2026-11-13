@@ -67,6 +67,11 @@ type updateState struct {
 	// looking again before rollbackAfter.
 	confirmChecks int
 	message       string
+	// failed is true when message says why the last update failed.
+	failed bool
+	// restarting is true from an installed update until RasBeacon
+	// restarts into it (or that restart fails).
+	restarting bool
 	// latest is the release the online check offers (the newest one this
 	// RasBeacon can install, see fetchUpdateRelease), newest the newest
 	// release of all, lastCheck when it last asked, and checkError why that
@@ -143,6 +148,8 @@ func (a *Agent) updateStatus() api.UpdateStatus {
 		Installing:     a.update.installing,
 		RestartPending: a.update.restartPending,
 		Message:        a.update.message,
+		Failed:         a.update.failed,
+		Restarting:     a.update.restarting,
 		CanCheckOnline: version.Repository != "",
 		CheckHours:     a.cfg.Updates.CheckHours,
 		CheckError:     a.update.checkError,
@@ -251,6 +258,7 @@ func (a *Agent) beginInstall(message string) error {
 	a.update.restartPending = false
 	a.update.installing = true
 	a.update.message = message
+	a.update.failed = false
 	return nil
 }
 
@@ -267,6 +275,7 @@ func (a *Agent) finishInstall(newVersion string, err error) error {
 			a.update.refused = &api.UpdateReflash{Version: needs.Version, MinFromVersion: needs.MinFromVersion, URL: releaseURL(needs.Version)}
 		}
 		a.update.message = "The update was not installed: " + err.Error()
+		a.update.failed = true
 		return &config.ValidationError{Field: "update", Message: a.update.message}
 	}
 
@@ -277,10 +286,12 @@ func (a *Agent) finishInstall(newVersion string, err error) error {
 		// trial. Say so, rather than keep showing "Installing…".
 		slog.Error("update written, but the note for the restart could not be saved", "error", err)
 		a.update.message = "The update was not installed: " + err.Error()
+		a.update.failed = true
 		return err
 	}
 	slog.Warn("update installed; restarting to try it", "version", newVersion)
 	a.update.message = fmt.Sprintf("Update %s installed. RasBeacon is restarting to try it (about 2 minutes).", newVersion)
+	a.update.restarting = true
 	a.afterFunc(switchDelay, func() { _ = a.restartIntoUpdate() })
 	return nil
 }
@@ -349,6 +360,7 @@ func (a *Agent) RestartIntoUpdate() error {
 	}
 	slog.Info("restart into the update requested from the web UI", "version", pending.Version)
 	a.update.message = fmt.Sprintf("RasBeacon is restarting to try %s (about 2 minutes).", pending.Version)
+	a.update.restarting = true
 	a.afterFunc(switchDelay, func() { _ = a.restartIntoUpdate() })
 	return nil
 }
@@ -380,6 +392,7 @@ func (a *Agent) restartIntoUpdate() error {
 		_ = a.savePendingUpdate(pending)
 		slog.Error("could not restart into the update", "version", pending.Version, "error", err)
 		a.update.restartPending = true
+		a.update.restarting = false
 		a.update.message = fmt.Sprintf("Update %s is installed, but RasBeacon couldn't restart into it: %v", pending.Version, err)
 		return err
 	}
@@ -491,6 +504,7 @@ func (a *Agent) checkTrialStart() {
 	case hasPending:
 		slog.Error("the updated system did not start correctly; running the previous one", "update", pending.Version)
 		a.update.message = fmt.Sprintf("The update to %s didn't start correctly, so RasBeacon went back to %s.", pending.Version, version.Version)
+		a.update.failed = true
 		_ = os.Remove(a.paths.UpdatePendingFile())
 	}
 }

@@ -405,6 +405,13 @@ type UpdateStatus struct {
 	// Message describes the last update, e.g. "Updated to v1.2.0." or why
 	// it failed.
 	Message string `json:"message,omitempty"`
+	// Failed is true when Message says why the last update failed: it
+	// wasn't installed, or the new version didn't start and RasBeacon went
+	// back to this one.
+	Failed bool `json:"failed,omitempty"`
+	// Restarting is true once an update is installed, until RasBeacon
+	// restarts into it: the page can't reach it for a couple of minutes.
+	Restarting bool `json:"restarting,omitempty"`
 	// The optional online check (see UpdateSettings). CheckHours is how
 	// often it runs (0: only with "Check now"); LastChecked is when it last
 	// asked (RFC 3339, "" if never), and CheckError why that failed.

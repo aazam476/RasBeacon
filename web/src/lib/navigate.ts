@@ -6,6 +6,11 @@ export function openAddress(address: string) {
   window.location.assign(address);
 }
 
+/** Loads this page again, with the newest web UI the router serves. */
+export function reloadPage() {
+  window.location.reload();
+}
+
 /** The host this page was opened from, such as "rasbeacon.lan". */
 export function currentHostname() {
   return window.location.hostname;
