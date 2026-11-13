@@ -388,6 +388,14 @@ type EthernetUplinkStatus struct {
 	Duplex    string `json:"duplex,omitempty"`
 }
 
+// UpdateLogLine is one line of the update log (UpdateStatus.Log).
+type UpdateLogLine struct {
+	Text string `json:"text"`
+	// Percent, when set, makes the line a progress bar (0 to 100) that
+	// changes in place as the step goes on.
+	Percent *int `json:"percent,omitempty"`
+}
+
 // UpdateStatus describes software updates.
 type UpdateStatus struct {
 	// Board is the image's board: "rpi64" (the Pi 4 and Pi 5 image; older
@@ -412,6 +420,9 @@ type UpdateStatus struct {
 	// Restarting is true once an update is installed, until RasBeacon
 	// restarts into it: the page can't reach it for a couple of minutes.
 	Restarting bool `json:"restarting,omitempty"`
+	// Log says, step by step, what the last install did (or is doing),
+	// for the log box on the System page.
+	Log []UpdateLogLine `json:"log,omitempty"`
 	// The optional online check (see UpdateSettings). CheckHours is how
 	// often it runs (0: only with "Check now"); LastChecked is when it last
 	// asked (RFC 3339, "" if never), and CheckError why that failed.

@@ -146,6 +146,9 @@ func (p *Package) Read(b []byte) (int, error) {
 	return n, err
 }
 
+// Remaining is how many bytes of the bundle haven't been read yet.
+func (p *Package) Remaining() int64 { return p.Manifest.BundleSize - p.read }
+
 // Verify reads whatever is left of the bundle and checks its SHA-256
 // against the signed manifest. Call it after the partitions were written
 // and before using them.

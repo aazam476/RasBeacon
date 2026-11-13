@@ -242,6 +242,13 @@ export interface UplinkStatus {
 }
 
 /** Software updates (part of Status). */
+/** One line of the update log: a step in words, or a progress bar when `percent` is set. */
+export interface UpdateLogLine {
+  text: string;
+  /** 0 to 100: the line is a progress bar that moves on in place. */
+  percent?: number;
+}
+
 export interface UpdateStatus {
   board: string;
   /** False when the image has no update signing key. */
@@ -255,6 +262,8 @@ export interface UpdateStatus {
   failed?: boolean;
   /** True once an update is installed, until RasBeacon restarts into it. */
   restarting?: boolean;
+  /** What the last install did (or is doing), step by step, for the log box. */
+  log?: UpdateLogLine[];
   /** The optional online check for new releases. */
   canCheckOnline: boolean;
   /** How often it asks GitHub: 0 (only with Check now), 1, 6, 24 or 168 hours. */

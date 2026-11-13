@@ -22,7 +22,16 @@ import {
   checkSetupForm,
   checkWifiPassword,
 } from '../real/logic';
-import type { MACChoice, Plugin, PluginChoices, PluginPreview, Radio, SavedNetwork, VPNProfile } from '../types';
+import type {
+  MACChoice,
+  Plugin,
+  PluginChoices,
+  PluginPreview,
+  Radio,
+  SavedNetwork,
+  UpdateLogLine,
+  VPNProfile,
+} from '../types';
 import { DemoIndex } from './DemoIndex';
 import { DemoTag } from './DemoTag';
 import { StressToggle } from './StressToggle';
@@ -221,12 +230,36 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
       });
     }
 
+    /** Adds lines to the demo's update log, as rbd does (internal/agent/updatelog.go). */
+    function logDemoUpdate(...lines: UpdateLogLine[]) {
+      change((d) => void (d.router.status.update.log = [...(d.router.status.update.log ?? []), ...lines]));
+    }
+
     /**
-     * An update being installed: the router restarts into the new version a little later, and
+     * An update being installed, with its log: the file arrives and is written (`step`, a
+     * progress bar), is checked, and the router restarts into the new version a little later,
      * then offers the next step, if there is one.
      */
-    function installDemoUpdate() {
-      change((d) => void (d.router.status.update.installing = true));
+    async function installDemoUpdate(step: string) {
+      const version = currentDemo.router.status.update.latestVersion ?? 'v1.1.0';
+      logDemoUpdate({ text: "Checking the update file's signature" });
+      await wait(500);
+      logDemoUpdate({ text: `Signature is valid: this is RasBeacon ${version}` }, { text: step, percent: 0 });
+      for (let percent = 5; percent <= 100; percent += 5) {
+        await wait(150);
+        change((d) => {
+          const log = d.router.status.update.log ?? [];
+          log[log.length - 1] = { text: step, percent };
+        });
+      }
+      logDemoUpdate(
+        { text: 'Verifying the update against its signature' },
+        { text: 'Verified the update' },
+        { text: 'Saving it to the SD card' },
+        { text: `Installed RasBeacon ${version}` },
+        { text: 'Restarting to finish the install (RasBeacon is offline for about 2 minutes)' },
+      );
+      change((d) => Object.assign(d.router.status.update, { installing: false, restarting: true }));
       setTimeout(
         () =>
           change((d) => {
@@ -234,6 +267,8 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
             d.router.status.version = latestVersion;
             Object.assign(d.router.status.update, {
               installing: false,
+              restarting: false,
+              log: undefined,
               message: `Updated to ${latestVersion}.`,
               latestVersion: newerVersion,
               latestUrl: newerVersion && `https://github.com/rasbeacon/rasbeacon/releases/tag/${newerVersion}`,
@@ -241,7 +276,14 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
               downloadSize: newerVersion && DEMO_UPDATE_SIZE,
             });
           }),
-        8000,
+        4000,
+      );
+    }
+
+    /** Starts the demo's update log for a new install. */
+    function beginDemoInstall(firstLine: string) {
+      change((d) =>
+        Object.assign(d.router.status.update, { installing: true, failed: false, log: [{ text: firstLine }] }),
       );
     }
 
@@ -876,16 +918,27 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
       },
 
       installUpdate: async (file) => {
-        await wait(4000);
-        if (!file.name.endsWith('.rbupdate')) throw new Error('This is not a RasBeacon update file (.rbupdate).');
-        installDemoUpdate();
+        beginDemoInstall('Receiving the update file');
+        if (!file.name.endsWith('.rbupdate')) {
+          await wait(800);
+          const reason = 'This is not a RasBeacon update file (.rbupdate).';
+          logDemoUpdate(
+            { text: "Checking the update file's signature" },
+            { text: `Update file is not valid: ${reason}` },
+            { text: 'Discarded the update. The running RasBeacon was not changed.' },
+          );
+          change((d) => Object.assign(d.router.status.update, { installing: false, failed: true }));
+          throw new Error(reason);
+        }
+        await installDemoUpdate('Uploading and installing update');
       },
       downloadUpdate: async () => {
         await wait(600);
         const { latestVersion, downloadSize } = currentDemo.router.status.update;
         if (!downloadSize) throw new Error('There is no update to download. Check for new versions first.');
         change((d) => void (d.router.status.update.message = `Downloading and installing RasBeacon ${latestVersion}…`));
-        installDemoUpdate();
+        beginDemoInstall('Downloading the update file from GitHub');
+        void installDemoUpdate('Downloading and installing update');
       },
       saveUpdateSettings: async (settings) => {
         await wait(600);

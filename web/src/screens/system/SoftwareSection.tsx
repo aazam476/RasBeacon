@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useDevice } from '@/data/device';
 import { errorText } from '@/data/errors';
 import type { Status, UpdateReflash, UpdateSettings } from '@/data/types';
@@ -23,6 +23,7 @@ import {
 } from '@/ui';
 import { NEEDS_INTERNET } from '../common/describe';
 import { BackupSheet } from './BackupSection';
+import { UpdateLog } from './UpdateLog';
 import { noteUpdateStarted, useUpdateWatch } from './updateWatch';
 
 /** The boards each image is for, by the name the update reports (others are shown as they are). */
@@ -111,6 +112,9 @@ function lastCheckedText(lastChecked: string | undefined): string | undefined {
   });
   return `Last checked ${when}.`;
 }
+
+/** How often the status (and the update log) is refreshed while an update installs. */
+const UPDATE_LOG_EVERY_MS = 1000;
 
 /** How often RasBeacon can check for updates, in hours (0: only when asked). */
 const CHECK_OPTIONS = [
@@ -347,7 +351,7 @@ function ReflashNotice({
  * first. Under them: what the last check found, or how an install is going.
  */
 function UpdateActions({ status }: { status: Status }) {
-  const { installUpdate, downloadUpdate, checkForUpdates } = useDevice();
+  const { installUpdate, downloadUpdate, checkForUpdates, reload } = useDevice();
   const { update } = status;
   const online = status.uplink.connected;
   const input = useRef<HTMLInputElement>(null);
@@ -362,6 +366,21 @@ function UpdateActions({ status }: { status: Status }) {
   });
   const completedVersion = useUpdateWatch(status);
   const busy = installing.pending || update.installing;
+
+  // While an update installs, the status (with its log) is asked for every second, not every ten.
+  useEffect(() => {
+    if (!busy) return;
+    const timer = setInterval(() => void reload('status'), UPDATE_LOG_EVERY_MS);
+    return () => clearInterval(timer);
+  }, [busy, reload]);
+
+  // Closing or reloading the page would stop the upload: the browser asks first.
+  useEffect(() => {
+    if (!installing.pending) return;
+    const ask = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener('beforeunload', ask);
+    return () => window.removeEventListener('beforeunload', ask);
+  }, [installing.pending]);
   const offered = update.canInstall && update.downloadSize ? update.latestVersion : undefined;
   const size = formatBytes(update.downloadSize ?? 0);
 
@@ -370,7 +389,7 @@ function UpdateActions({ status }: { status: Status }) {
   if (installing.pending) {
     below = (
       <ActivityIndicator
-        label="Uploading and checking the update… keep this page open (a few minutes)."
+        label="Installing the update… keep this page open: closing or reloading it stops the upload. It takes a few minutes."
         className="text-subhead text-label"
       />
     );
@@ -436,6 +455,9 @@ function UpdateActions({ status }: { status: Status }) {
         </div>
       )}
       {below && <div className="row">{below}</div>}
+      {update.log && update.log.length > 0 && (busy || update.restarting || update.failed) && (
+        <UpdateLog lines={update.log} />
+      )}
 
       {/* After the rows, so it doesn't break the line between them (`.row + .row`). */}
       {update.canInstall && (

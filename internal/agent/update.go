@@ -72,6 +72,8 @@ type updateState struct {
 	// restarting is true from an installed update until RasBeacon
 	// restarts into it (or that restart fails).
 	restarting bool
+	// log is what the last install did, step by step (updatelog.go).
+	log []api.UpdateLogLine
 	// latest is the release the online check offers (the newest one this
 	// RasBeacon can install, see fetchUpdateRelease), newest the newest
 	// release of all, lastCheck when it last asked, and checkError why that
@@ -150,6 +152,7 @@ func (a *Agent) updateStatus() api.UpdateStatus {
 		Message:        a.update.message,
 		Failed:         a.update.failed,
 		Restarting:     a.update.restarting,
+		Log:            a.updateLogCopy(),
 		CanCheckOnline: version.Repository != "",
 		CheckHours:     a.cfg.Updates.CheckHours,
 		CheckError:     a.update.checkError,
@@ -202,7 +205,10 @@ func (a *Agent) InstallUpdate(r io.Reader) error {
 	if err := a.beginInstall("Installing an update…"); err != nil {
 		return err
 	}
-	newVersion, err := a.writeUpdate(r)
+	a.logUpdate("Receiving the update file")
+	watch := a.watchTransfer(r, "upload")
+	newVersion, err := a.writeUpdate(watch, "Uploading and installing update")
+	watch.stop()
 	return a.finishInstall(newVersion, err)
 }
 
@@ -259,12 +265,16 @@ func (a *Agent) beginInstall(message string) error {
 	a.update.installing = true
 	a.update.message = message
 	a.update.failed = false
+	a.startUpdateLog()
 	return nil
 }
 
 // finishInstall records how writing an update went (newVersion, or err)
 // and, when it worked, restarts into it shortly. It takes a.mu itself.
 func (a *Agent) finishInstall(newVersion string, err error) error {
+	if err != nil {
+		a.logUpdateResult(err)
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.update.installing = false
@@ -285,6 +295,8 @@ func (a *Agent) finishInstall(newVersion string, err error) error {
 		// Without this note the restart wouldn't start the new system on
 		// trial. Say so, rather than keep showing "Installing…".
 		slog.Error("update written, but the note for the restart could not be saved", "error", err)
+		a.addUpdateLogLine(api.UpdateLogLine{Text: "The update failed: " + err.Error()})
+		a.addUpdateLogLine(api.UpdateLogLine{Text: "Discarded the update. The running RasBeacon was not changed."})
 		a.update.message = "The update was not installed: " + err.Error()
 		a.update.failed = true
 		return err
@@ -292,6 +304,8 @@ func (a *Agent) finishInstall(newVersion string, err error) error {
 	slog.Warn("update installed; restarting to try it", "version", newVersion)
 	a.update.message = fmt.Sprintf("Update %s installed. RasBeacon is restarting to try it (about 2 minutes).", newVersion)
 	a.update.restarting = true
+	a.addUpdateLogLine(api.UpdateLogLine{Text: "Installed RasBeacon " + newVersion})
+	a.addUpdateLogLine(api.UpdateLogLine{Text: "Restarting to finish the install (RasBeacon is offline for about 2 minutes)"})
 	a.afterFunc(switchDelay, func() { _ = a.restartIntoUpdate() })
 	return nil
 }
@@ -314,12 +328,15 @@ func (a *Agent) downloadUpdate(url string) (string, error) {
 	// Each piece that arrives pushes the deadline back.
 	stall := time.AfterFunc(downloadStall, cancel)
 	defer stall.Stop()
+	a.logUpdate("Downloading the update file from GitHub")
 	resp, err := askGitHub(ctx, updateDownloadHTTP, url, "")
 	if err != nil {
 		return "", fmt.Errorf("downloading the update: %w", err)
 	}
 	defer resp.Body.Close()
-	newVersion, err := a.writeUpdate(&stallReader{r: resp.Body, timer: stall, after: downloadStall})
+	watch := a.watchTransfer(&stallReader{r: resp.Body, timer: stall, after: downloadStall}, "download")
+	defer watch.stop()
+	newVersion, err := a.writeUpdate(watch, "Downloading and installing update")
 	if err != nil && ctx.Err() != nil {
 		// The stall timer stopped the download. What writeUpdate made of
 		// the cut-off file ("not a RasBeacon update file", a wrong
@@ -394,6 +411,7 @@ func (a *Agent) restartIntoUpdate() error {
 		a.update.restartPending = true
 		a.update.restarting = false
 		a.update.message = fmt.Sprintf("Update %s is installed, but RasBeacon couldn't restart into it: %v", pending.Version, err)
+		a.addUpdateLogLine(api.UpdateLogLine{Text: "Couldn't restart into the update: " + err.Error()})
 		return err
 	}
 	a.update.restartPending = false
@@ -406,9 +424,12 @@ func (a *Agent) savePendingUpdate(pending pendingUpdate) error {
 	return config.WriteFileAtomic(a.paths.UpdatePendingFile(), data, 0o644)
 }
 
-// writeUpdate checks the update file and writes it into the other slot. It
-// returns the new version.
-func (a *Agent) writeUpdate(r io.Reader) (string, error) {
+// writeUpdate checks the update file arriving through src and writes it
+// into the other slot, saying each step in the update log (step names the
+// writing, which goes on while the file arrives). It returns the new
+// version. A file that stops arriving fails with errTransferCut, and one
+// refused for what it holds with errInvalidUpdate.
+func (a *Agent) writeUpdate(src *transferWatch, step string) (string, error) {
 	board := a.board()
 	if board == "" {
 		return "", errors.New("this image doesn't know its board, so it can't check updates")
@@ -416,13 +437,20 @@ func (a *Agent) writeUpdate(r io.Reader) (string, error) {
 	if a.singleSystem() {
 		return "", errors.New("this image has one copy of the system, so new versions are flashed instead")
 	}
-	pkg, err := update.Open(r, a.trustedUpdateKeys(), board)
+	a.logUpdate("Checking the update file's signature")
+	pkg, err := update.Open(src, a.trustedUpdateKeys(), board)
 	if err != nil {
-		return "", err
+		// A broken connection only: a small file that ends early is
+		// simply not an update file.
+		if src.cutOff(0) {
+			return "", errTransferCut{src.what}
+		}
+		return "", errInvalidUpdate{err}
 	}
+	a.logUpdate("Signature is valid: this is RasBeacon %s", pkg.Manifest.Version)
 	// No older versions, and none that need a newer RasBeacon to install.
 	if err := update.CheckVersion(pkg.Manifest, version.Version); err != nil {
-		return "", err
+		return "", errInvalidUpdate{err}
 	}
 	slog.Info("update file signature is valid; writing the other slot", "version", pkg.Manifest.Version)
 
@@ -440,7 +468,8 @@ func (a *Agent) writeUpdate(r io.Reader) (string, error) {
 		targets[part] = update.Target{Device: device, Size: size}
 	}
 
-	bundle, wait, err := a.decompress(pkg)
+	a.logUpdateProgress(step, 0)
+	bundle, wait, err := a.decompress(&progressReader{pkg: pkg, agent: a, step: step})
 	if err != nil {
 		return "", err
 	}
@@ -450,12 +479,21 @@ func (a *Agent) writeUpdate(r io.Reader) (string, error) {
 		writeErr = fmt.Errorf("decompressing the update: %w", err)
 	}
 	if writeErr != nil {
+		if src.cutOff(pkg.Remaining()) {
+			return "", errTransferCut{src.what}
+		}
 		return "", writeErr
 	}
 	// Everything was written; now check it is exactly what was signed.
+	a.logUpdate("Verifying the update against its signature")
 	if err := pkg.Verify(); err != nil {
-		return "", err
+		if src.cutOff(pkg.Remaining()) {
+			return "", errTransferCut{src.what}
+		}
+		return "", errInvalidUpdate{err}
 	}
+	a.logUpdate("Verified the update")
+	a.logUpdate("Saving it to the SD card")
 	for part, target := range targets {
 		if err := target.Device.(*os.File).Sync(); err != nil {
 			return "", fmt.Errorf("saving the %s partition: %w", part, err)
