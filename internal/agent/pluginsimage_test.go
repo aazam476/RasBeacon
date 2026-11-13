@@ -88,3 +88,37 @@ func TestPlugins_AMissingImageFromTheCatalogIsDownloadedAgain(t *testing.T) {
 		t.Error("nothing should be recorded for later: the image is back")
 	}
 }
+
+// Without the kernel's memory controller, Podman can't give a plugin its
+// memory limit; the page says why instead of crun's error.
+func TestPlugins_WithoutTheMemoryControllerTheyCantStartAndSayWhy(t *testing.T) {
+	e := newPluginEnv(t)
+	if _, err := e.installTestPlugin(writeTestPlugin(t, testPluginManifest("1.0"), nil), nil); err != nil {
+		t.Fatal(err)
+	}
+	e.runBackground()
+	if err := e.agent.StopPlugin("adguard-home"); err != nil {
+		t.Fatal(err)
+	}
+	mustWrite(t, e.paths.CgroupControllers(), "cpuset cpu io pids\n")
+	runs := e.runner.count("podman run")
+	if err := e.agent.StartPlugin("adguard-home"); err == nil {
+		t.Error("it can't start without the memory controller")
+	}
+	p := e.plugin("adguard-home")
+	if p.State != api.PluginFailed || !strings.Contains(p.Message, "cgroup_enable=memory") {
+		t.Errorf("state %s, message %q", p.State, p.Message)
+	}
+	if e.runner.count("podman run") != runs {
+		t.Error("podman must not be asked to run it")
+	}
+
+	// With the controller on, it starts.
+	mustWrite(t, e.paths.CgroupControllers(), "cpuset cpu io memory pids\n")
+	if err := e.agent.StartPlugin("adguard-home"); err != nil {
+		t.Fatal(err)
+	}
+	if e.plugin("adguard-home").State != api.PluginRunning {
+		t.Errorf("state %s", e.plugin("adguard-home").State)
+	}
+}

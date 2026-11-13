@@ -22,6 +22,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"text/template"
@@ -321,6 +322,13 @@ func (a *Agent) runPlugin(id string) error {
 		a.mu.Unlock()
 		return err
 	}
+	if err := a.checkPluginLimits(); err != nil {
+		slog.Error("plugin can't start", "plugin", id, "error", err)
+		a.mu.Lock()
+		a.setPluginState(id, api.PluginFailed, "It can't start: "+err.Error())
+		a.mu.Unlock()
+		return err
+	}
 	a.mu.Lock()
 	plan, err := a.planPluginRun(id)
 	if err == nil {
@@ -346,6 +354,28 @@ func (a *Agent) runPlugin(id string) error {
 	}
 	a.setPluginState(id, api.PluginRunning, "")
 	slog.Info("plugin started", "plugin", id)
+	return nil
+}
+
+// errNoMemoryController means the kernel started without its memory
+// controller, so Podman can't give a plugin its memory limit.
+var errNoMemoryController = errors.New("this RasBeacon started without the kernel's memory controller, which " +
+	"plugins' memory limits need (cgroup_enable=memory in cmdline.txt). Update RasBeacon, which turns it on, " +
+	"then start the plugin again")
+
+// checkPluginLimits checks that the kernel can enforce plugins' limits:
+// their memory limit needs the memory controller, which Raspberry Pi
+// kernels leave off unless the image turns it on (image/layer/rasbeacon.yaml).
+// Without the controllers file (a computer that isn't a Pi), it checks
+// nothing.
+func (a *Agent) checkPluginLimits() error {
+	controllers, err := os.ReadFile(a.paths.CgroupControllers())
+	if err != nil {
+		return nil
+	}
+	if !slices.Contains(strings.Fields(string(controllers)), "memory") {
+		return errNoMemoryController
+	}
 	return nil
 }
 

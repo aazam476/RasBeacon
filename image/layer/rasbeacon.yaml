@@ -124,6 +124,12 @@ mmdebstrap:
       kernel=kernel8.img
       [all]
       EOF
+    # Plugins' memory limits (podman run --memory) need the kernel's memory
+    # controller, which Raspberry Pi kernels leave off unless the kernel
+    # command line turns it on. Without it, no plugin can start ("crun:
+    # opening file `memory.max`"). cmdline.txt is one line; rpi-image-gen
+    # put it there, and later only changes its root= setting.
+    - sed -i '1 s/$/ cgroup_enable=memory/' $1/boot/firmware/cmdline.txt
     # Debian's own wpa_supplicant service must not grab the radios either;
     # rbd starts rasbeacon-wpa@<radio>.service instead.
     - chroot $1 systemctl mask wpa_supplicant.service

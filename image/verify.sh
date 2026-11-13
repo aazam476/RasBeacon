@@ -44,6 +44,7 @@ done
 check "Podman keeps images on the data partition" grep -q 'graphroot = "/persistent/containers/storage"' "$root/etc/containers/storage.conf"
 check "Podman adds no firewall rules of its own" grep -q 'firewall_driver = "none"' "$root/etc/containers/containers.conf"
 check "the I2C bus is on for plugins" grep -q '^dtparam=i2c_arm=on' "$root/boot/firmware/config.txt"
+check "the kernel's memory controller is on, for plugins' memory limits" grep -q 'cgroup_enable=memory' "$root/boot/firmware/cmdline.txt"
 
 # Firmware for the supported USB Wi-Fi adapters (drivers alone are not enough).
 check "Realtek RTL8812BU firmware (TP-Link Archer T3U)" test -f "$root/usr/lib/firmware/rtw88/rtw8822b_fw.bin"

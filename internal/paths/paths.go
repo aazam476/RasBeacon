@@ -292,6 +292,12 @@ func (p Paths) UpdatePendingFile() string { return filepath.Join(p.DataDir(), "u
 // SysClassNet lists network interfaces (Linux sysfs).
 func (p Paths) SysClassNet() string { return p.join("sys", "class", "net") }
 
+// CgroupControllers lists the kernel's cgroup controllers ("cpu memory
+// pids ..."): plugins' limits need "memory" and "cpu".
+func (p Paths) CgroupControllers() string {
+	return p.join("sys", "fs", "cgroup", "cgroup.controllers")
+}
+
 // SysClassInput lists input devices (used to find the reset button).
 func (p Paths) SysClassInput() string { return p.join("sys", "class", "input") }
 
