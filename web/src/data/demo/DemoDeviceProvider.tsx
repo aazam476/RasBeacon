@@ -258,7 +258,7 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
         { text: 'Verified the update' },
         { text: 'Saving it to the SD card' },
         { text: `Installed RasBeacon ${version}` },
-        { text: 'Restarting to finish the install (RasBeacon is offline for about 2 minutes)' },
+        { text: 'Restarting to finish the install (this can take up to 2 minutes)' },
       );
       change((d) => Object.assign(d.router.status.update, { installing: false, restarting: true }));
       setTimeout(

@@ -45,7 +45,7 @@ func TestUpdateLog_SaysEachStepOfAnInstall(t *testing.T) {
 		"Verified the update",
 		"Saving it to the SD card",
 		"Installed RasBeacon v9.9.9",
-		"Restarting to finish the install (RasBeacon is offline for about 2 minutes)",
+		"Restarting to finish the install (this can take up to 2 minutes)",
 	}
 	if got := logTexts(e); strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Errorf("log:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))

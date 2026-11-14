@@ -60,7 +60,7 @@ func TestUpdateLog_ASlowProgressBarIsSplitIntoNewLines(t *testing.T) {
 	time.Sleep(80 * time.Millisecond)
 	e.agent.logUpdateProgress(step, 46, "186 of 404 MB")
 	log := logLines(e)
-	want := step + " [182 of 404 MB]\nStill uploading and installing update: 182 of 404 MB so far\n" + step + " [186 of 404 MB]"
+	want := step + " [182 of 404 MB]\nStill uploading and installing update: 182 of 404 MB\n" + step + " [186 of 404 MB]"
 	if !strings.Contains(log, want) {
 		t.Errorf("log:\n%s\nwant it to contain:\n%s", log, want)
 	}
@@ -95,6 +95,43 @@ func TestUpdateLog_MegabytesAreShortAndReadable(t *testing.T) {
 	} {
 		if got := megabytes(c.done, c.total); got != c.want {
 			t.Errorf("megabytes(%d, %d) = %q, want %q", c.done, c.total, got, c.want)
+		}
+	}
+}
+
+// The time left follows the speed, but only every timeLeftEvery, and
+// smoothed: one slow moment doesn't make it jump.
+func TestUpdateLog_TimeLeftFollowsTheSpeedCalmly(t *testing.T) {
+	const total = 400_000_000
+	start := time.Date(2026, 11, 14, 12, 0, 0, 0, time.UTC)
+	var left timeLeft
+	if got := left.update(0, total, start); got != "" {
+		t.Errorf("before any speed is known: %q", got)
+	}
+	// 1 MB/s for the first 10 s: 390 MB left at 1 MB/s is 6.5 min.
+	if got := left.update(10_000_000, total, start.Add(10*time.Second)); got != "about 7 min left" {
+		t.Errorf("after 10 s at 1 MB/s: %q", got)
+	}
+	// Faster for a moment: the estimate waits for the next 10 s.
+	if got := left.update(30_000_000, total, start.Add(15*time.Second)); got != "about 7 min left" {
+		t.Errorf("between measurements the estimate stays: %q", got)
+	}
+	// 3 MB/s over the next 10 s: blended with the earlier 1 MB/s (1.8 MB/s),
+	// 360 MB left is about 3.3 min, not the 2 min 3 MB/s alone would say.
+	if got := left.update(40_000_000, total, start.Add(20*time.Second)); got != "about 3 min left" {
+		t.Errorf("after a faster stretch: %q", got)
+	}
+}
+
+func TestUpdateLog_TimeLeftIsRoundedTheWayPeopleSayIt(t *testing.T) {
+	for seconds, want := range map[float64]string{
+		4:    "less than 10 s left",
+		37:   "about 40 s left",
+		95:   "about 2 min left",
+		4800: "about 1 h 20 min left",
+	} {
+		if got := roundTimeLeft(seconds); got != want {
+			t.Errorf("%v s: %q, want %q", seconds, got, want)
 		}
 	}
 }

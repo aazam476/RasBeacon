@@ -305,7 +305,7 @@ func (a *Agent) finishInstall(newVersion string, err error) error {
 	a.update.message = fmt.Sprintf("Update %s installed. RasBeacon is restarting to try it (about 2 minutes).", newVersion)
 	a.update.restarting = true
 	a.addUpdateStep(api.UpdateLogLine{Text: "Installed RasBeacon " + newVersion})
-	a.addUpdateStep(api.UpdateLogLine{Text: "Restarting to finish the install (RasBeacon is offline for about 2 minutes)"})
+	a.addUpdateStep(api.UpdateLogLine{Text: "Restarting to finish the install (this can take up to 2 minutes)"})
 	a.afterFunc(switchDelay, func() { _ = a.restartIntoUpdate() })
 	return nil
 }

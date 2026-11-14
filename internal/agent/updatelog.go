@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"strings"
 	"sync"
 	"time"
@@ -102,13 +103,14 @@ func (a *Agent) keepUpdateLogMoving(run int) {
 }
 
 // stillLine says the current step goes on: "Still saving it to the SD
-// card (10 s so far)", or for a progress bar how far it got. The caller
-// holds a.mu.
+// card (10 s so far)", or for a progress bar how far it got ("Still
+// uploading and installing update: 182 of 404 MB, about 3 min left").
+// The caller holds a.mu.
 func (a *Agent) stillLine() string {
 	log := &a.update.log
 	doing := "Still " + strings.ToLower(log.step[:1]) + log.step[1:]
 	if n := len(log.lines); n > 0 && log.lines[n-1].Percent != nil && log.lines[n-1].Detail != "" {
-		return doing + ": " + log.lines[n-1].Detail + " so far"
+		return doing + ": " + log.lines[n-1].Detail
 	}
 	return fmt.Sprintf("%s (%s so far)", doing, time.Since(log.stepStarted).Round(time.Second))
 }
@@ -303,12 +305,13 @@ func (w *transferWatch) cutOff(missing int64) bool {
 
 // progressReader reads an update's bundle (the compressed partitions) and
 // shows in the log how much of it has been read and written: step, with
-// its percentage and megabytes. The line changes with each megabyte, so
-// even a slow upload shows it is moving.
+// its percentage, megabytes and the time left. The line changes with each
+// megabyte, so even a slow upload shows it is moving.
 type progressReader struct {
 	pkg   *update.Package
 	agent *Agent
 	step  string
+	left  timeLeft
 	// What the log shows: the percentage, and the megabytes, e.g. "182 of
 	// 404 MB".
 	shownPercent int
@@ -321,6 +324,9 @@ func (p *progressReader) Read(b []byte) (int, error) {
 	size := p.pkg.Manifest.BundleSize
 	done := size - p.pkg.Remaining()
 	percent, detail := int(done*100/size), megabytes(done, size)
+	if left := p.left.update(done, size, time.Now()); left != "" && done < size {
+		detail += ", " + left
+	}
 	if percent != p.shownPercent || detail != p.shownDetail {
 		p.shownPercent, p.shownDetail = percent, detail
 		p.agent.logUpdateProgress(p.step, percent, detail)
@@ -335,4 +341,61 @@ func megabytes(done, total int64) string {
 		return fmt.Sprintf("%d of %d MB", done/1e6, total/1e6)
 	}
 	return fmt.Sprintf("%.1f of %.1f MB", float64(done)/1e6, float64(total)/1e6)
+}
+
+// timeLeftEvery is how often the time left is worked out again: often
+// enough to follow the connection's speed as it changes, not so often
+// that the estimate jumps around and looks unreliable.
+const timeLeftEvery = 10 * time.Second
+
+// timeLeft estimates how long a transfer still takes from its recent
+// speed. Every timeLeftEvery it measures the speed over that time and
+// blends it with the earlier speed, so one slow or fast moment moves the
+// estimate only a little.
+type timeLeft struct {
+	windowStart time.Time // when the current measurement began
+	windowDone  int64     // the bytes done then
+	speed       float64   // bytes per second, smoothed; 0 until measured
+	text        string    // what the log shows, e.g. "about 3 min left"
+}
+
+// update notes that done of total bytes are there at now, and returns the
+// time left to show ("" until the first measurement is over).
+func (t *timeLeft) update(done, total int64, now time.Time) string {
+	if t.windowStart.IsZero() {
+		t.windowStart, t.windowDone = now, done
+		return ""
+	}
+	elapsed := now.Sub(t.windowStart)
+	if elapsed < timeLeftEvery {
+		return t.text
+	}
+	measured := float64(done-t.windowDone) / elapsed.Seconds()
+	if t.speed == 0 {
+		t.speed = measured
+	} else {
+		// The newest measurement counts for 40%, the earlier speed for 60%.
+		t.speed = 0.6*t.speed + 0.4*measured
+	}
+	t.windowStart, t.windowDone = now, done
+	if t.speed > 0 {
+		t.text = roundTimeLeft(float64(total-done) / t.speed)
+	}
+	return t.text
+}
+
+// roundTimeLeft says a number of seconds the way people estimate time:
+// "about 40 s left", "about 3 min left", "about 1 h 20 min left". Coarse
+// on purpose: an estimate shouldn't look more exact than it is.
+func roundTimeLeft(seconds float64) string {
+	switch {
+	case seconds < 10:
+		return "less than 10 s left"
+	case seconds < 60:
+		return fmt.Sprintf("about %d s left", int(math.Round(seconds/10))*10)
+	case seconds < 3600:
+		return fmt.Sprintf("about %d min left", max(1, int(math.Round(seconds/60))))
+	}
+	minutes := int(math.Round(seconds / 60))
+	return fmt.Sprintf("about %d h %d min left", minutes/60, minutes%60)
 }

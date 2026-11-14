@@ -456,7 +456,7 @@ function UpdateActions({ status }: { status: Status }) {
       )}
       {below && <div className="row">{below}</div>}
       {update.log && update.log.length > 0 && (busy || update.restarting || update.failed) && (
-        <UpdateLog lines={update.log} restarting={Boolean(update.restarting) && !busy} />
+        <UpdateLog lines={update.log} />
       )}
 
       {/* After the rows, so it doesn't break the line between them (`.row + .row`). */}
