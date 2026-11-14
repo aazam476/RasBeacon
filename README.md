@@ -185,7 +185,9 @@ since their image has one copy of the system.
   choose which radio runs the hotspot, which joins Wi-Fi networks, and give
   the guest network a radio of its own. RasBeacon restarts with the new
   jobs and goes back to the old ones after 3 minutes unless you press
-  **Keep**, in case you can't reach it any more.
+  **Keep**, in case you can't reach it any more. The pencil next to a
+  radio's name renames it ("Blue adapter"); the name follows the adapter
+  into any USB port.
 - **Metered connection** (on a phone's hotspot or a paid plan): tick it on
   the **Hotspot** page. Android devices then hold back big downloads; on
   iPhones and Macs turn on *Low Data Mode* for the hotspot in Wi-Fi
@@ -217,7 +219,11 @@ since their image has one copy of the system.
 - **Plugins:** the **Plugins** page adds features like ad blocking (AdGuard
   Home), file sharing (Samba) or the Argon ONE V2 case's fan. Each runs on
   its own with only the permissions you allow, and reaches the internet
-  through the VPN. See [docs/plugins.md](docs/plugins.md).
+  through the VPN. Some plugins, like Samba, let you choose how much of
+  RasBeacon's internal storage they set aside (System → Storage shows each
+  plugin's part). A plugin's USB drive can have its files **encrypted** on
+  the plugin's page, so someone who pulls the drive out can't read them;
+  save the recovery key it offers. See [docs/plugins.md](docs/plugins.md).
 - **A welcome page** for visitors (your own captive portal): Guests →
   **Welcome page**. Devices on the guest network see your message and house
   rules, and type an access code if you set one, before they get the
