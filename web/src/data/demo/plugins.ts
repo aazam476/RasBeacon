@@ -93,6 +93,8 @@ interface PluginDefinition {
   memoryMb: number;
   cpus: number;
   storageMb: number;
+  /** The owner may choose the size of its data (with `storageMb` suggested). */
+  storageAdjustable?: boolean;
   /** Bytes still to download when installing (the image from its registry). */
   downloadSize: number;
   size: number;
@@ -179,6 +181,7 @@ export const PLUGIN_DEFINITIONS: PluginDefinition[] = [
     memoryMb: 128,
     cpus: 0.5,
     storageMb: 2048,
+    storageAdjustable: true,
     downloadSize: 0,
     size: 18_900_000,
     boards: [],
@@ -304,7 +307,9 @@ export function installedPlugin(
       state === 'running' ? demoMetrics(definition.id) : definition.metricLabels.map((label) => ({ label, value: '' })),
     memoryMb: definition.memoryMb,
     cpus: definition.cpus,
-    storageMb: definition.storageMb,
+    storageMb: choices.storageMb ?? definition.storageMb,
+    // Samba's files fill some of its space once it has run.
+    ...demoStorageRange(definition, state === 'installing' ? undefined : 412),
     canUpdate: false,
   };
 }
@@ -446,9 +451,24 @@ export function previewOf(
     metered: state.metered,
     memoryMb: definition.memoryMb,
     cpus: definition.cpus,
-    storageMb: definition.storageMb,
+    // An update keeps the size the owner chose.
+    storageMb: installed?.storageMb ?? definition.storageMb,
+    ...demoStorageRange(definition),
     warnings,
   };
+}
+
+/** The demo SD card's room for a plugin's data (as the router works it out: free space less 1 GB). */
+export const DEMO_STORAGE_MAX_MB = 6 * 1024;
+
+/**
+ * The sizes the owner may choose for a plugin's data, for one whose manifest allows it: from
+ * 256 MB (or what its files use with room to spare) to what the SD card has room for.
+ */
+export function demoStorageRange(definition: PluginDefinition, usedMb?: number) {
+  if (!definition.storageAdjustable) return {};
+  const minimum = usedMb ? Math.max(256, usedMb + Math.max(64, Math.floor(usedMb / 10))) : 256;
+  return { storageAdjustable: true, storageMinMb: minimum, storageMaxMb: DEMO_STORAGE_MAX_MB, storageUsedMb: usedMb };
 }
 
 /** The drives plugged into the demo router. */

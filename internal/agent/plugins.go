@@ -287,7 +287,11 @@ func (a *Agent) pluginView(id string) api.Plugin {
 	view.UsesDrive = m.USBDrive != nil
 	view.DriveOptional = m.USBDrive != nil && m.USBDrive.Optional
 	view.AfterInstall = a.pluginValues(id, m, p, false).Expand(m.AfterInstall)
-	view.MemoryMB, view.CPUs, view.StorageMB = m.Memory(), m.CPULimit(), m.Storage()
+	view.MemoryMB, view.CPUs, view.StorageMB = m.Memory(), m.CPULimit(), pluginStorageMB(m, p)
+	if m.StorageAdjustable {
+		view.StorageAdjustable = true
+		view.PluginStorage = a.pluginStorageRange(id)
+	}
 	if entry, ok := a.plugins.catalog.find(p.Source, id); ok && plugin.NewerVersion(entry.Version, p.Version) {
 		view.UpdateVersion = entry.Version
 		view.CanUpdate = p.PublicKey != ""
@@ -687,12 +691,17 @@ func (a *Agent) UpdatePluginSettings(req api.PluginSettingsRequest) (api.Plugin,
 	if err := a.checkDrive(req.ID, m, req.Drive); err != nil {
 		return fail(err)
 	}
+	storage, err := a.checkPluginStorage(req.ID, m, req.StorageMB)
+	if err != nil {
+		return fail(err)
+	}
 	if err := a.savePluginSecrets(req.ID, secrets); err != nil {
 		return fail(err)
 	}
-	oldDrive := a.cfg.Plugins.Installed[req.ID].Drive
+	old := a.cfg.Plugins.Installed[req.ID]
+	oldDrive := old.Drive
 	if err := a.savePluginConfig(req.ID, func(p *config.InstalledPlugin) {
-		p.Ports, p.Settings, p.Drive = ports, values, req.Drive
+		p.Ports, p.Settings, p.Drive, p.StorageMB = ports, values, req.Drive, storage
 	}); err != nil {
 		return fail(err)
 	}
@@ -708,10 +717,26 @@ func (a *Agent) UpdatePluginSettings(req api.PluginSettingsRequest) (api.Plugin,
 		_, _ = a.plugins.runner.Run("podman", "rm", "--force", "--ignore", "--time", "10", plugin.ContainerName(req.ID))
 		_, _ = a.plugins.runner.Run("umount", a.paths.DriveMountDir(oldDrive))
 	}
+	// A new size for its data: the data file is resized while it is
+	// stopped. If that fails (the files don't fit after all), the size it
+	// had is saved back.
+	var resizeErr error
+	if newSize := pluginStorageMB(m, a.cfg.Plugins.Installed[req.ID]); newSize != pluginStorageMB(m, old) {
+		if err := a.resizePluginData(req.ID, newSize); err != nil {
+			slog.Error("could not resize the plugin's data", "plugin", req.ID, "error", err)
+			resizeErr = &config.ValidationError{Field: "storageMb", Message: "The size couldn't be changed: " + err.Error() + "."}
+			a.mu.Lock()
+			_ = a.savePluginConfig(req.ID, func(p *config.InstalledPlugin) { p.StorageMB = old.StorageMB })
+			a.mu.Unlock()
+		}
+	}
 	if running {
 		_ = a.runPlugin(req.ID) // its state shows any problem
 	}
 	a.endPluginWork(req.ID)
+	if resizeErr != nil {
+		return api.Plugin{}, resizeErr
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.pluginView(req.ID), nil

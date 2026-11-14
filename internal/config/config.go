@@ -214,6 +214,9 @@ type InstalledPlugin struct {
 	Settings map[string]string `json:"settings,omitempty"`
 	// Drive is the UUID of the USB drive it uses ("" = none).
 	Drive string `json:"drive,omitempty"`
+	// StorageMB is the size of its data the owner chose, for a plugin
+	// whose manifest allows it (storageAdjustable); 0: the manifest's.
+	StorageMB int `json:"storageMb,omitempty"`
 	// Running is whether it should run: kept across restarts.
 	Running bool `json:"running"`
 	// StoppedAfterCrashes is set when it crashed too often and was stopped;

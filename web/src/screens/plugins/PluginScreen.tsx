@@ -194,10 +194,13 @@ function RunningSection({ plugin }: { plugin: Plugin }) {
 /** The plugin's settings, ports and drive, and their Save (which restarts it). */
 function SettingsForm({ plugin }: { plugin: Plugin }) {
   const { savePluginSettings, status } = useDevice();
-  const form = useForm(draftOf(plugin.ports, plugin.settings, plugin.drive), (draft) =>
-    savePluginSettings(plugin.id, choicesOf(draft)),
+  const form = useForm(
+    draftOf(plugin.ports, plugin.settings, plugin.drive, plugin.storageAdjustable ? plugin.storageMb : undefined),
+    (draft) => savePluginSettings(plugin.id, choicesOf(draft)),
   );
-  if (plugin.ports.length === 0 && plugin.settings.length === 0 && !plugin.usesDrive) return null;
+  if (plugin.ports.length === 0 && plugin.settings.length === 0 && !plugin.usesDrive && !plugin.storageAdjustable) {
+    return null;
+  }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -211,6 +214,7 @@ function SettingsForm({ plugin }: { plugin: Plugin }) {
         settings={plugin.settings}
         usesDrive={plugin.usesDrive}
         driveOptional={plugin.driveOptional}
+        storage={plugin}
         draft={form.values}
         onChange={(draft) => form.update(() => draft)}
         errors={form.fieldErrors}

@@ -312,6 +312,11 @@ export function createMockRouter(): MockRouter {
         medium: 'eMMC',
         filesystem: 'SquashFS + OverlayFS',
         health: '99%',
+        // The installed plugins' data (createMockPlugins).
+        plugins: [
+          { name: 'AdGuard Home', gb: 0.5 },
+          { name: 'Samba', gb: 2 },
+        ],
       },
       lan: { maxClients: 16, subnet: '192.168.8.0/24', dhcpRange: '192.168.8.100 - 192.168.8.250' },
       speedtest: {

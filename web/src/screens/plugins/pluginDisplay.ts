@@ -38,24 +38,55 @@ export interface ChoicesDraft {
   ports: Record<string, string>;
   settings: Record<string, string>;
   drive: string;
+  /** The size of its data in GB as typed; absent for a plugin whose size is fixed. */
+  storage?: string;
 }
 
-/** The form's starting values: the ports and settings it has (or suggests), passwords empty. */
-export function draftOf(ports: PluginPort[], settings: PluginSetting[], drive?: string): ChoicesDraft {
+/** Megabytes in a gigabyte, as the router counts a plugin's storage. */
+const MB_PER_GB = 1024;
+
+/**
+ * A size in MB as the GB the storage field shows, to a tenth: 2048 → "2", 1536 → "1.5". `round`
+ * picks the way: `up` for a smallest size and `down` for a largest, so the size shown is always
+ * one RasBeacon takes.
+ */
+export function storageGbText(mb: number, round: 'nearest' | 'up' | 'down' = 'nearest'): string {
+  const tenths = (mb / MB_PER_GB) * 10;
+  const rounded = round === 'up' ? Math.ceil(tenths) : round === 'down' ? Math.floor(tenths) : Math.round(tenths);
+  return String(rounded / 10);
+}
+
+/**
+ * The form's starting values: the ports and settings it has (or suggests), passwords empty, and
+ * the size of its data when the owner may choose it (`storageMb`, left out otherwise).
+ */
+export function draftOf(
+  ports: PluginPort[],
+  settings: PluginSetting[],
+  drive?: string,
+  storageMb?: number,
+): ChoicesDraft {
   return {
     ports: Object.fromEntries(ports.map((port) => [port.key, String(port.host)])),
     settings: Object.fromEntries(settings.map((s) => [s.key, s.type === 'password' ? '' : s.value])),
     drive: drive ?? '',
+    storage: storageMb === undefined ? undefined : storageGbText(storageMb),
   };
 }
 
-/** The draft as the router takes it. */
+/** The draft as the router takes it; the size only for a plugin that lets the owner choose it. */
 export function choicesOf(draft: ChoicesDraft): PluginChoices {
-  return {
+  const choices: PluginChoices = {
     ports: Object.fromEntries(Object.entries(draft.ports).map(([key, value]) => [key, Number(value.trim()) || 0])),
     settings: draft.settings,
     drive: draft.drive,
   };
+  if (draft.storage !== undefined) {
+    // A size that isn't a number is sent as 1 MB, so the router says what sizes it takes.
+    const gb = Number(draft.storage.trim().replace(',', '.'));
+    choices.storageMb = Number.isFinite(gb) && gb > 0 ? Math.round(gb * MB_PER_GB) : 1;
+  }
+  return choices;
 }
 
 /**

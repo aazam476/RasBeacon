@@ -260,7 +260,11 @@ func (a *Agent) preview(s *stagedPlugin) (api.PluginPreview, error) {
 		Permissions: permissionViews(m.Permissions), UsesDrive: m.USBDrive != nil,
 		DriveOptional: m.USBDrive != nil && m.USBDrive.Optional,
 		DownloadSize:  s.downloadSize, Metered: a.metered(),
-		MemoryMB: m.Memory(), CPUs: m.CPULimit(), StorageMB: m.Storage(),
+		MemoryMB: m.Memory(), CPUs: m.CPULimit(), StorageMB: pluginStorageMB(m, installed),
+	}
+	if m.StorageAdjustable {
+		preview.StorageAdjustable = true
+		preview.PluginStorage = a.pluginStorageRange(m.ID)
 	}
 	if key != "" {
 		preview.KeyID = plugin.KeyID(s.archive.PublicKey)
@@ -343,8 +347,16 @@ func (a *Agent) InstallPlugin(req api.PluginInstallRequest) (api.Plugin, error) 
 	if err := a.checkDrive(m.ID, m, req.Drive); err != nil {
 		return api.Plugin{}, err
 	}
-
 	old, update := a.cfg.Plugins.Installed[m.ID]
+	// An update keeps the size the owner chose; it is changed on the
+	// plugin's page, where the data can shrink too.
+	storage := old.StorageMB
+	if !update {
+		if storage, err = a.checkPluginStorage(m.ID, m, req.StorageMB); err != nil {
+			return api.Plugin{}, err
+		}
+	}
+
 	live := a.plugins.live[m.ID]
 	if live == nil {
 		live = &pluginLive{}
@@ -363,7 +375,7 @@ func (a *Agent) InstallPlugin(req api.PluginInstallRequest) (api.Plugin, error) 
 	// new image is in place (installPluginSteps).
 	record := config.InstalledPlugin{
 		Version: m.Version, Source: s.source, PublicKey: old.PublicKey, Image: old.Image, Address: old.Address,
-		Ports: ports, Settings: values, Drive: req.Drive, Running: true,
+		Ports: ports, Settings: values, Drive: req.Drive, StorageMB: storage, Running: true,
 	}
 	if preview.Signed {
 		record.PublicKey = s.publicKey()

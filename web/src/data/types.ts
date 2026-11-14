@@ -395,6 +395,29 @@ export interface StorageInfo {
   medium: string;
   filesystem: string;
   health: string;
+  /** The space each plugin's data takes (reserved, used or not); not counted in `userGb`. */
+  plugins?: StoragePlugin[];
+}
+
+/** The space one plugin's data takes on the SD card. */
+export interface StoragePlugin {
+  name: string;
+  gb: number;
+}
+
+/**
+ * The sizes the owner may choose for a plugin's data, when its manifest allows it
+ * (`storageAdjustable`). Sizes are in MB (1 GB = 1024 MB).
+ */
+export interface PluginStorageRange {
+  /** The owner can choose `storageMb`. */
+  storageAdjustable?: boolean;
+  /** The smallest: 256 MB, or what its files use with some room to spare. */
+  storageMinMb?: number;
+  /** The largest: what the SD card has room for, keeping 1 GB free. */
+  storageMaxMb?: number;
+  /** What its files use now (absent: none yet, or not known). */
+  storageUsedMb?: number;
 }
 
 /** The hotspot's own network. */
@@ -846,7 +869,7 @@ export interface PluginSetting {
 export type PluginState = 'installing' | 'waiting' | 'starting' | 'running' | 'stopped' | 'crashed' | 'failed';
 
 /** An installed plugin (GET /api/v1/plugins). */
-export interface Plugin {
+export interface Plugin extends PluginStorageRange {
   id: string;
   name: string;
   version: string;
@@ -916,7 +939,7 @@ export interface PluginSummary {
 }
 
 /** What the install sheet shows before installing. */
-export interface PluginPreview {
+export interface PluginPreview extends PluginStorageRange {
   stagingId: string;
   id: string;
   name: string;
@@ -967,6 +990,8 @@ export interface PluginChoices {
   settings: Record<string, string>;
   /** The USB drive's UUID, "" for none. */
   drive: string;
+  /** The size of its data in MB, only for a plugin that lets the owner choose it. */
+  storageMb?: number;
 }
 
 /** One plugin in the catalog, from one of its sources. */

@@ -18,7 +18,12 @@ interface InstallSheetProps {
  */
 export function InstallSheet({ preview, onDone }: InstallSheetProps) {
   const { installPlugin, cancelPluginInstall, status } = useDevice();
-  const [draft, setDraft] = useState(() => draftOf(preview.ports, preview.settings, preview.drive));
+  // The size of its data is chosen at the first install; an update keeps it (it changes on the
+  // plugin's page, where the data can shrink too).
+  const chooseStorage = preview.storageAdjustable && !preview.update;
+  const [draft, setDraft] = useState(() =>
+    draftOf(preview.ports, preview.settings, preview.drive, chooseStorage ? preview.storageMb : undefined),
+  );
   // Off until the owner says otherwise: nothing shows the kept data belongs to this plugin.
   const [useKeptData, setUseKeptData] = useState(false);
   // Closing after Install isn't a cancel.
@@ -87,6 +92,7 @@ export function InstallSheet({ preview, onDone }: InstallSheetProps) {
             settings={preview.settings}
             usesDrive={preview.usesDrive}
             driveOptional={preview.driveOptional}
+            storage={chooseStorage ? preview : undefined}
             draft={draft}
             onChange={setDraft}
             errors={errors}

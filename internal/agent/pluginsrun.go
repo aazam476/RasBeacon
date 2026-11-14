@@ -98,7 +98,7 @@ func (a *Agent) planPluginRun(id string) (*pluginRunPlan, error) {
 		return nil, errors.New("its files can't be read")
 	}
 	plan := &pluginRunPlan{
-		id: id, manifest: m, storageMB: m.Storage(), drive: p.Drive, power: m.Has("power-button"),
+		id: id, manifest: m, storageMB: pluginStorageMB(m, p), drive: p.Drive, power: m.Has("power-button"),
 		// With its passwords: they go into its templates and environment.
 		values: a.pluginValues(id, m, p, true),
 	}

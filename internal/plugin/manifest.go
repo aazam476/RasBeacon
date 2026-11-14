@@ -76,8 +76,13 @@ type Manifest struct {
 	MinSwapMB   int `json:"minSwapMb,omitempty"`
 	// StorageMB is the size of its data (default 256 MB), kept in one
 	// file on the SD card and shared by its Volumes.
-	StorageMB int      `json:"storageMb,omitempty"`
-	Volumes   []Volume `json:"volumes,omitempty"`
+	StorageMB int `json:"storageMb,omitempty"`
+	// StorageAdjustable lets the owner choose the size of its data (at
+	// install and on its page), from MinStorageMB up to what the SD card
+	// has room for, with StorageMB as the suggestion. For a plugin that
+	// keeps the owner's files, like a file share.
+	StorageAdjustable bool     `json:"storageAdjustable,omitempty"`
+	Volumes           []Volume `json:"volumes,omitempty"`
 	// USBDrive is where the drive the owner picks appears, with the
 	// usb-drive permission.
 	USBDrive *USBDrive `json:"usbDrive,omitempty"`
@@ -230,7 +235,10 @@ const (
 	DefaultMemoryMB  = 256
 	DefaultCPUs      = 0.5
 	DefaultStorageMB = 256
-	MaxStorageMB     = 64 * 1024
+	// MinStorageMB is the smallest size an owner may choose for an
+	// adjustable plugin's data (StorageAdjustable).
+	MinStorageMB = 256
+	MaxStorageMB = 64 * 1024
 )
 
 // ReservedPorts are RasBeacon's own ports on the hotspot: SSH, DNS, DHCP,

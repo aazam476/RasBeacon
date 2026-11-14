@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react';
 import { useDevice } from '@/data/device';
 import { errorText } from '@/data/errors';
-import type { PluginDrive, PluginPort, PluginSetting } from '@/data/types';
+import type { PluginDrive, PluginPort, PluginSetting, PluginStorageRange } from '@/data/types';
 import { formatBytes } from '@/lib/format';
 import { FormSwitchRow, PasswordField, Section, SelectField, TextField } from '@/ui';
-import { numberNote, type ChoicesDraft } from './pluginDisplay';
+import { numberNote, storageGbText, type ChoicesDraft } from './pluginDisplay';
 
 interface PluginFieldsProps {
   ports: PluginPort[];
   settings: PluginSetting[];
   usesDrive: boolean;
   driveOptional?: boolean;
+  /** The sizes its data may have, when the owner may choose it (else no storage field). */
+  storage?: PluginStorageRange;
   draft: ChoicesDraft;
   onChange: (draft: ChoicesDraft) => void;
   errors: Readonly<Record<string, string | undefined>>;
@@ -32,6 +34,7 @@ export function PluginFields({
   settings,
   usesDrive,
   driveOptional,
+  storage,
   draft,
   onChange,
   errors,
@@ -89,7 +92,55 @@ export function PluginFields({
           error={errors.drive}
         />
       )}
+
+      {storage?.storageAdjustable && (
+        <StorageField
+          level={level}
+          range={storage}
+          value={draft.storage ?? ''}
+          onChange={(value) => onChange({ ...draft, storage: value })}
+          error={errors.storageMb}
+        />
+      )}
     </>
+  );
+}
+
+interface StorageFieldProps {
+  level: 2 | 3;
+  range: PluginStorageRange;
+  value: string;
+  onChange: (gb: string) => void;
+  error?: string;
+}
+
+/**
+ * The size of the plugin's data on RasBeacon's own storage, for a plugin that lets the owner
+ * choose it: the whole size is set aside on the SD card, used or not.
+ */
+function StorageField({ level, range, value, onChange, error }: StorageFieldProps) {
+  const { storageMinMb = 256, storageMaxMb, storageUsedMb } = range;
+  const limits = storageMaxMb
+    ? `From ${storageGbText(storageMinMb, 'up')} to ${storageGbText(storageMaxMb, 'down')} GB.`
+    : `At least ${storageGbText(storageMinMb, 'up')} GB.`;
+  const used = storageUsedMb ? ` Its files use ${storageGbText(storageUsedMb)} GB now.` : '';
+  return (
+    <Section
+      level={level}
+      title="RasBeacon internal storage"
+      footer="This space is set aside on RasBeacon’s SD card for the plugin, whether it fills it or not. It can grow or shrink later, but not below what its files use."
+    >
+      <TextField
+        label="Size"
+        labelNote="(GB)"
+        hint={limits + used}
+        inputMode="decimal"
+        value={value}
+        onChange={(typed) => onChange(typed.replace(/[^\d.,]/g, ''))}
+        error={error}
+        {...PLAIN_INPUT}
+      />
+    </Section>
   );
 }
 
@@ -182,7 +233,9 @@ function DriveField({ level, optional, value, onChange, error }: DriveFieldProps
   }, [pluginDrives]);
 
   const options = [
-    ...(optional || value === '' ? [{ value: '', label: optional ? 'None (its own storage)' : 'Choose a drive' }] : []),
+    ...(optional || value === ''
+      ? [{ value: '', label: optional ? 'RasBeacon internal storage' : 'Choose a drive' }]
+      : []),
     ...(drives ?? []).map((drive) => ({
       value: drive.uuid,
       label: `${drive.label || 'Untitled'} · ${formatBytes(drive.size)} ${drive.fsType}${drive.usedBy ? ` (used by ${drive.usedBy})` : ''}`,

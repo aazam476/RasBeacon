@@ -225,6 +225,15 @@ type StorageInfo struct {
 	Filesystem string  `json:"filesystem"`
 	// Health is "unknown": SD cards don't report it.
 	Health string `json:"health"`
+	// Plugins is the space each plugin's data takes (reserved whether it
+	// is used or not). It is not counted in UserGB.
+	Plugins []StoragePlugin `json:"plugins"`
+}
+
+// StoragePlugin is the space one plugin's data takes on the SD card.
+type StoragePlugin struct {
+	Name string  `json:"name"`
+	GB   float64 `json:"gb"`
 }
 
 // LANInfo describes the hotspot's own network.
@@ -1019,6 +1028,10 @@ type Plugin struct {
 	MemoryMB      int            `json:"memoryMb"`
 	CPUs          float64        `json:"cpus"`
 	StorageMB     int            `json:"storageMb"`
+	// StorageAdjustable: the owner can choose StorageMB (see
+	// PluginStorage), up to StorageMaxMB and down to StorageMinMB.
+	StorageAdjustable bool `json:"storageAdjustable,omitempty"`
+	PluginStorage
 	// UpdateVersion is a newer version in the catalog ("" = none known).
 	UpdateVersion string `json:"updateVersion,omitempty"`
 	// CanUpdate: the update can be installed from the catalog (signed
@@ -1100,6 +1113,10 @@ type PluginPreview struct {
 	MemoryMB     int     `json:"memoryMb"`
 	CPUs         float64 `json:"cpus"`
 	StorageMB    int     `json:"storageMb"`
+	// StorageAdjustable: the owner can choose the size of its data, with
+	// StorageMB as the suggestion.
+	StorageAdjustable bool `json:"storageAdjustable,omitempty"`
+	PluginStorage
 	// Warnings are shown above the Install button (e.g. little memory).
 	Warnings []string `json:"warnings,omitempty"`
 	// KeptData is set when data kept from an earlier install with this ID
@@ -1116,10 +1133,27 @@ type PluginInstallRequest struct {
 	Ports     map[string]int    `json:"ports"`
 	Settings  map[string]string `json:"settings"`
 	Drive     string            `json:"drive"`
+	// StorageMB is the size of its data, for a plugin that lets the owner
+	// choose it (StorageAdjustable); 0 keeps the size it has, or the
+	// manifest's for a new install.
+	StorageMB int `json:"storageMb,omitempty"`
 	// UseKeptData gives the new install the data kept from an earlier one
 	// of the same ID that wasn't signed with the same key (the preview's
 	// KeptData). Data of the same author comes back without it.
 	UseKeptData bool `json:"useKeptData,omitempty"`
+}
+
+// PluginStorage is the range of sizes the owner may choose for a plugin's
+// data (only set when it is adjustable).
+type PluginStorage struct {
+	// StorageMinMB is the smallest size: 256 MB, or what its files use
+	// now with some room to spare.
+	StorageMinMB int `json:"storageMinMb,omitempty"`
+	// StorageMaxMB is the largest: what the SD card has room for,
+	// keeping 1 GB free for RasBeacon, and at most 64 GB.
+	StorageMaxMB int `json:"storageMaxMb,omitempty"`
+	// StorageUsedMB is what its files use now (0: none yet, or not known).
+	StorageUsedMB int `json:"storageUsedMb,omitempty"`
 }
 
 // PluginKeptData describes data kept from an earlier install with the same
@@ -1138,6 +1172,9 @@ type PluginSettingsRequest struct {
 	Ports    map[string]int    `json:"ports"`
 	Settings map[string]string `json:"settings"`
 	Drive    string            `json:"drive"`
+	// StorageMB is the new size of its data (as in PluginInstallRequest);
+	// 0 keeps it.
+	StorageMB int `json:"storageMb,omitempty"`
 }
 
 // PluginIDRequest names a plugin.

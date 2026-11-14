@@ -171,7 +171,8 @@ Or name a published image in the manifest (pinned by digest) and leave
 | `ports` | `name` (at most 40 characters), `container` (its port), `protocol` (`tcp` or `udp`, default `tcp`), `default` (the suggested port on RasBeacon, 1 to 65535; default the container's), `open` (an Open button for a web page), `https`. Ports 22, 53, 67, 80 and 443 are RasBeacon's. |
 | `memoryMb`, `cpus` | Limits; default 256 MB and half a core. |
 | `minMemoryMb`, `minSwapMb` | Refuse the install on a Pi with less memory, or less swap (the owner is pointed to System → Swap file). |
-| `storageMb` | Its data, one fixed-size file on the SD card (default 256 MB), shared by its `volumes`. It grows when a new version asks for more. |
+| `storageMb` | Its data, one fixed-size file on the SD card (default 256 MB), shared by its `volumes`. It grows when a new version asks for more. The whole size is set aside on the card, and System → Storage shows it under Plugins. |
+| `storageAdjustable` | `true` lets the owner choose the size of its data, at install (with `storageMb` suggested) and later on its page: from 256 MB up to what the SD card has room for (keeping 1 GB free), and down to what its files use. For a plugin that keeps the owner's files, like a file share. An update keeps the owner's size. |
 | `volumes` | Folders of its data: `name` and `path` in the container (each path once). They survive updates. |
 | `usbDrive` | `path` where the chosen drive appears, `optional`. With the `usb-drive` permission. A chosen drive replaces a volume at the same path. |
 | `env`, `command` | Fixed environment variables (one line each), and a command replacing the image's. |

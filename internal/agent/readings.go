@@ -312,7 +312,10 @@ func (a *Agent) storageInfo() api.StorageInfo {
 	if err := syscall.Statfs(a.paths.DataDir(), &fs); err == nil {
 		total := fs.Blocks * uint64(fs.Bsize)
 		used := (fs.Blocks - fs.Bfree) * uint64(fs.Bsize)
-		s.UserGB = float64(used) / gb
+		// The plugins' data is shown on its own.
+		var plugins uint64
+		s.Plugins, plugins = a.pluginStorageUse()
+		s.UserGB = float64(used-min(plugins, used)) / gb
 		s.TotalGB = float64(firmware+total) / gb
 	}
 	if fsType := a.mountType(a.paths.DataDir()); fsType != "" {
@@ -340,7 +343,10 @@ func (a *Agent) singleSystemStorage() api.StorageInfo {
 		total := st.Blocks * uint64(st.Bsize)
 		used := (st.Blocks - st.Bfree) * uint64(st.Bsize)
 		persistent = min(persistent, used)
-		s.UserGB = float64(persistent) / gb
+		// The plugins' data is in /persistent too, but shown on its own.
+		var plugins uint64
+		s.Plugins, plugins = a.pluginStorageUse()
+		s.UserGB = float64(persistent-min(plugins, persistent)) / gb
 		s.FirmwareGB = float64(boot+used-persistent) / gb
 		s.TotalGB = float64(boot+total) / gb
 	}

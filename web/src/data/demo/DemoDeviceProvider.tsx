@@ -95,7 +95,7 @@ const staged = new Map<string, { id: string; source: string }>();
 
 /** Like the router: the choices for a plugin's ports and settings, checked. */
 function checkPluginChoices(
-  preview: Pick<PluginPreview, 'ports' | 'settings'>,
+  preview: Pick<PluginPreview, 'ports' | 'settings' | 'storageMb' | 'storageMinMb' | 'storageMaxMb'>,
   choices: PluginChoices,
   taken: number[],
 ) {
@@ -122,6 +122,14 @@ function checkPluginChoices(
         errors[`settings.${setting.key}`] = `Must be from ${setting.min ?? 'any'} to ${setting.max ?? 'any'}.`;
       }
     }
+  }
+  // The size of its data, as the router checks it (checkPluginStorage in pluginstorage.go).
+  const size = choices.storageMb;
+  if (size !== undefined && size !== preview.storageMb) {
+    const gb = (mb: number) => `${Math.round((mb / 1024) * 10) / 10} GB`;
+    if (size < (preview.storageMinMb ?? 256)) errors.storageMb = `Use at least ${gb(preview.storageMinMb ?? 256)}.`;
+    else if (preview.storageMaxMb && size > preview.storageMaxMb)
+      errors.storageMb = `The SD card has room for at most ${gb(preview.storageMaxMb)}.`;
   }
   if (Object.keys(errors).length > 0) throw new FieldErrors(errors);
 }
@@ -1173,6 +1181,12 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
               : { ...setting, value: choices.settings[setting.key] ?? setting.value },
           );
           target.drive = choices.drive || undefined;
+          if (choices.storageMb !== undefined) {
+            target.storageMb = choices.storageMb;
+            // System → Storage shows the new size.
+            const shown = d.router.status.storage.plugins?.find((p) => p.name === target.name);
+            if (shown) shown.gb = Math.round((choices.storageMb / 1024) * 10) / 10;
+          }
         });
       },
       setPluginRunning: async (id, running) => {
