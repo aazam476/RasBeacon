@@ -38,7 +38,11 @@ export function ProfilesSection({ settings }: { settings: VPNSettings }) {
               icon="description"
               trailing={
                 <>
-                  <EditButton label={`Rename ${profile.name}`} onClick={() => setRenaming(profile.name)} />
+                  <EditButton
+                    label={`Rename ${profile.name}`}
+                    beside="buttons"
+                    onClick={() => setRenaming(profile.name)}
+                  />
                   <IconButton
                     icon="delete"
                     ariaLabel={`Remove ${profile.name}`}

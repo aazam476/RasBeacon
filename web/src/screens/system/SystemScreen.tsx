@@ -73,9 +73,9 @@ function AboutSection({ status }: { status: Status }) {
         className="group"
         // The pencil sits by the title, so the name lines up on the right with the other values.
         title={
-          <span className="inline-flex items-center gap-1">
+          <span className="inline-flex items-center gap-1.5">
             Name
-            <EditButton label="Rename RasBeacon" onClick={() => setRenaming(true)} className="-my-1.5" />
+            <EditButton label="Rename RasBeacon" onClick={() => setRenaming(true)} />
           </span>
         }
         value={device.hostname}

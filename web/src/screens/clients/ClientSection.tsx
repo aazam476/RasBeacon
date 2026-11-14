@@ -34,7 +34,7 @@ export function ClientSection({ client }: { client: NetworkClient }) {
                 which is hidden until hovered with a mouse. */}
             {client.isThisDevice && <Badge tone="tint">This device</Badge>}
             {client.priority && <Badge>Priority</Badge>}
-            <EditButton label={`Rename ${name}`} onClick={() => setRenaming(true)} className="-my-1.5" />
+            <EditButton label={`Rename ${name}`} onClick={() => setRenaming(true)} />
           </span>
           <span className="mt-0.5 block text-subhead text-label-2">
             {networkName(client)}
