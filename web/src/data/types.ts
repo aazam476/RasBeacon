@@ -858,9 +858,14 @@ export interface PluginSetting {
   help?: string;
   unit?: string;
   required?: boolean;
-  options?: { value: string; label: string }[];
+  options?: {
+    value: string;
+    label: string;
+  }[];
   min?: number;
   max?: number;
+  /** About the USB drive (like a size limit): shown only while one is chosen. */
+  onlyWithDrive?: boolean;
   value: string;
   hasValue?: boolean;
 }

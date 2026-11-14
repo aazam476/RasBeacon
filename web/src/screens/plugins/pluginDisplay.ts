@@ -1,4 +1,5 @@
 import type { BaseIconName, Tone } from '@/ui';
+import { FieldErrors } from '@/data/errors';
 import type { Plugin, PluginChoices, PluginPort, PluginSetting, PluginState } from '@/data/types';
 
 /** A plugin's state in a word or two, and the badge color for it. */
@@ -75,17 +76,23 @@ export function draftOf(
   };
 }
 
-/** The draft as the router takes it; the size only for a plugin that lets the owner choose it. */
+/**
+ * The draft as the router takes it. The size of its data goes along only for a plugin that lets
+ * the owner choose it, and only while its files are on RasBeacon's internal storage (no USB drive
+ * chosen): there the size is required, so a blank or wrong one is refused here, under the field.
+ */
 export function choicesOf(draft: ChoicesDraft): PluginChoices {
   const choices: PluginChoices = {
     ports: Object.fromEntries(Object.entries(draft.ports).map(([key, value]) => [key, Number(value.trim()) || 0])),
     settings: draft.settings,
     drive: draft.drive,
   };
-  if (draft.storage !== undefined) {
-    // A size that isn't a number is sent as 1 MB, so the router says what sizes it takes.
-    const gb = Number(draft.storage.trim().replace(',', '.'));
-    choices.storageMb = Number.isFinite(gb) && gb > 0 ? Math.round(gb * MB_PER_GB) : 1;
+  if (draft.storage !== undefined && draft.drive === '') {
+    const typed = draft.storage.trim().replace(',', '.');
+    const gb = Number(typed);
+    if (typed === '') throw new FieldErrors({ storageMb: 'Enter a size: its files are kept in this space.' });
+    if (!Number.isFinite(gb) || gb <= 0) throw new FieldErrors({ storageMb: 'Enter a size in GB, like 2 or 1.5.' });
+    choices.storageMb = Math.round(gb * MB_PER_GB);
   }
   return choices;
 }

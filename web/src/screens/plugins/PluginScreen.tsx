@@ -228,7 +228,9 @@ function SettingsForm({ plugin }: { plugin: Plugin }) {
         pending={form.pending}
         error={form.error}
         success={form.saved && 'Saved.'}
-        note={plugin.state === 'running' ? 'Saving restarts it.' : undefined}
+        note={
+          plugin.state === 'running' ? 'Saving restarts it, which stops anything it is in the middle of.' : undefined
+        }
       />
     </form>
   );

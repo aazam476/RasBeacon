@@ -354,7 +354,7 @@ func (a *Agent) settingViews(m *plugin.Manifest, values, secrets map[string]stri
 	for _, s := range m.Settings {
 		view := api.PluginSetting{
 			Key: s.Key, Label: s.Label, Type: s.Type, Help: s.Help, Unit: s.Unit, Required: s.Required,
-			Min: s.Min, Max: s.Max,
+			Min: s.Min, Max: s.Max, OnlyWithDrive: s.OnlyWithDrive,
 		}
 		for _, o := range s.Options {
 			view.Options = append(view.Options, api.PluginOption{Value: o.Value, Label: o.Label})
@@ -388,6 +388,10 @@ func (a *Agent) pluginValues(id string, m *plugin.Manifest, p config.InstalledPl
 			v.Settings[s.Key] = a.secrets.Plugins[id][s.Key]
 		case s.Secret():
 			// Left out: {setting:password} stays as it is written.
+		case s.OnlyWithDrive && p.Drive == "":
+			// About the drive: nothing without one (it is kept for when
+			// a drive is chosen again).
+			v.Settings[s.Key] = ""
 		default:
 			value, ok := p.Settings[s.Key]
 			if !ok {

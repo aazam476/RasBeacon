@@ -44,6 +44,11 @@ export function PluginFields({
   const setPort = (key: string, value: string) => onChange({ ...draft, ports: { ...draft.ports, [key]: value } });
   const setSetting = (key: string, value: string) =>
     onChange({ ...draft, settings: { ...draft.settings, [key]: value } });
+  // Settings about the drive (a size limit) only while one is chosen; the internal storage's size
+  // only while its files are there. One size to fill in either way: required on RasBeacon's own
+  // storage, which has to set the space aside, and optional on a drive.
+  const shownSettings = settings.filter((setting) => !setting.onlyWithDrive || draft.drive !== '');
+  const onInternalStorage = !usesDrive || draft.drive === '';
 
   return (
     <>
@@ -69,9 +74,9 @@ export function PluginFields({
         </Section>
       )}
 
-      {settings.length > 0 && (
+      {shownSettings.length > 0 && (
         <Section level={level} title="Settings">
-          {settings.map((setting) => (
+          {shownSettings.map((setting) => (
             <SettingField
               key={setting.key}
               setting={setting}
@@ -93,7 +98,7 @@ export function PluginFields({
         />
       )}
 
-      {storage?.storageAdjustable && (
+      {storage?.storageAdjustable && onInternalStorage && (
         <StorageField
           level={level}
           range={storage}
@@ -128,7 +133,7 @@ function StorageField({ level, range, value, onChange, error }: StorageFieldProp
     <Section
       level={level}
       title="RasBeacon internal storage"
-      footer="This space is set aside on RasBeacon’s SD card for the plugin, whether it fills it or not. It can grow or shrink later, but not below what its files use."
+      footer="Its files are kept in this space, set aside on RasBeacon’s SD card whether it fills it or not. It can grow or shrink later, but not below what its files use."
     >
       <TextField
         label="Size"

@@ -153,6 +153,11 @@ type Setting struct {
 	Unit string   `json:"unit,omitempty"`
 	// Env is the environment variable that gets the value, if any.
 	Env string `json:"env,omitempty"`
+	// OnlyWithDrive: the setting is about the USB drive (Samba's size
+	// limit), so it is shown, and given to the plugin, only while one is
+	// chosen; without one the plugin gets it empty. Needs usbDrive, and
+	// can't be required.
+	OnlyWithDrive bool `json:"onlyWithDrive,omitempty"`
 }
 
 // Option is a choice of a select setting.
@@ -527,6 +532,9 @@ func (m *Manifest) checkSettings() error {
 		}
 		if s.Env != "" && !envPattern.MatchString(s.Env) {
 			return fmt.Errorf("%s: env %q must be uppercase letters, digits and _", field, s.Env)
+		}
+		if s.OnlyWithDrive && (m.USBDrive == nil || s.Required) {
+			return fmt.Errorf("%s: onlyWithDrive needs usbDrive, and can't be required", field)
 		}
 		switch s.Type {
 		case "text", "password", "switch":

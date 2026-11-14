@@ -975,6 +975,8 @@ type PluginSetting struct {
 	Max      *float64       `json:"max,omitempty"`
 	Value    string         `json:"value"`
 	HasValue bool           `json:"hasValue,omitempty"`
+	// OnlyWithDrive: shown only while a USB drive is chosen.
+	OnlyWithDrive bool `json:"onlyWithDrive,omitempty"`
 }
 
 // PluginMetric is a number on a plugin's page; Value is "" when it can't
