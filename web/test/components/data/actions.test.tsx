@@ -407,6 +407,19 @@ describe('clients', () => {
     },
     { name: 'the radios’ new jobs are kept', run: (d) => d.keepRadioRoles(), sends: ['POST /settings/radios/keep'] },
     {
+      name: 'a drive is encrypted, then the plugins read again',
+      run: (d) => d.setPluginEncryption('samba', true),
+      sends: ['POST /plugins/encryption'],
+      body: { id: 'samba', on: true },
+    },
+    {
+      name: 'the recovery key is fetched, then the plugins read again',
+      run: (d) => d.pluginRecoveryKey('samba'),
+      sends: ['POST /plugins/recovery-key'],
+      answer: { body: { fileName: 'key.txt', text: 'KEY' } },
+      then: (_device, answered) => expect(answered).toEqual({ fileName: 'key.txt', text: 'KEY' }),
+    },
+    {
       name: 'a radio is named, then the status read again',
       run: (d) => d.renameRadio('00:0e:8e:00:00:03', 'Blue adapter'),
       sends: ['POST /settings/radios/name'],

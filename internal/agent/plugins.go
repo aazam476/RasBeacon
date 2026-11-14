@@ -98,6 +98,10 @@ type pluginLive struct {
 	message  string
 	// busy is set while a slow action runs on it.
 	busy bool
+	// converting is set while its drive's files are encrypted or
+	// decrypted; convertDone and convertTotal count the files moved.
+	converting                bool
+	convertDone, convertTotal int
 	// crashes counts crashes in a row; startedAt is when it last started.
 	crashes   int
 	startedAt time.Time
@@ -287,6 +291,13 @@ func (a *Agent) pluginView(id string) api.Plugin {
 	view.UsesDrive = m.USBDrive != nil
 	view.DriveOptional = m.USBDrive != nil && m.USBDrive.Optional
 	view.AfterInstall = a.pluginValues(id, m, p, false).Expand(m.AfterInstall)
+	if p.Drive != "" && m.USBDrive != nil {
+		view.Encryption = &api.PluginEncryption{State: p.Encryption, RecoveryKeySaved: p.RecoveryKeySaved}
+		if p.Encryption == encryptionOff {
+			view.Encryption.State = "off"
+		}
+		view.Encryption.Done, view.Encryption.Total = live.convertDone, live.convertTotal
+	}
 	view.MemoryMB, view.CPUs, view.StorageMB = m.Memory(), m.CPULimit(), pluginStorageMB(m, p)
 	if m.StorageAdjustable {
 		view.StorageAdjustable = true
@@ -691,6 +702,9 @@ func (a *Agent) UpdatePluginSettings(req api.PluginSettingsRequest) (api.Plugin,
 	if err := a.checkDrive(req.ID, m, req.Drive); err != nil {
 		return fail(err)
 	}
+	if current := a.cfg.Plugins.Installed[req.ID]; req.Drive != current.Drive && current.Encryption != encryptionOff {
+		return fail(&config.ValidationError{Field: "drive", Message: "Turn off the drive's encryption before choosing another drive."})
+	}
 	storage, err := a.checkPluginStorage(req.ID, m, req.StorageMB)
 	if err != nil {
 		return fail(err)
@@ -701,6 +715,9 @@ func (a *Agent) UpdatePluginSettings(req api.PluginSettingsRequest) (api.Plugin,
 	old := a.cfg.Plugins.Installed[req.ID]
 	oldDrive := old.Drive
 	if err := a.savePluginConfig(req.ID, func(p *config.InstalledPlugin) {
+		if p.Drive != req.Drive {
+			p.Encryption, p.RecoveryKeySaved = a.knownDriveEncryption(req.Drive)
+		}
 		p.Ports, p.Settings, p.Drive, p.StorageMB = ports, values, req.Drive, storage
 	}); err != nil {
 		return fail(err)
@@ -715,7 +732,7 @@ func (a *Agent) UpdatePluginSettings(req api.PluginSettingsRequest) (api.Plugin,
 	// A drive it no longer uses is let go of.
 	if oldDrive != "" && oldDrive != req.Drive && plugin.ValidDriveUUID(oldDrive) {
 		_, _ = a.plugins.runner.Run("podman", "rm", "--force", "--ignore", "--time", "10", plugin.ContainerName(req.ID))
-		_, _ = a.plugins.runner.Run("umount", a.paths.DriveMountDir(oldDrive))
+		a.releaseDrive(oldDrive)
 	}
 	// A new size for its data: the data file is resized while it is
 	// stopped. If that fails (the files don't fit after all), the size it

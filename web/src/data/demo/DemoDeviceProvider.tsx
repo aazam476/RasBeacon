@@ -94,6 +94,9 @@ function nowIso(): string {
 const staged = new Map<string, { id: string; source: string }>();
 
 /** Like the router: the choices for a plugin's ports and settings, checked. */
+/** The demo drive's recovery key (a real one is random). */
+const DEMO_RECOVERY_KEY = 'DEMOK-EYABC-DEFGH-IJKLM-NOPQR-STUVW-XYZ23-45672';
+
 function checkPluginChoices(
   preview: Pick<PluginPreview, 'ports' | 'settings' | 'storageMb' | 'storageMinMb' | 'storageMaxMb'>,
   choices: PluginChoices,
@@ -1188,6 +1191,52 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
             if (shown) shown.gb = Math.round((choices.storageMb / 1024) * 10) / 10;
           }
         });
+      },
+      setPluginEncryption: async (id, on, recoveryKey) => {
+        await wait(600);
+        const plugin = currentDemo.router.plugins.plugins.find((p) => p.id === id);
+        if (!plugin?.encryption) throw new FieldErrors({ drive: 'Choose a USB drive first.' });
+        const wanted = on ? 'encrypting' : 'decrypting';
+        if (plugin.encryption.state === (on ? 'on' : 'off')) return;
+        // The demo's key is DEMO_RECOVERY_KEY; any case, with or without dashes.
+        const typed = (recoveryKey ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+        if (!on && typed !== DEMO_RECOVERY_KEY.replace(/-/g, '')) {
+          throw new FieldErrors({ recoveryKey: 'This isn’t the drive’s recovery key.' });
+        }
+        const wasRunning = plugin.state === 'running';
+        const total = 1_240;
+        const step = (done: number) =>
+          change((d) => {
+            const target = d.router.plugins.plugins.find((p) => p.id === id);
+            if (!target?.encryption || target.encryption.state !== wanted) return;
+            if (done < total) {
+              target.state = 'converting';
+              target.message = `${on ? 'Encrypting' : 'Decrypting'} the drive’s files: ${done.toLocaleString('en-US')} of ${total.toLocaleString('en-US')}`;
+              target.encryption.done = done;
+              target.encryption.total = total;
+              setTimeout(() => step(Math.min(total, done + 310)), 1500);
+              return;
+            }
+            target.encryption = { state: on ? 'on' : 'off', recoveryKeySaved: on ? false : undefined };
+            target.state = wasRunning ? 'running' : 'stopped';
+            target.message = undefined;
+          });
+        change((d) => {
+          const target = d.router.plugins.plugins.find((p) => p.id === id);
+          if (target?.encryption) target.encryption = { state: wanted };
+        });
+        step(0);
+      },
+      pluginRecoveryKey: async (id) => {
+        await wait(400);
+        change((d) => {
+          const target = d.router.plugins.plugins.find((p) => p.id === id);
+          if (target?.encryption) target.encryption.recoveryKeySaved = true;
+        });
+        return {
+          fileName: 'rasbeacon-recovery-key-6A1F-22C9.txt',
+          text: `RasBeacon recovery key (demo)\n\n    ${DEMO_RECOVERY_KEY}\n`,
+        };
       },
       setPluginRunning: async (id, running) => {
         await wait(1200);

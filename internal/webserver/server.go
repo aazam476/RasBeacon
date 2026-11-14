@@ -723,6 +723,8 @@ var forwardedRoutes = map[string]string{
 	"POST /api/v1/plugins/install":                   "/plugins/install",
 	"POST /api/v1/plugins/cancel":                    "/plugins/cancel",
 	"POST /api/v1/plugins/logs":                      "/plugins/logs",
+	"POST /api/v1/plugins/encryption":                "/plugins/encryption",
+	"POST /api/v1/plugins/recovery-key":              "/plugins/recovery-key",
 	"GET /api/v1/plugins/drives":                     "/plugins/drives",
 	"PUT /api/v1/plugins/sources":                    "/plugins/sources",
 	"POST /api/v1/plugins/kept/forget":               "/plugins/kept/forget",

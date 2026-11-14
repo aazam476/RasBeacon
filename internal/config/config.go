@@ -217,6 +217,13 @@ type InstalledPlugin struct {
 	// StorageMB is the size of its data the owner chose, for a plugin
 	// whose manifest allows it (storageAdjustable); 0: the manifest's.
 	StorageMB int `json:"storageMb,omitempty"`
+	// Encryption is its drive's encryption: "" (off), "encrypting", "on"
+	// or "decrypting" (see agent/driveencryption.go). The key is in
+	// Secrets.DriveKeys.
+	Encryption string `json:"encryption,omitempty"`
+	// RecoveryKeySaved is set once the owner downloaded the drive's
+	// recovery key.
+	RecoveryKeySaved bool `json:"recoveryKeySaved,omitempty"`
 	// Running is whether it should run: kept across restarts.
 	Running bool `json:"running"`
 	// StoppedAfterCrashes is set when it crashed too often and was stopped;
@@ -968,6 +975,10 @@ type Secrets struct {
 	// the SIM refuses it, it waits for a new one (see agent/modem.go), so
 	// it can never use up the SIM's attempts.
 	ModemPIN string `json:"modemPin,omitempty"`
+	// DriveKeys holds the recovery keys of encrypted USB drives, by the
+	// drive's ID (UUID). Kept when a plugin is removed, so its drive opens
+	// again when chosen later.
+	DriveKeys map[string]string `json:"driveKeys,omitempty"`
 }
 
 // WireGuardKeys are one VPN profile's secrets (base64).
@@ -1203,6 +1214,7 @@ func (s Secrets) Clone() Secrets {
 	}
 	s.UplinkPasswords = passwords
 	s.WireGuardKeys = maps.Clone(s.WireGuardKeys)
+	s.DriveKeys = maps.Clone(s.DriveKeys)
 	if s.Plugins != nil {
 		plugins := make(map[string]map[string]string, len(s.Plugins))
 		for id, values := range s.Plugins {

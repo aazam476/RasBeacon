@@ -17,6 +17,7 @@ import type {
   HTTPSSettings,
   NearbyNetwork,
   Plugin,
+  PluginRecoveryKey,
   PluginCatalog,
   PluginChoices,
   PluginDrive,
@@ -450,6 +451,12 @@ export const removePlugin = (id: string, keepData: boolean) =>
 export const forgetKeptPluginData = (id: string) =>
   request<PluginsState>('POST', '/plugins/kept/forget', { body: { id } });
 /** A plugin's recent log lines. */
+/** Encrypts the files on a plugin's drive, or decrypts them (with the drive's recovery key). */
+export const setPluginEncryption = (id: string, on: boolean, recoveryKey?: string) =>
+  request<Plugin>('POST', '/plugins/encryption', { body: { id, on, recoveryKey } });
+/** The drive's recovery key as a text file, once its files are encrypted. */
+export const getPluginRecoveryKey = (id: string) =>
+  request<PluginRecoveryKey>('POST', '/plugins/recovery-key', { body: { id } });
 export const getPluginLogs = (id: string) => request<PluginLogsResponse>('POST', '/plugins/logs', { body: { id } });
 /** The drives plugged in, that a plugin may be given. */
 export const getPluginDrives = () => request<{ drives: PluginDrive[] }>('GET', '/plugins/drives');

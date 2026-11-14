@@ -71,8 +71,10 @@ type pluginRunPlan struct {
 	templates []pendingTemplate
 	values    plugin.Values
 	drive     string
-	spec      plugin.RunSpec
-	power     bool
+	// driveKey opens the drive's encrypted files ("" when not encrypted).
+	driveKey string
+	spec     plugin.RunSpec
+	power    bool
 }
 
 // pendingTemplate is one of the plugin's templates, to fill in and write
@@ -96,6 +98,13 @@ func (a *Agent) planPluginRun(id string) (*pluginRunPlan, error) {
 	m := live.manifest
 	if m == nil {
 		return nil, errors.New("its files can't be read")
+	}
+	// Half of the drive's files moved: it would see some of them only.
+	switch p.Encryption {
+	case encryptionEncrypting:
+		return nil, errors.New("its drive's files are only partly encrypted; turn encryption on again to finish")
+	case encryptionDecrypting:
+		return nil, errors.New("its drive's files are only partly decrypted; turn encryption off again to finish")
 	}
 	plan := &pluginRunPlan{
 		id: id, manifest: m, storageMB: pluginStorageMB(m, p), drive: p.Drive, power: m.Has("power-button"),
@@ -137,7 +146,11 @@ func (a *Agent) planPluginRun(id string) (*pluginRunPlan, error) {
 		spec.Mounts = append(spec.Mounts, plugin.Mount{Host: filepath.Join(dataMount, v.Name), Container: v.Path})
 	}
 	if p.Drive != "" && m.USBDrive != nil {
-		spec.Mounts = append(spec.Mounts, plugin.Mount{Host: a.paths.DriveMountDir(p.Drive), Container: m.USBDrive.Path})
+		// With its files encrypted, the plugin gets the opened view.
+		spec.Mounts = append(spec.Mounts, plugin.Mount{Host: a.driveHostDir(p), Container: m.USBDrive.Path})
+		if p.Encryption == encryptionOn {
+			plan.driveKey = a.secrets.DriveKeys[p.Drive]
+		}
 	}
 	if plan.power {
 		env["RASBEACON_SOCKET"] = "/run/rasbeacon/rbd.sock"
@@ -429,6 +442,13 @@ func (a *Agent) preparePluginRun(plan *pluginRunPlan) error {
 			}
 			slog.Warn("the plugin's USB drive isn't there; starting without it", "plugin", plan.id, "error", err)
 			plan.spec.Mounts = removeMount(plan.spec.Mounts, a.paths.DriveMountDir(plan.drive))
+			plan.spec.Mounts = removeMount(plan.spec.Mounts, a.paths.DrivePlainDir(plan.drive))
+		} else if plan.driveKey != "" {
+			// Never the encrypted files themselves: if they can't be
+			// opened, the plugin doesn't start.
+			if err := a.openEncryptedFolder(plan.drive, plan.driveKey); err != nil {
+				return err
+			}
 		}
 	}
 	if plan.power {
@@ -537,9 +557,7 @@ func (a *Agent) stopPluginContainer(id string) {
 	a.mu.Lock()
 	drive := a.cfg.Plugins.Installed[id].Drive
 	a.mu.Unlock()
-	if drive != "" && plugin.ValidDriveUUID(drive) {
-		_, _ = a.plugins.runner.Run("umount", a.paths.DriveMountDir(drive))
-	}
+	a.releaseDrive(drive)
 	a.closePowerSocket(id)
 }
 
@@ -582,11 +600,14 @@ func (a *Agent) ensurePodmanNetwork() {
 // restarted, and the crash watch. Runs in the background.
 func (a *Agent) startPlugins() {
 	a.mu.Lock()
+	// Drives RasBeacon was encrypting or decrypting go on first; those
+	// plugins start when their files are moved.
+	resumed := a.resumeConversions()
 	var ids []string
 	for _, id := range a.pluginIDs() {
 		p := a.cfg.Plugins.Installed[id]
 		live := a.plugins.live[id]
-		if p.Running && live != nil && live.manifest != nil && !live.busy {
+		if p.Running && live != nil && live.manifest != nil && !live.busy && !resumed[id] {
 			live.busy = true
 			ids = append(ids, id)
 		}
@@ -880,8 +901,6 @@ func (a *Agent) stopAllPlugins() {
 	_, _ = a.plugins.runner.Run("podman", "rm", "--all", "--force", "--time", "5")
 	for id, p := range a.cfg.Plugins.Installed {
 		_, _ = a.plugins.runner.Run("umount", a.pluginDataMount(id))
-		if p.Drive != "" && plugin.ValidDriveUUID(p.Drive) {
-			_, _ = a.plugins.runner.Run("umount", a.paths.DriveMountDir(p.Drive))
-		}
+		a.releaseDrive(p.Drive)
 	}
 }

@@ -66,6 +66,27 @@ describe('device', () => {
     { name: 'keeps the radios’ new jobs', call: api.keepRadioRoles, method: 'POST', path: '/settings/radios/keep' },
     { name: 'goes back to the old jobs', call: api.revertRadioRoles, method: 'POST', path: '/settings/radios/revert' },
     {
+      name: 'encrypts a plugin’s drive',
+      call: () => api.setPluginEncryption('samba', true),
+      method: 'POST',
+      path: '/plugins/encryption',
+      body: { id: 'samba', on: true },
+    },
+    {
+      name: 'decrypts it with the recovery key',
+      call: () => api.setPluginEncryption('samba', false, 'ABCDE-FGHIJ'),
+      method: 'POST',
+      path: '/plugins/encryption',
+      body: { id: 'samba', on: false, recoveryKey: 'ABCDE-FGHIJ' },
+    },
+    {
+      name: 'gets the recovery key',
+      call: () => api.getPluginRecoveryKey('samba'),
+      method: 'POST',
+      path: '/plugins/recovery-key',
+      body: { id: 'samba' },
+    },
+    {
       name: 'names a radio',
       call: () => api.renameRadio('00:0e:8e:00:00:03', 'Blue adapter'),
       method: 'POST',

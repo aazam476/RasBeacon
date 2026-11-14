@@ -70,6 +70,7 @@ check "rbd runs at boot" test -L "$root/etc/systemd/system/multi-user.target.wan
 check "rbd shares /tmp with wpa_supplicant and hostapd (no PrivateTmp)" \
   sh -c "! grep -q '^PrivateTmp=yes' '$root/usr/lib/systemd/system/rbd.service'"
 check "the data partition grows to fill the card" test -L "$root/etc/systemd/system/multi-user.target.wants/rasbeacon-grow-data.service"
+check "gocryptfs and FUSE are installed (encrypted USB drives)" sh -c "test -x '$root/usr/bin/gocryptfs' && test -x '$root/usr/bin/fusermount3'"
 check "sfdisk and resize2fs are installed" sh -c "test -x '$root/usr/sbin/sfdisk' && test -x '$root/usr/sbin/resize2fs'"
 check "rbweb runs at boot" test -L "$root/etc/systemd/system/multi-user.target.wants/rbweb.service"
 check "opt-in debug log is available" test -L "$root/etc/systemd/system/sysinit.target.wants/rasbeacon-debug-log.service"

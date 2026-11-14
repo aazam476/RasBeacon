@@ -302,6 +302,8 @@ export function installedPlugin(
     usesDrive: definition.usesDrive,
     driveOptional: definition.driveOptional,
     drive: choices.drive || undefined,
+    // A plugin with a chosen drive can encrypt it.
+    encryption: choices.drive ? { state: 'off' } : undefined,
     afterInstall: expand(definition.afterInstall, { address, ports }),
     metrics:
       state === 'running' ? demoMetrics(definition.id) : definition.metricLabels.map((label) => ({ label, value: '' })),

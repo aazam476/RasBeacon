@@ -69,6 +69,12 @@ func (p Paths) PluginEnvFile(id string) string { return filepath.Join(p.PluginRu
 // DriveMountDir is where a USB drive is mounted for a plugin.
 func (p Paths) DriveMountDir(uuid string) string { return filepath.Join(p.RunDir(), "drives", uuid) }
 
+// DrivePlainDir is where an encrypted USB drive's files are opened (the
+// decrypted view the plugin gets).
+func (p Paths) DrivePlainDir(uuid string) string {
+	return filepath.Join(p.RunDir(), "drives-open", uuid)
+}
+
 // DevDir is /dev (I²C and GPIO devices for plugins).
 func (p Paths) DevDir() string { return p.join("dev") }
 

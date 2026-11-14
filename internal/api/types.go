@@ -993,6 +993,9 @@ const (
 	PluginStopped    = "stopped"
 	PluginCrashed    = "crashed" // stopped after crashing too often
 	PluginFailed     = "failed"  // couldn't install or start; see Message
+	// PluginConverting: paused while its drive's files are encrypted or
+	// decrypted (see Message and Encryption).
+	PluginConverting = "converting"
 )
 
 // Plugin is an installed plugin (GET /plugins).
@@ -1032,6 +1035,9 @@ type Plugin struct {
 	// PluginStorage), up to StorageMaxMB and down to StorageMinMB.
 	StorageAdjustable bool `json:"storageAdjustable,omitempty"`
 	PluginStorage
+	// Encryption is its drive's encryption, for a plugin with a chosen
+	// USB drive (nil otherwise).
+	Encryption *PluginEncryption `json:"encryption,omitempty"`
 	// UpdateVersion is a newer version in the catalog ("" = none known).
 	UpdateVersion string `json:"updateVersion,omitempty"`
 	// CanUpdate: the update can be installed from the catalog (signed
@@ -1154,6 +1160,35 @@ type PluginStorage struct {
 	StorageMaxMB int `json:"storageMaxMb,omitempty"`
 	// StorageUsedMB is what its files use now (0: none yet, or not known).
 	StorageUsedMB int `json:"storageUsedMb,omitempty"`
+}
+
+// PluginEncryption is whether a plugin's USB drive has its files
+// encrypted (POST /plugins/encryption).
+type PluginEncryption struct {
+	// State is "off", "encrypting", "on" or "decrypting".
+	State string `json:"state"`
+	// Done and Total count the files moved so far while encrypting or
+	// decrypting (Total 0: still counting).
+	Done  int `json:"done,omitempty"`
+	Total int `json:"total,omitempty"`
+	// RecoveryKeySaved: the recovery key was downloaded since the files
+	// were encrypted. Until then, the page asks to save it.
+	RecoveryKeySaved bool `json:"recoveryKeySaved,omitempty"`
+}
+
+// PluginEncryptionRequest turns the encryption of a plugin's drive on or
+// off (POST /plugins/encryption). Off needs the drive's recovery key.
+type PluginEncryptionRequest struct {
+	ID          string `json:"id"`
+	On          bool   `json:"on"`
+	RecoveryKey string `json:"recoveryKey,omitempty"`
+}
+
+// PluginRecoveryKey is a drive's recovery key as a text file to save
+// (POST /plugins/recovery-key).
+type PluginRecoveryKey struct {
+	FileName string `json:"fileName"`
+	Text     string `json:"text"`
 }
 
 // PluginKeptData describes data kept from an earlier install with the same

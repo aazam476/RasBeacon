@@ -376,6 +376,10 @@ func (a *Agent) InstallPlugin(req api.PluginInstallRequest) (api.Plugin, error) 
 	record := config.InstalledPlugin{
 		Version: m.Version, Source: s.source, PublicKey: old.PublicKey, Image: old.Image, Address: old.Address,
 		Ports: ports, Settings: values, Drive: req.Drive, StorageMB: storage, Running: true,
+		Encryption: old.Encryption, RecoveryKeySaved: old.RecoveryKeySaved,
+	}
+	if req.Drive != old.Drive {
+		record.Encryption, record.RecoveryKeySaved = a.knownDriveEncryption(req.Drive)
 	}
 	if preview.Signed {
 		record.PublicKey = s.publicKey()

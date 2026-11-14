@@ -16,6 +16,7 @@ import type {
   PluginChoices,
   PluginDrive,
   PluginLogLine,
+  PluginRecoveryKey,
   PluginPreview,
   PluginsState,
   PointerSpot,
@@ -413,6 +414,13 @@ export interface DeviceActions {
   removePlugin: (id: string, keepData: boolean) => Promise<void>;
   /** Delete the data kept from a removed plugin, for good (the screen has asked first). */
   forgetKeptPluginData: (id: string) => Promise<void>;
+  /**
+   * Encrypt the files on a plugin's USB drive, or decrypt them, which needs the drive's recovery
+   * key. Answers at once; the plugin is paused while its files move. Field key: recoveryKey.
+   */
+  setPluginEncryption: (id: string, on: boolean, recoveryKey?: string) => Promise<void>;
+  /** The drive's recovery key as a text file to save (afterwards it counts as saved). */
+  pluginRecoveryKey: (id: string) => Promise<PluginRecoveryKey>;
   /** Its last 500 lines of output. */
   pluginLogs: (id: string) => Promise<PluginLogLine[]>;
   pluginDrives: () => Promise<PluginDrive[]>;

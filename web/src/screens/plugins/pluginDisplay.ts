@@ -10,6 +10,7 @@ export const STATE_LABELS: Record<PluginState, { text: string; tone: Tone }> = {
   stopped: { text: 'Stopped', tone: 'gray' },
   crashed: { text: 'Stopped after crashing', tone: 'red' },
   failed: { text: 'Not working', tone: 'red' },
+  converting: { text: 'Paused', tone: 'orange' },
 };
 
 /** The symbol for each permission, as in a phone's permission prompts. */
@@ -25,7 +26,7 @@ export const PERMISSION_ICONS: Record<string, BaseIconName> = {
 
 /** True while the router is still working on it (the page follows along). */
 export function isBusy(state: PluginState): boolean {
-  return state === 'installing' || state === 'waiting' || state === 'starting';
+  return state === 'installing' || state === 'waiting' || state === 'starting' || state === 'converting';
 }
 
 /** Where a plugin came from: "From a file", or its GitHub repository. */

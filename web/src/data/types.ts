@@ -866,7 +866,32 @@ export interface PluginSetting {
 }
 
 /** What a plugin is doing. */
-export type PluginState = 'installing' | 'waiting' | 'starting' | 'running' | 'stopped' | 'crashed' | 'failed';
+export type PluginState =
+  | 'installing'
+  | 'waiting'
+  | 'starting'
+  | 'running'
+  | 'stopped'
+  | 'crashed'
+  | 'failed'
+  /** Paused while its drive's files are encrypted or decrypted (the message counts them). */
+  | 'converting';
+
+/** Whether a plugin's USB drive has its files encrypted (POST /plugins/encryption). */
+export interface PluginEncryption {
+  state: 'off' | 'encrypting' | 'on' | 'decrypting';
+  /** Files moved so far while encrypting or decrypting (no total yet: still counting). */
+  done?: number;
+  total?: number;
+  /** The recovery key was downloaded since the files were encrypted. */
+  recoveryKeySaved?: boolean;
+}
+
+/** A drive's recovery key as a text file to save. */
+export interface PluginRecoveryKey {
+  fileName: string;
+  text: string;
+}
 
 /** An installed plugin (GET /api/v1/plugins). */
 export interface Plugin extends PluginStorageRange {
@@ -900,6 +925,8 @@ export interface Plugin extends PluginStorageRange {
   memoryMb: number;
   cpus: number;
   storageMb: number;
+  /** Its drive's encryption, for a plugin with a chosen USB drive. */
+  encryption?: PluginEncryption;
   /** A newer version in the catalog. */
   updateVersion?: string;
   /** The update installs from the catalog (signed plugins only; unsigned ones update from a file). */

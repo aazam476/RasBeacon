@@ -69,6 +69,10 @@ mmdebstrap:
     - netavark
     # Plugins' USB drives: exFAT (NTFS is in the kernel, ntfs3)
     - exfatprogs
+    # Encrypting a plugin's USB drive (internal/agent/driveencryption.go):
+    # gocryptfs, and FUSE, which it opens the encrypted files with
+    - gocryptfs
+    - fuse3
     # The login browser for hotel networks (zero-leak login, see
     # internal/browser): Chromium without a window, and a font for it
     - chromium-headless-shell

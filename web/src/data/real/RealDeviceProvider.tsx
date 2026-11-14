@@ -806,6 +806,15 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
       removePlugin: async (id, keepData) => {
         store('plugins', await attempt(() => api.removePlugin(id, keepData)));
       },
+      setPluginEncryption: async (id, on, recoveryKey) => {
+        await attempt(() => api.setPluginEncryption(id, on, recoveryKey), sameNames('recoveryKey'));
+        await load('plugins');
+      },
+      pluginRecoveryKey: async (id) => {
+        const file = await attempt(() => api.getPluginRecoveryKey(id));
+        await load('plugins');
+        return file;
+      },
       pluginLogs: async (id) => (await attempt(() => api.getPluginLogs(id))).lines,
       pluginDrives: async () => (await attempt(() => api.getPluginDrives())).drives,
       savePluginSources: async (sources) => {
