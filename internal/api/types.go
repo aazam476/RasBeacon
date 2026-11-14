@@ -859,6 +859,13 @@ type RadioRolesRequest struct {
 	Roles map[string]string `json:"roles"`
 }
 
+// RadioNameRequest names a Wi-Fi radio by its own MAC address
+// (POST /settings/radios/name); an empty name goes back to the default.
+type RadioNameRequest struct {
+	MAC  string `json:"mac"`
+	Name string `json:"name"`
+}
+
 // ClientPriorityRequest makes a device a priority device or an ordinary
 // one (POST /clients/priority).
 type ClientPriorityRequest struct {

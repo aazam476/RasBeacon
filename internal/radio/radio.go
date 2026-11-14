@@ -98,6 +98,10 @@ type Radio struct {
 	// Chosen is true when the owner chose Role (System page); false when
 	// RasBeacon did.
 	Chosen bool `json:"chosen,omitempty"`
+	// Name is the owner's name for the radio (System page), or empty for
+	// the pages' own ("Built-in Wi-Fi", "USB adapter …"). The status
+	// fills it in from the settings; detecting leaves it empty.
+	Name string `json:"name,omitempty"`
 	// Caps is what the radio can do on each band (see ParseBandCaps).
 	Caps map[int]BandCaps `json:"-"`
 }

@@ -1010,6 +1010,17 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
           d.router.status.radioRolesPending = 180;
         });
       },
+      renameRadio: async (mac, name) => {
+        await wait(600);
+        // The same rules as the router (SetRadioName in internal/agent/radioroles.go).
+        const trimmed = name.trim();
+        if ([...trimmed].length > 40) throw new FieldErrors({ name: 'Use at most 40 characters.' });
+        change((d) => {
+          for (const radio of d.router.status.radios) {
+            if (radio.mac === mac) radio.name = trimmed || undefined;
+          }
+        });
+      },
       keepRadioRoles: async () => {
         await wait(500);
         change((d) => {

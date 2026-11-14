@@ -88,6 +88,8 @@ export interface Radio {
   role: RadioRole;
   /** The owner chose this role (System page); otherwise RasBeacon did. */
   chosen?: boolean;
+  /** The owner's name for the radio (System page); without one, the pages name it themselves. */
+  name?: string;
   /** What it can run as a hotspot: Wi-Fi 6, 6 GHz (Wi-Fi 6E), Wi-Fi 7 (not used yet). */
   hasWifi6?: boolean;
   has6GHz?: boolean;

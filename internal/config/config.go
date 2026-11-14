@@ -119,6 +119,10 @@ type RadiosConfig struct {
 	// "hotspot", "uplink", "guest" or "unused" (radio.Role). Radios not
 	// listed get their job automatically.
 	Roles map[string]string `json:"roles,omitempty"`
+	// Names maps a radio's own MAC address (lower case) to the owner's
+	// name for it, such as "Blue adapter". Radios not listed are called
+	// "Built-in Wi-Fi" or "USB adapter …" on the pages.
+	Names map[string]string `json:"names,omitempty"`
 }
 
 // QoSConfig is "quality of service": which devices go first, and how fast
@@ -1170,6 +1174,7 @@ func (c Config) Clone() Config {
 	c.Clients.FixedAddresses = maps.Clone(c.Clients.FixedAddresses)
 	c.QoS.Priority = slices.Clone(c.QoS.Priority)
 	c.Radios.Roles = maps.Clone(c.Radios.Roles)
+	c.Radios.Names = maps.Clone(c.Radios.Names)
 	c.DNS.Servers = slices.Clone(c.DNS.Servers)
 	c.DNS.DoH = slices.Clone(c.DNS.DoH)
 	c.Plugins.Sources = slices.Clone(c.Plugins.Sources)

@@ -65,6 +65,13 @@ describe('device', () => {
     },
     { name: 'keeps the radios’ new jobs', call: api.keepRadioRoles, method: 'POST', path: '/settings/radios/keep' },
     { name: 'goes back to the old jobs', call: api.revertRadioRoles, method: 'POST', path: '/settings/radios/revert' },
+    {
+      name: 'names a radio',
+      call: () => api.renameRadio('00:0e:8e:00:00:03', 'Blue adapter'),
+      method: 'POST',
+      path: '/settings/radios/name',
+      body: { mac: '00:0e:8e:00:00:03', name: 'Blue adapter' },
+    },
     { name: 'shuts down', call: api.shutDown, method: 'POST', path: '/system/shutdown' },
     {
       name: 'changes the admin password',

@@ -13,9 +13,14 @@ export const ROLE_LABELS: Record<RadioRole, string> = {
   unused: 'Not used',
 };
 
-/** "Built-in Wi-Fi" or "USB adapter 0e8d:7612". */
-export function radioName(radio: Radio): string {
+/** What a radio is called without a name from the owner: "Built-in Wi-Fi" or "USB adapter 0e8d:7612". */
+export function defaultRadioName(radio: Radio): string {
   return radio.isUsb ? `USB adapter${radio.usbId ? ` ${radio.usbId}` : ''}` : 'Built-in Wi-Fi';
+}
+
+/** The owner's name for a radio, or else what it is (defaultRadioName). */
+export function radioName(radio: Radio): string {
+  return radio.name || defaultRadioName(radio);
 }
 
 /** The order automatic choices go through the radios: the hotspot's (ap0) first, then by phy. */

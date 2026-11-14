@@ -3,6 +3,7 @@ import { useDevice } from '@/data/device';
 import type { Radio, RadioRole, Status } from '@/data/types';
 import {
   assignRoles,
+  defaultRadioName,
   radioName,
   ROLE_LABELS,
   rolesNotes,
@@ -11,7 +12,20 @@ import {
   timeLeft,
   type RadioChoice,
 } from '@/lib/radios';
-import { ActionButton, Badge, ButtonRow, Notice, NoticeList, Row, Section, SelectField, Sheet, type Tone } from '@/ui';
+import {
+  ActionButton,
+  Badge,
+  ButtonRow,
+  EditButton,
+  Notice,
+  NoticeList,
+  RenameSheet,
+  Row,
+  Section,
+  SelectField,
+  Sheet,
+  type Tone,
+} from '@/ui';
 
 /** The color of each job's badge. */
 const TONES: Record<RadioRole, Tone> = { hotspot: 'green', uplink: 'tint', guest: 'orange', unused: 'gray' };
@@ -27,7 +41,11 @@ function radioDetails(radio: Radio): string {
 
 /** The Wi-Fi radios RasBeacon found, what each one does, and the way to change it. */
 export function RadiosSection({ status }: { status: Status }) {
+  const { renameRadio } = useDevice();
   const [changing, setChanging] = useState(false);
+  // The radio being renamed, by its MAC address.
+  const [renaming, setRenaming] = useState<string>();
+  const renamed = status.radios.find((radio) => radio.mac === renaming);
   return (
     <Section
       title="Wi-Fi radios"
@@ -36,8 +54,27 @@ export function RadiosSection({ status }: { status: Status }) {
       {status.radios.map((radio) => (
         <Row
           key={radio.mac || radio.interface}
+          className="group"
           leading={{ icon: 'wifi' }}
-          title={radioName(radio)}
+          // The pencil shows while the pointer is over the row, and always on touch screens.
+          title={
+            // Inline, so the pencil follows the name's last word when a long name wraps. The
+            // space before it is an ordinary one, which a browser drops at the end of a line,
+            // so a pencil wrapped onto a line of its own starts right at the edge.
+            <>
+              {radioName(radio)}
+              {radio.mac && (
+                <>
+                  {' '}
+                  <EditButton
+                    label={`Rename ${radioName(radio)}`}
+                    onClick={() => setRenaming(radio.mac)}
+                    className="align-middle"
+                  />
+                </>
+              )}
+            </>
+          }
           subtitle={radioDetails(radio)}
           trailing={<Badge tone={TONES[radio.role]}>{ROLE_LABELS[radio.role]}</Badge>}
         />
@@ -48,6 +85,24 @@ export function RadiosSection({ status }: { status: Status }) {
         </ButtonRow>
       )}
       {changing && <RadioRolesSheet radios={status.radios} onClose={() => setChanging(false)} />}
+      {renamed && (
+        <RenameSheet
+          title="Rename radio"
+          label="Name"
+          initial={renamed.name ?? ''}
+          placeholder={defaultRadioName(renamed)}
+          maxLength={40}
+          allowEmpty
+          footer={
+            <>
+              Kept for <span className="font-mono wrap-anywhere">{renamed.mac}</span>, in any USB port. Leave it empty
+              to call it {defaultRadioName(renamed)}.
+            </>
+          }
+          onSave={(name) => renameRadio(renamed.mac, name)}
+          onClose={() => setRenaming(undefined)}
+        />
+      )}
     </Section>
   );
 }

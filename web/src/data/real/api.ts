@@ -374,6 +374,9 @@ export const putRadioRoles = (roles: Record<string, RadioRole>) =>
   request<void>('PUT', '/settings/radios', { body: { roles } });
 export const keepRadioRoles = () => request<void>('POST', '/settings/radios/keep');
 export const revertRadioRoles = () => request<void>('POST', '/settings/radios/revert');
+/** A radio's name, by its MAC address; "" goes back to the default. */
+export const renameRadio = (mac: string, name: string) =>
+  request<void>('POST', '/settings/radios/name', { body: { mac, name } });
 
 // HTTPS for these pages.
 export const getHTTPSSettings = () => request<HTTPSSettings>('GET', '/settings/https');

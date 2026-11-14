@@ -72,7 +72,7 @@ func (a *Agent) StatusFor(viewer string) api.Status {
 		VPN:               a.vpnStatus(),
 		Portal:            a.portalStatus(),
 		Update:            a.updateStatus(),
-		Radios:            a.radios,
+		Radios:            a.namedRadios(),
 		RadioRolesPending: a.radioRolesSecondsLeft(),
 		Clients:           a.connectedClients(),
 		Warnings:          slices.Concat(a.warnings, a.vpnWarnings(), a.uplinkWarnings(), a.enterpriseWarnings(), a.serverCertWarnings(), a.guestWarnings(), a.hotspotWarnings(), a.clockWarnings(), a.mobileDataWarnings()),

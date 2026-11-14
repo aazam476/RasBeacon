@@ -704,6 +704,7 @@ var forwardedRoutes = map[string]string{
 	"PUT /api/v1/settings/radios":                    "/settings/radios",
 	"POST /api/v1/settings/radios/keep":              "/settings/radios/keep",
 	"POST /api/v1/settings/radios/revert":            "/settings/radios/revert",
+	"POST /api/v1/settings/radios/name":              "/settings/radios/name",
 	"PUT /api/v1/settings/qos":                       "/settings/qos",
 	"POST /api/v1/clients/fixed-address":             "/clients/fixed-address",
 	"GET /api/v1/settings/modem":                     "/settings/modem",

@@ -17,8 +17,10 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"rasbeacon/internal/api"
 	"rasbeacon/internal/config"
@@ -311,6 +313,59 @@ func (a *Agent) radioRolesSecondsLeft() int {
 // renames the radios again.
 func (a *Agent) restartRBD() {
 	a.afterFunc(switchDelay, func() { _, _ = a.runner.Run("systemctl", "restart", "rbd.service") })
+}
+
+// --- Naming the radios (System page) ---
+
+// namedRadios is the radios for the status, each with the owner's name
+// for it, if any. It is a copy, so the names never reach a.radios.
+func (a *Agent) namedRadios() []radio.Radio {
+	radios := slices.Clone(a.radios)
+	for i := range radios {
+		radios[i].Name = a.cfg.Radios.Names[radios[i].MAC]
+	}
+	return radios
+}
+
+// SetRadioName names a Wi-Fi radio, found by its own MAC address; an
+// empty name goes back to the pages' own name for it. Unlike a change of
+// roles, nothing restarts: the name is only for the pages.
+func (a *Agent) SetRadioName(mac, name string) error {
+	mac, err := normalizeMAC(mac)
+	if err != nil {
+		return err
+	}
+	// The same rules as a device's name (SetClientName).
+	name = strings.TrimSpace(name)
+	if utf8.RuneCountInString(name) > config.MaxDeviceNameLength {
+		return &config.ValidationError{Field: "name", Message: "Use at most 40 characters."}
+	}
+	if strings.ContainsFunc(name, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
+		return &config.ValidationError{Field: "name", Message: "Use letters, numbers and punctuation only."}
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.mode != api.ModeNormal {
+		return ErrWrongMode
+	}
+	if a.radioByMAC(mac) == nil {
+		return &config.ValidationError{Field: "name", Message: "This radio isn't plugged in any more. Reload the page."}
+	}
+	newCfg := a.cfg.Clone()
+	if name == "" {
+		delete(newCfg.Radios.Names, mac)
+	} else {
+		if newCfg.Radios.Names == nil {
+			newCfg.Radios.Names = map[string]string{}
+		}
+		newCfg.Radios.Names[mac] = name
+	}
+	if err := config.WriteJSON(a.paths.ConfigFile(), newCfg, 0o644); err != nil {
+		return err
+	}
+	a.cfg = newCfg
+	slog.Info("radio renamed", "mac", mac)
+	return nil
 }
 
 // radioByMAC returns the radio with this own address, or nil.

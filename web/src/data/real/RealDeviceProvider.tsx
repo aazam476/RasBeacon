@@ -752,6 +752,10 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
         await waitForRestart();
         await loadStartup();
       },
+      renameRadio: async (mac, name) => {
+        await attempt(() => api.renameRadio(mac, name), sameNames('name'));
+        await refreshStatus();
+      },
       keepRadioRoles: async () => {
         await attempt(api.keepRadioRoles);
         await refreshStatus();

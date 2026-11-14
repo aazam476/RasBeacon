@@ -362,6 +362,8 @@ export interface DeviceActions {
   keepRadioRoles: () => Promise<void>;
   /** Go back to the radio roles from before the change; RasBeacon restarts. */
   revertRadioRoles: () => Promise<void>;
+  /** Name a Wi-Fi radio, by its MAC address; "" goes back to the default. Nothing restarts. Field key: name. */
+  renameRadio: (mac: string, name: string) => Promise<void>;
   /** Turn RasBeacon off; afterwards the phase is the `off` notice. */
   shutDown: () => Promise<void>;
   /**

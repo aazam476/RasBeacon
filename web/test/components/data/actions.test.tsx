@@ -407,6 +407,12 @@ describe('clients', () => {
     },
     { name: 'the radios’ new jobs are kept', run: (d) => d.keepRadioRoles(), sends: ['POST /settings/radios/keep'] },
     {
+      name: 'a radio is named, then the status read again',
+      run: (d) => d.renameRadio('00:0e:8e:00:00:03', 'Blue adapter'),
+      sends: ['POST /settings/radios/name'],
+      body: { mac: '00:0e:8e:00:00:03', name: 'Blue adapter' },
+    },
+    {
       name: 'a priority device is saved, then the count of them read again',
       run: (d) => d.setClientPriority('3a:1f:22:aa:bb:cc', true),
       sends: ['POST /clients/priority', 'GET /settings/qos'],
