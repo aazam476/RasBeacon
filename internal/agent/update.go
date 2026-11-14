@@ -73,7 +73,7 @@ type updateState struct {
 	// restarts into it (or that restart fails).
 	restarting bool
 	// log is what the last install did, step by step (updatelog.go).
-	log []api.UpdateLogLine
+	log updateLogState
 	// latest is the release the online check offers (the newest one this
 	// RasBeacon can install, see fetchUpdateRelease), newest the newest
 	// release of all, lastCheck when it last asked, and checkError why that
@@ -304,8 +304,8 @@ func (a *Agent) finishInstall(newVersion string, err error) error {
 	slog.Warn("update installed; restarting to try it", "version", newVersion)
 	a.update.message = fmt.Sprintf("Update %s installed. RasBeacon is restarting to try it (about 2 minutes).", newVersion)
 	a.update.restarting = true
-	a.addUpdateLogLine(api.UpdateLogLine{Text: "Installed RasBeacon " + newVersion})
-	a.addUpdateLogLine(api.UpdateLogLine{Text: "Restarting to finish the install (RasBeacon is offline for about 2 minutes)"})
+	a.addUpdateStep(api.UpdateLogLine{Text: "Installed RasBeacon " + newVersion})
+	a.addUpdateStep(api.UpdateLogLine{Text: "Restarting to finish the install (RasBeacon is offline for about 2 minutes)"})
 	a.afterFunc(switchDelay, func() { _ = a.restartIntoUpdate() })
 	return nil
 }
@@ -468,7 +468,7 @@ func (a *Agent) writeUpdate(src *transferWatch, step string) (string, error) {
 		targets[part] = update.Target{Device: device, Size: size}
 	}
 
-	a.logUpdateProgress(step, 0)
+	a.logUpdateProgress(step, 0, megabytes(0, pkg.Manifest.BundleSize))
 	bundle, wait, err := a.decompress(&progressReader{pkg: pkg, agent: a, step: step})
 	if err != nil {
 		return "", err

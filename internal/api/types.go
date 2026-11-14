@@ -394,6 +394,8 @@ type UpdateLogLine struct {
 	// Percent, when set, makes the line a progress bar (0 to 100) that
 	// changes in place as the step goes on.
 	Percent *int `json:"percent,omitempty"`
+	// Detail goes after the bar, such as "182 of 404 MB".
+	Detail string `json:"detail,omitempty"`
 }
 
 // UpdateStatus describes software updates.

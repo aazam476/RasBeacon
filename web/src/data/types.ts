@@ -247,6 +247,8 @@ export interface UpdateLogLine {
   text: string;
   /** 0 to 100: the line is a progress bar that moves on in place. */
   percent?: number;
+  /** After the bar, such as "182 of 404 MB". */
+  detail?: string;
 }
 
 export interface UpdateStatus {

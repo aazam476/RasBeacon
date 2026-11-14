@@ -249,7 +249,8 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
         await wait(150);
         change((d) => {
           const log = d.router.status.update.log ?? [];
-          log[log.length - 1] = { text: step, percent };
+          const size = DEMO_UPDATE_SIZE / 1e6;
+          log[log.length - 1] = { text: step, percent, detail: `${Math.round((size * percent) / 100)} of ${size} MB` };
         });
       }
       logDemoUpdate(

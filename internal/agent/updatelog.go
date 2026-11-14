@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -21,9 +22,15 @@ import (
 // updateLogLines is the most lines the log keeps; older ones are dropped.
 const updateLogLines = 60
 
+// updateLogEvery is the longest the log goes without a change while an
+// update installs: a step that takes longer gets a "Still …" line, so
+// the owner sees it hasn't stalled. A variable so tests can make it short.
+var updateLogEvery = 5 * time.Second
+
 // transferQuietAfter is how long the update file may stop arriving
-// before the log says so. A variable so tests can make it short.
-var transferQuietAfter = 15 * time.Second
+// before the log says so (and says so again each time after). A variable
+// so tests can make it short.
+var transferQuietAfter = 5 * time.Second
 
 // errTransferCut means the update file stopped arriving before all of it
 // was there; the message says whether it was an upload or a download.
@@ -49,46 +56,115 @@ func (e errInvalidUpdate) Error() string { return e.err.Error() }
 // Unwrap lets errors.As find the refusal (update.NeedsReflashError).
 func (e errInvalidUpdate) Unwrap() error { return e.err }
 
-// startUpdateLog empties the log for a new install. The caller holds a.mu.
+// updateLogState is the log and what keeps it moving (updateState.log).
+type updateLogState struct {
+	lines []api.UpdateLogLine
+	// changed is when the log last changed; step is the step it shows
+	// now (its last line that isn't a "Still …" one), started when.
+	changed     time.Time
+	step        string
+	stepStarted time.Time
+	// transfer is the update file arriving, while it does.
+	transfer *transferWatch
+	// every and quietAfter are updateLogEvery and transferQuietAfter as
+	// the install started; run tells this install's checks from an
+	// earlier one's.
+	every, quietAfter time.Duration
+	run               int
+}
+
+// startUpdateLog empties the log for a new install, and starts checking
+// every second that it changes at least every updateLogEvery. The caller
+// holds a.mu.
 func (a *Agent) startUpdateLog() {
-	a.update.log = nil
+	run := a.update.log.run + 1
+	a.update.log = updateLogState{changed: time.Now(), every: updateLogEvery, quietAfter: transferQuietAfter, run: run}
+	time.AfterFunc(updateLogEvery/5, func() { a.keepUpdateLogMoving(run) })
+}
+
+// keepUpdateLogMoving adds a "Still …" line when the log hasn't changed
+// for updateLogEvery, then looks again a moment later, as long as the
+// install goes on. A file that stopped arriving is left to its own
+// "Nothing has arrived" lines (transferWatch). run is the install it
+// watches.
+func (a *Agent) keepUpdateLogMoving(run int) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	log := &a.update.log
+	if !a.update.installing || log.run != run {
+		return
+	}
+	waiting := log.transfer != nil && log.transfer.quietFor() >= log.quietAfter/2
+	if !waiting && log.step != "" && time.Since(log.changed) >= log.every {
+		a.addUpdateLogLine(api.UpdateLogLine{Text: a.stillLine()})
+	}
+	time.AfterFunc(log.every/5, func() { a.keepUpdateLogMoving(run) })
+}
+
+// stillLine says the current step goes on: "Still saving it to the SD
+// card (10 s so far)", or for a progress bar how far it got. The caller
+// holds a.mu.
+func (a *Agent) stillLine() string {
+	log := &a.update.log
+	doing := "Still " + strings.ToLower(log.step[:1]) + log.step[1:]
+	if n := len(log.lines); n > 0 && log.lines[n-1].Percent != nil && log.lines[n-1].Detail != "" {
+		return doing + ": " + log.lines[n-1].Detail + " so far"
+	}
+	return fmt.Sprintf("%s (%s so far)", doing, time.Since(log.stepStarted).Round(time.Second))
 }
 
 // logUpdate adds a line to the log. It takes a.mu itself.
 func (a *Agent) logUpdate(format string, args ...any) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.addUpdateLogLine(api.UpdateLogLine{Text: fmt.Sprintf(format, args...)})
+	a.addUpdateStep(api.UpdateLogLine{Text: fmt.Sprintf(format, args...)})
 }
 
-// logUpdateProgress shows how far a step is (0 to 100 percent). The step's
-// line is changed in place, like a progress bar in a terminal, rather
-// than added again for each percent. It takes a.mu itself.
-func (a *Agent) logUpdateProgress(step string, percent int) {
+// logUpdateProgress shows how far a step is: percent (0 to 100) and
+// detail ("182 of 404 MB"). The step's line is changed in place, like a
+// progress bar in a terminal, rather than added again each time; after a
+// "Still …" line it starts a new one. It takes a.mu itself.
+func (a *Agent) logUpdateProgress(step string, percent int, detail string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	log := a.update.log
-	if n := len(log); n > 0 && log[n-1].Text == step && log[n-1].Percent != nil {
-		*log[n-1].Percent = percent
+	lines := a.update.log.lines
+	if n := len(lines); n > 0 && lines[n-1].Text == step && lines[n-1].Percent != nil {
+		*lines[n-1].Percent = percent
+		lines[n-1].Detail = detail
+		a.update.log.changed = time.Now()
 		return
 	}
-	a.addUpdateLogLine(api.UpdateLogLine{Text: step, Percent: &percent})
+	if a.update.log.step == step {
+		// The same step goes on after a "Still …" line: its time goes on too.
+		a.addUpdateLogLine(api.UpdateLogLine{Text: step, Percent: &percent, Detail: detail})
+		return
+	}
+	a.addUpdateStep(api.UpdateLogLine{Text: step, Percent: &percent, Detail: detail})
+}
+
+// addUpdateStep appends the line of a new step. The caller holds a.mu.
+func (a *Agent) addUpdateStep(line api.UpdateLogLine) {
+	a.update.log.step = line.Text
+	a.update.log.stepStarted = time.Now()
+	a.addUpdateLogLine(line)
 }
 
 // addUpdateLogLine appends line, keeping at most updateLogLines. The
 // caller holds a.mu.
 func (a *Agent) addUpdateLogLine(line api.UpdateLogLine) {
-	a.update.log = append(a.update.log, line)
-	if extra := len(a.update.log) - updateLogLines; extra > 0 {
-		a.update.log = a.update.log[extra:]
+	log := &a.update.log
+	log.lines = append(log.lines, line)
+	if extra := len(log.lines) - updateLogLines; extra > 0 {
+		log.lines = log.lines[extra:]
 	}
+	log.changed = time.Now()
 }
 
 // updateLogCopy is the log for the status, copied so it can't change
 // while it is sent. The caller holds a.mu.
 func (a *Agent) updateLogCopy() []api.UpdateLogLine {
-	lines := make([]api.UpdateLogLine, len(a.update.log))
-	for i, line := range a.update.log {
+	lines := make([]api.UpdateLogLine, len(a.update.log.lines))
+	for i, line := range a.update.log.lines {
 		lines[i] = line
 		if line.Percent != nil {
 			percent := *line.Percent
@@ -125,30 +201,54 @@ type transferWatch struct {
 	agent *Agent
 	// what is "upload" or "download", for the messages.
 	what string
-	// quiet fires when nothing arrived for transferQuietAfter.
-	quiet *time.Timer
+	// quiet fires when nothing arrived for quietAfter (transferQuietAfter
+	// when the transfer started).
+	quiet      *time.Timer
+	quietAfter time.Duration
 
-	mu      sync.Mutex // the timer's function runs on its own
-	waiting bool       // the log said that nothing arrives
-	broke   bool       // a read failed (not just the end of the file)
-	ended   bool       // the end of the file was reached
+	mu       sync.Mutex // the timer's function runs on its own
+	lastData time.Time  // when data last arrived
+	waiting  bool       // the log said that nothing arrives
+	stopped  bool       // the install is over: no more lines
+	broke    bool       // a read failed (not just the end of the file)
+	ended    bool       // the end of the file was reached
 }
 
 // watchTransfer starts watching r, an update file arriving by what
 // ("upload" or "download"). Call stop when the install is over.
 func (a *Agent) watchTransfer(r io.Reader, what string) *transferWatch {
-	w := &transferWatch{r: r, agent: a, what: what}
-	w.quiet = time.AfterFunc(transferQuietAfter, w.wentQuiet)
+	w := &transferWatch{r: r, agent: a, what: what, lastData: time.Now(), quietAfter: transferQuietAfter}
+	w.quiet = time.AfterFunc(w.quietAfter, w.wentQuiet)
+	a.mu.Lock()
+	a.update.log.transfer = w
+	a.mu.Unlock()
 	return w
 }
 
-// wentQuiet tells the log that nothing has arrived for a while.
+// wentQuiet tells the log that nothing has arrived for a while, and looks
+// again after transferQuietAfter more.
 func (w *transferWatch) wentQuiet() {
+	quiet := w.quietFor()
 	w.mu.Lock()
+	if w.stopped {
+		w.mu.Unlock()
+		return
+	}
 	w.waiting = true
 	w.mu.Unlock()
-	w.agent.logUpdate("Nothing has arrived for %.0f seconds. Still waiting: the %s stops after 2 minutes without data.",
-		transferQuietAfter.Seconds(), w.what)
+	w.agent.mu.Lock()
+	w.agent.addUpdateLogLine(api.UpdateLogLine{Text: fmt.Sprintf(
+		"Nothing has arrived for %.0f seconds. Still waiting: the %s stops after 2 minutes without data.",
+		quiet.Seconds(), w.what)})
+	w.agent.mu.Unlock()
+	w.quiet.Reset(w.quietAfter)
+}
+
+// quietFor is how long it has been since data last arrived.
+func (w *transferWatch) quietFor() time.Duration {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return time.Since(w.lastData)
 }
 
 // Read reads the file, noting data that arrives again after a pause, a
@@ -159,6 +259,7 @@ func (w *transferWatch) Read(p []byte) (int, error) {
 	resumed := n > 0 && w.waiting
 	if n > 0 {
 		w.waiting = false
+		w.lastData = time.Now()
 	}
 	switch {
 	case errors.Is(err, io.EOF):
@@ -168,17 +269,27 @@ func (w *transferWatch) Read(p []byte) (int, error) {
 	}
 	w.mu.Unlock()
 	if n > 0 {
-		w.quiet.Reset(transferQuietAfter)
+		w.quiet.Reset(w.quietAfter)
 	}
 	if resumed {
-		w.agent.logUpdate("Data is arriving again")
+		w.agent.mu.Lock()
+		w.agent.addUpdateLogLine(api.UpdateLogLine{Text: "Data is arriving again"})
+		w.agent.mu.Unlock()
 	}
 	return n, err
 }
 
 // stop stops watching.
 func (w *transferWatch) stop() {
+	w.mu.Lock()
+	w.stopped = true
+	w.mu.Unlock()
 	w.quiet.Stop()
+	w.agent.mu.Lock()
+	if w.agent.update.log.transfer == w {
+		w.agent.update.log.transfer = nil
+	}
+	w.agent.mu.Unlock()
 }
 
 // cutOff reports whether the file stopped arriving before all of it was
@@ -192,21 +303,36 @@ func (w *transferWatch) cutOff(missing int64) bool {
 
 // progressReader reads an update's bundle (the compressed partitions) and
 // shows in the log how much of it has been read and written: step, with
-// its percentage.
+// its percentage and megabytes. The line changes with each megabyte, so
+// even a slow upload shows it is moving.
 type progressReader struct {
 	pkg   *update.Package
 	agent *Agent
 	step  string
-	shown int // the percentage the log shows
+	// What the log shows: the percentage, and the megabytes, e.g. "182 of
+	// 404 MB".
+	shownPercent int
+	shownDetail  string
 }
 
 // Read reads the bundle and moves the step's progress bar on.
 func (p *progressReader) Read(b []byte) (int, error) {
 	n, err := p.pkg.Read(b)
 	size := p.pkg.Manifest.BundleSize
-	if percent := int((size - p.pkg.Remaining()) * 100 / size); percent != p.shown {
-		p.shown = percent
-		p.agent.logUpdateProgress(p.step, percent)
+	done := size - p.pkg.Remaining()
+	percent, detail := int(done*100/size), megabytes(done, size)
+	if percent != p.shownPercent || detail != p.shownDetail {
+		p.shownPercent, p.shownDetail = percent, detail
+		p.agent.logUpdateProgress(p.step, percent, detail)
 	}
 	return n, err
+}
+
+// megabytes is how much of total is done, in MB: "182 of 404 MB", with a
+// decimal for small files ("0.4 of 2.5 MB").
+func megabytes(done, total int64) string {
+	if total >= 100e6 {
+		return fmt.Sprintf("%d of %d MB", done/1e6, total/1e6)
+	}
+	return fmt.Sprintf("%.1f of %.1f MB", float64(done)/1e6, float64(total)/1e6)
 }
