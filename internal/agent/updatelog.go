@@ -104,7 +104,7 @@ func (a *Agent) keepUpdateLogMoving(run int) {
 
 // stillLine says the current step goes on: "Still saving it to the SD
 // card (10 s so far)", or for a progress bar how far it got ("Still
-// uploading and installing update: 182 of 404 MB, about 3 min left").
+// uploading and installing update: 182 of 404 MB | ~3m left").
 // The caller holds a.mu.
 func (a *Agent) stillLine() string {
 	log := &a.update.log
@@ -305,7 +305,8 @@ func (w *transferWatch) cutOff(missing int64) bool {
 
 // progressReader reads an update's bundle (the compressed partitions) and
 // shows in the log how much of it has been read and written: step, with
-// its percentage, megabytes and the time left. The line changes with each
+// its percentage, megabytes and the time left ("182 of 404 MB | ~3m
+// left"). The line changes with each
 // megabyte, so even a slow upload shows it is moving.
 type progressReader struct {
 	pkg   *update.Package
@@ -325,7 +326,7 @@ func (p *progressReader) Read(b []byte) (int, error) {
 	done := size - p.pkg.Remaining()
 	percent, detail := int(done*100/size), megabytes(done, size)
 	if left := p.left.update(done, size, time.Now()); left != "" && done < size {
-		detail += ", " + left
+		detail += " | " + left
 	}
 	if percent != p.shownPercent || detail != p.shownDetail {
 		p.shownPercent, p.shownDetail = percent, detail
@@ -356,7 +357,7 @@ type timeLeft struct {
 	windowStart time.Time // when the current measurement began
 	windowDone  int64     // the bytes done then
 	speed       float64   // bytes per second, smoothed; 0 until measured
-	text        string    // what the log shows, e.g. "about 3 min left"
+	text        string    // what the log shows, e.g. "~3m left"
 }
 
 // update notes that done of total bytes are there at now, and returns the
@@ -384,18 +385,19 @@ func (t *timeLeft) update(done, total int64, now time.Time) string {
 	return t.text
 }
 
-// roundTimeLeft says a number of seconds the way people estimate time:
-// "about 40 s left", "about 3 min left", "about 1 h 20 min left". Coarse
-// on purpose: an estimate shouldn't look more exact than it is.
+// roundTimeLeft says a number of seconds briefly, for the end of a
+// progress line: "<10s left", "~40s left", "~3m left", "~1h 20m left" (~
+// is "about"). Coarse on purpose: an estimate shouldn't look more exact
+// than it is.
 func roundTimeLeft(seconds float64) string {
 	switch {
 	case seconds < 10:
-		return "less than 10 s left"
+		return "<10s left"
 	case seconds < 60:
-		return fmt.Sprintf("about %d s left", int(math.Round(seconds/10))*10)
+		return fmt.Sprintf("~%ds left", int(math.Round(seconds/10))*10)
 	case seconds < 3600:
-		return fmt.Sprintf("about %d min left", max(1, int(math.Round(seconds/60))))
+		return fmt.Sprintf("~%dm left", max(1, int(math.Round(seconds/60))))
 	}
 	minutes := int(math.Round(seconds / 60))
-	return fmt.Sprintf("about %d h %d min left", minutes/60, minutes%60)
+	return fmt.Sprintf("~%dh %dm left", minutes/60, minutes%60)
 }

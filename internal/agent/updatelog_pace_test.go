@@ -109,26 +109,26 @@ func TestUpdateLog_TimeLeftFollowsTheSpeedCalmly(t *testing.T) {
 		t.Errorf("before any speed is known: %q", got)
 	}
 	// 1 MB/s for the first 10 s: 390 MB left at 1 MB/s is 6.5 min.
-	if got := left.update(10_000_000, total, start.Add(10*time.Second)); got != "about 7 min left" {
+	if got := left.update(10_000_000, total, start.Add(10*time.Second)); got != "~7m left" {
 		t.Errorf("after 10 s at 1 MB/s: %q", got)
 	}
 	// Faster for a moment: the estimate waits for the next 10 s.
-	if got := left.update(30_000_000, total, start.Add(15*time.Second)); got != "about 7 min left" {
+	if got := left.update(30_000_000, total, start.Add(15*time.Second)); got != "~7m left" {
 		t.Errorf("between measurements the estimate stays: %q", got)
 	}
 	// 3 MB/s over the next 10 s: blended with the earlier 1 MB/s (1.8 MB/s),
 	// 360 MB left is about 3.3 min, not the 2 min 3 MB/s alone would say.
-	if got := left.update(40_000_000, total, start.Add(20*time.Second)); got != "about 3 min left" {
+	if got := left.update(40_000_000, total, start.Add(20*time.Second)); got != "~3m left" {
 		t.Errorf("after a faster stretch: %q", got)
 	}
 }
 
 func TestUpdateLog_TimeLeftIsRoundedTheWayPeopleSayIt(t *testing.T) {
 	for seconds, want := range map[float64]string{
-		4:    "less than 10 s left",
-		37:   "about 40 s left",
-		95:   "about 2 min left",
-		4800: "about 1 h 20 min left",
+		4:    "<10s left",
+		37:   "~40s left",
+		95:   "~2m left",
+		4800: "~1h 20m left",
 	} {
 		if got := roundTimeLeft(seconds); got != want {
 			t.Errorf("%v s: %q, want %q", seconds, got, want)
