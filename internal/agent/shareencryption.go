@@ -1,20 +1,20 @@
 package agent
 
-// Encrypting a plugin's USB drive (the Samba plugin's, for example), so
-// someone who pulls the drive out and plugs it into a computer can't read
-// the files. They are read through the plugin only.
+// Encrypting a share's files (a plugin's share, Samba's for example), so
+// someone who pulls out the USB drive or the SD card and plugs it into a
+// computer can't read them. They are read through the plugin only.
 //
 // The files are encrypted with gocryptfs (XChaCha20-Poly1305), each file
-// on its own, in a folder on the drive called "RasBeacon encrypted files",
-// with a README.txt next to it that says what it is. RasBeacon opens the
-// folder with the drive's recovery key, kept with its other secrets on the
-// SD card (by the drive's ID), and gives the plugin the opened view instead
-// of the drive itself.
+// on its own, in a folder called "RasBeacon encrypted files" in the share
+// (its folder on the drive, or its storage file on internal storage), with
+// a README next to it that says what it is. RasBeacon opens the folder
+// with the share's recovery key, kept with its other secrets on the SD
+// card, and gives the plugin the opened view instead.
 //
-// Turning encryption on moves every file on the drive into the folder, one
-// at a time: copied, written to the drive for sure (fsync), and only then
-// removed. Turning it off (which needs the recovery key) moves them back.
-// The plugin is paused meanwhile, and starts again when all the files are
+// Turning encryption on moves every file of the share into the folder,
+// one at a time: copied, written for sure (fsync), and only then removed.
+// Turning it off (which needs the recovery key) moves them back. The
+// plugin is paused meanwhile, and starts again when all the files are
 // moved. If RasBeacon restarts or the drive is pulled out in the middle,
 // the move goes on where it stopped the next time (a file is never in only
 // half of its copies: a copy that wasn't finished is made again).
@@ -42,7 +42,7 @@ import (
 	"rasbeacon/internal/plugin"
 )
 
-// The states of a plugin's drive encryption (InstalledPlugin.Encryption).
+// The states of a share's encryption (PluginShare.Encryption).
 const (
 	encryptionOff        = ""
 	encryptionEncrypting = "encrypting"
@@ -51,24 +51,24 @@ const (
 )
 
 const (
-	// encryptedFolder holds the encrypted files on the drive.
+	// encryptedFolder holds a share's encrypted files.
 	encryptedFolder = "RasBeacon encrypted files"
-	// encryptedReadme says on the drive what the folder is.
+	// encryptedReadme says next to it what the folder is.
 	encryptedReadme = "RasBeacon encrypted files - README.txt"
 	// partSuffix marks a file being copied, until it is complete.
 	partSuffix = ".rasbeacon-part"
 )
 
 // encryptedReadmeText is the README written next to the encrypted folder.
-const encryptedReadmeText = `This USB drive's files are encrypted by RasBeacon.
+const encryptedReadmeText = `This share's files are encrypted by RasBeacon.
 
 They are in the folder "RasBeacon encrypted files", each file encrypted on
-its own with gocryptfs (XChaCha20-Poly1305). Plugged into RasBeacon, the
-plugin that uses this drive (such as Samba) shows the files as usual.
+its own with gocryptfs (XChaCha20-Poly1305). On RasBeacon, the plugin that
+offers this share (such as Samba) shows the files as usual.
 
-To read them on a computer, you need the drive's recovery key, which you
+To read them on a computer, you need the share's recovery key, which you
 can download from the plugin's page on RasBeacon. With gocryptfs installed
-(https://nuetzlich.net/gocryptfs/), open a terminal and run:
+(https://nuetzlich.net/gocryptfs/), open a terminal in this folder and run:
 
     gocryptfs "RasBeacon encrypted files" ~/rasbeacon-files
 
@@ -105,16 +105,7 @@ func formatRecoveryKey(typed string) string {
 	return strings.Join(append(groups, plain), "-")
 }
 
-// --- Opening and closing the encrypted folder ---
-
-// driveHostDir is the folder the plugin gets as its drive: the opened view
-// of the encrypted files while encryption is on, else the drive itself.
-func (a *Agent) driveHostDir(p config.InstalledPlugin) string {
-	if p.Encryption == encryptionOn {
-		return a.paths.DrivePlainDir(p.Drive)
-	}
-	return a.paths.DriveMountDir(p.Drive)
-}
+// --- Opening the encrypted folder ---
 
 // withKeyFile writes the recovery key to a file only root can read, in
 // RasBeacon's run folder (in memory, never on the SD card), for gocryptfs's
@@ -139,15 +130,14 @@ func (a *Agent) withKeyFile(key string, run func(file string) error) error {
 	return run(f.Name())
 }
 
-// openEncryptedFolder makes the encrypted folder on a mounted drive if it
-// isn't there yet, and opens it at DrivePlainDir. Called without a.mu.
-func (a *Agent) openEncryptedFolder(uuid, key string) error {
+// openEncryptedFolder makes the encrypted folder in a share (store) if it
+// isn't there yet, and opens it at plain. Called without a.mu.
+func (a *Agent) openEncryptedFolder(store, plain, key string) error {
 	r := a.plugins.runner
-	plain := a.paths.DrivePlainDir(uuid)
 	if _, err := r.Run("mountpoint", "-q", plain); err == nil {
 		return nil // already open
 	}
-	cipher := filepath.Join(a.paths.DriveMountDir(uuid), encryptedFolder)
+	cipher := filepath.Join(store, encryptedFolder)
 	if err := os.MkdirAll(plain, 0o755); err != nil {
 		return err
 	}
@@ -170,24 +160,13 @@ func (a *Agent) openEncryptedFolder(uuid, key string) error {
 	})
 }
 
-// knownDriveEncryption is the encryption of a drive the owner chooses: on
-// when RasBeacon has its recovery key (it encrypted the drive for a plugin
-// removed since, whose files are still there), else off. The key was given
-// then, so it isn't asked for again. The caller holds a.mu.
-func (a *Agent) knownDriveEncryption(uuid string) (state string, keySaved bool) {
-	if uuid != "" && a.secrets.DriveKeys[uuid] != "" {
-		return encryptionOn, true
-	}
-	return encryptionOff, false
-}
-
-// releaseDrive closes a drive's encrypted folder (if open) and unmounts
-// the drive, so it can be pulled out. Called without a.mu.
+// releaseDrive unmounts a plugin's drive, so it can be pulled out (its
+// encrypted shares are closed first, by releaseSharesOf). Called without
+// a.mu.
 func (a *Agent) releaseDrive(uuid string) {
 	if !plugin.ValidDriveUUID(uuid) {
 		return
 	}
-	_, _ = a.plugins.runner.Run("umount", a.paths.DrivePlainDir(uuid))
 	_, _ = a.plugins.runner.Run("umount", a.paths.DriveMountDir(uuid))
 }
 
@@ -310,16 +289,17 @@ func copyFileSynced(src, dst string, info fs.FileInfo) error {
 
 // --- Turning encryption on and off ---
 
-// SetPluginEncryption turns the encryption of a plugin's drive on or off.
-// Turning it off needs the drive's recovery key. The files are moved in
-// the background (convertDrive) while the plugin is paused; the answer
-// comes at once, and the plugin's state shows the progress. It can be
-// turned the other way while the files are moving: the move turns around.
+// SetPluginEncryption turns the encryption of one share on or off. Turning
+// it off needs the share's recovery key. The files are moved in the
+// background (convertShare) while the plugin is paused; the answer comes
+// at once, and the plugin's state shows the progress. It can be turned
+// the other way while the files are moving: the move turns around.
 func (a *Agent) SetPluginEncryption(req api.PluginEncryptionRequest) (api.Plugin, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	live := a.plugins.live[req.ID]
-	converting := live != nil && live.converting
+	// Only the share being moved can be turned around meanwhile.
+	converting := live != nil && live.converting && live.convertShare == req.Share
 	if !converting {
 		var err error
 		if live, err = a.beginPluginWork(req.ID); err != nil {
@@ -338,88 +318,103 @@ func (a *Agent) SetPluginEncryption(req api.PluginEncryptionRequest) (api.Plugin
 		return a.pluginView(req.ID), nil
 	}
 	p := a.cfg.Plugins.Installed[req.ID]
-	if p.Drive == "" || !plugin.ValidDriveUUID(p.Drive) {
-		return done(&config.ValidationError{Field: "drive", Message: "Choose a USB drive first."})
+	index := findShare(p.Shares, req.Share)
+	if index < 0 {
+		return done(&config.ValidationError{Field: "share", Message: "No such share."})
 	}
-	key := a.secrets.DriveKeys[p.Drive]
+	share := p.Shares[index]
+	keyName := shareKeyName(req.ID, share)
+	key := a.secrets.ShareKeys[keyName]
 	var want string
 	switch {
-	case req.On && (p.Encryption == encryptionOn || p.Encryption == encryptionEncrypting) && converting:
-		return done(nil) // already on its way
-	case req.On && p.Encryption == encryptionOn:
-		return done(nil)
+	case req.On && (share.Encryption == encryptionOn || share.Encryption == encryptionEncrypting && converting):
+		return done(nil) // on, or already on its way
 	case req.On:
 		want = encryptionEncrypting
-	case p.Encryption == encryptionOff:
+	case share.Encryption == encryptionOff:
 		return done(nil)
 	case key == "" || formatRecoveryKey(req.RecoveryKey) != key:
-		return done(&config.ValidationError{Field: "recoveryKey", Message: "This isn't the drive's recovery key."})
-	case p.Encryption == encryptionDecrypting && converting:
+		return done(&config.ValidationError{Field: "recoveryKey", Message: "This isn't the share's recovery key."})
+	case share.Encryption == encryptionDecrypting && converting:
 		return done(nil)
 	default:
 		want = encryptionDecrypting
 	}
 	if key == "" {
 		newSecrets := a.secrets.Clone()
-		if newSecrets.DriveKeys == nil {
-			newSecrets.DriveKeys = map[string]string{}
+		if newSecrets.ShareKeys == nil {
+			newSecrets.ShareKeys = map[string]string{}
 		}
-		newSecrets.DriveKeys[p.Drive] = newRecoveryKey()
+		newSecrets.ShareKeys[keyName] = newRecoveryKey()
 		if err := config.WriteJSON(a.paths.SecretsFile(), newSecrets, 0o600); err != nil {
 			return done(err)
 		}
 		a.secrets = newSecrets
 	}
-	if err := a.savePluginConfig(req.ID, func(p *config.InstalledPlugin) { p.Encryption = want }); err != nil {
+	if err := a.saveShare(req.ID, req.Share, func(s *config.PluginShare) { s.Encryption = want }); err != nil {
 		return done(err)
 	}
-	slog.Info("drive encryption changing", "plugin", req.ID, "to", want)
+	slog.Info("share encryption changing", "plugin", req.ID, "share", req.Share, "to", want)
 	if !converting {
-		live.converting = true
-		a.setPluginState(req.ID, api.PluginConverting, conversionMessage(want, 0, 0))
-		a.background(func() { a.convertDrive(req.ID) })
+		live.converting, live.convertShare = true, req.Share
+		a.setPluginState(req.ID, api.PluginConverting, conversionMessage(share.Name, want, 0, 0))
+		a.background(func() { a.convertShare(req.ID, req.Share) })
 	}
 	return a.pluginView(req.ID), nil
+}
+
+// saveShare saves a change to one share. The caller holds a.mu.
+func (a *Agent) saveShare(id, shareID string, change func(s *config.PluginShare)) error {
+	return a.savePluginConfig(id, func(p *config.InstalledPlugin) {
+		if i := findShare(p.Shares, shareID); i >= 0 {
+			change(&p.Shares[i])
+		}
+	})
 }
 
 // errTurnedAround stops a move whose direction the owner changed.
 var errTurnedAround = errors.New("turned around")
 
-// convertDrive moves a plugin's drive files into the encrypted folder or
-// out of it, as its Encryption says, with the plugin paused, then starts
-// it again if it was running. The plugin is busy until it ends (set by
+// convertShare moves a share's files into its encrypted folder or out of
+// it, as its Encryption says, with the plugin paused, then starts it again
+// if it was running. The plugin is busy until it ends (set by
 // SetPluginEncryption, or resumeConversions). Called without a.mu.
-func (a *Agent) convertDrive(id string) {
+func (a *Agent) convertShare(id, shareID string) {
 	defer a.endPluginWork(id)
 	_, _ = a.plugins.runner.Run("podman", "rm", "--force", "--ignore", "--time", "10", plugin.ContainerName(id))
 	for {
 		a.mu.Lock()
 		p := a.cfg.Plugins.Installed[id]
-		key := a.secrets.DriveKeys[p.Drive]
+		index := findShare(p.Shares, shareID)
+		if index < 0 {
+			a.mu.Unlock()
+			return
+		}
+		share := p.Shares[index]
+		key := a.secrets.ShareKeys[shareKeyName(id, share)]
 		a.mu.Unlock()
-		err := a.convertOnce(id, p.Drive, key, p.Encryption)
+		err := a.convertOnce(id, share, key)
 		if errors.Is(err, errTurnedAround) {
 			continue
 		}
 		a.mu.Lock()
 		live := a.plugins.live[id]
 		if live != nil {
-			live.converting = false
+			live.converting, live.convertShare = false, ""
 		}
 		if err != nil {
-			slog.Error("could not move the drive's files", "plugin", id, "error", err)
-			action := "Encrypting"
-			if p.Encryption == encryptionDecrypting {
-				action = "Decrypting"
+			slog.Error("could not move a share's files", "plugin", id, "share", shareID, "error", err)
+			action, again := "Encrypting", "on"
+			if share.Encryption == encryptionDecrypting {
+				action, again = "Decrypting", "off"
 			}
 			a.setPluginState(id, api.PluginFailed, fmt.Sprintf(
-				"%s the drive's files stopped: %v. Nothing is lost; turn encryption %s again to go on.",
-				action, err, map[bool]string{true: "on", false: "off"}[action == "Encrypting"]))
+				"%s the share %s stopped: %v. Nothing is lost; turn its encryption %s again to go on.", action, share.Name, err, again))
 			a.mu.Unlock()
 			return
 		}
-		if err := a.finishConversion(id, p); err != nil {
-			a.setPluginState(id, api.PluginFailed, "The drive's files were moved, but the settings can't be saved: "+err.Error())
+		if err := a.finishConversion(id, share); err != nil {
+			a.setPluginState(id, api.PluginFailed, "The share's files were moved, but the settings can't be saved: "+err.Error())
 			a.mu.Unlock()
 			return
 		}
@@ -433,49 +428,62 @@ func (a *Agent) convertDrive(id string) {
 	}
 }
 
-// convertOnce moves the files one way: into the encrypted folder
+// convertOnce moves a share's files one way: into the encrypted folder
 // (encrypting) or out of it (decrypting). It stops with errTurnedAround
 // when the owner changed the direction. Called without a.mu.
-func (a *Agent) convertOnce(id, uuid, key, direction string) error {
-	if err := a.mountDrive(uuid); err != nil {
+func (a *Agent) convertOnce(id string, share config.PluginShare, key string) error {
+	store, plain := a.shareStoreDir(id, share), a.paths.SharePlainDir(id, share.ID)
+	if share.Drive == "" {
+		if err := a.mountImage(a.paths.PluginShareImage(id, share.ID), store, share.QuotaMB); err != nil {
+			return err
+		}
+	} else {
+		if err := a.mountDrive(share.Drive); err != nil {
+			return err
+		}
+		if err := os.MkdirAll(store, 0o755); err != nil {
+			return err
+		}
+	}
+	if err := a.openEncryptedFolder(store, plain, key); err != nil {
 		return err
 	}
-	if err := a.openEncryptedFolder(uuid, key); err != nil {
-		return err
-	}
-	root, plain := a.paths.DriveMountDir(uuid), a.paths.DrivePlainDir(uuid)
+	direction := share.Encryption
 	progress := func(done, total int) error {
 		a.mu.Lock()
 		defer a.mu.Unlock()
-		if a.cfg.Plugins.Installed[id].Encryption != direction {
+		p := a.cfg.Plugins.Installed[id]
+		if i := findShare(p.Shares, share.ID); i < 0 || p.Shares[i].Encryption != direction {
 			return errTurnedAround
 		}
 		if live := a.plugins.live[id]; live != nil {
 			live.convertDone, live.convertTotal = done, total
 		}
-		a.setPluginState(id, api.PluginConverting, conversionMessage(direction, done, total))
+		a.setPluginState(id, api.PluginConverting, conversionMessage(share.Name, direction, done, total))
 		return nil
 	}
 	if direction == encryptionEncrypting {
-		readme := filepath.Join(root, encryptedReadme)
+		readme := filepath.Join(store, encryptedReadme)
 		if err := os.WriteFile(readme, []byte(encryptedReadmeText), 0o644); err != nil {
 			return err
 		}
-		ours := func(rel string) bool { return rel == encryptedFolder || rel == encryptedReadme }
-		return a.moveFiles(root, plain, ours, progress)
+		// ext4 keeps lost+found at the top of a share on internal
+		// storage: it stays where it is.
+		ours := func(rel string) bool { return rel == encryptedFolder || rel == encryptedReadme || rel == "lost+found" }
+		return a.moveFiles(store, plain, ours, progress)
 	}
-	if err := a.moveFiles(plain, root, func(string) bool { return false }, progress); err != nil {
+	if err := a.moveFiles(plain, store, func(string) bool { return false }, progress); err != nil {
 		return err
 	}
 	// Everything is out: the encrypted folder and its README go.
 	if _, err := a.plugins.runner.Run("umount", plain); err != nil {
 		return fmt.Errorf("the encrypted folder can't be closed: %w", err)
 	}
-	if err := os.RemoveAll(filepath.Join(root, encryptedFolder)); err != nil {
+	if err := os.RemoveAll(filepath.Join(store, encryptedFolder)); err != nil {
 		return err
 	}
 	// (No README when it was turned off before the first file moved.)
-	if err := os.Remove(filepath.Join(root, encryptedReadme)); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err := os.Remove(filepath.Join(store, encryptedReadme)); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 	return nil
@@ -484,37 +492,32 @@ func (a *Agent) convertOnce(id, uuid, key, direction string) error {
 // finishConversion saves that the move is done: encryption on, or off
 // (then the recovery key goes too, as nothing is encrypted with it any
 // more). The caller holds a.mu.
-func (a *Agent) finishConversion(id string, p config.InstalledPlugin) error {
+func (a *Agent) finishConversion(id string, share config.PluginShare) error {
 	if live := a.plugins.live[id]; live != nil {
 		live.convertDone, live.convertTotal = 0, 0
 	}
-	if p.Encryption == encryptionEncrypting {
-		slog.Info("drive encrypted", "plugin", id)
-		return a.savePluginConfig(id, func(p *config.InstalledPlugin) { p.Encryption = encryptionOn })
+	if share.Encryption == encryptionEncrypting {
+		slog.Info("share encrypted", "plugin", id, "share", share.ID)
+		return a.saveShare(id, share.ID, func(s *config.PluginShare) { s.Encryption = encryptionOn })
 	}
-	newSecrets := a.secrets.Clone()
-	delete(newSecrets.DriveKeys, p.Drive)
-	if err := config.WriteJSON(a.paths.SecretsFile(), newSecrets, 0o600); err != nil {
-		return err
-	}
-	a.secrets = newSecrets
-	slog.Info("drive decrypted", "plugin", id)
-	return a.savePluginConfig(id, func(p *config.InstalledPlugin) {
-		p.Encryption, p.RecoveryKeySaved = encryptionOff, false
+	a.forgetShareKey(shareKeyName(id, share))
+	slog.Info("share decrypted", "plugin", id, "share", share.ID)
+	return a.saveShare(id, share.ID, func(s *config.PluginShare) {
+		s.Encryption, s.RecoveryKeySaved = encryptionOff, false
 	})
 }
 
-// conversionMessage is the plugin's state message while its files move:
-// "Encrypting the drive's files: 120 of 3,010".
-func conversionMessage(direction string, done, total int) string {
+// conversionMessage is the plugin's state message while a share's files
+// move: "Encrypting the share Movies: 120 of 3,010 files".
+func conversionMessage(name, direction string, done, total int) string {
 	action := "Encrypting"
 	if direction == encryptionDecrypting {
 		action = "Decrypting"
 	}
 	if total == 0 {
-		return action + " the drive's files…"
+		return action + " the share " + name + "…"
 	}
-	return fmt.Sprintf("%s the drive's files: %s of %s", action, thousands(done), thousands(total))
+	return fmt.Sprintf("%s the share %s: %s of %s files", action, name, thousands(done), thousands(total))
 }
 
 // thousands writes a count with commas: 3010 → "3,010".
@@ -527,58 +530,79 @@ func thousands(n int) string {
 }
 
 // resumeConversions goes on with moves that RasBeacon restarted in the
-// middle of; startPlugins calls it first and leaves these plugins to it.
-// The caller holds a.mu.
+// middle of; startPlugins calls it first and leaves these plugins to it
+// (one share at a time per plugin; the others go on when it starts
+// again). The caller holds a.mu.
 func (a *Agent) resumeConversions() map[string]bool {
 	resumed := map[string]bool{}
 	for _, id := range a.pluginIDs() {
-		p := a.cfg.Plugins.Installed[id]
 		live := a.plugins.live[id]
-		if live == nil || live.busy || (p.Encryption != encryptionEncrypting && p.Encryption != encryptionDecrypting) {
+		if live == nil || live.busy {
 			continue
 		}
-		live.busy, live.converting = true, true
-		resumed[id] = true
-		a.setPluginState(id, api.PluginConverting, conversionMessage(p.Encryption, 0, 0))
-		a.background(func() { a.convertDrive(id) })
+		for _, share := range a.cfg.Plugins.Installed[id].Shares {
+			if share.Encryption != encryptionEncrypting && share.Encryption != encryptionDecrypting {
+				continue
+			}
+			live.busy, live.converting, live.convertShare = true, true, share.ID
+			resumed[id] = true
+			a.setPluginState(id, api.PluginConverting, conversionMessage(share.Name, share.Encryption, 0, 0))
+			shareID := share.ID
+			a.background(func() { a.convertShare(id, shareID) })
+			break
+		}
 	}
 	return resumed
 }
 
 // --- The recovery key ---
 
-// PluginRecoveryKey is the drive's recovery key as a text file to save.
-// It is given once the files are encrypted; after that, the page stops
-// asking to save it.
-func (a *Agent) PluginRecoveryKey(id string) (api.PluginRecoveryKey, error) {
+// PluginRecoveryKey is a share's recovery key as a text file to save. It
+// is given once the files are encrypted; after that, the page stops asking
+// to save it.
+func (a *Agent) PluginRecoveryKey(req api.PluginShareRequest) (api.PluginRecoveryKey, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	p, ok := a.cfg.Plugins.Installed[id]
+	p, ok := a.cfg.Plugins.Installed[req.ID]
 	if !ok {
 		return api.PluginRecoveryKey{}, errNoPlugin
 	}
-	key := a.secrets.DriveKeys[p.Drive]
-	if p.Encryption != encryptionOn || key == "" {
-		return api.PluginRecoveryKey{}, &config.ValidationError{Field: "id", Message: "The drive's files aren't encrypted."}
+	index := findShare(p.Shares, req.Share)
+	if index < 0 {
+		return api.PluginRecoveryKey{}, &config.ValidationError{Field: "share", Message: "No such share."}
 	}
-	if !p.RecoveryKeySaved {
-		if err := a.savePluginConfig(id, func(p *config.InstalledPlugin) { p.RecoveryKeySaved = true }); err != nil {
+	share := p.Shares[index]
+	key := a.secrets.ShareKeys[shareKeyName(req.ID, share)]
+	if share.Encryption != encryptionOn || key == "" {
+		return api.PluginRecoveryKey{}, &config.ValidationError{Field: "share", Message: "The share's files aren't encrypted."}
+	}
+	if !share.RecoveryKeySaved {
+		if err := a.saveShare(req.ID, req.Share, func(s *config.PluginShare) { s.RecoveryKeySaved = true }); err != nil {
 			return api.PluginRecoveryKey{}, err
 		}
 	}
-	name := a.pluginName(id)
+	where := "on RasBeacon's internal storage"
+	if share.Drive != "" {
+		where = fmt.Sprintf("in the folder %s on the USB drive %s", share.Folder, share.Drive)
+	}
 	text := fmt.Sprintf(`RasBeacon recovery key
 
-For the USB drive %s, used by %s. Saved %s.
+For the share %s of %s, %s. Saved %s.
 
     %s
 
 Keep it somewhere safe, away from the drive: with it, anyone can read the
-drive's files, and without it, nobody can (RasBeacon too, if its SD card
+share's files, and without it, nobody can (RasBeacon too, if its SD card
 is lost or erased). It is also needed to turn the encryption off.
 
 To read the files on a computer, see "RasBeacon encrypted files -
-README.txt" on the drive.
-`, p.Drive, name, a.now().Format("2 January 2006"), key)
-	return api.PluginRecoveryKey{FileName: "rasbeacon-recovery-key-" + p.Drive + ".txt", Text: text}, nil
+README.txt" in the share.
+`, share.Name, a.pluginName(req.ID), where, a.now().Format("2 January 2006"), key)
+	safe := strings.Map(func(r rune) rune {
+		if r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-' {
+			return r
+		}
+		return '-'
+	}, share.Name)
+	return api.PluginRecoveryKey{FileName: "rasbeacon-recovery-key-" + safe + ".txt", Text: text}, nil
 }

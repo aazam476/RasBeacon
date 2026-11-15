@@ -975,8 +975,6 @@ type PluginSetting struct {
 	Max      *float64       `json:"max,omitempty"`
 	Value    string         `json:"value"`
 	HasValue bool           `json:"hasValue,omitempty"`
-	// OnlyWithDrive: shown only while a USB drive is chosen.
-	OnlyWithDrive bool `json:"onlyWithDrive,omitempty"`
 }
 
 // PluginMetric is a number on a plugin's page; Value is "" when it can't
@@ -1037,9 +1035,9 @@ type Plugin struct {
 	// PluginStorage), up to StorageMaxMB and down to StorageMinMB.
 	StorageAdjustable bool `json:"storageAdjustable,omitempty"`
 	PluginStorage
-	// Encryption is its drive's encryption, for a plugin with a chosen
-	// USB drive (nil otherwise).
-	Encryption *PluginEncryption `json:"encryption,omitempty"`
+	// Shares are its shares, for a plugin whose manifest has them (nil
+	// otherwise).
+	Shares *PluginShares `json:"shares,omitempty"`
 	// UpdateVersion is a newer version in the catalog ("" = none known).
 	UpdateVersion string `json:"updateVersion,omitempty"`
 	// CanUpdate: the update can be installed from the catalog (signed
@@ -1158,14 +1156,88 @@ type PluginStorage struct {
 	// now with some room to spare.
 	StorageMinMB int `json:"storageMinMb,omitempty"`
 	// StorageMaxMB is the largest: what the SD card has room for,
-	// keeping 1 GB free for RasBeacon, and at most 64 GB.
+	// keeping 2 GB free for RasBeacon, and at most 64 GB.
 	StorageMaxMB int `json:"storageMaxMb,omitempty"`
 	// StorageUsedMB is what its files use now (0: none yet, or not known).
 	StorageUsedMB int `json:"storageUsedMb,omitempty"`
 }
 
-// PluginEncryption is whether a plugin's USB drive has its files
-// encrypted (POST /plugins/encryption).
+// PluginShares is a plugin's shares, and what a new one may be.
+type PluginShares struct {
+	// Max is how many shares it may have; OnDrives says they can also be
+	// on USB drives (the usb-drive permission).
+	Max      int  `json:"max"`
+	OnDrives bool `json:"onDrives"`
+	// Settings are the per-share settings a new share starts with.
+	Settings []PluginSetting `json:"settings"`
+	// NewInternalMaxMB is the largest quota a new share on internal
+	// storage may have now: the SD card's free space less 2 GB.
+	NewInternalMaxMB int           `json:"newInternalMaxMb"`
+	List             []PluginShare `json:"list"`
+}
+
+// PluginShare is one share as the plugin's page shows it.
+type PluginShare struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// Drive is the USB drive's UUID ("" for RasBeacon's internal
+	// storage), DriveLabel its name, and Folder the share's folder on it.
+	Drive      string `json:"drive,omitempty"`
+	DriveLabel string `json:"driveLabel,omitempty"`
+	Folder     string `json:"folder,omitempty"`
+	// DriveMissing: its drive isn't plugged in, so the plugin doesn't
+	// offer it for now.
+	DriveMissing bool `json:"driveMissing,omitempty"`
+	QuotaMB      int  `json:"quotaMb"`
+	// UsedMB is what its files use (-1 while not measured yet). It can be
+	// more than the quota on a drive, after files were added on a
+	// computer: the share then shows as full.
+	UsedMB int `json:"usedMb"`
+	// MinQuotaMB and MaxQuotaMB are the quotas it may get now.
+	MinQuotaMB int              `json:"minQuotaMb"`
+	MaxQuotaMB int              `json:"maxQuotaMb"`
+	Settings   []PluginSetting  `json:"settings"`
+	Encryption PluginEncryption `json:"encryption"`
+}
+
+// PluginShareAddRequest makes a share (POST /plugins/shares/add). Drive ""
+// is RasBeacon's internal storage; on a drive, Folder is required.
+type PluginShareAddRequest struct {
+	ID       string            `json:"id"`
+	Name     string            `json:"name"`
+	Drive    string            `json:"drive"`
+	Folder   string            `json:"folder"`
+	QuotaMB  int               `json:"quotaMb"`
+	Settings map[string]string `json:"settings"`
+}
+
+// PluginShareUpdateRequest changes a share's name, quota and settings
+// (PUT /plugins/shares); where it is never changes.
+type PluginShareUpdateRequest struct {
+	ID       string            `json:"id"`
+	Share    string            `json:"share"`
+	Name     string            `json:"name"`
+	QuotaMB  int               `json:"quotaMb"`
+	Settings map[string]string `json:"settings"`
+}
+
+// PluginShareRemoveRequest removes a share (POST /plugins/shares/remove).
+// DeleteFiles also deletes its folder on a USB drive; a share on internal
+// storage, or an encrypted one, always takes its files with it.
+type PluginShareRemoveRequest struct {
+	ID          string `json:"id"`
+	Share       string `json:"share"`
+	DeleteFiles bool   `json:"deleteFiles,omitempty"`
+}
+
+// PluginShareRequest names one share of a plugin.
+type PluginShareRequest struct {
+	ID    string `json:"id"`
+	Share string `json:"share"`
+}
+
+// PluginEncryption is whether a share's files are encrypted (POST
+// /plugins/encryption).
 type PluginEncryption struct {
 	// State is "off", "encrypting", "on" or "decrypting".
 	State string `json:"state"`
@@ -1178,15 +1250,16 @@ type PluginEncryption struct {
 	RecoveryKeySaved bool `json:"recoveryKeySaved,omitempty"`
 }
 
-// PluginEncryptionRequest turns the encryption of a plugin's drive on or
-// off (POST /plugins/encryption). Off needs the drive's recovery key.
+// PluginEncryptionRequest turns the encryption of a share on or off
+// (POST /plugins/encryption). Off needs its recovery key.
 type PluginEncryptionRequest struct {
 	ID          string `json:"id"`
+	Share       string `json:"share"`
 	On          bool   `json:"on"`
 	RecoveryKey string `json:"recoveryKey,omitempty"`
 }
 
-// PluginRecoveryKey is a drive's recovery key as a text file to save
+// PluginRecoveryKey is a share's recovery key as a text file to save
 // (POST /plugins/recovery-key).
 type PluginRecoveryKey struct {
 	FileName string `json:"fileName"`

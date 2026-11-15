@@ -207,9 +207,10 @@ func (a *Agent) Handler() http.Handler {
 	}))
 	mux.HandleFunc("PUT /plugins/settings", pluginCall(a.UpdatePluginSettings))
 	mux.HandleFunc("POST /plugins/encryption", pluginCall(a.SetPluginEncryption))
-	mux.HandleFunc("POST /plugins/recovery-key", pluginCall(func(req api.PluginIDRequest) (api.PluginRecoveryKey, error) {
-		return a.PluginRecoveryKey(req.ID)
-	}))
+	mux.HandleFunc("POST /plugins/recovery-key", pluginCall(a.PluginRecoveryKey))
+	mux.HandleFunc("POST /plugins/shares/add", pluginCall(a.AddPluginShare))
+	mux.HandleFunc("PUT /plugins/shares", pluginCall(a.UpdatePluginShare))
+	mux.HandleFunc("POST /plugins/shares/remove", pluginCall(a.RemovePluginShare))
 	for route, action := range map[string]func(string) error{
 		"POST /plugins/start": a.StartPlugin,
 		"POST /plugins/stop":  a.StopPlugin,

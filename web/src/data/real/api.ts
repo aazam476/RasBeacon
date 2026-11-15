@@ -18,6 +18,8 @@ import type {
   NearbyNetwork,
   Plugin,
   PluginRecoveryKey,
+  NewPluginShare,
+  PluginShareChanges,
   PluginCatalog,
   PluginChoices,
   PluginDrive,
@@ -451,12 +453,19 @@ export const removePlugin = (id: string, keepData: boolean) =>
 export const forgetKeptPluginData = (id: string) =>
   request<PluginsState>('POST', '/plugins/kept/forget', { body: { id } });
 /** A plugin's recent log lines. */
-/** Encrypts the files on a plugin's drive, or decrypts them (with the drive's recovery key). */
-export const setPluginEncryption = (id: string, on: boolean, recoveryKey?: string) =>
-  request<Plugin>('POST', '/plugins/encryption', { body: { id, on, recoveryKey } });
-/** The drive's recovery key as a text file, once its files are encrypted. */
-export const getPluginRecoveryKey = (id: string) =>
-  request<PluginRecoveryKey>('POST', '/plugins/recovery-key', { body: { id } });
+/** Encrypts a share's files, or decrypts them (with its recovery key). */
+export const setPluginEncryption = (id: string, share: string, on: boolean, recoveryKey?: string) =>
+  request<Plugin>('POST', '/plugins/encryption', { body: { id, share, on, recoveryKey } });
+/** A share's recovery key as a text file, once its files are encrypted. */
+export const getPluginRecoveryKey = (id: string, share: string) =>
+  request<PluginRecoveryKey>('POST', '/plugins/recovery-key', { body: { id, share } });
+// A plugin's shares: made, changed and removed (slow: a big drive is measured, a share resized).
+export const addPluginShare = (id: string, share: NewPluginShare) =>
+  request<Plugin>('POST', '/plugins/shares/add', { body: { id, ...share }, timeoutMs: 120_000 });
+export const updatePluginShare = (id: string, share: string, changes: PluginShareChanges) =>
+  request<Plugin>('PUT', '/plugins/shares', { body: { id, share, ...changes }, timeoutMs: 120_000 });
+export const removePluginShare = (id: string, share: string, deleteFiles: boolean) =>
+  request<Plugin>('POST', '/plugins/shares/remove', { body: { id, share, deleteFiles }, timeoutMs: 120_000 });
 export const getPluginLogs = (id: string) => request<PluginLogsResponse>('POST', '/plugins/logs', { body: { id } });
 /** The drives plugged in, that a plugin may be given. */
 export const getPluginDrives = () =>

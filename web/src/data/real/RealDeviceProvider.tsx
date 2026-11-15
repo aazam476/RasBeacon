@@ -48,6 +48,7 @@ import {
   pluginFields,
   sameNames,
   screenError,
+  shareFields,
   splitList,
   toSavedNetwork,
   vpnDetailsRequest,
@@ -336,7 +337,10 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
      * Runs a request for an action: a 401 means the session ended, and a refusal becomes what
      * the screen shows (`fields` maps the router's field names to the screen's keys).
      */
-    async function attempt<T>(request: () => Promise<T>, fields?: Record<string, string>): Promise<T> {
+    async function attempt<T>(
+      request: () => Promise<T>,
+      fields?: Record<string, string> | ((field: string) => string | null),
+    ): Promise<T> {
       try {
         return await request();
       } catch (error) {
@@ -806,14 +810,26 @@ export function RealDeviceProvider({ children }: { children: ReactNode }) {
       removePlugin: async (id, keepData) => {
         store('plugins', await attempt(() => api.removePlugin(id, keepData)));
       },
-      setPluginEncryption: async (id, on, recoveryKey) => {
-        await attempt(() => api.setPluginEncryption(id, on, recoveryKey), sameNames('recoveryKey'));
+      setPluginEncryption: async (id, share, on, recoveryKey) => {
+        await attempt(() => api.setPluginEncryption(id, share, on, recoveryKey), sameNames('recoveryKey'));
         await load('plugins');
       },
-      pluginRecoveryKey: async (id) => {
-        const file = await attempt(() => api.getPluginRecoveryKey(id));
+      pluginRecoveryKey: async (id, share) => {
+        const file = await attempt(() => api.getPluginRecoveryKey(id, share));
         await load('plugins');
         return file;
+      },
+      addPluginShare: async (id, share) => {
+        await attempt(() => api.addPluginShare(id, share), shareFields);
+        await load('plugins');
+      },
+      savePluginShare: async (id, share, changes) => {
+        await attempt(() => api.updatePluginShare(id, share, changes), shareFields);
+        await load('plugins');
+      },
+      removePluginShare: async (id, share, deleteFiles) => {
+        await attempt(() => api.removePluginShare(id, share, deleteFiles), sameNames('deleteFiles'));
+        await load('plugins');
       },
       pluginLogs: async (id) => (await attempt(() => api.getPluginLogs(id))).lines,
       pluginDrives: async () => (await attempt(() => api.getPluginDrives())).drives,

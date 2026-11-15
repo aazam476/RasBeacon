@@ -172,9 +172,10 @@ Or name a published image in the manifest (pinned by digest) and leave
 | `memoryMb`, `cpus` | Limits; default 256 MB and half a core. |
 | `minMemoryMb`, `minSwapMb` | Refuse the install on a Pi with less memory, or less swap (the owner is pointed to System → Swap file). |
 | `storageMb` | Its data, one fixed-size file on the SD card (default 256 MB), shared by its `volumes`. It grows when a new version asks for more. The whole size is set aside on the card, and System → Storage shows it under Plugins. |
-| `storageAdjustable` | `true` lets the owner choose the size of its data while its files are on RasBeacon's internal storage (no USB drive chosen; there the size is required), at install (with `storageMb` suggested) and later on its page: from 256 MB up to what the SD card has room for (keeping 1 GB free), and down to what its files use. For a plugin that keeps the owner's files, like a file share. An update keeps the owner's size. |
+| `storageAdjustable` | `true` lets the owner choose the size of its data while its files are on RasBeacon's internal storage (no USB drive chosen; there the size is required), at install (with `storageMb` suggested) and later on its page: from 256 MB up to what the SD card has room for (keeping 2 GB free), and down to what its files use. For a plugin that keeps the owner's files, like a file share. An update keeps the owner's size. |
 | `volumes` | Folders of its data: `name` and `path` in the container (each path once). They survive updates. |
-| `usbDrive` | `path` where the chosen drive appears, `optional`. With the `usb-drive` permission. A chosen drive replaces a volume at the same path. The owner can encrypt the drive's files on the plugin's page; the plugin then gets the decrypted view at the same path, and needs nothing of its own for it. |
+| `usbDrive` | `path` where the chosen drive appears, `optional`. With the `usb-drive` permission. A chosen drive replaces a volume at the same path. |
+| `shares` | Lets the owner make shares for the plugin to offer (a file share, like Samba): `path` where they appear (each at `<path>/<id>`, like `/shares/s1`), `max` (default 8, at most 32), and `settings` asked for each share (no passwords, no `env`). The plugin starts with none. Each share has a `name`, a place fixed when it is made (RasBeacon's internal storage, or a folder on a USB drive with the `usb-drive` permission) and a quota; the owner can encrypt each one. See [Shares](#shares). Not with `usbDrive`. |
 | `env`, `command` | Fixed environment variables (one line each), and a command replacing the image's. |
 | `settings` | The form RasBeacon draws: `key`, `label`, `type` (`text`, `password`, `number`, `switch`, `select`), `help`, `default`, `required`, `options` (`value`, `label`), `min`, `max`, `unit`, `env` (the environment variable that gets the value), and `onlyWithDrive` (a setting about the USB drive, like a size limit: shown, and given to the plugin, only while a drive is chosen, else empty; needs `usbDrive`, and can't be `required`). Labels are at most 40 characters, help 300, units 20, option labels 60; option values are distinct. Passwords are kept with RasBeacon's secrets, exactly as typed, and never shown again. Values are one line, at most 1000 characters. The environment reaches Podman in a file only root can read (`--env-file`, deleted once the container started), never on its command line, so error messages and logs don't show it. |
 | `templates` | Files in `templates/` written into a volume before each start (`path` names a file inside a volume), filled in with Go's `text/template`: `{{.Settings.key}}`, `{{.Address}}`, `{{.Host}}`, `{{port 3000}}`, `{{bcrypt .Settings.password}}` (at most 10 times), `{{json .Settings.key}}`, `{{html .Settings.key}}`, `{{if}}` and `{{with}}`, and the comparisons `eq`, `ne`, `lt`, `le`, `gt`, `ge`, `and`, `or` and `not`. Everything else is refused when the plugin is opened: `range`, `define`, `template` and `block` can make filling in a template take hours, and variables (`{{$a := …}}`), `printf` and Go's other functions can build values large enough to make RasBeacon run out of memory. A filled-in file is at most 4 MB. `once` writes it only the first time, so changes the plugin makes are kept. RasBeacon stops the plugin before writing, and never writes through a symbolic link the plugin made: if a folder on the path is a link, the plugin doesn't start. |
@@ -198,6 +199,35 @@ hotspot), `{port:3000}` (the port on RasBeacon chosen for container port
 - Its volumes, its drive, and the devices its permissions give. No privileges,
   `no-new-privileges`, at most 512 processes.
 - Its output goes to its log (256 KB, in memory; its page shows the last 500 lines).
+
+### Shares
+
+A plugin with `shares` in its manifest gets, besides its own data, the
+shares the owner makes on its page. RasBeacon mounts each one at
+`<path>/<id>` and describes them all in one line of JSON in the
+`RASBEACON_SHARES` environment variable:
+
+```json
+[{"id":"s1","name":"Movies","path":"/shares/s1","quotaBytes":21474836480,"settings":{"readOnly":"false"}}]
+```
+
+- **On internal storage**, a share is a filesystem of its own, the quota's
+  size, set aside on the SD card in full: the quota is a hard limit
+  (writing fails when it is full; deleting works).
+- **On a USB drive**, a share is a folder on the drive. Nothing is set
+  aside, and files can be added or deleted on a computer while the drive
+  is out. The plugin should report `quotaBytes` as the share's size and
+  only what is left of it as free, measured against the files in the
+  folder: with more files than the quota, nothing is free (Samba does this
+  with its `dfree command`).
+- **Encrypted** shares come as their decrypted view; the plugin needs
+  nothing of its own for it. While a share's files are encrypted or
+  decrypted, the plugin is stopped.
+- A share whose drive isn't plugged in is left out of `RASBEACON_SHARES`
+  (and not mounted) until it is, when the plugin starts again.
+
+The plugin restarts when a share is added, changed or removed, so it reads
+`RASBEACON_SHARES` once, when it starts.
 
 ### Power
 

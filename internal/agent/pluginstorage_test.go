@@ -56,9 +56,9 @@ func TestPluginStorage_TheOwnersSizeIsUsedAndShown(t *testing.T) {
 	if !p.StorageAdjustable || p.StorageMB != 2048 {
 		t.Errorf("plugin = adjustable %v, %d MB; want adjustable, the manifest's 2048", p.StorageAdjustable, p.StorageMB)
 	}
-	// Nothing used yet: from 256 MB to the free space less 1 GB.
-	if p.StorageMinMB != 256 || p.StorageMaxMB != 9*1024 {
-		t.Errorf("range = %d to %d MB, want 256 to 9216", p.StorageMinMB, p.StorageMaxMB)
+	// Nothing used yet: from 256 MB to the free space less 2 GB.
+	if p.StorageMinMB != 256 || p.StorageMaxMB != 8*1024 {
+		t.Errorf("range = %d to %d MB, want 256 to 8192", p.StorageMinMB, p.StorageMaxMB)
 	}
 
 	// Growing: the data file grows while it is stopped, then it starts again.
@@ -119,8 +119,8 @@ func TestPluginStorage_Rules(t *testing.T) {
 	}{
 		{100, "at least 256 MB"},
 		{1024, "Its files use 1000 MB, so it needs at least 1.1 GB"},
-		// 2 GB now + 3 GB free - 1 GB kept free = 4 GB at most.
-		{5000, "room for at most 4 GB"},
+		// 2 GB now + 3 GB free - 2 GB kept free = 3 GB at most.
+		{5000, "room for at most 3 GB"},
 	} {
 		_, err := e.agent.UpdatePluginSettings(api.PluginSettingsRequest{ID: "adguard-home", StorageMB: c.mb})
 		if !errors.As(err, &invalid) || invalid.Field != "storageMb" || !strings.Contains(invalid.Message, c.want) {
@@ -159,7 +159,7 @@ func TestPluginStorage_ChosenAtInstallAndKeptByUpdates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !preview.StorageAdjustable || preview.StorageMB != 256 || preview.StorageMaxMB != 19*1024 {
+	if !preview.StorageAdjustable || preview.StorageMB != 256 || preview.StorageMaxMB != 18*1024 {
 		t.Errorf("preview = %+v", preview)
 	}
 	if _, err := e.agent.InstallPlugin(api.PluginInstallRequest{

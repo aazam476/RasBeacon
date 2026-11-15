@@ -43,6 +43,46 @@ func (a *Agent) keptDataFiles(id string) (data, owner string) {
 	return filepath.Join(dir, id+".img"), filepath.Join(dir, id+".key.json")
 }
 
+// keptShareFiles are where a removed plugin's shares are kept: the list
+// (all of them, those on drives too), and the files of those on internal
+// storage.
+func (a *Agent) keptShareFiles(id string) (list, files string) {
+	dir := a.paths.PluginKeptDir()
+	return filepath.Join(dir, id+".shares.json"), filepath.Join(dir, id+".shares")
+}
+
+// keepPluginShares moves a removed plugin's shares aside with its data.
+func (a *Agent) keepPluginShares(id string, shares []config.PluginShare) {
+	if len(shares) == 0 {
+		return
+	}
+	list, files := a.keptShareFiles(id)
+	if err := config.WriteJSON(list, shares, 0o600); err != nil {
+		slog.Warn("could not keep the plugin's shares", "plugin", id, "error", err)
+		return
+	}
+	_ = os.RemoveAll(files)
+	if err := os.Rename(filepath.Join(a.paths.PluginDir(id), "shares"), files); err != nil && !errors.Is(err, os.ErrNotExist) {
+		slog.Warn("could not keep the plugin's shares' files", "plugin", id, "error", err)
+	}
+}
+
+// restoreKeptShares gives a new install its kept shares back (with its
+// kept data, by the same rules): their files, and the list it returns.
+func (a *Agent) restoreKeptShares(id string) []config.PluginShare {
+	list, files := a.keptShareFiles(id)
+	var shares []config.PluginShare
+	if err := config.ReadJSON(list, &shares); err != nil {
+		return nil
+	}
+	if err := os.Rename(files, filepath.Join(a.paths.PluginDir(id), "shares")); err != nil && !errors.Is(err, os.ErrNotExist) {
+		slog.Warn("could not restore the plugin's shares' files", "plugin", id, "error", err)
+		return nil
+	}
+	_ = os.Remove(list)
+	return shares
+}
+
 // keepPluginData moves a plugin's data aside when it is removed, with its
 // name and the key it was signed with.
 func (a *Agent) keepPluginData(id string, owner keptDataOwner) {
@@ -111,6 +151,18 @@ func (a *Agent) restoreKeptData(id, publicKey string, useKeptData bool) {
 		return
 	}
 	_ = os.Remove(ownerFile)
+	if shares := a.restoreKeptShares(id); len(shares) > 0 {
+		a.mu.Lock()
+		err := a.savePluginConfig(id, func(p *config.InstalledPlugin) {
+			if len(p.Shares) == 0 {
+				p.Shares = shares
+			}
+		})
+		a.mu.Unlock()
+		if err != nil {
+			slog.Warn("could not restore the plugin's shares", "plugin", id, "error", err)
+		}
+	}
 	slog.Info("plugin's kept data restored", "plugin", id, "chosenByOwner", !sameAuthor)
 }
 
@@ -130,7 +182,17 @@ func (a *Agent) keptData() []api.PluginKept {
 		if name == "" {
 			name = id
 		}
-		kept = append(kept, api.PluginKept{ID: id, Name: name, Bytes: spaceUsed(info)})
+		bytes := spaceUsed(info)
+		_, files := a.keptShareFiles(id)
+		_ = filepath.WalkDir(files, func(_ string, d fs.DirEntry, err error) error {
+			if err == nil && !d.IsDir() {
+				if share, err := d.Info(); err == nil {
+					bytes += spaceUsed(share)
+				}
+			}
+			return nil
+		})
+		kept = append(kept, api.PluginKept{ID: id, Name: name, Bytes: bytes})
 	}
 	return kept
 }
@@ -158,6 +220,11 @@ func (a *Agent) ForgetKeptData(id string) error {
 		return err
 	}
 	_ = os.Remove(owner)
+	// Its shares go too: those on internal storage with their files;
+	// those on drives keep their folders.
+	list, files := a.keptShareFiles(id)
+	_ = os.Remove(list)
+	_ = os.RemoveAll(files)
 	slog.Info("kept plugin data deleted", "plugin", id)
 	return nil
 }

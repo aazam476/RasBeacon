@@ -24,9 +24,9 @@ import {
   StatRow,
   SwitchRow,
 } from '@/ui';
-import { EncryptionSection } from './EncryptionSection';
 import { InstallSheet } from './InstallSheet';
 import { PluginFields } from './PluginFields';
+import { SharesSection } from './SharesSection';
 import { InstallFromFile } from './PluginsScreen';
 import {
   byline,
@@ -101,7 +101,7 @@ function WorkingPluginPage({ plugin }: { plugin: Plugin }) {
       )}
 
       {!busy && <SettingsForm plugin={plugin} />}
-      <EncryptionSection plugin={plugin} />
+      <SharesSection plugin={plugin} />
 
       <PermissionsSection plugin={plugin} />
       <LogSection plugin={plugin} />

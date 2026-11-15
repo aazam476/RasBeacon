@@ -1,7 +1,7 @@
 import type { BaseIconName, Tone } from '@/ui';
 import { errorText, FieldErrors } from '@/data/errors';
 import { ApiError } from '@/data/real/api';
-import type { Plugin, PluginChoices, PluginPort, PluginSetting, PluginState } from '@/data/types';
+import type { Plugin, PluginChoices, PluginPort, PluginSetting, PluginShare, PluginState } from '@/data/types';
 
 /** A plugin's state in a word or two, and the badge color for it. */
 export const STATE_LABELS: Record<PluginState, { text: string; tone: Tone }> = {
@@ -139,6 +139,20 @@ export function numberNote(setting: Pick<PluginSetting, 'unit' | 'min' | 'max'>)
 /** "Version 1.2 · by RasBeacon" */
 export function byline(plugin: Pick<Plugin, 'version' | 'author'>): string {
   return plugin.author ? `Version ${plugin.version} · by ${plugin.author}` : `Version ${plugin.version}`;
+}
+
+/** "0.4 of 2 GB", or "Measuring…" before RasBeacon has added up its files. */
+export function shareUsage(share: PluginShare): string {
+  if (share.usedMb < 0) return 'Measuring…';
+  // Under a gigabyte in MB, so a few files don't read as "0".
+  const used = share.usedMb < 1024 ? `${share.usedMb} MB` : storageGbText(share.usedMb);
+  return `${used} of ${storageGbText(share.quotaMb)} GB`;
+}
+
+/** Where a share is: "Internal storage", or "TRAVEL › Movies". */
+export function sharePlace(share: PluginShare): string {
+  if (!share.drive) return 'Internal storage';
+  return `${share.driveLabel ?? 'USB drive'} › ${share.folder ?? ''}`;
 }
 
 /**

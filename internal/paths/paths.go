@@ -69,10 +69,21 @@ func (p Paths) PluginEnvFile(id string) string { return filepath.Join(p.PluginRu
 // DriveMountDir is where a USB drive is mounted for a plugin.
 func (p Paths) DriveMountDir(uuid string) string { return filepath.Join(p.RunDir(), "drives", uuid) }
 
-// DrivePlainDir is where an encrypted USB drive's files are opened (the
+// PluginShareImage is the file that holds a plugin's share on internal
+// storage (an ext4 filesystem, like its data).
+func (p Paths) PluginShareImage(id, share string) string {
+	return filepath.Join(p.PluginDir(id), "shares", share+".img")
+}
+
+// PluginShareMount is where a share on internal storage is mounted.
+func (p Paths) PluginShareMount(id, share string) string {
+	return filepath.Join(p.RunDir(), "plugin-shares", id, share)
+}
+
+// SharePlainDir is where an encrypted share's files are opened (the
 // decrypted view the plugin gets).
-func (p Paths) DrivePlainDir(uuid string) string {
-	return filepath.Join(p.RunDir(), "drives-open", uuid)
+func (p Paths) SharePlainDir(id, share string) string {
+	return filepath.Join(p.RunDir(), "shares-open", id, share)
 }
 
 // DevDir is /dev (I²C and GPIO devices for plugins).

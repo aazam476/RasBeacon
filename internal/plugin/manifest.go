@@ -86,6 +86,9 @@ type Manifest struct {
 	// USBDrive is where the drive the owner picks appears, with the
 	// usb-drive permission.
 	USBDrive *USBDrive `json:"usbDrive,omitempty"`
+	// Shares lets the owner make shares for the plugin to offer (Samba
+	// shares them on the network). Without it, the plugin has none.
+	Shares *Shares `json:"shares,omitempty"`
 	// Env are fixed environment variables.
 	Env map[string]string `json:"env,omitempty"`
 	// Command replaces the image's command, if set.
@@ -135,6 +138,36 @@ type USBDrive struct {
 	Optional bool `json:"optional,omitempty"`
 }
 
+// Shares are folders the owner makes for the plugin, each on RasBeacon's
+// internal storage or in a folder on a USB drive (with the usb-drive
+// permission), with a name and a quota. The plugin finds each in a folder
+// named after its ID under Path (/shares/s1), and all of them described in
+// the RASBEACON_SHARES environment variable (see docs/plugins.md). A
+// plugin has either Shares or USBDrive, not both.
+type Shares struct {
+	Path string `json:"path"`
+	// Max is how many shares the owner can make (default 8, at most 32).
+	Max int `json:"max,omitempty"`
+	// Settings are asked for each share, such as Samba's read-only
+	// switch. No passwords, and no env (they reach the plugin in
+	// RASBEACON_SHARES).
+	Settings []Setting `json:"settings,omitempty"`
+}
+
+// DefaultMaxShares and MaxShares bound Shares.Max.
+const (
+	DefaultMaxShares = 8
+	MaxShares        = 32
+)
+
+// MaxShareCount is how many shares the owner may make.
+func (s *Shares) MaxShareCount() int {
+	if s.Max == 0 {
+		return DefaultMaxShares
+	}
+	return s.Max
+}
+
 // Setting is one field of the plugin's settings form.
 type Setting struct {
 	Key   string `json:"key"`
@@ -153,11 +186,6 @@ type Setting struct {
 	Unit string   `json:"unit,omitempty"`
 	// Env is the environment variable that gets the value, if any.
 	Env string `json:"env,omitempty"`
-	// OnlyWithDrive: the setting is about the USB drive (Samba's size
-	// limit), so it is shown, and given to the plugin, only while one is
-	// chosen; without one the plugin gets it empty. Needs usbDrive, and
-	// can't be required.
-	OnlyWithDrive bool `json:"onlyWithDrive,omitempty"`
 }
 
 // Option is a choice of a select setting.
@@ -423,7 +451,9 @@ func (m *Manifest) checkPermissions() error {
 		}
 	}
 	// "!=" between two bools is true when exactly one of them is true.
-	if m.Has("usb-drive") != (m.USBDrive != nil) {
+	// usb-drive needs something to use a drive for: usbDrive, or shares
+	// (which can then be on USB drives too); usbDrive needs usb-drive.
+	if m.USBDrive != nil && !m.Has("usb-drive") || m.Has("usb-drive") && m.USBDrive == nil && m.Shares == nil {
 		return errors.New("usbDrive and the usb-drive permission go together")
 	}
 	return nil
@@ -495,6 +525,18 @@ func (m *Manifest) checkStorage() error {
 	if m.USBDrive != nil && !absolutePath(m.USBDrive.Path) {
 		return errors.New("usbDrive: path must be absolute")
 	}
+	if s := m.Shares; s != nil {
+		switch {
+		case m.USBDrive != nil:
+			return errors.New("shares and usbDrive can't go together")
+		case !absolutePath(s.Path):
+			return errors.New("shares: path must be absolute")
+		case paths[s.Path]:
+			return errors.New("shares: a volume has the same path")
+		case s.Max < 0 || s.Max > MaxShares:
+			return fmt.Errorf("shares: max must be from 1 to %d", MaxShares)
+		}
+	}
 	return nil
 }
 
@@ -514,13 +556,33 @@ func (m *Manifest) checkEnv() error {
 // checkSettings checks the settings form: keys, labels, types, choices,
 // limits and defaults.
 func (m *Manifest) checkSettings() error {
+	if err := checkSettingList(m.Settings, "setting"); err != nil {
+		return err
+	}
+	if m.Shares == nil {
+		return nil
+	}
+	// A share's settings reach the plugin in RASBEACON_SHARES, and are
+	// shown on the page with the share: no passwords, no variables.
+	for _, s := range m.Shares.Settings {
+		if s.Type == "password" || s.Env != "" {
+			return fmt.Errorf("shares setting %s: no passwords or env in a share's settings", s.Key)
+		}
+	}
+	return checkSettingList(m.Shares.Settings, "shares setting")
+}
+
+// checkSettingList checks one settings form (the plugin's, or each
+// share's): keys, labels, types, choices, limits and defaults. what names
+// the list in errors.
+func checkSettingList(settings []Setting, what string) error {
 	seen := map[string]bool{}
-	for _, s := range m.Settings {
+	for _, s := range settings {
 		if !keyPattern.MatchString(s.Key) || seen[s.Key] {
-			return fmt.Errorf("setting keys must be distinct words (%q)", s.Key)
+			return fmt.Errorf("%s keys must be distinct words (%q)", what, s.Key)
 		}
 		seen[s.Key] = true
-		field := "setting " + s.Key
+		field := what + " " + s.Key
 		if err := checkLine(field+": label", s.Label, maxLabelLength, true); err != nil {
 			return err
 		}
@@ -532,9 +594,6 @@ func (m *Manifest) checkSettings() error {
 		}
 		if s.Env != "" && !envPattern.MatchString(s.Env) {
 			return fmt.Errorf("%s: env %q must be uppercase letters, digits and _", field, s.Env)
-		}
-		if s.OnlyWithDrive && (m.USBDrive == nil || s.Required) {
-			return fmt.Errorf("%s: onlyWithDrive needs usbDrive, and can't be required", field)
 		}
 		switch s.Type {
 		case "text", "password", "switch":

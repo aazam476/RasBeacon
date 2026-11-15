@@ -308,9 +308,13 @@ export function pageSizeFor(screenWidth: number, screenHeight: number): PageSize
  * router named one the screen knows (`fields` maps the router's field names to the screen's
  * keys), otherwise a plain message.
  */
-export function screenError(error: unknown, fields: Record<string, string> = {}): Error {
+export function screenError(
+  error: unknown,
+  fields: Record<string, string> | ((field: string) => string | null) = {},
+): Error {
   if (error instanceof ApiError && error.field) {
-    const key = fields[error.field] ?? networkErrorKey(error.field);
+    const key =
+      (typeof fields === 'function' ? fields(error.field) : fields[error.field]) ?? networkErrorKey(error.field);
     if (key) return new FieldErrors({ [key]: error.message });
   }
   if (error instanceof Error) return error;
@@ -324,6 +328,16 @@ export function screenError(error: unknown, fields: Record<string, string> = {})
 export function networkErrorKey(field: string): string | null {
   const match = /^networks\.(\d+)(\.[\w.]+)?$/.exec(field);
   return match ? `networks.${match[1]}` : null;
+}
+
+/**
+ * The field keys of a share's form, as the router names them; its settings (settings.<key>) come
+ * through as they are.
+ */
+export function shareFields(field: string): string | null {
+  return ['name', 'drive', 'folder', 'quotaMb', 'share'].includes(field) || field.startsWith('settings.')
+    ? field
+    : null;
 }
 
 /** Field names of the forms whose router names are the same as the screen's keys. */

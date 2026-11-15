@@ -43,10 +43,8 @@ export function PluginFields({
   const setPort = (key: string, value: string) => onChange({ ...draft, ports: { ...draft.ports, [key]: value } });
   const setSetting = (key: string, value: string) =>
     onChange({ ...draft, settings: { ...draft.settings, [key]: value } });
-  // Settings about the drive (a size limit) only while one is chosen; the internal storage's size
-  // only while its files are there. One size to fill in either way: required on RasBeacon's own
-  // storage, which has to set the space aside, and optional on a drive.
-  const shownSettings = settings.filter((setting) => !setting.onlyWithDrive || draft.drive !== '');
+  // The internal storage's size only while its files are there (no USB drive chosen), where it is
+  // required: RasBeacon has to set the space aside.
   const onInternalStorage = !usesDrive || draft.drive === '';
 
   return (
@@ -73,9 +71,9 @@ export function PluginFields({
         </Section>
       )}
 
-      {shownSettings.length > 0 && (
+      {settings.length > 0 && (
         <Section level={level} title="Settings">
-          {shownSettings.map((setting) => (
+          {settings.map((setting) => (
             <SettingField
               key={setting.key}
               setting={setting}
@@ -156,7 +154,7 @@ interface SettingFieldProps {
 }
 
 /** One setting of a plugin, as the field its type calls for: a switch, a choice, a number or text. */
-function SettingField({ setting, value, onChange, error }: SettingFieldProps) {
+export function SettingField({ setting, value, onChange, error }: SettingFieldProps) {
   const label = setting.unit ? `${setting.label} (${setting.unit})` : setting.label;
   switch (setting.type) {
     case 'switch':

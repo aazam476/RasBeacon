@@ -1,40 +1,59 @@
 // Plugins: choosing the size of a plugin's data on RasBeacon's own storage, for a plugin whose
-// manifest allows it (the demo's Samba), and seeing it in System → Storage.
+// manifest allows it (a test plugin here, File Store, which can also keep its files on a USB
+// drive), and seeing it in System → Storage.
 import { screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { Pages } from '@/App';
 import type { MockRouter } from '@/data/demo/mockData';
-import { createMockPlugins, definitionOf, previewOf } from '@/data/demo/plugins';
+import {
+  createMockPlugins,
+  definitionOf,
+  installedPlugin,
+  previewOf,
+  type PluginDefinition,
+} from '@/data/demo/plugins';
 import { PluginsScreen } from '@/screens/plugins/PluginsScreen';
 import { SystemScreen } from '@/screens/system/SystemScreen';
 import { fakeDevice, renderScreen, section } from '../render';
 
-/** The sample router with Samba's files on RasBeacon's internal storage (no USB drive). */
-function sambaOnInternalStorage(router: MockRouter) {
-  router.plugins.plugins.find((p) => p.id === 'samba')!.drive = undefined;
+/** A plugin whose data size the owner chooses (2 GB suggested), on internal storage or a drive. */
+const FILE_STORE: PluginDefinition = {
+  ...definitionOf('trip-notes')!,
+  id: 'file-store',
+  name: 'File Store',
+  permissions: ['usb-drive'],
+  usesDrive: true,
+  driveOptional: true,
+  storageMb: 2048,
+  storageAdjustable: true,
+  shares: undefined,
+};
+
+/** The sample router with File Store installed: on a USB drive, or on internal storage. */
+function withFileStore(drive?: string) {
+  return (router: MockRouter) => {
+    router.plugins.plugins.push(
+      installedPlugin(FILE_STORE, '10.89.0.9', { ports: {}, settings: {}, drive: drive ?? '' }, 'running'),
+    );
+  };
 }
 
-/** The install sheet's preview for Samba, as a new install (Samba isn't installed). */
-function sambaPreview() {
-  const state = createMockPlugins();
-  state.plugins = state.plugins.filter((p) => p.id !== 'samba');
-  return previewOf(definitionOf('samba')!, state, 'staging-9');
+/** The install sheet's preview for File Store, as a new install. */
+function fileStorePreview() {
+  return previewOf(FILE_STORE, createMockPlugins(), 'staging-9');
 }
 
 describe('the size of a plugin’s data', () => {
   it('is chosen when installing, in GB, with the sizes it may have', async () => {
-    const device = fakeDevice(undefined, { previewPluginFile: async () => sambaPreview() });
+    const device = fakeDevice(undefined, { previewPluginFile: async () => fileStorePreview() });
     const { user } = renderScreen(<PluginsScreen />, device, '/plugins');
-    await user.upload(screen.getByLabelText('Install from a file'), new File(['x'], 'samba.rba'));
-    const sheet = within(await screen.findByRole('dialog', { name: 'Install Samba' }));
+    await user.upload(screen.getByLabelText('Install from a file'), new File(['x'], 'file-store.rba'));
+    const sheet = within(await screen.findByRole('dialog', { name: 'Install File Store' }));
     const size = sheet.getByRole('textbox', { name: /^Size/ }) as HTMLInputElement;
     expect(size.value).toBe('2');
     expect(sheet.getByText('From 0.3 to 6 GB.')).toBeTruthy();
     await user.clear(size);
     await user.type(size, '3.5');
-    // Without a drive, the share is on RasBeacon's own storage.
-    await user.selectOptions(sheet.getByLabelText('Drive'), 'RasBeacon internal storage');
-    await user.type(sheet.getByLabelText('Password'), 'harbor-sunrise');
     await user.click(sheet.getByRole('button', { name: 'Install' }));
     expect(device.installPlugin).toHaveBeenCalledWith(
       'staging-9',
@@ -45,13 +64,13 @@ describe('the size of a plugin’s data', () => {
 
   it('isn’t asked for by an update, which keeps it', async () => {
     const state = createMockPlugins();
-    const update = previewOf(definitionOf('samba')!, state, 'staging-10');
+    state.plugins.push(installedPlugin(FILE_STORE, '10.89.0.9', { ports: {}, settings: {}, drive: '' }, 'running'));
+    const update = previewOf(FILE_STORE, state, 'staging-10');
     const device = fakeDevice(undefined, { previewPluginFile: async () => update });
     const { user } = renderScreen(<PluginsScreen />, device, '/plugins');
-    await user.upload(screen.getByLabelText('Install from a file'), new File(['x'], 'samba.rba'));
-    const sheet = within(await screen.findByRole('dialog', { name: 'Update Samba' }));
-    // The storage size (not Samba's size limit, which is about its drive).
-    expect(sheet.queryByRole('textbox', { name: /^Size(?! limit)/ })).toBeNull();
+    await user.upload(screen.getByLabelText('Install from a file'), new File(['x'], 'file-store.rba'));
+    const sheet = within(await screen.findByRole('dialog', { name: 'Update File Store' }));
+    expect(sheet.queryByRole('textbox', { name: /^Size/ })).toBeNull();
     await user.click(sheet.getByRole('button', { name: 'Update' }));
     expect(device.installPlugin).toHaveBeenCalledWith(
       'staging-10',
@@ -61,8 +80,8 @@ describe('the size of a plugin’s data', () => {
   });
 
   it('changes on the plugin’s page, and says what its files use', async () => {
-    const device = fakeDevice(sambaOnInternalStorage);
-    const { user } = renderScreen(<Pages />, device, '/plugins/samba');
+    const device = fakeDevice(withFileStore());
+    const { user } = renderScreen(<Pages />, device, '/plugins/file-store');
     const storage = within(section('RasBeacon internal storage'));
     expect(storage.getByText(/Its files use 0.4 GB now/)).toBeTruthy();
     const size = storage.getByRole('textbox', { name: /^Size/ });
@@ -70,13 +89,13 @@ describe('the size of a plugin’s data', () => {
     // A comma works as the decimal point too.
     await user.type(size, '1,5');
     await user.click(screen.getByRole('button', { name: 'Save' }));
-    expect(device.savePluginSettings).toHaveBeenCalledWith('samba', expect.objectContaining({ storageMb: 1536 }));
+    expect(device.savePluginSettings).toHaveBeenCalledWith('file-store', expect.objectContaining({ storageMb: 1536 }));
   });
 
   // On RasBeacon's internal storage the size is required: the plugin's files are kept in it.
   it('needs a size on internal storage, and says so under the field', async () => {
-    const device = fakeDevice(sambaOnInternalStorage);
-    const { user } = renderScreen(<Pages />, device, '/plugins/samba');
+    const device = fakeDevice(withFileStore());
+    const { user } = renderScreen(<Pages />, device, '/plugins/file-store');
     const storage = within(section('RasBeacon internal storage'));
     const size = storage.getByRole('textbox', { name: /^Size/ });
     await user.clear(size);
@@ -88,23 +107,18 @@ describe('the size of a plugin’s data', () => {
     expect(device.savePluginSettings).not.toHaveBeenCalled();
   });
 
-  // On a USB drive the files are on the drive: no internal size to give, and the plugin's own
-  // setting about the drive (Samba's optional size limit) shows instead.
-  it('is left out with a USB drive, where the drive’s size limit shows instead', async () => {
-    // The demo's Samba keeps its files on a USB drive, and has the drive's size limit.
-    const device = fakeDevice();
-    const { user } = renderScreen(<Pages />, device, '/plugins/samba');
+  // On a USB drive the files are on the drive: no internal size to give.
+  it('is left out with a USB drive, and comes back with internal storage', async () => {
+    const device = fakeDevice(withFileStore('6A1F-22C9'));
+    const { user } = renderScreen(<Pages />, device, '/plugins/file-store');
     expect(screen.queryByRole('heading', { name: 'RasBeacon internal storage' })).toBeNull();
-    expect(screen.getByLabelText(/^Size limit/)).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Save' }));
     expect(device.savePluginSettings).toHaveBeenCalledWith(
-      'samba',
+      'file-store',
       expect.not.objectContaining({ storageMb: expect.anything() }),
     );
-    // Choosing internal storage swaps them.
-    await user.selectOptions(await screen.findByLabelText('Drive'), 'RasBeacon internal storage');
+    await user.selectOptions(await screen.findByLabelText('Drive', { exact: true }), 'RasBeacon internal storage');
     expect(screen.getByRole('heading', { name: 'RasBeacon internal storage' })).toBeTruthy();
-    expect(screen.queryByLabelText(/^Size limit/)).toBeNull();
   });
 
   it('has no field for a plugin with a fixed size', () => {
@@ -115,12 +129,12 @@ describe('the size of a plugin’s data', () => {
 
   it('shows without a limit when RasBeacon didn’t give one', () => {
     const device = fakeDevice((router) => {
-      sambaOnInternalStorage(router);
-      const samba = router.plugins.plugins.find((p) => p.id === 'samba')!;
-      samba.storageMaxMb = undefined;
-      samba.storageUsedMb = undefined;
+      withFileStore()(router);
+      const store = router.plugins.plugins.find((p) => p.id === 'file-store')!;
+      store.storageMaxMb = undefined;
+      store.storageUsedMb = undefined;
     });
-    renderScreen(<Pages />, device, '/plugins/samba');
+    renderScreen(<Pages />, device, '/plugins/file-store');
     expect(within(section('RasBeacon internal storage')).getByText('At least 0.5 GB.')).toBeTruthy();
   });
 });

@@ -414,7 +414,7 @@ export interface PluginStorageRange {
   storageAdjustable?: boolean;
   /** The smallest: 256 MB, or what its files use with some room to spare. */
   storageMinMb?: number;
-  /** The largest: what the SD card has room for, keeping 1 GB free. */
+  /** The largest: what the SD card has room for, keeping 2 GB free. */
   storageMaxMb?: number;
   /** What its files use now (absent: none yet, or not known). */
   storageUsedMb?: number;
@@ -864,8 +864,6 @@ export interface PluginSetting {
   }[];
   min?: number;
   max?: number;
-  /** About the USB drive (like a size limit): shown only while one is chosen. */
-  onlyWithDrive?: boolean;
   value: string;
   hasValue?: boolean;
 }
@@ -882,7 +880,55 @@ export type PluginState =
   /** Paused while its drive's files are encrypted or decrypted (the message counts them). */
   | 'converting';
 
-/** Whether a plugin's USB drive has its files encrypted (POST /plugins/encryption). */
+/** A plugin's shares (Samba's, say), and what a new one may be. */
+export interface PluginShares {
+  /** How many it may have; `onDrives`: they can be on USB drives too. */
+  max: number;
+  onDrives: boolean;
+  /** The per-share settings a new share starts with. */
+  settings: PluginSetting[];
+  /** The largest quota a new share on internal storage may have now (the SD card's free space less 2 GB). */
+  newInternalMaxMb: number;
+  list: PluginShare[];
+}
+
+/** One share: a name, a place that never changes, and a quota (sizes in MB, 1 GB = 1024 MB). */
+export interface PluginShare {
+  id: string;
+  name: string;
+  /** The USB drive's UUID; absent for RasBeacon's internal storage. */
+  drive?: string;
+  driveLabel?: string;
+  /** Its folder on the drive, from the drive's top. */
+  folder?: string;
+  /** Its drive isn't plugged in: the plugin doesn't offer it for now. */
+  driveMissing?: boolean;
+  quotaMb: number;
+  /** What its files use (-1 until measured); more than the quota after files were added on a computer. */
+  usedMb: number;
+  minQuotaMb: number;
+  maxQuotaMb: number;
+  settings: PluginSetting[];
+  encryption: PluginEncryption;
+}
+
+/** A new share: on internal storage (no `drive`), or in a folder on a USB drive. */
+export interface NewPluginShare {
+  name: string;
+  drive: string;
+  folder: string;
+  quotaMb: number;
+  settings: Record<string, string>;
+}
+
+/** What can change on a share: never where it is. */
+export interface PluginShareChanges {
+  name: string;
+  quotaMb: number;
+  settings: Record<string, string>;
+}
+
+/** Whether a share's files are encrypted (POST /plugins/encryption). */
 export interface PluginEncryption {
   state: 'off' | 'encrypting' | 'on' | 'decrypting';
   /** Files moved so far while encrypting or decrypting (no total yet: still counting). */
@@ -892,7 +938,7 @@ export interface PluginEncryption {
   recoveryKeySaved?: boolean;
 }
 
-/** A drive's recovery key as a text file to save. */
+/** A share's recovery key as a text file to save. */
 export interface PluginRecoveryKey {
   fileName: string;
   text: string;
@@ -930,8 +976,8 @@ export interface Plugin extends PluginStorageRange {
   memoryMb: number;
   cpus: number;
   storageMb: number;
-  /** Its drive's encryption, for a plugin with a chosen USB drive. */
-  encryption?: PluginEncryption;
+  /** Its shares, for a plugin that has them (Samba). */
+  shares?: PluginShares;
   /** A newer version in the catalog. */
   updateVersion?: string;
   /** The update installs from the catalog (signed plugins only; unsigned ones update from a file). */

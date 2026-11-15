@@ -219,11 +219,12 @@ since their image has one copy of the system.
 - **Plugins:** the **Plugins** page adds features like ad blocking (AdGuard
   Home), file sharing (Samba) or the Argon ONE V2 case's fan. Each runs on
   its own with only the permissions you allow, and reaches the internet
-  through the VPN. Some plugins, like Samba, let you choose how much of
-  RasBeacon's internal storage they set aside (System → Storage shows each
-  plugin's part). A plugin's USB drive can have its files **encrypted** on
-  the plugin's page, so someone who pulls the drive out can't read them;
-  save the recovery key it offers. See [docs/plugins.md](docs/plugins.md).
+  through the VPN. Samba offers **shares** you add on its page, each on
+  RasBeacon's internal storage or in a folder on a USB drive, with a quota
+  (System → Storage shows what plugins set aside). A share's files can be
+  **encrypted**, so someone who pulls out the drive or the SD card can't
+  read them; save the recovery key it offers. See
+  [docs/plugins.md](docs/plugins.md).
 - **A welcome page** for visitors (your own captive portal): Guests →
   **Welcome page**. Devices on the guest network see your message and house
   rules, and type an access code if you set one, before they get the

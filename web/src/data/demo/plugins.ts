@@ -1,4 +1,5 @@
 import type {
+  PluginShare,
   Plugin,
   PluginCatalogEntry,
   PluginChoices,
@@ -70,7 +71,7 @@ export const PERMISSIONS: Record<string, PluginPermission> = {
 const BUILT_IN = 'aazam476/RasBeacon-plugins';
 
 /** Everything the demo knows about a plugin, installed or not. */
-interface PluginDefinition {
+export interface PluginDefinition {
   id: string;
   file: string;
   source: string;
@@ -95,6 +96,8 @@ interface PluginDefinition {
   storageMb: number;
   /** The owner may choose the size of its data (with `storageMb` suggested). */
   storageAdjustable?: boolean;
+  /** It offers shares the owner makes (Samba): how many, and each one's settings. */
+  shares?: { max: number; settings: PluginSetting[] };
   /** Bytes still to download when installing (the image from its registry). */
   downloadSize: number;
   size: number;
@@ -160,39 +163,38 @@ export const PLUGIN_DEFINITIONS: PluginDefinition[] = [
     source: BUILT_IN,
     name: 'Samba',
     version: '4.20.5-1',
-    description: 'Shares a folder, or a USB drive, with the computers on your hotspot.',
+    description: 'Shares folders with the computers on your hotspot, on RasBeacon or on USB drives.',
     author: 'RasBeacon',
     icon: PLUGIN_ICONS.samba,
     readme:
-      "Shares files with the Windows, macOS and Linux computers on your hotspot.\n\nPick a **USB drive** to share it (exFAT, FAT32, NTFS or ext4), or none to use\n2 GB of RasBeacon's own storage. Nothing on the drive can run on RasBeacon.\n\n- **Mac:** Finder → Go → Connect to Server, `smb://<RasBeacon's address>`.\n- **Windows:** File Explorer, `\\\\<RasBeacon's address>` (Windows needs port\n  445).\n\nGuests can't reach it.",
+      "Shares folders with the Windows, macOS and Linux computers on your hotspot.\n\nAdd **shares** on its page: each on RasBeacon's internal storage or in a folder on a\n**USB drive** (exFAT, FAT32, NTFS or ext4), with a quota. Nothing on a drive can run on\nRasBeacon.\n\n- **Mac:** Finder → Go → Connect to Server, `smb://<RasBeacon's address>`.\n- **Windows:** File Explorer, `\\\\<RasBeacon's address>`.\n\nGuests can't reach it.",
     signed: true,
     keyId: '7F3A 9C2E 4B1D 7162',
     permissions: ['usb-drive'],
     ports: [{ key: 'tcp/445', name: 'File sharing (SMB)', protocol: 'tcp', container: 445, host: 445 }],
     settings: [
-      { key: 'share', label: 'Share name', type: 'text', value: 'Files', required: true },
       { key: 'username', label: 'Username', type: 'text', value: 'traveler', required: true },
       { key: 'password', label: 'Password', type: 'password', value: '', required: true },
-      {
-        key: 'sizeLimit',
-        label: 'Size limit',
-        type: 'number',
-        unit: 'GB',
-        min: 1,
-        max: 16384,
-        value: '',
-        onlyWithDrive: true,
-        help: 'Optional. Computers see the share as this big, and Finder and File Explorer don’t copy more onto it. Below what the files use, nothing is deleted: the share shows as full.',
-      },
     ],
-    usesDrive: true,
-    driveOptional: true,
-    afterInstall: 'Connect to smb://{host} (port {port:445}) and log in with the username and password you chose.',
-    metricLabels: ['Connected', 'Free space'],
+    usesDrive: false,
+    shares: {
+      max: 8,
+      settings: [
+        {
+          key: 'readOnly',
+          label: 'Read-only',
+          type: 'switch',
+          value: 'false',
+          help: 'Computers can open its files but not change them.',
+        },
+      ],
+    },
+    afterInstall:
+      'Add a share below, then connect to smb://{host} and log in with the username and password you chose.',
+    metricLabels: ['Connected', 'Shares'],
     memoryMb: 128,
     cpus: 0.5,
-    storageMb: 2048,
-    storageAdjustable: true,
+    storageMb: 16,
     downloadSize: 0,
     size: 18_900_000,
     boards: [],
@@ -313,8 +315,13 @@ export function installedPlugin(
     usesDrive: definition.usesDrive,
     driveOptional: definition.driveOptional,
     drive: choices.drive || undefined,
-    // A plugin with a chosen drive can encrypt it.
-    encryption: choices.drive ? { state: 'off' } : undefined,
+    shares: definition.shares && {
+      max: definition.shares.max,
+      onDrives: definition.permissions.includes('usb-drive'),
+      settings: definition.shares.settings,
+      newInternalMaxMb: DEMO_STORAGE_MAX_MB,
+      list: [],
+    },
     afterInstall: expand(definition.afterInstall, { address, ports }),
     metrics:
       state === 'running' ? demoMetrics(definition.id) : definition.metricLabels.map((label) => ({ label, value: '' })),
@@ -367,9 +374,10 @@ export function createMockPlugins(): PluginsState {
   const samba = installedPlugin(
     definitionOf('samba')!,
     '10.89.0.3',
-    { ports: {}, settings: { password: 'x' }, drive: '6A1F-22C9' },
+    { ports: {}, settings: { password: 'x' }, drive: '' },
     'stopped',
   );
+  samba.shares!.list = DEMO_SHARES.map((share) => ({ ...share, settings: share.settings.map((s) => ({ ...s })) }));
   return {
     plugins: [adguard, samba],
     sources: [
@@ -471,7 +479,47 @@ export function previewOf(
   };
 }
 
-/** The demo SD card's room for a plugin's data (as the router works it out: free space less 1 GB). */
+/** The demo Samba's shares: one on internal storage, and two on the TRAVEL stick (one over its quota, one encrypted). */
+const DEMO_SHARES: PluginShare[] = [
+  {
+    id: 's1',
+    name: 'Files',
+    quotaMb: 2048,
+    usedMb: 412,
+    minQuotaMb: 476,
+    maxQuotaMb: 6 * 1024 + 2048,
+    settings: [{ key: 'readOnly', label: 'Read-only', type: 'switch', value: 'false' }],
+    encryption: { state: 'off' },
+  },
+  {
+    id: 's2',
+    name: 'Movies',
+    drive: '6A1F-22C9',
+    driveLabel: 'TRAVEL',
+    folder: 'Movies',
+    quotaMb: 20 * 1024,
+    usedMb: 22 * 1024,
+    minQuotaMb: 22 * 1024,
+    maxQuotaMb: 40 * 1024,
+    settings: [{ key: 'readOnly', label: 'Read-only', type: 'switch', value: 'false' }],
+    encryption: { state: 'off' },
+  },
+  {
+    id: 's3',
+    name: 'Passports',
+    drive: '6A1F-22C9',
+    driveLabel: 'TRAVEL',
+    folder: 'Documents/Passports',
+    quotaMb: 1024,
+    usedMb: 38,
+    minQuotaMb: 256,
+    maxQuotaMb: 19 * 1024,
+    settings: [{ key: 'readOnly', label: 'Read-only', type: 'switch', value: 'true' }],
+    encryption: { state: 'on', recoveryKeySaved: false },
+  },
+];
+
+/** The demo SD card's room for a plugin's data (as the router works it out: free space less 2 GB). */
 export const DEMO_STORAGE_MAX_MB = 6 * 1024;
 
 /**

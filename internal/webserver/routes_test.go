@@ -23,6 +23,7 @@ var rbdOnlyRoutes = []string{
 	// Streamed or slow: rbweb has its own handlers (see Handler).
 	"POST /plugins/upload", "POST /plugins/catalog", "POST /plugins/catalog/download", "POST /plugins/update",
 	"POST /plugins/start", "POST /plugins/stop", "POST /plugins/remove", "PUT /plugins/settings",
+	"POST /plugins/shares/add", "PUT /plugins/shares", "POST /plugins/shares/remove",
 	"GET /system/backup/{token}", "POST /system/restore/upload", "POST /system/restore",
 	// The welcome page's own server (see WelcomeHandler).
 	"GET /welcome/page", "POST /welcome/accept",

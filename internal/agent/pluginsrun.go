@@ -71,10 +71,10 @@ type pluginRunPlan struct {
 	templates []pendingTemplate
 	values    plugin.Values
 	drive     string
-	// driveKey opens the drive's encrypted files ("" when not encrypted).
-	driveKey string
-	spec     plugin.RunSpec
-	power    bool
+	// shares are its shares, as they are mounted in the container.
+	shares []shareRun
+	spec   plugin.RunSpec
+	power  bool
 }
 
 // pendingTemplate is one of the plugin's templates, to fill in and write
@@ -99,12 +99,8 @@ func (a *Agent) planPluginRun(id string) (*pluginRunPlan, error) {
 	if m == nil {
 		return nil, errors.New("its files can't be read")
 	}
-	// Half of the drive's files moved: it would see some of them only.
-	switch p.Encryption {
-	case encryptionEncrypting:
-		return nil, errors.New("its drive's files are only partly encrypted; turn encryption on again to finish")
-	case encryptionDecrypting:
-		return nil, errors.New("its drive's files are only partly decrypted; turn encryption off again to finish")
+	if err := halfConverted(p.Shares); err != nil {
+		return nil, err
 	}
 	plan := &pluginRunPlan{
 		id: id, manifest: m, storageMB: pluginStorageMB(m, p), drive: p.Drive, power: m.Has("power-button"),
@@ -146,11 +142,10 @@ func (a *Agent) planPluginRun(id string) (*pluginRunPlan, error) {
 		spec.Mounts = append(spec.Mounts, plugin.Mount{Host: filepath.Join(dataMount, v.Name), Container: v.Path})
 	}
 	if p.Drive != "" && m.USBDrive != nil {
-		// With its files encrypted, the plugin gets the opened view.
-		spec.Mounts = append(spec.Mounts, plugin.Mount{Host: a.driveHostDir(p), Container: m.USBDrive.Path})
-		if p.Encryption == encryptionOn {
-			plan.driveKey = a.secrets.DriveKeys[p.Drive]
-		}
+		spec.Mounts = append(spec.Mounts, plugin.Mount{Host: a.paths.DriveMountDir(p.Drive), Container: m.USBDrive.Path})
+	}
+	if m.Shares != nil {
+		a.planShares(plan, &spec, p)
 	}
 	if plan.power {
 		env["RASBEACON_SOCKET"] = "/run/rasbeacon/rbd.sock"
@@ -442,14 +437,10 @@ func (a *Agent) preparePluginRun(plan *pluginRunPlan) error {
 			}
 			slog.Warn("the plugin's USB drive isn't there; starting without it", "plugin", plan.id, "error", err)
 			plan.spec.Mounts = removeMount(plan.spec.Mounts, a.paths.DriveMountDir(plan.drive))
-			plan.spec.Mounts = removeMount(plan.spec.Mounts, a.paths.DrivePlainDir(plan.drive))
-		} else if plan.driveKey != "" {
-			// Never the encrypted files themselves: if they can't be
-			// opened, the plugin doesn't start.
-			if err := a.openEncryptedFolder(plan.drive, plan.driveKey); err != nil {
-				return err
-			}
 		}
+	}
+	if err := a.prepareShares(plan); err != nil {
+		return err
 	}
 	if plan.power {
 		if err := a.openPowerSocket(plan.id); err != nil {
@@ -473,8 +464,13 @@ func removeMount(mounts []plugin.Mount, host string) []plugin.Mount {
 // mountPluginData makes (or grows) the plugin's data file and mounts it.
 // The file has a fixed size, so a plugin can't fill the SD card.
 func (a *Agent) mountPluginData(id string, storageMB int) error {
+	return a.mountImage(filepath.Join(a.paths.PluginDir(id), pluginDataImage), a.pluginDataMount(id), storageMB)
+}
+
+// mountImage makes (or grows) a storage file holding an ext4 filesystem
+// (a plugin's data, or a share on internal storage) and mounts it.
+func (a *Agent) mountImage(file, mount string, storageMB int) error {
 	r := a.plugins.runner
-	mount := a.pluginDataMount(id)
 	// mountpoint -q succeeds (no error) when something is mounted there.
 	if _, err := r.Run("mountpoint", "-q", mount); err == nil {
 		return nil // already mounted
@@ -482,7 +478,9 @@ func (a *Agent) mountPluginData(id string, storageMB int) error {
 	if err := os.MkdirAll(mount, 0o755); err != nil {
 		return err
 	}
-	file := filepath.Join(a.paths.PluginDir(id), pluginDataImage)
+	if err := os.MkdirAll(filepath.Dir(file), 0o700); err != nil {
+		return err
+	}
 	size := strconv.Itoa(storageMB) + "M"
 	info, err := os.Stat(file)
 	switch {
@@ -558,6 +556,7 @@ func (a *Agent) stopPluginContainer(id string) {
 	drive := a.cfg.Plugins.Installed[id].Drive
 	a.mu.Unlock()
 	a.releaseDrive(drive)
+	a.releaseShares(id)
 	a.closePowerSocket(id)
 }
 
@@ -902,5 +901,6 @@ func (a *Agent) stopAllPlugins() {
 	for id, p := range a.cfg.Plugins.Installed {
 		_, _ = a.plugins.runner.Run("umount", a.pluginDataMount(id))
 		a.releaseDrive(p.Drive)
+		a.releaseSharesOf(id, p.Shares)
 	}
 }

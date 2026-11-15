@@ -28,10 +28,6 @@ import (
 	"rasbeacon/internal/plugin"
 )
 
-// pluginStorageKeepFreeMB is what the SD card keeps free when the owner
-// makes a plugin's data bigger: room for settings, logs and updates.
-const pluginStorageKeepFreeMB = 1024
-
 // pluginStorageMB is the size of a plugin's data: the owner's choice when
 // the manifest allows one, else the manifest's.
 func pluginStorageMB(m *plugin.Manifest, p config.InstalledPlugin) int {
@@ -59,7 +55,13 @@ func (a *Agent) pluginDataFileMB(id string) int {
 // from the filesystem's own counts (dumpe2fs -h), which works whether it
 // is mounted or not. 0: no data file yet, or the counts can't be read.
 func (a *Agent) pluginDataUsedMB(id string) int {
-	file := a.pluginDataFile(id)
+	return a.imageUsedMB(a.pluginDataFile(id))
+}
+
+// imageUsedMB is what the files use in a storage file (a plugin's data or
+// a share), from the filesystem's own counts (dumpe2fs -h), which works
+// whether it is mounted or not. 0: no file, or the counts can't be read.
+func (a *Agent) imageUsedMB(file string) int {
 	if _, err := os.Stat(file); err != nil {
 		return 0
 	}
@@ -114,7 +116,7 @@ func (a *Agent) pluginStorageRange(id string) api.PluginStorage {
 	// kept free for RasBeacon.
 	largest := plugin.MaxStorageMB
 	if free, err := a.diskFree(a.paths.DataDir()); err == nil {
-		largest = current + int(free>>20) - pluginStorageKeepFreeMB
+		largest = current + int(free>>20) - internalHeadroomMB
 	}
 	storage.StorageMaxMB = min(plugin.MaxStorageMB, max(largest, current, storage.StorageMinMB))
 	return storage
@@ -169,7 +171,17 @@ func sizeText(mb int) string {
 // this size when the plugin starts. Called without a.mu, while the plugin
 // is busy (beginPluginWork).
 func (a *Agent) resizePluginData(id string, storageMB int) error {
-	file := a.pluginDataFile(id)
+	_, _ = a.plugins.runner.Run("podman", "rm", "--force", "--ignore", "--time", "10", plugin.ContainerName(id))
+	return a.resizeImage(a.pluginDataFile(id), a.pluginDataMount(id), storageMB)
+}
+
+// resizeImage makes a storage file storageMB big, unmounting it first
+// (what used it must be stopped). Growing adds space to the file and the
+// filesystem; shrinking makes the filesystem smaller first (resize2fs
+// refuses if the files don't fit, and then nothing changed), then gives
+// the end of the file back to the SD card. A file not made yet is left:
+// it is made at the new size when first mounted.
+func (a *Agent) resizeImage(file, mount string, storageMB int) error {
 	info, err := os.Stat(file)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
@@ -181,8 +193,7 @@ func (a *Agent) resizePluginData(id string, storageMB int) error {
 		return nil
 	}
 	r := a.plugins.runner
-	_, _ = r.Run("podman", "rm", "--force", "--ignore", "--time", "10", plugin.ContainerName(id))
-	a.unmountPluginData(id)
+	_, _ = r.Run("umount", mount)
 	// resize2fs works only on a filesystem just checked. -p fixes what is
 	// safe to fix; its exit code says whether it fixed anything, so it
 	// isn't an error here.
@@ -209,13 +220,17 @@ func (a *Agent) pluginStorageUse() ([]api.StoragePlugin, uint64) {
 	plugins := []api.StoragePlugin{}
 	var total uint64
 	for _, id := range a.pluginIDs() {
+		// What its files really take on the card (their blocks), which
+		// for a reserved file is its size: its data, and its shares on
+		// internal storage.
+		bytes := a.shareStorageBytes(id)
 		var st syscall.Stat_t
-		if err := syscall.Stat(a.pluginDataFile(id), &st); err != nil {
+		if err := syscall.Stat(a.pluginDataFile(id), &st); err == nil {
+			bytes += uint64(st.Blocks) * 512
+		}
+		if bytes == 0 {
 			continue
 		}
-		// What the file really takes on the card (its blocks), which for
-		// a reserved file is its size.
-		bytes := uint64(st.Blocks) * 512
 		total += bytes
 		plugins = append(plugins, api.StoragePlugin{Name: a.pluginName(id), GB: float64(bytes) / gb})
 	}

@@ -27,6 +27,8 @@ import type {
   Plugin,
   PluginChoices,
   PluginPreview,
+  PluginShare,
+  PluginShares,
   Radio,
   SavedNetwork,
   UpdateLogLine,
@@ -94,7 +96,27 @@ function nowIso(): string {
 const staged = new Map<string, { id: string; source: string }>();
 
 /** Like the router: the choices for a plugin's ports and settings, checked. */
-/** The demo drive's recovery key (a real one is random). */
+/** One of a demo plugin's shares; throws when there is none (as the router answers). */
+function demoShare(demo: DemoState, id: string, shareId: string): PluginShare {
+  const share = demo.router.plugins.plugins.find((p) => p.id === id)?.shares?.list.find((x) => x.id === shareId);
+  if (!share) throw new FieldErrors({ share: 'No such share.' });
+  return share;
+}
+
+/** The router's rules for a share's name and quota (internal/agent/pluginshares.go), for the demo. */
+function checkDemoShare(shares: PluginShares, name: string, quotaMb: number, maxMb: number, except?: string) {
+  if (!name) throw new FieldErrors({ name: 'Give the share a name.' });
+  if (!/^[A-Za-z0-9 _.-]+$/.test(name)) throw new FieldErrors({ name: 'Use letters, digits, spaces, - _ and . only.' });
+  if (shares.list.some((x) => x.id !== except && x.name.toLowerCase() === name.toLowerCase())) {
+    throw new FieldErrors({ name: 'Another share has this name.' });
+  }
+  if (quotaMb < 256) throw new FieldErrors({ quotaMb: 'Use at least 256 MB.' });
+  if (quotaMb > maxMb) {
+    throw new FieldErrors({ quotaMb: `There is room for at most ${Math.floor((maxMb / 1024) * 10) / 10} GB.` });
+  }
+}
+
+/** The demo shares' recovery key (a real one is random). */
 const DEMO_RECOVERY_KEY = 'DEMOK-EYABC-DEFGH-IJKLM-NOPQR-STUVW-XYZ23-45672';
 
 function checkPluginChoices(
@@ -1192,51 +1214,109 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
           }
         });
       },
-      setPluginEncryption: async (id, on, recoveryKey) => {
+      setPluginEncryption: async (id, shareId, on, recoveryKey) => {
         await wait(600);
-        const plugin = currentDemo.router.plugins.plugins.find((p) => p.id === id);
-        if (!plugin?.encryption) throw new FieldErrors({ drive: 'Choose a USB drive first.' });
+        const share = demoShare(currentDemo, id, shareId);
         const wanted = on ? 'encrypting' : 'decrypting';
-        if (plugin.encryption.state === (on ? 'on' : 'off')) return;
+        if (share.encryption.state === (on ? 'on' : 'off')) return;
         // The demo's key is DEMO_RECOVERY_KEY; any case, with or without dashes.
         const typed = (recoveryKey ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
         if (!on && typed !== DEMO_RECOVERY_KEY.replace(/-/g, '')) {
-          throw new FieldErrors({ recoveryKey: 'This isn’t the drive’s recovery key.' });
+          throw new FieldErrors({ recoveryKey: 'This isn’t the share’s recovery key.' });
         }
-        const wasRunning = plugin.state === 'running';
+        const wasRunning = currentDemo.router.plugins.plugins.find((p) => p.id === id)?.state === 'running';
         const total = 1_240;
         const step = (done: number) =>
           change((d) => {
             const target = d.router.plugins.plugins.find((p) => p.id === id);
-            if (!target?.encryption || target.encryption.state !== wanted) return;
+            const moving = target?.shares?.list.find((x) => x.id === shareId);
+            if (!target || !moving || moving.encryption.state !== wanted) return;
             if (done < total) {
               target.state = 'converting';
-              target.message = `${on ? 'Encrypting' : 'Decrypting'} the drive’s files: ${done.toLocaleString('en-US')} of ${total.toLocaleString('en-US')}`;
-              target.encryption.done = done;
-              target.encryption.total = total;
+              target.message = `${on ? 'Encrypting' : 'Decrypting'} the share ${moving.name}: ${done.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} files`;
+              moving.encryption = { state: wanted, done, total };
               setTimeout(() => step(Math.min(total, done + 310)), 1500);
               return;
             }
-            target.encryption = { state: on ? 'on' : 'off', recoveryKeySaved: on ? false : undefined };
+            moving.encryption = { state: on ? 'on' : 'off', recoveryKeySaved: on ? false : undefined };
             target.state = wasRunning ? 'running' : 'stopped';
             target.message = undefined;
           });
         change((d) => {
-          const target = d.router.plugins.plugins.find((p) => p.id === id);
-          if (target?.encryption) target.encryption = { state: wanted };
+          const moving = d.router.plugins.plugins.find((p) => p.id === id)?.shares?.list.find((x) => x.id === shareId);
+          if (moving) moving.encryption = { state: wanted };
         });
         step(0);
       },
-      pluginRecoveryKey: async (id) => {
+      pluginRecoveryKey: async (id, shareId) => {
         await wait(400);
+        const share = demoShare(currentDemo, id, shareId);
         change((d) => {
-          const target = d.router.plugins.plugins.find((p) => p.id === id);
-          if (target?.encryption) target.encryption.recoveryKeySaved = true;
+          const target = d.router.plugins.plugins.find((p) => p.id === id)?.shares?.list.find((x) => x.id === shareId);
+          if (target) target.encryption.recoveryKeySaved = true;
         });
         return {
-          fileName: 'rasbeacon-recovery-key-6A1F-22C9.txt',
+          fileName: `rasbeacon-recovery-key-${share.name}.txt`,
           text: `RasBeacon recovery key (demo)\n\n    ${DEMO_RECOVERY_KEY}\n`,
         };
+      },
+      addPluginShare: async (id, share) => {
+        await wait(900);
+        const plugin = currentDemo.router.plugins.plugins.find((p) => p.id === id);
+        if (!plugin?.shares) throw new Error('This plugin has no shares.');
+        checkDemoShare(
+          plugin.shares,
+          share.name,
+          share.quotaMb,
+          share.drive ? 40 * 1024 : plugin.shares.newInternalMaxMb,
+        );
+        if (share.drive && !share.folder.trim()) {
+          throw new FieldErrors({ folder: 'Type a folder on the drive, like Movies or Media/Movies.' });
+        }
+        change((d) => {
+          const shares = d.router.plugins.plugins.find((p) => p.id === id)?.shares;
+          if (!shares) return;
+          const drive = DEMO_DRIVES.find((x) => x.uuid === share.drive);
+          shares.list.push({
+            id: `s${shares.list.length + 1}${Date.now() % 1000}`,
+            name: share.name,
+            drive: share.drive || undefined,
+            driveLabel: drive ? drive.label || 'Untitled' : undefined,
+            folder: share.drive ? share.folder.replace(/^\/+|\/+$/g, '') : undefined,
+            quotaMb: share.quotaMb,
+            usedMb: 0,
+            minQuotaMb: 256,
+            maxQuotaMb: share.drive ? 40 * 1024 : shares.newInternalMaxMb,
+            settings: shares.settings.map((s) => ({ ...s, value: share.settings[s.key] ?? s.value })),
+            encryption: { state: 'off' },
+          });
+          if (!share.drive) shares.newInternalMaxMb -= share.quotaMb;
+        });
+      },
+      savePluginShare: async (id, shareId, changes) => {
+        await wait(900);
+        const plugin = currentDemo.router.plugins.plugins.find((p) => p.id === id);
+        const share = demoShare(currentDemo, id, shareId);
+        checkDemoShare(plugin!.shares!, changes.name, changes.quotaMb, share.maxQuotaMb, shareId);
+        if (changes.quotaMb !== share.quotaMb && changes.quotaMb < share.minQuotaMb) {
+          throw new FieldErrors({
+            quotaMb: `Its files use ${Math.round((share.usedMb / 1024) * 10) / 10} GB, so its quota can’t be less than that.`,
+          });
+        }
+        change((d) => {
+          const target = d.router.plugins.plugins.find((p) => p.id === id)?.shares?.list.find((x) => x.id === shareId);
+          if (!target) return;
+          target.name = changes.name;
+          target.quotaMb = changes.quotaMb;
+          target.settings = target.settings.map((s) => ({ ...s, value: changes.settings[s.key] ?? s.value }));
+        });
+      },
+      removePluginShare: async (id, shareId) => {
+        await wait(900);
+        change((d) => {
+          const shares = d.router.plugins.plugins.find((p) => p.id === id)?.shares;
+          if (shares) shares.list = shares.list.filter((x) => x.id !== shareId);
+        });
       },
       setPluginRunning: async (id, running) => {
         await wait(1200);

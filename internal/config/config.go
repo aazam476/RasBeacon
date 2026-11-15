@@ -217,13 +217,9 @@ type InstalledPlugin struct {
 	// StorageMB is the size of its data the owner chose, for a plugin
 	// whose manifest allows it (storageAdjustable); 0: the manifest's.
 	StorageMB int `json:"storageMb,omitempty"`
-	// Encryption is its drive's encryption: "" (off), "encrypting", "on"
-	// or "decrypting" (see agent/driveencryption.go). The key is in
-	// Secrets.DriveKeys.
-	Encryption string `json:"encryption,omitempty"`
-	// RecoveryKeySaved is set once the owner downloaded the drive's
-	// recovery key.
-	RecoveryKeySaved bool `json:"recoveryKeySaved,omitempty"`
+	// Shares are the shares the owner made, for a plugin whose manifest
+	// has shares (see agent/pluginshares.go).
+	Shares []PluginShare `json:"shares,omitempty"`
 	// Running is whether it should run: kept across restarts.
 	Running bool `json:"running"`
 	// StoppedAfterCrashes is set when it crashed too often and was stopped;
@@ -232,6 +228,33 @@ type InstalledPlugin struct {
 	// Fetch, after a restore from a backup without its image, says where
 	// to download the image again; cleared once it is here.
 	Fetch *PluginFetch `json:"fetch,omitempty"`
+}
+
+// PluginShare is one share of a plugin: a folder it offers (Samba shares it
+// on the network), with a name and a quota. Where it is never changes.
+type PluginShare struct {
+	// ID names it for good within the plugin ("s1", "s2", …): its folder
+	// in the container, and its storage file on internal storage.
+	ID string `json:"id"`
+	// Name is what the plugin calls it (Samba: the share's name on the
+	// network). The owner can change it.
+	Name string `json:"name"`
+	// Drive is the USB drive's UUID, "" for RasBeacon's internal storage.
+	Drive string `json:"drive,omitempty"`
+	// Folder is its folder on the drive, from the drive's top ("Movies"
+	// or "Media/Movies"). Fixed when the share is made.
+	Folder string `json:"folder,omitempty"`
+	// QuotaMB is how much it may hold. On internal storage the space is
+	// set aside (a file that size); on a drive it is how big the plugin
+	// reports the share, measured against the files in its folder.
+	QuotaMB int `json:"quotaMb"`
+	// Settings are the values of the manifest's per-share settings.
+	Settings map[string]string `json:"settings,omitempty"`
+	// Encryption is "" (off), "encrypting", "on" or "decrypting" (see
+	// agent/shareencryption.go); the key is in Secrets.ShareKeys.
+	Encryption string `json:"encryption,omitempty"`
+	// RecoveryKeySaved is set once the owner downloaded its recovery key.
+	RecoveryKeySaved bool `json:"recoveryKeySaved,omitempty"`
 }
 
 // PluginFetch is where a plugin's image can be downloaded again: its .rba
@@ -251,6 +274,14 @@ func (p InstalledPlugin) Clone() InstalledPlugin {
 	if p.Fetch != nil {
 		fetch := *p.Fetch
 		p.Fetch = &fetch
+	}
+	if p.Shares != nil {
+		shares := make([]PluginShare, len(p.Shares))
+		for i, share := range p.Shares {
+			share.Settings = maps.Clone(share.Settings)
+			shares[i] = share
+		}
+		p.Shares = shares
 	}
 	return p
 }
@@ -975,10 +1006,11 @@ type Secrets struct {
 	// the SIM refuses it, it waits for a new one (see agent/modem.go), so
 	// it can never use up the SIM's attempts.
 	ModemPIN string `json:"modemPin,omitempty"`
-	// DriveKeys holds the recovery keys of encrypted USB drives, by the
-	// drive's ID (UUID). Kept when a plugin is removed, so its drive opens
-	// again when chosen later.
-	DriveKeys map[string]string `json:"driveKeys,omitempty"`
+	// ShareKeys holds the recovery keys of encrypted shares, by where the
+	// share is: "<drive UUID>/<folder>" on a USB drive, so the folder
+	// opens again for a share made there later, or "<plugin>/<share ID>"
+	// on internal storage.
+	ShareKeys map[string]string `json:"shareKeys,omitempty"`
 }
 
 // WireGuardKeys are one VPN profile's secrets (base64).
@@ -1214,7 +1246,7 @@ func (s Secrets) Clone() Secrets {
 	}
 	s.UplinkPasswords = passwords
 	s.WireGuardKeys = maps.Clone(s.WireGuardKeys)
-	s.DriveKeys = maps.Clone(s.DriveKeys)
+	s.ShareKeys = maps.Clone(s.ShareKeys)
 	if s.Plugins != nil {
 		plugins := make(map[string]map[string]string, len(s.Plugins))
 		for id, values := range s.Plugins {

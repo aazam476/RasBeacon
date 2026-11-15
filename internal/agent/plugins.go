@@ -87,6 +87,9 @@ type pluginsState struct {
 	proxyDial func(ctx context.Context, address string) (net.Conn, error)
 	// watchEvery is how often the crash watch runs (0: never, in tests).
 	watchEvery time.Duration
+	// shareUsage is the last measurement of each share's files, by
+	// drive, folder and ID (see pluginshares.go).
+	shareUsage map[string]shareUsage
 }
 
 // pluginLive is one plugin's state in memory.
@@ -98,9 +101,11 @@ type pluginLive struct {
 	message  string
 	// busy is set while a slow action runs on it.
 	busy bool
-	// converting is set while its drive's files are encrypted or
-	// decrypted; convertDone and convertTotal count the files moved.
+	// converting is set while a share's files are encrypted or
+	// decrypted (convertShare is its ID); convertDone and convertTotal
+	// count the files moved.
 	converting                bool
+	convertShare              string
 	convertDone, convertTotal int
 	// crashes counts crashes in a row; startedAt is when it last started.
 	crashes   int
@@ -291,12 +296,8 @@ func (a *Agent) pluginView(id string) api.Plugin {
 	view.UsesDrive = m.USBDrive != nil
 	view.DriveOptional = m.USBDrive != nil && m.USBDrive.Optional
 	view.AfterInstall = a.pluginValues(id, m, p, false).Expand(m.AfterInstall)
-	if p.Drive != "" && m.USBDrive != nil {
-		view.Encryption = &api.PluginEncryption{State: p.Encryption, RecoveryKeySaved: p.RecoveryKeySaved}
-		if p.Encryption == encryptionOff {
-			view.Encryption.State = "off"
-		}
-		view.Encryption.Done, view.Encryption.Total = live.convertDone, live.convertTotal
+	if m.Shares != nil {
+		view.Shares = a.sharesView(id, m, p)
 	}
 	view.MemoryMB, view.CPUs, view.StorageMB = m.Memory(), m.CPULimit(), pluginStorageMB(m, p)
 	if m.StorageAdjustable {
@@ -354,7 +355,7 @@ func (a *Agent) settingViews(m *plugin.Manifest, values, secrets map[string]stri
 	for _, s := range m.Settings {
 		view := api.PluginSetting{
 			Key: s.Key, Label: s.Label, Type: s.Type, Help: s.Help, Unit: s.Unit, Required: s.Required,
-			Min: s.Min, Max: s.Max, OnlyWithDrive: s.OnlyWithDrive,
+			Min: s.Min, Max: s.Max,
 		}
 		for _, o := range s.Options {
 			view.Options = append(view.Options, api.PluginOption{Value: o.Value, Label: o.Label})
@@ -388,10 +389,6 @@ func (a *Agent) pluginValues(id string, m *plugin.Manifest, p config.InstalledPl
 			v.Settings[s.Key] = a.secrets.Plugins[id][s.Key]
 		case s.Secret():
 			// Left out: {setting:password} stays as it is written.
-		case s.OnlyWithDrive && p.Drive == "":
-			// About the drive: nothing without one (it is kept for when
-			// a drive is chosen again).
-			v.Settings[s.Key] = ""
 		default:
 			value, ok := p.Settings[s.Key]
 			if !ok {
@@ -541,10 +538,8 @@ func (a *Agent) checkDrive(id string, m *plugin.Manifest, uuid string) error {
 	if !plugin.ValidDriveUUID(uuid) {
 		return &config.ValidationError{Field: "drive", Message: "Choose a USB drive from the list."}
 	}
-	for other, p := range a.cfg.Plugins.Installed {
-		if other != id && p.Drive == uuid {
-			return &config.ValidationError{Field: "drive", Message: a.pluginName(other) + " already uses this drive."}
-		}
+	if other := a.driveUser(uuid); other != "" && other != id {
+		return &config.ValidationError{Field: "drive", Message: a.pluginName(other) + " already uses this drive."}
 	}
 	return nil
 }
@@ -706,9 +701,6 @@ func (a *Agent) UpdatePluginSettings(req api.PluginSettingsRequest) (api.Plugin,
 	if err := a.checkDrive(req.ID, m, req.Drive); err != nil {
 		return fail(err)
 	}
-	if current := a.cfg.Plugins.Installed[req.ID]; req.Drive != current.Drive && current.Encryption != encryptionOff {
-		return fail(&config.ValidationError{Field: "drive", Message: "Turn off the drive's encryption before choosing another drive."})
-	}
 	storage, err := a.checkPluginStorage(req.ID, m, req.StorageMB)
 	if err != nil {
 		return fail(err)
@@ -719,9 +711,6 @@ func (a *Agent) UpdatePluginSettings(req api.PluginSettingsRequest) (api.Plugin,
 	old := a.cfg.Plugins.Installed[req.ID]
 	oldDrive := old.Drive
 	if err := a.savePluginConfig(req.ID, func(p *config.InstalledPlugin) {
-		if p.Drive != req.Drive {
-			p.Encryption, p.RecoveryKeySaved = a.knownDriveEncryption(req.Drive)
-		}
 		p.Ports, p.Settings, p.Drive, p.StorageMB = ports, values, req.Drive, storage
 	}); err != nil {
 		return fail(err)
@@ -791,6 +780,7 @@ func (a *Agent) RemovePlugin(req api.PluginRemoveRequest) error {
 		return err
 	}
 	image := a.cfg.Plugins.Installed[req.ID].Image
+	shares := a.cfg.Plugins.Installed[req.ID].Shares
 	owner := keptDataOwner{PublicKey: a.cfg.Plugins.Installed[req.ID].PublicKey}
 	if live := a.plugins.live[req.ID]; live != nil && live.manifest != nil {
 		owner.Name = live.manifest.Name
@@ -799,12 +789,18 @@ func (a *Agent) RemovePlugin(req api.PluginRemoveRequest) error {
 
 	a.stopPluginContainer(req.ID)
 	a.unmountPluginData(req.ID)
+	for _, share := range shares {
+		if share.Drive == "" {
+			_, _ = a.plugins.runner.Run("umount", a.paths.PluginShareMount(req.ID, share.ID))
+		}
+	}
 	if image != "" {
 		_, _ = a.plugins.runner.Run("podman", "rmi", "--ignore", image)
 	}
 	dir := a.paths.PluginDir(req.ID)
 	if req.KeepData {
 		a.keepPluginData(req.ID, owner)
+		a.keepPluginShares(req.ID, shares)
 	}
 	if err := os.RemoveAll(dir); err != nil {
 		slog.Warn("could not delete the plugin's files", "plugin", req.ID, "error", err)
@@ -822,6 +818,16 @@ func (a *Agent) RemovePlugin(req api.PluginRemoveRequest) error {
 	delete(a.plugins.live, req.ID)
 	if err := a.savePluginSecrets(req.ID, nil); err != nil {
 		slog.Warn("could not delete the plugin's passwords", "plugin", req.ID, "error", err)
+	}
+	// Without its data, its encrypted shares on internal storage are gone,
+	// and their keys with them. Those on drives keep theirs: a share made
+	// in the same folder later opens it.
+	if !req.KeepData {
+		for _, share := range shares {
+			if share.Drive == "" {
+				a.forgetShareKey(shareKeyName(req.ID, share))
+			}
+		}
 	}
 	if err := a.applyFirewall(); err != nil {
 		slog.Error("could not update the firewall after removing a plugin", "error", err)
@@ -903,10 +909,8 @@ func (a *Agent) PluginDrives() (api.PluginDrives, error) {
 	result := api.PluginDrives{Drives: []api.PluginDrive{}}
 	for _, d := range drives {
 		view := api.PluginDrive{UUID: d.UUID, Label: d.Label, FSType: d.FSType, Size: d.Size}
-		for id, p := range a.cfg.Plugins.Installed {
-			if p.Drive == d.UUID {
-				view.UsedBy = a.pluginName(id)
-			}
+		if id := a.driveUser(d.UUID); id != "" {
+			view.UsedBy = a.pluginName(id)
 		}
 		result.Drives = append(result.Drives, view)
 	}

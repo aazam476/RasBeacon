@@ -154,6 +154,9 @@ func (s *Server) Handler() http.Handler {
 	for _, route := range []string{
 		"POST /plugins/catalog", "POST /plugins/catalog/download", "POST /plugins/update",
 		"POST /plugins/start", "POST /plugins/stop", "POST /plugins/remove", "PUT /plugins/settings",
+		// Shares: a folder on a big drive is added up, and a share on
+		// internal storage resized, while the request waits.
+		"POST /plugins/shares/add", "PUT /plugins/shares", "POST /plugins/shares/remove",
 		"POST /system/restore",
 	} {
 		method, path, _ := strings.Cut(route, " ")

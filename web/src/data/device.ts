@@ -17,6 +17,8 @@ import type {
   PluginDrive,
   PluginLogLine,
   PluginRecoveryKey,
+  NewPluginShare,
+  PluginShareChanges,
   PluginPreview,
   PluginsState,
   PointerSpot,
@@ -415,12 +417,18 @@ export interface DeviceActions {
   /** Delete the data kept from a removed plugin, for good (the screen has asked first). */
   forgetKeptPluginData: (id: string) => Promise<void>;
   /**
-   * Encrypt the files on a plugin's USB drive, or decrypt them, which needs the drive's recovery
-   * key. Answers at once; the plugin is paused while its files move. Field key: recoveryKey.
+   * Encrypt a share's files, or decrypt them, which needs its recovery key. Answers at once; the
+   * plugin is paused while the files move. Field key: recoveryKey.
    */
-  setPluginEncryption: (id: string, on: boolean, recoveryKey?: string) => Promise<void>;
-  /** The drive's recovery key as a text file to save (afterwards it counts as saved). */
-  pluginRecoveryKey: (id: string) => Promise<PluginRecoveryKey>;
+  setPluginEncryption: (id: string, share: string, on: boolean, recoveryKey?: string) => Promise<void>;
+  /** A share's recovery key as a text file to save (afterwards it counts as saved). */
+  pluginRecoveryKey: (id: string, share: string) => Promise<PluginRecoveryKey>;
+  /** Make a share; the plugin restarts. Field keys: name, drive, folder, quotaMb, settings.<key>. */
+  addPluginShare: (id: string, share: NewPluginShare) => Promise<void>;
+  /** Rename a share, change its quota and settings; the plugin restarts. Field keys as addPluginShare's. */
+  savePluginShare: (id: string, share: string, changes: PluginShareChanges) => Promise<void>;
+  /** Remove a share, and on a drive its folder too when asked. Field key: deleteFiles. */
+  removePluginShare: (id: string, share: string, deleteFiles: boolean) => Promise<void>;
   /** Its last 500 lines of output. */
   pluginLogs: (id: string) => Promise<PluginLogLine[]>;
   pluginDrives: () => Promise<PluginDrive[]>;
