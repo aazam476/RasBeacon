@@ -331,10 +331,14 @@ export function sameNames(...keys: string[]): Record<string, string> {
   return Object.fromEntries(keys.map((key) => [key, key]));
 }
 
-/** The field keys of a plugin's form (ports.<key>, settings.<key>, drive), as the router names them. */
+/**
+ * The field keys of a plugin's form (ports.<key>, settings.<key>, drive, storageMb), as the router
+ * names them.
+ */
 export function pluginFields(choices: PluginChoices): Record<string, string> {
   return sameNames(
     'drive',
+    'storageMb',
     ...Object.keys(choices.ports).map((key) => `ports.${key}`),
     ...Object.keys(choices.settings).map((key) => `settings.${key}`),
   );
