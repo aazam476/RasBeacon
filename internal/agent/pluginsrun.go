@@ -478,6 +478,23 @@ func (a *Agent) mountImage(file, mount string, storageMB int) error {
 	if err := os.MkdirAll(mount, 0o755); err != nil {
 		return err
 	}
+	if err := a.makeImage(file, storageMB); err != nil {
+		return err
+	}
+	// nosuid and nodev: no program in it can gain privileges, and it can't
+	// hold device files.
+	_, err := r.Run("mount", "-o", "loop,nosuid,nodev", file, mount)
+	return err
+}
+
+// makeImage makes a storage file storageMB big, with an empty ext4
+// filesystem in it, or grows one smaller than that. Its whole size is set
+// aside on the SD card from the start (fallocate), whether files fill it
+// or not: the SD card's free space never counts on room it has promised.
+// A file made before RasBeacon kept it whole (its filesystem was made with
+// discard, which gave the empty part back) has it set aside again.
+func (a *Agent) makeImage(file string, storageMB int) error {
+	r := a.plugins.runner
 	if err := os.MkdirAll(filepath.Dir(file), 0o700); err != nil {
 		return err
 	}
@@ -485,11 +502,12 @@ func (a *Agent) mountImage(file, mount string, storageMB int) error {
 	info, err := os.Stat(file)
 	switch {
 	case errors.Is(err, os.ErrNotExist):
-		// A new plugin: reserve the space, and make an empty filesystem in it.
+		// A new file: reserve the space, and make an empty filesystem in it.
+		// nodiscard: mkfs would otherwise hand the unused space back.
 		if _, err := r.Run("fallocate", "--length", size, file); err != nil {
-			return fmt.Errorf("no room for its %d MB of data: %w", storageMB, err)
+			return fmt.Errorf("the SD card has no room for %s: %w", sizeText(storageMB), err)
 		}
-		if _, err := r.Run("mkfs.ext4", "-q", "-F", "-m", "0", "-L", "plugin", file); err != nil {
+		if _, err := r.Run("mkfs.ext4", "-q", "-F", "-m", "0", "-E", "nodiscard", "-L", "plugin", file); err != nil {
 			_ = os.Remove(file)
 			return err
 		}
@@ -499,16 +517,19 @@ func (a *Agent) mountImage(file, mount string, storageMB int) error {
 		// A newer version wants more room: grow the file and the filesystem.
 		_, _ = r.Run("e2fsck", "-f", "-p", file)
 		if _, err := r.Run("fallocate", "--length", size, file); err != nil {
-			return fmt.Errorf("no room to grow its data to %d MB: %w", storageMB, err)
+			return fmt.Errorf("the SD card has no room for %s: %w", sizeText(storageMB), err)
 		}
 		if _, err := r.Run("resize2fs", file); err != nil {
 			return err
 		}
+	default:
+		// Set aside what isn't yet (nothing, usually). If the SD card has
+		// no room left for it, the files in it stay usable: logged only.
+		if _, err := r.Run("fallocate", "--length", strconv.FormatInt(info.Size(), 10), file); err != nil {
+			slog.Warn("a storage file's space can't all be set aside", "file", file, "error", err)
+		}
 	}
-	// nosuid and nodev: no program in it can gain privileges, and it can't
-	// hold device files.
-	_, err = r.Run("mount", "-o", "loop,nosuid,nodev", file, mount)
-	return err
+	return nil
 }
 
 // unmountPluginData unmounts a plugin's data (errors: it wasn't mounted).

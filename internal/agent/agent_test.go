@@ -26,6 +26,7 @@ import (
 	"rasbeacon/internal/config"
 	"rasbeacon/internal/dhcpprobe"
 	"rasbeacon/internal/paths"
+	"rasbeacon/internal/quotafs"
 )
 
 // fakeRunner records commands instead of running them.
@@ -147,6 +148,10 @@ type testEnv struct {
 
 	backgroundMu sync.Mutex
 	pending      []func()
+
+	// held is what each USB share's reservation was last set to while its
+	// plugin was stopped, by name (rbd's holdRoom, recorded instead).
+	held map[string]int64
 }
 
 // runBackground runs the background work scheduled so far, and what it
@@ -245,6 +250,15 @@ func (e *testEnv) newAgent() *Agent {
 	}
 	// A card with 10 GB free, whatever this computer's disk holds.
 	a.diskFree = func(string) (int64, error) { return 10 << 30, nil }
+	a.holdRoom = func(r *quotafs.Reservation, want int64) error {
+		e.backgroundMu.Lock()
+		defer e.backgroundMu.Unlock()
+		if e.held == nil {
+			e.held = map[string]int64{}
+		}
+		e.held[r.Name()] = want
+		return nil
+	}
 	a.background = func(f func()) { e.backgroundMu.Lock(); e.pending = append(e.pending, f); e.backgroundMu.Unlock() }
 	a.plugins.watchEvery = 0
 	a.dhcpProbe = e.fakeDHCPProbe

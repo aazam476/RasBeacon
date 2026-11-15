@@ -1,7 +1,8 @@
 //go:build linux
 
 // Package quotafs holds a USB share to its quota, strictly. A share on a
-// USB drive is a folder on the drive; nothing sets space aside for it, so
+// USB drive is a folder on the drive; its free room is held on the drive
+// by its reservation (see Reservation), but nothing else stops it growing:
 // the plugin (Samba) would only report the share as full, which Finder and
 // File Explorer respect but a program writing directly doesn't have to.
 //
@@ -28,6 +29,7 @@ import (
 	"path/filepath"
 	"sync"
 	"syscall"
+	"time"
 
 	gofs "github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
@@ -39,11 +41,104 @@ type Quota struct {
 	mu    sync.Mutex
 	used  int64
 	limit int64
+
+	// The share's reservation on its drive (see Reservation), if it has
+	// one, and what it holds as far as Quota knows. fitting is held while
+	// the reservation changes, so a write never finds the drive full of
+	// it. regrow asks for it to grow back (after files were deleted).
+	reservation *Reservation
+	held        int64
+	fitting     sync.Mutex
+	regrow      chan struct{}
 }
+
+// slack is how much more than asked the reservation shrinks by when a
+// share's files grow, so each small write doesn't shrink it again.
+var slack int64 = 64 << 20
+
+// regrowAfter is how long the reservation waits, after files were
+// deleted, before growing back (so deleting many files grows it once).
+var regrowAfter = 2 * time.Second
 
 // NewQuota starts the count at used bytes, out of limit.
 func NewQuota(used, limit int64) *Quota {
 	return &Quota{used: used, limit: limit}
+}
+
+// HoldWith gives the quota its share's reservation: from now on it holds
+// the room the share's files don't use (limit less used), shrinking before
+// they grow. It is brought to that size now: at once if it holds too much
+// (files were added on a computer), in the background if too little.
+func (q *Quota) HoldWith(r *Reservation) error {
+	q.reservation, q.held = r, r.Size()
+	q.regrow = make(chan struct{}, 1)
+	if err := q.fit(0); err != nil {
+		return err
+	}
+	go q.regrowing()
+	q.askRegrow()
+	return nil
+}
+
+// fit makes room for bytes more in the share: the reservation then holds
+// at most what is left of the quota (less slack, when it must shrink).
+func (q *Quota) fit(bytes int64) error {
+	if q.reservation == nil {
+		return nil
+	}
+	q.fitting.Lock()
+	defer q.fitting.Unlock()
+	q.mu.Lock()
+	room := q.limit - q.used - bytes
+	if room < 0 {
+		q.mu.Unlock()
+		return nil // it doesn't fit: refused, nothing to make room for
+	}
+	want := q.held
+	if q.held > room {
+		want = max(0, room-slack)
+	}
+	q.mu.Unlock()
+	if want == q.held {
+		return nil
+	}
+	if err := q.reservation.AtMost(want); err != nil {
+		return err
+	}
+	q.held = want
+	return nil
+}
+
+// askRegrow asks for the reservation to grow back, soon.
+func (q *Quota) askRegrow() {
+	if q.regrow == nil {
+		return
+	}
+	select {
+	case q.regrow <- struct{}{}:
+	default: // already asked
+	}
+}
+
+// regrowing grows the reservation back each time it is asked, after a
+// short wait, one step at a time (a write meanwhile waits for one step at
+// most). It runs as long as the mount.
+func (q *Quota) regrowing() {
+	for range q.regrow {
+		time.Sleep(regrowAfter)
+		for {
+			q.fitting.Lock()
+			q.mu.Lock()
+			want := q.limit - q.used
+			q.mu.Unlock()
+			done, err := q.reservation.GrowStep(want)
+			q.held = q.reservation.Size()
+			q.fitting.Unlock()
+			if done || err != nil {
+				break
+			}
+		}
+	}
 }
 
 // Used is what the files hold now.
@@ -61,24 +156,35 @@ func (q *Quota) Full() bool {
 }
 
 // Reserve takes room for bytes more, if it fits; a change that frees room
-// (bytes below 0) always does.
+// (bytes below 0) always does. Room is made on the drive first, from the
+// share's reservation.
 func (q *Quota) Reserve(bytes int64) bool {
+	if bytes > 0 && q.fit(bytes) != nil {
+		return false
+	}
 	q.mu.Lock()
-	defer q.mu.Unlock()
 	if bytes > 0 && q.used+bytes > q.limit {
+		q.mu.Unlock()
 		return false
 	}
 	q.used += bytes
+	q.mu.Unlock()
+	if bytes < 0 {
+		q.askRegrow()
+	}
 	return true
 }
 
 // Add counts bytes more (or fewer, below 0) without checking: for what
 // already happened, such as a deleted file, or a write that came out
-// shorter than reserved.
+// shorter than reserved. What is freed goes back to the reservation.
 func (q *Quota) Add(bytes int64) {
 	q.mu.Lock()
-	defer q.mu.Unlock()
 	q.used = max(0, q.used+bytes)
+	q.mu.Unlock()
+	if bytes < 0 {
+		q.askRegrow()
+	}
 }
 
 // FolderSize adds up the sizes of the files under dir (what NewQuota

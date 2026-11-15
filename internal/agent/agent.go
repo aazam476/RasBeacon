@@ -96,6 +96,7 @@ import (
 	"rasbeacon/internal/led"
 	"rasbeacon/internal/paths"
 	"rasbeacon/internal/portal"
+	"rasbeacon/internal/quotafs"
 	"rasbeacon/internal/radio"
 	"rasbeacon/internal/regdb"
 	"rasbeacon/internal/render"
@@ -217,6 +218,9 @@ type Agent struct {
 	dohEnv string
 	// diskFree reports the free space where a path is (tests fake it).
 	diskFree func(path string) (int64, error)
+	// holdRoom makes a share's reservation on its drive hold want bytes
+	// (holdRoomOnDrive; tests record it instead of filling their disk).
+	holdRoom func(r *quotafs.Reservation, want int64) error
 
 	// usbRadioWait is how long startup waits for a USB Wi-Fi adapter to
 	// appear (see waitForRadios). Tests set it to zero.
@@ -256,6 +260,7 @@ func New(p paths.Paths, runner system.Runner) *Agent {
 		webGroup:   -1,
 		browser:    defaultBrowserSettings(),
 		diskFree:   diskFreeBytes,
+		holdRoom:   holdRoomOnDrive,
 		dohEnv:     "?",
 		speedtest:  speedtestState{server: speedtest.DefaultServer, run: runSpeedtest},
 		plugins:    pluginsState{runner: runner},

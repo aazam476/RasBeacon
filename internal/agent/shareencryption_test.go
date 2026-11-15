@@ -84,7 +84,7 @@ func TestShareEncryption_OnMovesTheFilesInAndOffMovesThemBack(t *testing.T) {
 		t.Error("the plugin should start again")
 	}
 	// The plugin gets the opened view, held to the share's quota.
-	if !e.runner.ran("rbquotafs -limit 1073741824 " + open + " " + e.paths.ShareQuotaDir("adguard-home", "s1")) {
+	if !e.runner.ran("rbquotafs -limit 1073741824 " + reserveArgs(e, "s1") + open + " " + e.paths.ShareQuotaDir("adguard-home", "s1")) {
 		t.Error("the plugin should get the opened view, held to its quota")
 	}
 

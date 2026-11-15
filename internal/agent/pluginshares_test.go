@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"rasbeacon/internal/api"
 	"rasbeacon/internal/config"
 	"rasbeacon/internal/plugin"
+	"rasbeacon/internal/quotafs"
 )
 
 // sharesPlugin is the test plugin with shares (at /shares, with a
@@ -56,6 +58,12 @@ func addShare(e *testEnv, req api.PluginShareAddRequest) {
 		e.t.Fatal(err)
 	}
 	e.runBackground()
+}
+
+// reserveArgs are rbquotafs's arguments for a USB share's reservation
+// (with a space after them).
+func reserveArgs(e *testEnv, shareID string) string {
+	return "-reserve " + filepath.Join(e.paths.DriveMountDir("1234-ABCD"), quotafs.ReservedFolder) + " -name adguard-home-" + shareID + " "
 }
 
 // sharesEnvOf is RASBEACON_SHARES as the plugin last started with it.
@@ -222,7 +230,7 @@ func TestShares_OnAUSBDrive(t *testing.T) {
 	if !strings.Contains(strings.Join(e.runner.commands, "\n"), view+":/shares/s1") {
 		t.Error("the plugin should get the quota view at /shares/s1")
 	}
-	if !e.runner.ran("rbquotafs -limit 4294967296 " + filepath.Join(drive, "Movies") + " " + view) {
+	if !e.runner.ran("rbquotafs -limit 4294967296 " + reserveArgs(e, "s1") + filepath.Join(drive, "Movies") + " " + view) {
 		t.Error("the folder should be held to its 4 GB quota")
 	}
 	var invalid *config.ValidationError
@@ -457,7 +465,7 @@ func TestShares_AUSBShareIsHeldToItsQuota(t *testing.T) {
 	addShare(e, api.PluginShareAddRequest{Name: "Movies", Drive: "1234-ABCD", Folder: "Movies", QuotaMB: 1024})
 	view := e.paths.ShareQuotaDir("adguard-home", "s2")
 	folder := filepath.Join(e.paths.DriveMountDir("1234-ABCD"), "Movies")
-	if !e.runner.ran("rbquotafs -limit 1073741824 " + folder + " " + view) {
+	if !e.runner.ran("rbquotafs -limit 1073741824 " + reserveArgs(e, "s2") + folder + " " + view) {
 		t.Fatal("the USB share should be held to its quota")
 	}
 	if e.runner.ran("rbquotafs -limit 268435456") {
@@ -466,7 +474,7 @@ func TestShares_AUSBShareIsHeldToItsQuota(t *testing.T) {
 	if _, err := e.agent.UpdatePluginShare(api.PluginShareUpdateRequest{ID: "adguard-home", Share: "s2", Name: "Movies", QuotaMB: 2048}); err != nil {
 		t.Fatal(err)
 	}
-	if !e.runner.ran("rbquotafs -limit 2147483648 " + folder + " " + view) {
+	if !e.runner.ran("rbquotafs -limit 2147483648 " + reserveArgs(e, "s2") + folder + " " + view) {
 		t.Error("a new quota should be held to after the change")
 	}
 	umounts := e.runner.count("umount " + view)
@@ -484,5 +492,96 @@ func TestShares_AUSBShareIsHeldToItsQuota(t *testing.T) {
 	}
 	if p := e.plugin("adguard-home"); !strings.Contains(p.Message, "held to its quota") {
 		t.Errorf("state %s %q, want the quota problem", p.State, p.Message)
+	}
+}
+
+func TestShares_AnInternalShareSetsItsQuotaAsideAtOnce(t *testing.T) {
+	e := newSharesEnv(t)
+	// Even while the plugin is stopped, its file is made when it is added,
+	// the whole quota set aside (mkfs without discard keeps it so).
+	if err := e.agent.StopPlugin("adguard-home"); err != nil {
+		t.Fatal(err)
+	}
+	addShare(e, api.PluginShareAddRequest{Name: "Files", QuotaMB: 3072})
+	image := e.paths.PluginShareImage("adguard-home", "s1")
+	if !e.runner.ran("fallocate --length 3072M "+image) || !e.runner.ran("mkfs.ext4 -q -F -m 0 -E nodiscard -L plugin "+image) {
+		t.Errorf("the share's file should be made, all set aside, at once: %v", e.runner.commands)
+	}
+
+	// A file made before (empty space given back) is set aside again.
+	mustWrite(t, image, "")
+	if err := os.Truncate(image, 3072<<20); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.agent.StartPlugin("adguard-home"); err != nil {
+		t.Fatal(err)
+	}
+	if !e.runner.ran("fallocate --length " + strconv.Itoa(3072<<20) + " " + image) {
+		t.Error("an existing file should have its space set aside again")
+	}
+
+	// No room on the SD card: the share isn't made.
+	e.runner.failing = append(e.runner.failing, "fallocate --length 1024M")
+	_, err := e.agent.AddPluginShare(api.PluginShareAddRequest{ID: "adguard-home", Name: "More", QuotaMB: 1024})
+	var invalid *config.ValidationError
+	if !errors.As(err, &invalid) || invalid.Field != "quotaMb" {
+		t.Errorf("no room: %v", err)
+	}
+	if len(shares(e)) != 1 {
+		t.Errorf("shares = %+v, want only Files", shares(e))
+	}
+}
+
+func TestShares_AUSBShareHoldsItsRoomOnTheDrive(t *testing.T) {
+	e := newSharesEnv(t)
+	movies := filepath.Join(e.paths.DriveMountDir("1234-ABCD"), "Movies")
+	mustWrite(t, filepath.Join(movies, "a.mkv"), strings.Repeat("x", 3<<20)) // 3 MB
+	if err := e.agent.StopPlugin("adguard-home"); err != nil {
+		t.Fatal(err)
+	}
+	// While the plugin is stopped, rbd holds the room its files don't use.
+	addShare(e, api.PluginShareAddRequest{Name: "Movies", Drive: "1234-ABCD", Folder: "Movies", QuotaMB: 1024})
+	if got := e.held["adguard-home-s1"]; got != (1024-3)<<20 {
+		t.Errorf("held %d MB, want the 1021 MB its files don't use", got>>20)
+	}
+	if _, err := e.agent.UpdatePluginShare(api.PluginShareUpdateRequest{ID: "adguard-home", Share: "s1", Name: "Movies", QuotaMB: 2048}); err != nil {
+		t.Fatal(err)
+	}
+	e.runBackground()
+	if got := e.held["adguard-home-s1"]; got != (2048-3)<<20 {
+		t.Errorf("after the change, held %d MB, want 2045", got>>20)
+	}
+
+	// What a reservation holds is taken from the drive's free space already:
+	// the 10 GB free count it once, not twice.
+	reserved := filepath.Join(e.paths.DriveMountDir("1234-ABCD"), quotafs.ReservedFolder)
+	mustWrite(t, filepath.Join(reserved, "adguard-home-s1-001.bin"), "")
+	if err := os.Truncate(filepath.Join(reserved, "adguard-home-s1-001.bin"), 2045<<20); err != nil {
+		t.Fatal(err)
+	}
+	e.agent.diskFree = func(string) (int64, error) { return (10 << 30) - (2045 << 20), nil }
+	_, err := e.agent.AddPluginShare(api.PluginShareAddRequest{ID: "adguard-home", Name: "Photos", Drive: "1234-ABCD", Folder: "Photos", QuotaMB: 8 * 1024})
+	if err != nil {
+		t.Errorf("8 GB is what is left: %v", err)
+	}
+	e.runBackground()
+	_, err = e.agent.AddPluginShare(api.PluginShareAddRequest{ID: "adguard-home", Name: "More", Drive: "1234-ABCD", Folder: "More", QuotaMB: 1024})
+	var invalid *config.ValidationError
+	if !errors.As(err, &invalid) || invalid.Field != "quotaMb" {
+		t.Errorf("nothing is left for another share: %v", err)
+	}
+
+	// The reserved folder can't be a share's.
+	_, err = e.agent.AddPluginShare(api.PluginShareAddRequest{ID: "adguard-home", Name: "Odd", Drive: "1234-ABCD", Folder: "rasbeacon reserved space/x", QuotaMB: 256})
+	if !errors.As(err, &invalid) || invalid.Field != "folder" {
+		t.Errorf("a share in the reserved folder: %v", err)
+	}
+
+	// Removed, its room is given back.
+	if _, err := e.agent.RemovePluginShare(api.PluginShareRemoveRequest{ID: "adguard-home", Share: "s1"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(reserved, "adguard-home-s1-001.bin")); !errors.Is(err, os.ErrNotExist) {
+		t.Error("its reservation should be gone")
 	}
 }

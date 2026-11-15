@@ -45,7 +45,8 @@ function settingValues(share: { settings: PluginShare['settings'] }): Record<str
 /**
  * A plugin's shares (Samba's): each with a name, a place that never changes and a quota. On
  * RasBeacon's internal storage the quota's space is set aside on the SD card; on a USB drive a
- * share is a folder, and shows as full once its files reach the quota. Each share can have its
+ * share is a folder, the room its files don't use held in the drive's "RasBeacon reserved space"
+ * folder, and it shows as full once its files reach the quota. Each share can have its
  * files encrypted. Shown for a plugin whose manifest has shares; it starts with none.
  */
 export function SharesSection({ plugin }: { plugin: Plugin }) {
@@ -90,7 +91,7 @@ export function SharesSection({ plugin }: { plugin: Plugin }) {
 
       <Section
         title="Shares"
-        footer="Where a share is never changes. On RasBeacon’s internal storage, its quota is set aside on the SD card. On a USB drive, a share is a folder, and computers see it as full once its files reach the quota."
+        footer="Where a share is never changes. On RasBeacon’s internal storage, its quota is set aside on the SD card. On a USB drive, a share is a folder, its quota held in the drive’s “RasBeacon reserved space” folder, and computers see it as full once its files reach the quota."
       >
         {shares.list.length === 0 && <Row title="No shares yet" subtitle={`Add one for ${plugin.name} to offer.`} />}
         {shares.list.map((share) => (

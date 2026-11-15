@@ -6,7 +6,11 @@
 // and deleting still work. rbd runs one for each share on a USB drive and
 // gives the plugin the mount point.
 //
-//	rbquotafs -limit <bytes> <folder> <mount point>
+//	rbquotafs -limit <bytes> [-reserve <folder> -name <name>] <folder> <mount point>
+//
+// With -reserve, the room the files don't use is held on the drive by the
+// share's reservation (see quotafs.Reservation): name's files in that
+// folder (the drive's quotafs.ReservedFolder).
 //
 // Like gocryptfs, it returns once the share is mounted, and keeps serving
 // it in the background until it is unmounted (umount <mount point>).
@@ -30,16 +34,22 @@ const childEnv = "RBQUOTAFS_SERVE"
 
 func main() {
 	limit := flag.Int64("limit", 0, "the quota, in bytes")
+	reserve := flag.String("reserve", "", "the folder holding the share's reservation")
+	name := flag.String("name", "", "the reservation's name")
 	flag.Parse()
-	if flag.NArg() != 2 || *limit <= 0 {
-		fmt.Fprintln(os.Stderr, "usage: rbquotafs -limit <bytes> <folder> <mount point>")
+	if flag.NArg() != 2 || *limit <= 0 || (*reserve == "") != (*name == "") {
+		fmt.Fprintln(os.Stderr, "usage: rbquotafs -limit <bytes> [-reserve <folder> -name <name>] <folder> <mount point>")
 		os.Exit(2)
 	}
 	source, mountpoint := flag.Arg(0), flag.Arg(1)
 	if os.Getenv(childEnv) == "" {
 		os.Exit(startInBackground())
 	}
-	os.Exit(serve(source, mountpoint, *limit))
+	var reservation *quotafs.Reservation
+	if *reserve != "" {
+		reservation = quotafs.NewReservation(*reserve, *name)
+	}
+	os.Exit(serve(source, mountpoint, *limit, reservation))
 }
 
 // startInBackground runs this program again as a background process (in a
@@ -69,12 +79,19 @@ func startInBackground() int {
 	return 0
 }
 
-// serve mounts the share, tells the waiting command (on fd 3), and serves
-// it until it is unmounted. It returns the exit code.
-func serve(source, mountpoint string, limit int64) int {
+// serve mounts the share, held to limit (and its room held on the drive by
+// reservation, if it has one), tells the waiting command (on fd 3), and
+// serves it until it is unmounted. It returns the exit code.
+func serve(source, mountpoint string, limit int64, reservation *quotafs.Reservation) int {
 	tell := os.NewFile(3, "ready")
 	used := quotafs.FolderSize(source)
-	server, err := quotafs.Mount(source, mountpoint, quotafs.NewQuota(used, limit), true)
+	quota := quotafs.NewQuota(used, limit)
+	if reservation != nil {
+		if err := quota.HoldWith(reservation); err != nil {
+			log.Printf("rbquotafs: the share's reservation: %v", err) // its files stay usable
+		}
+	}
+	server, err := quotafs.Mount(source, mountpoint, quota, true)
 	if err != nil {
 		fmt.Fprintln(tell, err)
 		return 1

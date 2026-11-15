@@ -44,6 +44,7 @@ import (
 	"rasbeacon/internal/api"
 	"rasbeacon/internal/config"
 	"rasbeacon/internal/plugin"
+	"rasbeacon/internal/quotafs"
 )
 
 const (
@@ -172,6 +173,9 @@ func cleanShareFolder(folder string) (string, error) {
 			return "", invalid
 		}
 	}
+	if top, _, _ := strings.Cut(folder, "/"); strings.EqualFold(top, quotafs.ReservedFolder) {
+		return "", &config.ValidationError{Field: "folder", Message: "RasBeacon keeps its shares' reserved space in this folder; choose another."}
+	}
 	return path.Clean(folder), nil
 }
 
@@ -247,13 +251,15 @@ func (a *Agent) shareQuotaRange(id string, share config.PluginShare, usedMB int)
 	if err != nil {
 		return minMB, current
 	}
-	// What is free on the drive, less what the other shares on it may
-	// still fill (their quota less their files), plus this one's files.
-	// A drive belongs to one plugin, so its shares are all this plugin's.
-	room := int(free >> 20)
+	// What is free on the drive, plus this share's files and reservation
+	// (both its own), less what the other shares on it may still fill
+	// beyond what their reservations hold already (taken from the free
+	// space). A drive belongs to one plugin, so its shares are all this
+	// plugin's.
+	room := int(free>>20) + a.reservedMB(id, share)
 	for _, other := range a.cfg.Plugins.Installed[id].Shares {
 		if other.Drive == share.Drive && other.ID != share.ID {
-			room -= max(0, other.QuotaMB-max(a.cachedShareUsage(other), 0))
+			room -= max(0, other.QuotaMB-max(a.cachedShareUsage(other), 0)-a.reservedMB(id, other))
 		}
 	}
 	maxMB = max(usedMB, 0) + room
@@ -442,7 +448,26 @@ func (a *Agent) AddPluginShare(req api.PluginShareAddRequest) (api.Plugin, error
 		defer a.mu.Unlock()
 		return a.pluginView(req.ID), nil
 	}
-	return a.restartAfterShareChange(req.ID, nil)
+	if share.Drive != "" {
+		a.reserveWhileStopped(req.ID, share, used)
+		return a.restartAfterShareChange(req.ID, nil)
+	}
+	// On internal storage its file is made now, its whole quota set aside
+	// on the SD card, even while the plugin is stopped.
+	view, err := a.restartAfterShareChange(req.ID, func() error {
+		return a.makeImage(a.paths.PluginShareImage(req.ID, share.ID), share.QuotaMB)
+	})
+	if err != nil {
+		a.mu.Lock()
+		_ = a.savePluginConfig(req.ID, func(p *config.InstalledPlugin) {
+			if i := findShare(p.Shares, share.ID); i >= 0 {
+				p.Shares = slices.Delete(p.Shares, i, i+1)
+			}
+		})
+		a.mu.Unlock()
+		return api.Plugin{}, &config.ValidationError{Field: "quotaMb", Message: "The share couldn't be made: " + err.Error() + "."}
+	}
+	return view, nil
 }
 
 // UpdatePluginShare changes a share's name, quota and settings. A smaller
@@ -502,6 +527,11 @@ func (a *Agent) UpdatePluginShare(req api.PluginShareUpdateRequest) (api.Plugin,
 	if used >= 0 {
 		a.rememberShareUsage(share, used)
 	}
+	if share.Drive != "" && req.QuotaMB != share.QuotaMB {
+		changed := share
+		changed.QuotaMB = req.QuotaMB
+		a.reserveWhileStopped(req.ID, changed, used)
+	}
 	var resize func() error
 	if share.Drive == "" && req.QuotaMB != share.QuotaMB {
 		resize = func() error {
@@ -556,6 +586,8 @@ func (a *Agent) RemovePluginShare(req api.PluginShareRemoveRequest) (api.Plugin,
 	_, _ = a.plugins.runner.Run("podman", "rm", "--force", "--ignore", "--time", "10", plugin.ContainerName(req.ID))
 	_, _ = a.plugins.runner.Run("umount", a.paths.ShareQuotaDir(req.ID, share.ID))
 	_, _ = a.plugins.runner.Run("umount", a.paths.SharePlainDir(req.ID, share.ID))
+	// Its reserved room on the drive is given back (when it is plugged in).
+	a.removeReservation(req.ID, share)
 	if deleteFiles {
 		if err := a.deleteShareFiles(req.ID, share); err != nil {
 			a.endPluginWork(req.ID)
@@ -863,9 +895,87 @@ func (a *Agent) holdToQuota(id string, share config.PluginShare) error {
 	if err := os.MkdirAll(view, 0o755); err != nil {
 		return err
 	}
-	limit := strconv.FormatInt(int64(share.QuotaMB)<<20, 10)
-	_, err := a.plugins.runner.Run(rbquotafs, "-limit", limit, a.shareFilesDir(id, share), view)
+	args := []string{"-limit", strconv.FormatInt(int64(share.QuotaMB)<<20, 10)}
+	if share.Folder != "" {
+		args = append(args, "-reserve", a.reservedFolder(share.Drive), "-name", reservationName(id, share))
+	}
+	_, err := a.plugins.runner.Run(rbquotafs, append(args, a.shareFilesDir(id, share), view)...)
 	return err
+}
+
+// --- Holding a USB share's room on its drive ---
+//
+// A share on a drive holds the room its files don't use yet in files of
+// its own, its reservation (see quotafs.Reservation), so the drive shows
+// as full as its shares may become and nothing else fills that room.
+// While the plugin runs, rbquotafs keeps it the right size as files come
+// and go; while it is stopped, rbd sets it when the share is made or its
+// quota changes. A whole-drive share has none: it holds the drive anyway.
+
+// reservedFolder is where a drive's reservations are.
+func (a *Agent) reservedFolder(drive string) string {
+	return filepath.Join(a.paths.DriveMountDir(drive), quotafs.ReservedFolder)
+}
+
+// reservationName names a share's reservation: its plugin and share.
+func reservationName(id string, share config.PluginShare) string {
+	return id + "-" + share.ID
+}
+
+// reservation is a share's reservation on its drive (nil on internal
+// storage, or for a whole-drive share).
+func (a *Agent) reservation(id string, share config.PluginShare) *quotafs.Reservation {
+	if share.Drive == "" || share.Folder == "" {
+		return nil
+	}
+	return quotafs.NewReservation(a.reservedFolder(share.Drive), reservationName(id, share))
+}
+
+// reservedMB is how much a share's reservation holds now, in MB.
+func (a *Agent) reservedMB(id string, share config.PluginShare) int {
+	if r := a.reservation(id, share); r != nil {
+		return int(r.Size() >> 20)
+	}
+	return 0
+}
+
+// holdRoomOnDrive makes a reservation hold want bytes: what it holds
+// beyond that given back at once, what it lacks taken (as much as the
+// drive has).
+func holdRoomOnDrive(r *quotafs.Reservation, want int64) error {
+	if err := r.AtMost(want); err != nil {
+		return err
+	}
+	return r.GrowTo(want)
+}
+
+// removeReservation gives a share's reserved room on its drive back, if
+// the drive is plugged in. Called without a.mu.
+func (a *Agent) removeReservation(id string, share config.PluginShare) {
+	r := a.reservation(id, share)
+	if r == nil || a.mountDrive(share.Drive) != nil {
+		return
+	}
+	if err := r.Remove(); err != nil {
+		slog.Warn("a share's reserved room can't be given back", "plugin", id, "share", share.ID, "error", err)
+	}
+}
+
+// reserveWhileStopped sets a share's reservation to the room its files
+// don't use (usedMB of its quota), in the background, when its plugin
+// isn't running (rbquotafs does it while it runs). The drive must be
+// mounted. The caller holds a.mu.
+func (a *Agent) reserveWhileStopped(id string, share config.PluginShare, usedMB int) {
+	r := a.reservation(id, share)
+	if r == nil || usedMB < 0 || a.cfg.Plugins.Installed[id].Running {
+		return
+	}
+	want := (int64(share.QuotaMB) - int64(usedMB)) << 20
+	a.background(func() {
+		if err := a.holdRoom(r, want); err != nil {
+			slog.Warn("a share's room can't be held on its drive", "plugin", id, "share", share.ID, "error", err)
+		}
+	})
 }
 
 // releaseShares closes a plugin's encrypted shares and unmounts its

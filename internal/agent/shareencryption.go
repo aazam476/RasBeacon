@@ -412,8 +412,13 @@ func (a *Agent) convertShare(id, shareID string) {
 		share := p.Shares[index]
 		key := a.secrets.ShareKeys[shareKeyName(id, share)]
 		a.mu.Unlock()
-		// Its quota view sits on top of its files: let go of it first.
+		// Its quota view sits on top of its files: let go of it first. Its
+		// reserved room on the drive is given back while files move (each
+		// is copied before the old one goes); it is held again after.
 		_, _ = a.plugins.runner.Run("umount", a.paths.ShareQuotaDir(id, share.ID))
+		if r := a.reservation(id, share); r != nil {
+			_ = r.AtMost(0)
+		}
 		err := a.convertOnce(id, share, key)
 		if errors.Is(err, errTurnedAround) {
 			continue
@@ -440,6 +445,7 @@ func (a *Agent) convertShare(id, shareID string) {
 			return
 		}
 		running := a.cfg.Plugins.Installed[id].Running
+		a.reserveWhileStopped(id, share, a.cachedShareUsage(share))
 		a.setPluginState(id, api.PluginStopped, "")
 		a.mu.Unlock()
 		if running {

@@ -214,9 +214,15 @@ shares the owner makes on its page. RasBeacon mounts each one at
 - **On internal storage**, a share is a filesystem of its own, the quota's
   size, set aside on the SD card in full: the quota is a hard limit
   (writing fails when it is full; deleting works).
-- **On a USB drive**, a share is a folder on the drive. Nothing is set
-  aside, and files can be added or deleted on a computer while the drive
-  is out. RasBeacon holds it to its quota itself: the plugin gets the
+- **On a USB drive**, a share is a folder on the drive, and files can be
+  added or deleted on a computer while the drive is out. The room its
+  quota promises and its files don't use yet is held by files of its own
+  in the drive's `RasBeacon reserved space` folder (pieces of at most
+  1 GB, as FAT32 needs, with a README), so the drive shows as full as its
+  shares may become and nothing else fills that room; they shrink as the
+  share's files grow and grow back as they are deleted, and go when the
+  share is removed. A whole-drive share (carried over from an older
+  version) holds none. RasBeacon holds the share to its quota itself: the plugin gets the
   folder through a layer (`rbquotafs`) that counts its files' sizes and,
   once they reach the quota, refuses anything that adds more (writing past
   a file's end, a new file or folder: "no space left on device"), while

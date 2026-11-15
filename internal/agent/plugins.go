@@ -801,6 +801,14 @@ func (a *Agent) RemovePlugin(req api.PluginRemoveRequest) error {
 	if req.KeepData {
 		a.keepPluginData(req.ID, owner)
 		a.keepPluginShares(req.ID, shares)
+	} else {
+		// Its shares on drives keep their files, but not their reserved room.
+		for _, share := range shares {
+			a.removeReservation(req.ID, share)
+		}
+		for _, share := range shares {
+			a.releaseDrive(share.Drive)
+		}
 	}
 	if err := os.RemoveAll(dir); err != nil {
 		slog.Warn("could not delete the plugin's files", "plugin", req.ID, "error", err)
