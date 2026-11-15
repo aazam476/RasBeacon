@@ -425,6 +425,9 @@ func (a *Agent) installPlugin(id string, s *stagedPlugin, previous *previousVers
 		a.installFailed(id, s.archive.Manifest, image, previous, err)
 		return
 	}
+	if previous != nil {
+		a.carryOverToShares(id, previous.manifest, s.archive.Manifest, previous.record)
+	}
 	a.mu.Lock()
 	if err := a.applyFirewall(); err != nil {
 		slog.Error("could not apply the plugin's firewall rules", "error", err)

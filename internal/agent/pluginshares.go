@@ -162,7 +162,12 @@ func cleanShareFolder(folder string) (string, error) {
 }
 
 // foldersOverlap reports whether one folder is the other or inside it.
+// "" is the whole drive (a share carried over from an older version), and
+// holds every other folder.
 func foldersOverlap(a, b string) bool {
+	if a == "" || b == "" {
+		return true
+	}
 	a, b = strings.ToLower(a), strings.ToLower(b)
 	return a == b || strings.HasPrefix(a, b+"/") || strings.HasPrefix(b, a+"/")
 }
@@ -287,17 +292,7 @@ func (a *Agent) measureShareMB(id string, share config.PluginShare) int {
 	if _, err := a.plugins.runner.Run("mountpoint", "-q", a.paths.DriveMountDir(share.Drive)); err != nil && a.mountDrive(share.Drive) != nil {
 		return -1
 	}
-	var bytes int64
-	_ = filepath.WalkDir(a.shareStoreDir(id, share), func(_ string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return nil
-		}
-		if info, err := d.Info(); err == nil {
-			bytes += spaceUsed(info)
-		}
-		return nil
-	})
-	return int((bytes + 1<<20 - 1) >> 20) // rounded up
+	return a.measureFolderMB(a.shareStoreDir(id, share))
 }
 
 // cachedShareUsage is the last measurement of a share (-1: none yet). The
@@ -526,6 +521,12 @@ func (a *Agent) RemovePluginShare(req api.PluginShareRemoveRequest) (api.Plugin,
 	}
 	share := p.Shares[index]
 	deleteFiles := req.DeleteFiles || share.Drive == "" || share.Encryption != encryptionOff
+	// A share of a whole drive (carried over from an older version) never
+	// deletes the drive's files; encrypted, they stay readable with its
+	// recovery key, which is kept.
+	if share.Drive != "" && share.Folder == "" {
+		deleteFiles = false
+	}
 	a.mu.Unlock()
 
 	// Stopped first: nothing may write to the files while they go.
@@ -568,6 +569,9 @@ func (a *Agent) deleteShareFiles(id string, share config.PluginShare) error {
 	}
 	if err := a.mountDrive(share.Drive); err != nil {
 		return &config.ValidationError{Field: "deleteFiles", Message: "Plug in the share's drive to delete its files, or keep them."}
+	}
+	if share.Folder == "" {
+		return &config.ValidationError{Field: "deleteFiles", Message: "This share is the whole drive: its files stay on it."}
 	}
 	folder := a.shareStoreDir(id, share)
 	// Never above the drive's top: the folder was checked when the share
@@ -614,6 +618,129 @@ func (a *Agent) restartAfterShareChange(id string, change func() error) (api.Plu
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.pluginView(id), nil
+}
+
+// --- Carrying an older version's folder over ---
+
+// carryOverToShares turns the one folder an older version of a plugin had
+// into its first share, when an update moves it to shares (Samba 1.0 to
+// 1.1), so the owner's files stay where the new version looks:
+//
+//   - With a USB drive, the share is the whole drive, as the older version
+//     shared it (folder ""): nothing on the drive moves.
+//   - Without one, its files were in its own data, in the volume a drive
+//     would have replaced. They move into a share on internal storage as
+//     big as its data was (or as small as they fit, when the SD card has
+//     no room for both), and its data shrinks to what the new version
+//     asks for.
+//
+// The share is named after the older version's "share" setting (Samba
+// 1.0's share name), else "Files". Called without a.mu, after the update's
+// files are in place and before it starts. A problem is logged, and the
+// files stay where they were.
+func (a *Agent) carryOverToShares(id string, old, updated *plugin.Manifest, record config.InstalledPlugin) {
+	if old == nil || old.USBDrive == nil || old.Shares != nil || updated.Shares == nil {
+		return
+	}
+	a.mu.Lock()
+	already := len(a.cfg.Plugins.Installed[id].Shares) > 0
+	a.mu.Unlock()
+	if already {
+		return
+	}
+	name := record.Settings["share"]
+	if checkShareName(name, nil, "") != nil {
+		name = "Files"
+	}
+	settings, _ := checkShareSettings(updated, nil)
+	share := config.PluginShare{ID: "s1", Name: name, Settings: settings}
+	if record.Drive != "" {
+		share.Drive = record.Drive
+		share.QuotaMB = a.driveSizeMB(record.Drive)
+	} else {
+		quota, err := a.moveDataIntoShare(id, old, updated, record, share)
+		if err != nil {
+			slog.Error("could not carry the plugin's files over to a share; they stay in its data", "plugin", id, "error", err)
+			return
+		}
+		share.QuotaMB = quota
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if err := a.savePluginConfig(id, func(p *config.InstalledPlugin) {
+		p.Shares, p.Drive = []config.PluginShare{share}, ""
+	}); err != nil {
+		slog.Error("could not save the plugin's carried-over share", "plugin", id, "error", err)
+		return
+	}
+	slog.Info("plugin's folder carried over to a share", "plugin", id, "onDrive", share.Drive != "")
+}
+
+// driveSizeMB is a drive's size, for a share that is the whole drive
+// (256 MB when it can't be read: the owner can raise it).
+func (a *Agent) driveSizeMB(uuid string) int {
+	out, err := a.runner.Run("lsblk", plugin.LsblkArgs...)
+	if err == nil {
+		drives, _ := plugin.ParseDrives(out)
+		for _, d := range drives {
+			if d.UUID == uuid && d.Size > 0 {
+				return int(d.Size >> 20)
+			}
+		}
+	}
+	return minShareQuotaMB
+}
+
+// moveDataIntoShare moves the files of the volume an older version's drive
+// replaced, from its data into a new share on internal storage, and
+// shrinks its data to the new version's size. It returns the share's
+// quota. Called without a.mu, with the plugin stopped.
+func (a *Agent) moveDataIntoShare(id string, old, updated *plugin.Manifest, record config.InstalledPlugin, share config.PluginShare) (int, error) {
+	index := slices.IndexFunc(old.Volumes, func(v plugin.Volume) bool { return v.Path == old.USBDrive.Path })
+	if index < 0 {
+		return 0, errors.New("the older version kept no folder in its data")
+	}
+	oldSize := pluginStorageMB(old, record)
+	if err := a.mountPluginData(id, oldSize); err != nil {
+		return 0, err
+	}
+	from := filepath.Join(a.pluginDataMount(id), old.Volumes[index].Name)
+	used := a.measureFolderMB(from)
+	// As big as its data was, if the SD card has room for both a moment;
+	// else just big enough for the files.
+	quota := oldSize
+	if free, err := a.diskFree(a.paths.DataDir()); err == nil && int(free>>20)-internalHeadroomMB < quota {
+		quota = max(minShareQuotaMB, used+pluginStorageRoom(used))
+	}
+	to := a.paths.PluginShareMount(id, share.ID)
+	if err := a.mountImage(a.paths.PluginShareImage(id, share.ID), to, quota); err != nil {
+		return 0, err
+	}
+	if err := os.MkdirAll(from, 0o755); err != nil {
+		return 0, err
+	}
+	if err := a.moveFiles(from, to, func(rel string) bool { return rel == "lost+found" }, func(int, int) error { return nil }); err != nil {
+		return 0, err
+	}
+	// Its data only holds the new version's own files now.
+	if err := a.resizeImage(a.pluginDataFile(id), a.pluginDataMount(id), pluginStorageMB(updated, record)); err != nil {
+		slog.Warn("could not shrink the plugin's data after moving its files", "plugin", id, "error", err)
+	}
+	return quota, nil
+}
+
+// measureFolderMB adds up the files in a folder, rounded up.
+func (a *Agent) measureFolderMB(dir string) int {
+	var bytes int64
+	_ = filepath.WalkDir(dir, func(_ string, d fs.DirEntry, err error) error {
+		if err == nil && !d.IsDir() {
+			if info, err := d.Info(); err == nil {
+				bytes += spaceUsed(info)
+			}
+		}
+		return nil
+	})
+	return int((bytes + 1<<20 - 1) >> 20)
 }
 
 // --- Running the plugin with its shares ---

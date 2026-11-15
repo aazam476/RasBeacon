@@ -428,9 +428,11 @@ function DecryptSheet({ plugin, share, onClose }: { plugin: Plugin; share: Plugi
 function RemoveShareDialog({ plugin, share, onClose }: { plugin: Plugin; share: PluginShare; onClose: () => void }) {
   const { removePluginShare } = useDevice();
   const encrypted = share.encryption.state !== 'off';
-  const canKeep = Boolean(share.drive) && !encrypted;
+  // A share of a whole drive (carried over from an older version) never deletes the drive's files.
+  const wholeDrive = Boolean(share.drive) && !share.folder;
+  const canKeep = Boolean(share.drive) && !encrypted && !wholeDrive;
   const [deleteFiles, setDeleteFiles] = useState(false);
-  const deleting = !canKeep || deleteFiles;
+  const deleting = !wholeDrive && (!canKeep || deleteFiles);
 
   return (
     <AlertDialog
@@ -442,7 +444,13 @@ function RemoveShareDialog({ plugin, share, onClose }: { plugin: Plugin; share: 
       onClose={onClose}
     >
       {!share.drive && <>Its files are deleted with it, and its space goes back to the SD card.</>}
-      {share.drive && encrypted && (
+      {wholeDrive && (
+        <>
+          {plugin.name} stops sharing it. The drive’s files stay on it
+          {encrypted ? ', encrypted: you need its recovery key to read them.' : '.'}
+        </>
+      )}
+      {share.drive && encrypted && !wholeDrive && (
         <>Its folder {share.folder} is deleted from the drive with it: its encrypted files can’t be read without it.</>
       )}
       {canKeep && (

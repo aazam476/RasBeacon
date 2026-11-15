@@ -149,10 +149,14 @@ export function shareUsage(share: PluginShare): string {
   return `${used} of ${storageGbText(share.quotaMb)} GB`;
 }
 
-/** Where a share is: "Internal storage", or "TRAVEL › Movies". */
+/**
+ * Where a share is: "Internal storage", "TRAVEL › Movies", or "TRAVEL (whole drive)" for a share
+ * carried over from an older version that shared the whole drive.
+ */
 export function sharePlace(share: PluginShare): string {
   if (!share.drive) return 'Internal storage';
-  return `${share.driveLabel ?? 'USB drive'} › ${share.folder ?? ''}`;
+  const drive = share.driveLabel ?? 'USB drive';
+  return share.folder ? `${drive} › ${share.folder}` : `${drive} (whole drive)`;
 }
 
 /**

@@ -229,6 +229,17 @@ shares the owner makes on its page. RasBeacon mounts each one at
 The plugin restarts when a share is added, changed or removed, so it reads
 `RASBEACON_SHARES` once, when it starts.
 
+**Moving a plugin from `usbDrive` to `shares`** (as Samba did in 1.1):
+when it updates, RasBeacon carries its one folder over as its first share,
+so the owner loses nothing. With a USB drive chosen, the share is the whole
+drive (nothing moves; a whole-drive share can only come about this way, and
+removing it never deletes the drive's files). Without one, the files of the
+volume at `usbDrive`'s path move from its data into a share on internal
+storage as big as its data was (or as small as they fit, when the SD card
+has no room for both), and its data shrinks to the new `storageMb`. The
+share is named after a setting with the key `share`, if the old version had
+one, else "Files".
+
 ### Power
 
 With `power-button`, `RASBEACON_SOCKET` names a Unix socket (only root in

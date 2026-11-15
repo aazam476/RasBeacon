@@ -293,3 +293,43 @@ describe('removing a share', () => {
     expect(dialog.queryByLabelText(/Also delete the folder/)).toBeNull();
   });
 });
+
+// A share carried over from Samba 1.0, which shared a whole drive.
+describe('a share of a whole drive', () => {
+  const wholeDrive = withShare('s2', (s) => {
+    s.folder = undefined;
+    s.usedMb = 100;
+  });
+
+  it('says it is the whole drive', () => {
+    renderScreen(<Pages />, fakeDevice(wholeDrive), '/plugins/samba');
+    expect(within(section('Shares')).getByText('TRAVEL (whole drive)')).toBeTruthy();
+  });
+
+  it('keeps the drive’s files when removed, and doesn’t offer to delete them', async () => {
+    const device = fakeDevice(wholeDrive);
+    const { user } = renderScreen(<Pages />, device, '/plugins/samba');
+    await user.click(within(section('Shares')).getByRole('button', { name: /^Movies/ }));
+    await user.click(
+      within(screen.getByRole('dialog', { name: 'Movies' })).getByRole('button', { name: 'Remove share' }),
+    );
+    const dialog = within(screen.getByRole('dialog', { name: 'Remove Movies?' }));
+    expect(dialog.getByText(/The drive’s files stay on it\./)).toBeTruthy();
+    expect(dialog.queryByLabelText(/Also delete the folder/)).toBeNull();
+    await user.click(dialog.getByRole('button', { name: 'Remove' }));
+    expect(device.removePluginShare).toHaveBeenCalledWith('samba', 's2', false);
+  });
+
+  it('says an encrypted one stays readable with its key', async () => {
+    const device = fakeDevice((router) => {
+      wholeDrive(router);
+      withShare('s2', (s) => (s.encryption = { state: 'on', recoveryKeySaved: true }))(router);
+    });
+    const { user } = renderScreen(<Pages />, device, '/plugins/samba');
+    await user.click(within(section('Shares')).getByRole('button', { name: /^Movies/ }));
+    await user.click(
+      within(screen.getByRole('dialog', { name: 'Movies' })).getByRole('button', { name: 'Remove share' }),
+    );
+    expect(screen.getByText(/encrypted: you need its recovery key/)).toBeTruthy();
+  });
+});
