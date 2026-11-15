@@ -1,3 +1,5 @@
+//go:build linux
+
 // Package quotafs holds a USB share to its quota, strictly. A share on a
 // USB drive is a folder on the drive; nothing sets space aside for it, so
 // the plugin (Samba) would only report the share as full, which Finder and
@@ -14,6 +16,9 @@
 // Files are counted by their sizes. What they were when it started is
 // added up from the folder, so files added or deleted on a computer while
 // the drive was out count.
+//
+// It builds on Linux only (the go-fuse loopback it uses is Linux's), as it
+// runs only on the Pi.
 package quotafs
 
 import (

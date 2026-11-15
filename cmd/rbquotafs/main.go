@@ -1,3 +1,5 @@
+//go:build linux
+
 // Command rbquotafs holds a share on a USB drive to its quota (see
 // internal/quotafs): it shows the share's folder at a mount point, where
 // nothing more can be added once the files reach the quota, while reading
