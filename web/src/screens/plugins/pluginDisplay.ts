@@ -1,5 +1,6 @@
 import type { BaseIconName, Tone } from '@/ui';
-import { FieldErrors } from '@/data/errors';
+import { errorText, FieldErrors } from '@/data/errors';
+import { ApiError } from '@/data/real/api';
 import type { Plugin, PluginChoices, PluginPort, PluginSetting, PluginState } from '@/data/types';
 
 /** A plugin's state in a word or two, and the badge color for it. */
@@ -138,4 +139,15 @@ export function numberNote(setting: Pick<PluginSetting, 'unit' | 'min' | 'max'>)
 /** "Version 1.2 · by RasBeacon" */
 export function byline(plugin: Pick<Plugin, 'version' | 'author'>): string {
   return plugin.author ? `Version ${plugin.version} · by ${plugin.author}` : `Version ${plugin.version}`;
+}
+
+/**
+ * Why the USB drives couldn't be listed. No answer at all usually means a drive that is slow to
+ * answer, not a lost connection (the page is still open and working), so it says so.
+ */
+export function drivesErrorText(reason: unknown): string {
+  if (reason instanceof ApiError && reason.status === 0) {
+    return 'The USB drives took too long to list. Try again; if it keeps happening, unplug the drive and plug it in again.';
+  }
+  return errorText(reason);
 }

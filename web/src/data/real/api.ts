@@ -459,7 +459,9 @@ export const getPluginRecoveryKey = (id: string) =>
   request<PluginRecoveryKey>('POST', '/plugins/recovery-key', { body: { id } });
 export const getPluginLogs = (id: string) => request<PluginLogsResponse>('POST', '/plugins/logs', { body: { id } });
 /** The drives plugged in, that a plugin may be given. */
-export const getPluginDrives = () => request<{ drives: PluginDrive[] }>('GET', '/plugins/drives');
+export const getPluginDrives = () =>
+  // RasBeacon gives lsblk up to 30 s; waiting longer lets its own answer arrive if a drive is slow.
+  request<{ drives: PluginDrive[] }>('GET', '/plugins/drives', { timeoutMs: 40_000 });
 /** The GitHub repositories the catalog lists plugins from. */
 export const putPluginSources = (sources: string[]) =>
   request<PluginsState>('PUT', '/plugins/sources', { body: { sources } });
