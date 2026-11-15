@@ -160,12 +160,17 @@ export function sharePlace(share: PluginShare): string {
 }
 
 /**
- * Why the USB drives couldn't be listed. No answer at all usually means a drive that is slow to
- * answer, not a lost connection (the page is still open and working), so it says so.
+ * Why the USB drives couldn't be listed, to show under the drive dropdown. An answer that took
+ * too long means a drive slow to answer, so it says so. No answer at all means RasBeacon wasn't
+ * reached, which the note at the top of the page already says: then it is null (nothing to show).
  */
-export function drivesErrorText(reason: unknown): string {
+export function drivesErrorText(reason: unknown): string | null {
   if (reason instanceof ApiError && reason.status === 0) {
-    return 'The USB drives took too long to list. Try again; if it keeps happening, unplug the drive and plug it in again.';
+    if (reason.timedOut) {
+      return 'The USB drives took too long to list. Try again; if it keeps happening, unplug the drive and plug it in again.';
+    }
+    // Not reached at all: the note at the top of the page already says so.
+    return null;
   }
   return errorText(reason);
 }

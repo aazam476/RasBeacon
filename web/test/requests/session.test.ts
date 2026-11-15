@@ -96,6 +96,33 @@ describe('sending requests', () => {
     await expect(api.getStatus()).rejects.toMatchObject({ status: 0, message: api.UNREACHABLE });
   });
 
+  it('tells an answer that took too long from no connection at all', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Promise.reject(new TypeError('Failed to fetch'))),
+    );
+    await expect(api.getStatus()).rejects.toMatchObject({ status: 0, timedOut: false });
+
+    vi.useFakeTimers();
+    try {
+      // A router that never answers, so the browser gives up after the time limit.
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(
+          (_url: string, init: RequestInit = {}) =>
+            new Promise<Response>((_, reject) => {
+              init.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+            }),
+        ),
+      );
+      const status = api.getStatus().catch((reason: unknown) => reason);
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(await status).toMatchObject({ status: 0, message: api.UNREACHABLE, timedOut: true });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('answers undefined for “204 No Content”', async () => {
     fakeRouter({ status: 204 });
     await expect(api.shutDown()).resolves.toBeUndefined();

@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useDevice } from '@/data/device';
 import { FieldErrors } from '@/data/errors';
-import type { Plugin, PluginDrive, PluginShare, PluginShares } from '@/data/types';
+import type { Plugin, PluginShare, PluginShares } from '@/data/types';
 import { saveTextFile } from '@/lib/download';
 import {
   ActionButton,
@@ -19,7 +19,8 @@ import {
   TextField,
 } from '@/ui';
 import { SettingField } from './PluginFields';
-import { drivesErrorText, sharePlace, shareUsage, storageGbText } from './pluginDisplay';
+import { useDriveList } from './useDriveList';
+import { sharePlace, shareUsage, storageGbText } from './pluginDisplay';
 
 /** Megabytes in a gigabyte, as RasBeacon counts a share's quota. */
 const MB_PER_GB = 1024;
@@ -167,26 +168,14 @@ function ShareSubtitle({ share }: { share: PluginShare }) {
 
 /** A new share: its name, where it goes (fixed from then on), its quota and settings. */
 function AddShareSheet({ plugin, shares, onClose }: { plugin: Plugin; shares: PluginShares; onClose: () => void }) {
-  const { addPluginShare, pluginDrives } = useDevice();
+  const { addPluginShare } = useDevice();
   const [name, setName] = useState('');
   const [drive, setDrive] = useState('');
   // The folder follows the name until it is typed in.
   const [folder, setFolder] = useState<string>();
   const [quota, setQuota] = useState('');
   const [settings, setSettings] = useState(() => settingValues(shares));
-  const [drives, setDrives] = useState<PluginDrive[] | null>(shares.onDrives ? null : []);
-  const [driveProblem, setDriveProblem] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!shares.onDrives) return;
-    let open = true;
-    pluginDrives()
-      .then((list) => open && setDrives(list))
-      .catch((reason: unknown) => open && setDriveProblem(drivesErrorText(reason)));
-    return () => {
-      open = false;
-    };
-  }, [pluginDrives, shares.onDrives]);
+  const { drives, problem: driveProblem } = useDriveList(shares.onDrives);
 
   const places = [
     { value: '', label: 'RasBeacon internal storage' },

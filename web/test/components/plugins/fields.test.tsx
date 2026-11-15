@@ -1,11 +1,13 @@
 // A plugin's form (ports, settings, USB drive), drawn from its manifest. The install sheet and
 // the plugin's page both use it; here it is tested on its own.
-import { screen } from '@testing-library/react';
+import { act, screen } from '@testing-library/react';
 import { useState } from 'react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { ApiError, UNREACHABLE } from '@/data/real/api';
 import type { PluginDrive, PluginPort, PluginSetting } from '@/data/types';
 import { PluginFields } from '@/screens/plugins/PluginFields';
 import { draftOf, type ChoicesDraft } from '@/screens/plugins/pluginDisplay';
+import { DRIVES_RETRY_MS } from '@/screens/plugins/useDriveList';
 import { fakeDevice, renderScreen } from '../render';
 
 const ports: PluginPort[] = [{ key: 'tcp/3000', name: 'Web page', protocol: 'tcp', container: 3000, host: 3000 }];
@@ -106,5 +108,43 @@ describe('plugin form', () => {
     });
     expect(await screen.findByText("Can't list the drives.")).toBeTruthy();
     expect(screen.getByRole('option', { name: 'The chosen drive (not plugged in)' })).toBeTruthy();
+  });
+
+  it('leaves a lost connection to the note at the top, and lists the drives once it is back', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      let reachable = false;
+      const drives = vi.fn(async () => {
+        if (!reachable) throw new ApiError(0, UNREACHABLE);
+        return [{ uuid: 'u1', label: 'Photos', fsType: 'exfat', size: 64e9 }];
+      });
+      renderFields({ usesDrive: true, drives });
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(drives).toHaveBeenCalledTimes(1);
+      expect(screen.queryByText(UNREACHABLE)).toBeNull();
+      expect(screen.getByText('Looking for drives…')).toBeTruthy();
+
+      reachable = true;
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(DRIVES_RETRY_MS);
+      });
+      expect(drives).toHaveBeenCalledTimes(2);
+      expect(await screen.findByRole('option', { name: /Photos/ })).toBeTruthy();
+      expect(screen.queryByText('Looking for drives…')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('says the drives are slow when RasBeacon answered too late', async () => {
+    renderFields({
+      usesDrive: true,
+      drives: async () => {
+        throw new ApiError(0, UNREACHABLE, undefined, true);
+      },
+    });
+    expect(await screen.findByText(/USB drives took too long to list/)).toBeTruthy();
   });
 });

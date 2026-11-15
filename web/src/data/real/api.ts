@@ -96,12 +96,18 @@ export class ApiError extends Error {
   /** The HTTP status; 0 when there was no answer. */
   readonly status: number;
   readonly field?: string;
+  /**
+   * With no answer (status 0): whether RasBeacon was reached but took longer than the request's
+   * time limit, rather than not reached at all (this device left its Wi-Fi, or it is restarting).
+   */
+  readonly timedOut: boolean;
 
-  constructor(status: number, message: string, field?: string) {
+  constructor(status: number, message: string, field?: string, timedOut = false) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.field = field;
+    this.timedOut = timedOut;
   }
 }
 
@@ -182,8 +188,9 @@ async function request<T>(method: string, path: string, options: RequestOptions 
       signal: controller.signal,
     });
   } catch {
-    // No answer at all: the phone left the hotspot, or RasBeacon is restarting.
-    throw new ApiError(0, UNREACHABLE);
+    // No answer at all: the phone left the hotspot, or RasBeacon is restarting, or (when the
+    // timer aborted it) the answer took longer than the time limit.
+    throw new ApiError(0, UNREACHABLE, undefined, controller.signal.aborted);
   } finally {
     clearTimeout(timer);
   }

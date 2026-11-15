@@ -1,9 +1,8 @@
-import { useEffect, useState } from 'react';
-import { useDevice } from '@/data/device';
-import type { PluginDrive, PluginPort, PluginSetting, PluginStorageRange } from '@/data/types';
+import type { PluginPort, PluginSetting, PluginStorageRange } from '@/data/types';
 import { formatBytes } from '@/lib/format';
 import { FormSwitchRow, PasswordField, Section, SelectField, TextField } from '@/ui';
-import { drivesErrorText, numberNote, storageGbText, type ChoicesDraft } from './pluginDisplay';
+import { useDriveList } from './useDriveList';
+import { numberNote, storageGbText, type ChoicesDraft } from './pluginDisplay';
 
 interface PluginFieldsProps {
   ports: PluginPort[];
@@ -220,19 +219,7 @@ interface DriveFieldProps {
 
 /** The USB drive the plugin uses, from the drives plugged in now. */
 function DriveField({ level, optional, value, onChange, error }: DriveFieldProps) {
-  const { pluginDrives } = useDevice();
-  const [drives, setDrives] = useState<PluginDrive[] | null>(null);
-  const [problem, setProblem] = useState<string | null>(null);
-
-  useEffect(() => {
-    let open = true;
-    pluginDrives()
-      .then((list) => open && setDrives(list))
-      .catch((reason: unknown) => open && setProblem(drivesErrorText(reason)));
-    return () => {
-      open = false;
-    };
-  }, [pluginDrives]);
+  const { drives, problem } = useDriveList();
 
   const options = [
     ...(optional || value === ''
