@@ -347,3 +347,39 @@ func TestShareEncryption_Routes(t *testing.T) {
 		t.Errorf("recovery key = %d %s", status, body)
 	}
 }
+
+func TestShareEncryption_FromTheStart(t *testing.T) {
+	e := newSharesEnv(t)
+	// Files already in the drive's folder are moved into the encrypted folder.
+	movies := filepath.Join(e.paths.DriveMountDir("1234-ABCD"), "Movies")
+	mustWrite(t, filepath.Join(movies, "beach.mkv"), "sand and sea")
+	p, err := e.agent.AddPluginShare(api.PluginShareAddRequest{
+		ID: "adguard-home", Name: "Movies", Drive: "1234-ABCD", Folder: "Movies", QuotaMB: 1024, Encrypt: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.State != api.PluginConverting || !strings.Contains(p.Message, "Encrypting the share Movies") {
+		t.Errorf("after adding: %s %q", p.State, p.Message)
+	}
+	e.runBackground()
+	if got := e.readFile(filepath.Join(e.paths.SharePlainDir("adguard-home", "s1"), "beach.mkv")); got != "sand and sea" {
+		t.Errorf("beach.mkv = %q", got)
+	}
+	if got := encryption(e, "s1"); got.State != "on" || got.RecoveryKeySaved {
+		t.Errorf("Movies = %+v, want on, key not saved yet", got)
+	}
+
+	// On internal storage, an empty share; the plugin is free again after.
+	if _, err := e.agent.AddPluginShare(api.PluginShareAddRequest{ID: "adguard-home", Name: "Files", QuotaMB: 512, Encrypt: true}); err != nil {
+		t.Fatal(err)
+	}
+	e.runBackground()
+	if got := encryption(e, "s2"); got.State != "on" || e.agent.secrets.ShareKeys["adguard-home/s2"] == "" {
+		t.Errorf("Files = %+v, want on with a key", got)
+	}
+	addShare(e, api.PluginShareAddRequest{Name: "Plain", QuotaMB: 256})
+	if got := encryption(e, "s3"); got.State != "off" {
+		t.Errorf("Plain = %+v, want off", got)
+	}
+}

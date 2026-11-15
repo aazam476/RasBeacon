@@ -1201,7 +1201,9 @@ type PluginShare struct {
 }
 
 // PluginShareAddRequest makes a share (POST /plugins/shares/add). Drive ""
-// is RasBeacon's internal storage; on a drive, Folder is required.
+// is RasBeacon's internal storage; on a drive, Folder is required. Encrypt
+// encrypts its files from the start (files already in a drive's folder are
+// moved into the encrypted folder first, as when it is turned on later).
 type PluginShareAddRequest struct {
 	ID       string            `json:"id"`
 	Name     string            `json:"name"`
@@ -1209,6 +1211,7 @@ type PluginShareAddRequest struct {
 	Folder   string            `json:"folder"`
 	QuotaMB  int               `json:"quotaMb"`
 	Settings map[string]string `json:"settings"`
+	Encrypt  bool              `json:"encrypt"`
 }
 
 // PluginShareUpdateRequest changes a share's name, quota and settings

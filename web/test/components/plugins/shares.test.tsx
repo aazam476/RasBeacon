@@ -157,6 +157,21 @@ describe('adding a share', () => {
     );
   });
 
+  it('can be encrypted from the start', async () => {
+    const device = fakeDevice();
+    const { user } = renderScreen(<Pages />, device, '/plugins/samba');
+    await user.click(screen.getByRole('button', { name: 'Add a share' }));
+    const sheet = within(screen.getByRole('dialog', { name: 'Add a share' }));
+    await user.type(sheet.getByRole('textbox', { name: 'Name' }), 'Secret');
+    await user.type(sheet.getByRole('textbox', { name: /^Quota/ }), '1');
+    await user.click(sheet.getByLabelText('Encrypt this share’s files'));
+    await user.click(sheet.getByRole('button', { name: 'Add' }));
+    expect(device.addPluginShare).toHaveBeenCalledWith(
+      'samba',
+      expect.objectContaining({ name: 'Secret', encrypt: true }),
+    );
+  });
+
   it('shows RasBeacon’s answer under the field it is about', async () => {
     const device = fakeDevice(undefined, {
       addPluginShare: vi.fn(async () => {

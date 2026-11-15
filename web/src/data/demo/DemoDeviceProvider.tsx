@@ -1288,7 +1288,8 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
             minQuotaMb: 256,
             maxQuotaMb: share.drive ? 40 * 1024 : shares.newInternalMaxMb,
             settings: shares.settings.map((s) => ({ ...s, value: share.settings[s.key] ?? s.value })),
-            encryption: { state: 'off' },
+            // A new share in the demo holds no files, so it is encrypted at once.
+            encryption: share.encrypt ? { state: 'on', recoveryKeySaved: false } : { state: 'off' },
           });
           if (!share.drive) shares.newInternalMaxMb -= share.quotaMb;
         });

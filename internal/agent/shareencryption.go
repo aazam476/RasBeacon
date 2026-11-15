@@ -340,27 +340,46 @@ func (a *Agent) SetPluginEncryption(req api.PluginEncryptionRequest) (api.Plugin
 	default:
 		want = encryptionDecrypting
 	}
-	if key == "" {
+	if converting {
+		// The move going on picks up the new direction.
+		if err := a.saveShare(req.ID, req.Share, func(s *config.PluginShare) { s.Encryption = want }); err != nil {
+			return done(err)
+		}
+		slog.Info("share encryption changing", "plugin", req.ID, "share", req.Share, "to", want)
+		return a.pluginView(req.ID), nil
+	}
+	if err := a.startConversion(live, req.ID, share, want); err != nil {
+		return done(err)
+	}
+	return a.pluginView(req.ID), nil
+}
+
+// startConversion starts moving a share's files into its encrypted folder
+// (want encrypting) or out of it (decrypting), in the background: it makes
+// the share's key if it has none yet, saves the direction, and marks the
+// plugin as moving. The plugin must be marked busy (beginPluginWork); the
+// move ends that when it is done. The caller holds a.mu.
+func (a *Agent) startConversion(live *pluginLive, id string, share config.PluginShare, want string) error {
+	keyName := shareKeyName(id, share)
+	if a.secrets.ShareKeys[keyName] == "" {
 		newSecrets := a.secrets.Clone()
 		if newSecrets.ShareKeys == nil {
 			newSecrets.ShareKeys = map[string]string{}
 		}
 		newSecrets.ShareKeys[keyName] = newRecoveryKey()
 		if err := config.WriteJSON(a.paths.SecretsFile(), newSecrets, 0o600); err != nil {
-			return done(err)
+			return err
 		}
 		a.secrets = newSecrets
 	}
-	if err := a.saveShare(req.ID, req.Share, func(s *config.PluginShare) { s.Encryption = want }); err != nil {
-		return done(err)
+	if err := a.saveShare(id, share.ID, func(s *config.PluginShare) { s.Encryption = want }); err != nil {
+		return err
 	}
-	slog.Info("share encryption changing", "plugin", req.ID, "share", req.Share, "to", want)
-	if !converting {
-		live.converting, live.convertShare = true, req.Share
-		a.setPluginState(req.ID, api.PluginConverting, conversionMessage(share.Name, want, 0, 0))
-		a.background(func() { a.convertShare(req.ID, req.Share) })
-	}
-	return a.pluginView(req.ID), nil
+	slog.Info("share encryption changing", "plugin", id, "share", share.ID, "to", want)
+	live.converting, live.convertShare = true, share.ID
+	a.setPluginState(id, api.PluginConverting, conversionMessage(share.Name, want, 0, 0))
+	a.background(func() { a.convertShare(id, share.ID) })
+	return nil
 }
 
 // saveShare saves a change to one share. The caller holds a.mu.

@@ -919,6 +919,8 @@ export interface NewPluginShare {
   folder: string;
   quotaMb: number;
   settings: Record<string, string>;
+  /** Encrypted from the start (left out: not encrypted). */
+  encrypt?: boolean;
 }
 
 /** What can change on a share: never where it is. */

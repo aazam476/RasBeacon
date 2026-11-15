@@ -432,7 +432,16 @@ func (a *Agent) AddPluginShare(req api.PluginShareAddRequest) (api.Plugin, error
 		return fail(err)
 	}
 	a.rememberShareUsage(share, used)
-	slog.Info("share added", "plugin", req.ID, "share", share.ID, "onDrive", share.Drive != "")
+	slog.Info("share added", "plugin", req.ID, "share", share.ID, "onDrive", share.Drive != "", "encrypt", req.Encrypt)
+	if req.Encrypt && share.Encryption != encryptionOn {
+		// Encrypted from the start: the move (of nothing, or of what the
+		// drive's folder already holds) restarts the plugin when done.
+		if err := a.startConversion(live, req.ID, share, encryptionEncrypting); err != nil {
+			return fail(err)
+		}
+		defer a.mu.Unlock()
+		return a.pluginView(req.ID), nil
+	}
 	return a.restartAfterShareChange(req.ID, nil)
 }
 

@@ -175,6 +175,7 @@ function AddShareSheet({ plugin, shares, onClose }: { plugin: Plugin; shares: Pl
   const [folder, setFolder] = useState<string>();
   const [quota, setQuota] = useState('');
   const [settings, setSettings] = useState(() => settingValues(shares));
+  const [encrypt, setEncrypt] = useState(false);
   const { drives, problem: driveProblem } = useDriveList(shares.onDrives);
 
   const places = [
@@ -200,6 +201,7 @@ function AddShareSheet({ plugin, shares, onClose }: { plugin: Plugin; shares: Pl
           folder: drive ? (folder ?? name).trim() : '',
           quotaMb: quotaOf(quota),
           settings,
+          ...(encrypt ? { encrypt: true } : {}),
         })
       }
       onClose={onClose}
@@ -263,6 +265,18 @@ function AddShareSheet({ plugin, shares, onClose }: { plugin: Plugin; shares: Pl
               ))}
             </Section>
           )}
+          <Section
+            level={3}
+            title="Encryption"
+            footer={`Someone who pulls out the ${drive ? 'drive' : 'SD card'} can’t read encrypted files on a computer: only ${plugin.name} shows them.${drive ? ` Files already in the folder are moved into an encrypted folder first, while ${plugin.name} pauses.` : ''} Afterwards, download the recovery key.`}
+          >
+            <FormSwitchRow
+              leading={{ tile: 'lock', color: 'indigo' }}
+              label="Encrypt this share’s files"
+              checked={encrypt}
+              onChange={setEncrypt}
+            />
+          </Section>
         </>
       )}
     </Sheet>
