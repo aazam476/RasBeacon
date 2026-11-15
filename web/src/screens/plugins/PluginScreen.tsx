@@ -279,7 +279,8 @@ function LogSection({ plugin }: { plugin: Plugin }) {
   return (
     <Section title="Log" footer="Kept in memory until it or RasBeacon restarts.">
       <Disclosure
-        title="Its last 500 lines"
+        title="Log"
+        subtitle="Last 500 lines"
         leading={{ icon: 'article' }}
         content="rows"
         onToggle={(open) => {

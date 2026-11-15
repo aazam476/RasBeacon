@@ -46,7 +46,7 @@ describe('looking after a plugin', () => {
       pluginLogs: async () => [{ text: 'started' }, { time: written, text: 'listening on :53' }],
     });
     const { user } = renderScreen(<Pages />, device, '/plugins/adguard-home');
-    const row = within(await openRow(user, 'Its last 500 lines'));
+    const row = within(await openRow(user, 'Log'));
     const log = await row.findByText(/listening on :53/);
     expect(log.textContent).toBe(
       `started\n${new Date(written).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })} listening on :53`,
@@ -60,7 +60,7 @@ describe('looking after a plugin', () => {
       },
     });
     const { user } = renderScreen(<Pages />, device, '/plugins/adguard-home');
-    const row = within(await openRow(user, 'Its last 500 lines'));
+    const row = within(await openRow(user, 'Log'));
     expect(await row.findByText('It is not running.')).toBeTruthy();
   });
 
@@ -98,7 +98,7 @@ describe('looking after a plugin', () => {
     });
     renderScreen(<Pages />, device, '/plugins/adguard-home');
     expect(screen.queryByRole('switch', { name: /Running/ })).toBeNull();
-    expect(screen.getByText('Log')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Log' })).toBeTruthy();
     expect(screen.getByRole('button', { name: /^Remove / })).toBeTruthy();
   });
 });
