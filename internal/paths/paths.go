@@ -80,6 +80,12 @@ func (p Paths) PluginShareMount(id, share string) string {
 	return filepath.Join(p.RunDir(), "plugin-shares", id, share)
 }
 
+// ShareQuotaDir is where a share on a USB drive is held to its quota
+// (rbquotafs): the view of its folder the plugin gets.
+func (p Paths) ShareQuotaDir(id, share string) string {
+	return filepath.Join(p.RunDir(), "shares-quota", id, share)
+}
+
 // SharePlainDir is where an encrypted share's files are opened (the
 // decrypted view the plugin gets).
 func (p Paths) SharePlainDir(id, share string) string {

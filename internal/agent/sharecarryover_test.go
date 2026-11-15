@@ -110,8 +110,10 @@ func TestCarryOver_ADriveBecomesAShareOfTheWholeDrive(t *testing.T) {
 	if e.agent.cfg.Plugins.Installed["adguard-home"].Drive != "" {
 		t.Error("the single drive gives way to the share")
 	}
-	if !strings.Contains(strings.Join(e.runner.commands, "\n"), drive+":/shares/s1") {
-		t.Error("the plugin should get the whole drive as its share")
+	view := e.paths.ShareQuotaDir("adguard-home", "s1")
+	if !strings.Contains(strings.Join(e.runner.commands, "\n"), view+":/shares/s1") || !e.runner.ran("rbquotafs -limit") ||
+		!strings.Contains(strings.Join(e.runner.commands, "\n"), " "+drive+" "+view) {
+		t.Error("the plugin should get the whole drive, held to its quota, as its share")
 	}
 	// No other share fits on it, and removing it keeps the drive's files.
 	if _, err := e.agent.AddPluginShare(api.PluginShareAddRequest{ID: "adguard-home", Name: "Movies", Drive: "1234-ABCD", Folder: "Movies", QuotaMB: 256}); err == nil {

@@ -393,6 +393,8 @@ func (a *Agent) convertShare(id, shareID string) {
 		share := p.Shares[index]
 		key := a.secrets.ShareKeys[shareKeyName(id, share)]
 		a.mu.Unlock()
+		// Its quota view sits on top of its files: let go of it first.
+		_, _ = a.plugins.runner.Run("umount", a.paths.ShareQuotaDir(id, share.ID))
 		err := a.convertOnce(id, share, key)
 		if errors.Is(err, errTurnedAround) {
 			continue

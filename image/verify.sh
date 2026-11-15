@@ -26,6 +26,7 @@ check() {
 check "rbd is installed and executable" test -x "$root/usr/bin/rbd"
 check "rbweb is installed and executable" test -x "$root/usr/bin/rbweb"
 check "rbdoh is installed and executable" test -x "$root/usr/bin/rbdoh"
+check "rbquotafs is installed and executable (USB shares' quotas)" test -x "$root/usr/bin/rbquotafs"
 check "the DoH forwarder's unit is installed (rbd starts it)" test -f "$root/usr/lib/systemd/system/rasbeacon-doh.service"
 check "the DoH forwarder has its own user" grep -q "^rbdoh:" "$root/etc/passwd"
 check "the system's CA list is there (Enterprise login servers)" test -s "$root/etc/ssl/certs/ca-certificates.crt"

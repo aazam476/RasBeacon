@@ -216,10 +216,14 @@ shares the owner makes on its page. RasBeacon mounts each one at
   (writing fails when it is full; deleting works).
 - **On a USB drive**, a share is a folder on the drive. Nothing is set
   aside, and files can be added or deleted on a computer while the drive
-  is out. The plugin should report `quotaBytes` as the share's size and
-  only what is left of it as free, measured against the files in the
-  folder: with more files than the quota, nothing is free (Samba does this
-  with its `dfree command`).
+  is out. RasBeacon holds it to its quota itself: the plugin gets the
+  folder through a layer (`rbquotafs`) that counts its files' sizes and,
+  once they reach the quota, refuses anything that adds more (writing past
+  a file's end, a new file or folder: "no space left on device"), while
+  reading, changing files in place and deleting still work. The plugin
+  should still report `quotaBytes` as the share's size and only what is
+  left of it as free, so computers see it (Samba does this with its
+  `dfree command`).
 - **Encrypted** shares come as their decrypted view; the plugin needs
   nothing of its own for it. While a share's files are encrypted or
   decrypted, the plugin is stopped.

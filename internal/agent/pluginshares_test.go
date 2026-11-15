@@ -217,8 +217,13 @@ func TestShares_OnAUSBDrive(t *testing.T) {
 	if len(list) != 1 || list[0].Folder != "Movies" || list[0].DriveLabel != "STICK" || list[0].UsedMB < 3 {
 		t.Fatalf("shares = %+v", list)
 	}
-	if !strings.Contains(strings.Join(e.runner.commands, "\n"), filepath.Join(drive, "Movies")+":/shares/s1") {
-		t.Error("the plugin should get the folder at /shares/s1")
+	// The plugin gets the folder held to its quota (rbquotafs) at /shares/s1.
+	view := e.paths.ShareQuotaDir("adguard-home", "s1")
+	if !strings.Contains(strings.Join(e.runner.commands, "\n"), view+":/shares/s1") {
+		t.Error("the plugin should get the quota view at /shares/s1")
+	}
+	if !e.runner.ran("rbquotafs -limit 4294967296 " + filepath.Join(drive, "Movies") + " " + view) {
+		t.Error("the folder should be held to its 4 GB quota")
 	}
 	var invalid *config.ValidationError
 	// A folder inside another share's, or around it, can't be one.
@@ -439,5 +444,45 @@ func TestShares_Helpers(t *testing.T) {
 	}
 	if err := halfConverted([]config.PluginShare{{Name: "A", Encryption: encryptionDecrypting}}); err == nil {
 		t.Error("a half decrypted share stops the plugin from starting")
+	}
+}
+
+// A share on a USB drive is held to its quota by rbquotafs: mounted with
+// its quota as it is when the plugin starts, again after the quota
+// changes, and let go of when the plugin stops. Internal shares need none
+// (their own filesystem is the quota).
+func TestShares_AUSBShareIsHeldToItsQuota(t *testing.T) {
+	e := newSharesEnv(t)
+	addShare(e, api.PluginShareAddRequest{Name: "Files", QuotaMB: 256})
+	addShare(e, api.PluginShareAddRequest{Name: "Movies", Drive: "1234-ABCD", Folder: "Movies", QuotaMB: 1024})
+	view := e.paths.ShareQuotaDir("adguard-home", "s2")
+	folder := filepath.Join(e.paths.DriveMountDir("1234-ABCD"), "Movies")
+	if !e.runner.ran("rbquotafs -limit 1073741824 " + folder + " " + view) {
+		t.Fatal("the USB share should be held to its quota")
+	}
+	if e.runner.ran("rbquotafs -limit 268435456") {
+		t.Error("a share on internal storage needs no quota layer")
+	}
+	if _, err := e.agent.UpdatePluginShare(api.PluginShareUpdateRequest{ID: "adguard-home", Share: "s2", Name: "Movies", QuotaMB: 2048}); err != nil {
+		t.Fatal(err)
+	}
+	if !e.runner.ran("rbquotafs -limit 2147483648 " + folder + " " + view) {
+		t.Error("a new quota should be held to after the change")
+	}
+	umounts := e.runner.count("umount " + view)
+	if err := e.agent.StopPlugin("adguard-home"); err != nil {
+		t.Fatal(err)
+	}
+	if e.runner.count("umount "+view) == umounts {
+		t.Error("stopping should let go of the quota view")
+	}
+	// A quota layer that can't start stops the plugin from starting:
+	// never the share without its quota.
+	e.runner.failing = append(e.runner.failing, "rbquotafs")
+	if err := e.agent.StartPlugin("adguard-home"); err == nil {
+		e.runBackground()
+	}
+	if p := e.plugin("adguard-home"); !strings.Contains(p.Message, "held to its quota") {
+		t.Errorf("state %s %q, want the quota problem", p.State, p.Message)
 	}
 }

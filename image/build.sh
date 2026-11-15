@@ -56,7 +56,7 @@ make -C "$repo_root" pi VERSION="$version" REPOSITORY="${GITHUB_REPOSITORY:-}"
 #    overlay, so the repository itself never contains built binaries.
 rm -rf "$stage" && mkdir -p "$stage" "$out"
 cp -a "$repo_root/image/." "$stage/"
-install -m 0755 "$repo_root/build/arm64/rbd" "$repo_root/build/arm64/rbweb" "$repo_root/build/arm64/rbdoh" \
+install -m 0755 "$repo_root/build/arm64/rbd" "$repo_root/build/arm64/rbweb" "$repo_root/build/arm64/rbdoh" "$repo_root/build/arm64/rbquotafs" \
   "$stage/layer/rasbeacon.d/customize.overlay/usr/bin/"
 rm -f "$stage/layer/rasbeacon.d/customize.overlay/usr/bin/.gitkeep"
 # Which board this image is for: update files must match it.

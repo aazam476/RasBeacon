@@ -74,6 +74,10 @@ type shareRun struct {
 	key   string // its recovery key, when encrypted
 }
 
+// rbquotafs is the program that holds a share on a USB drive to its quota
+// (cmd/rbquotafs): nothing more can be added once its files reach it.
+const rbquotafs = "rbquotafs"
+
 // --- Where a share is ---
 
 // shareStoreDir is where a share's files are kept: its storage file's
@@ -86,13 +90,23 @@ func (a *Agent) shareStoreDir(id string, share config.PluginShare) string {
 	return filepath.Join(a.paths.DriveMountDir(share.Drive), filepath.FromSlash(share.Folder))
 }
 
-// shareHostDir is what the plugin gets as the share: the opened view when
-// it is encrypted, else where its files are.
-func (a *Agent) shareHostDir(id string, share config.PluginShare) string {
+// shareFilesDir is where the plugin's view of a share's files is: the
+// opened view when it is encrypted, else where its files are.
+func (a *Agent) shareFilesDir(id string, share config.PluginShare) string {
 	if share.Encryption == encryptionOn {
 		return a.paths.SharePlainDir(id, share.ID)
 	}
 	return a.shareStoreDir(id, share)
+}
+
+// shareHostDir is what the plugin gets as the share: on a USB drive, its
+// files held to the quota (rbquotafs), since nothing sets space aside
+// there; on internal storage its files, whose own filesystem is the quota.
+func (a *Agent) shareHostDir(id string, share config.PluginShare) string {
+	if share.Drive != "" {
+		return a.paths.ShareQuotaDir(id, share.ID)
+	}
+	return a.shareFilesDir(id, share)
 }
 
 // shareKeyName is where a share's recovery key is kept in
@@ -531,6 +545,7 @@ func (a *Agent) RemovePluginShare(req api.PluginShareRemoveRequest) (api.Plugin,
 
 	// Stopped first: nothing may write to the files while they go.
 	_, _ = a.plugins.runner.Run("podman", "rm", "--force", "--ignore", "--time", "10", plugin.ContainerName(req.ID))
+	_, _ = a.plugins.runner.Run("umount", a.paths.ShareQuotaDir(req.ID, share.ID))
 	_, _ = a.plugins.runner.Run("umount", a.paths.SharePlainDir(req.ID, share.ID))
 	if deleteFiles {
 		if err := a.deleteShareFiles(req.ID, share); err != nil {
@@ -812,8 +827,13 @@ func (a *Agent) prepareShares(plan *pluginRunPlan) error {
 		if run.key != "" {
 			// Never the encrypted files themselves: if they can't be
 			// opened, the plugin doesn't start.
-			if err := a.openEncryptedFolder(store, run.host, run.key); err != nil {
+			if err := a.openEncryptedFolder(store, a.paths.SharePlainDir(plan.id, share.ID), run.key); err != nil {
 				return fmt.Errorf("the share %s: %w", share.Name, err)
+			}
+		}
+		if share.Drive != "" {
+			if err := a.holdToQuota(plan.id, share); err != nil {
+				return fmt.Errorf("the share %s can't be held to its quota: %w", share.Name, err)
 			}
 		}
 		ready = append(ready, run)
@@ -822,6 +842,21 @@ func (a *Agent) prepareShares(plan *pluginRunPlan) error {
 		plan.spec.Env["RASBEACON_SHARES"] = sharesEnv(plan.manifest.Shares.Path, ready)
 	}
 	return nil
+}
+
+// holdToQuota mounts a USB share's quota view (rbquotafs) over its files,
+// counted afresh and with its quota as it is now: one already mounted
+// (from before a change of quota) is unmounted first. Called without
+// a.mu, with the plugin stopped.
+func (a *Agent) holdToQuota(id string, share config.PluginShare) error {
+	view := a.paths.ShareQuotaDir(id, share.ID)
+	_, _ = a.plugins.runner.Run("umount", view)
+	if err := os.MkdirAll(view, 0o755); err != nil {
+		return err
+	}
+	limit := strconv.FormatInt(int64(share.QuotaMB)<<20, 10)
+	_, err := a.plugins.runner.Run(rbquotafs, "-limit", limit, a.shareFilesDir(id, share), view)
+	return err
 }
 
 // releaseShares closes a plugin's encrypted shares and unmounts its
@@ -837,6 +872,10 @@ func (a *Agent) releaseShares(id string) {
 func (a *Agent) releaseSharesOf(id string, shares []config.PluginShare) {
 	released := map[string]bool{}
 	for _, share := range shares {
+		// Top down: the quota view, the opened view, then the drive.
+		if share.Drive != "" {
+			_, _ = a.plugins.runner.Run("umount", a.paths.ShareQuotaDir(id, share.ID))
+		}
 		_, _ = a.plugins.runner.Run("umount", a.paths.SharePlainDir(id, share.ID))
 		if share.Drive != "" && !released[share.Drive] {
 			released[share.Drive] = true

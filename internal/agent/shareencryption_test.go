@@ -83,8 +83,9 @@ func TestShareEncryption_OnMovesTheFilesInAndOffMovesThemBack(t *testing.T) {
 	if e.runner.count("podman run") == runs {
 		t.Error("the plugin should start again")
 	}
-	if !strings.Contains(strings.Join(e.runner.commands, "\n"), open+":/shares/s1") {
-		t.Error("the plugin should get the opened view")
+	// The plugin gets the opened view, held to the share's quota.
+	if !e.runner.ran("rbquotafs -limit 1073741824 " + open + " " + e.paths.ShareQuotaDir("adguard-home", "s1")) {
+		t.Error("the plugin should get the opened view, held to its quota")
 	}
 
 	file, err := e.agent.PluginRecoveryKey(api.PluginShareRequest{ID: "adguard-home", Share: "s1"})
