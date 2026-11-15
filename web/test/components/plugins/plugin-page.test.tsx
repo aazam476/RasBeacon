@@ -17,7 +17,7 @@ describe('a plugin’s page', () => {
 
   it('lists what it may do', () => {
     renderScreen(<Pages />, fakeDevice(), '/plugins/adguard-home');
-    const section = screen.getByRole('heading', { name: 'It can' }).closest('section')!;
+    const section = screen.getByRole('heading', { name: 'Permissions' }).closest('section')!;
     expect(within(section).getByText('Use the internet')).toBeTruthy();
   });
 });
@@ -46,7 +46,7 @@ describe('looking after a plugin', () => {
       pluginLogs: async () => [{ text: 'started' }, { time: written, text: 'listening on :53' }],
     });
     const { user } = renderScreen(<Pages />, device, '/plugins/adguard-home');
-    const row = within(await openRow(user, 'Log'));
+    const row = within(await openRow(user, 'Its last 500 lines'));
     const log = await row.findByText(/listening on :53/);
     expect(log.textContent).toBe(
       `started\n${new Date(written).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })} listening on :53`,
@@ -60,7 +60,7 @@ describe('looking after a plugin', () => {
       },
     });
     const { user } = renderScreen(<Pages />, device, '/plugins/adguard-home');
-    const row = within(await openRow(user, 'Log'));
+    const row = within(await openRow(user, 'Its last 500 lines'));
     expect(await row.findByText('It is not running.')).toBeTruthy();
   });
 

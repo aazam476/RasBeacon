@@ -506,7 +506,7 @@ Pi 4 in an Argon ONE V2 case, test that plugin too.
 4. **VPN + kill switch:** break the tunnel (see section 8) and install Samba:
    **expect** *Waiting for the VPN*, and the install continuing once the VPN
    is back. Fix the tunnel.
-5. **DNS:** do what *Next steps* says (DNS servers = its address, **Use
+5. **DNS:** do what *Tips* says (DNS servers = its address, **Use
    these servers while the VPN is on**). **Expect** ads blocked on phone A
    (<https://d3ward.github.io/toolz/adblock>), and AdGuard's *Queries today*
    growing. Guests' lookups are filtered too, but on a guest phone

@@ -130,7 +130,7 @@ export const PLUGIN_DEFINITIONS: PluginDefinition[] = [
     icon: PLUGIN_ICONS.adguard,
     // The README files are the real plugins' (Markdown, wrapped as the files are).
     readme:
-      "AdGuard Home answers your devices' DNS questions and blocks the ones for ads,\ntrackers and malware. It asks **Quad9** over DNS-over-HTTPS for everything\nelse, through the VPN when it is on.\n\n**After installing:** on RasBeacon's Internet page, set the DNS servers to\nthe address shown under *Next steps*, and turn on **Use these servers while the\nVPN is on**. Guests' lookups are filtered too, but only your devices can open\nAdGuard Home's web interface.\n\nIn AdGuard Home all questions come from RasBeacon (it asks on your devices'\nbehalf), so its per-device lists show one client.\n\nAdGuard Home is made by AdGuard (GPL-3.0); this plugin runs their official\nimage, pinned to one version.",
+      "AdGuard Home answers your devices' DNS questions and blocks the ones for ads,\ntrackers and malware. It asks **Quad9** over DNS-over-HTTPS for everything\nelse, through the VPN when it is on.\n\n**After installing:** on RasBeacon's Internet page, set the DNS servers to\nthe address shown under *Tips*, and turn on **Use these servers while the\nVPN is on**. Guests' lookups are filtered too, but only your devices can open\nAdGuard Home's web interface.\n\nIn AdGuard Home all questions come from RasBeacon (it asks on your devices'\nbehalf), so its per-device lists show one client.\n\nAdGuard Home is made by AdGuard (GPL-3.0); this plugin runs their official\nimage, pinned to one version.",
     signed: true,
     keyId: '7F3A 9C2E 4B1D 7162',
     permissions: ['internet'],

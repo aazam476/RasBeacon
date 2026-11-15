@@ -80,7 +80,7 @@ function WorkingPluginPage({ plugin }: { plugin: Plugin }) {
   const busy = isBusy(plugin.state);
   // What to do next only applies once it is installed and works (not while it installs, or
   // when installing failed).
-  const showNextSteps = plugin.afterInstall && !busy && plugin.state !== 'failed';
+  const showTips = plugin.afterInstall && !busy && plugin.state !== 'failed';
 
   return (
     <>
@@ -94,8 +94,8 @@ function WorkingPluginPage({ plugin }: { plugin: Plugin }) {
 
       <RunningSection plugin={plugin} />
 
-      {showNextSteps && (
-        <Notice tone="info" icon="info" title="Next steps">
+      {showTips && (
+        <Notice tone="info" icon="info" title="Tips">
           <p className="wrap-break-word">{plugin.afterInstall}</p>
         </Notice>
       )}
@@ -239,7 +239,7 @@ function SettingsForm({ plugin }: { plugin: Plugin }) {
 /** What the plugin was allowed to do, in plain words. */
 function PermissionsSection({ plugin }: { plugin: Plugin }) {
   return (
-    <Section title="It can">
+    <Section title="Permissions">
       {plugin.permissions.length === 0 ? (
         <Row leading={{ icon: 'block' }} title="Only answer on its ports, and keep its own data" />
       ) : (
@@ -277,10 +277,9 @@ function LogSection({ plugin }: { plugin: Plugin }) {
   }
 
   return (
-    <Section footer="Kept in memory until it or RasBeacon restarts.">
+    <Section title="Log" footer="Kept in memory until it or RasBeacon restarts.">
       <Disclosure
-        title="Log"
-        subtitle="Its last 500 lines"
+        title="Its last 500 lines"
         leading={{ icon: 'article' }}
         content="rows"
         onToggle={(open) => {
