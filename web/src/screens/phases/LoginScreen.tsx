@@ -42,8 +42,9 @@ export function LoginScreen() {
 
       <p className="px-4 text-footnote text-label-2">
         <strong className="font-semibold text-label">Forgot the password?</strong> Do a factory reset: put the SD card
-        in a computer, create an empty file named <code className="font-mono text-label">factory-reset</code> on it, and
-        start RasBeacon again.
+        in a computer, create an empty file named <code className="font-mono text-label">factory-reset</code> on its{' '}
+        <code className="font-mono text-label">BOOTCONFIG</code> drive (
+        <code className="font-mono text-label">BOOT</code> on a Pi 3 or Zero 2 W), and start RasBeacon again.
       </p>
     </FullPage>
   );
