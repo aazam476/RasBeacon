@@ -691,6 +691,7 @@ func (a *Agent) checkPluginContainers() {
 
 	a.mu.Lock()
 	var restart, giveUp []string
+	memory := map[string]int{} // each stopped plugin's memory limit, for why it stopped
 	for id, p := range a.cfg.Plugins.Installed {
 		live := a.plugins.live[id]
 		if live == nil || live.busy || !p.Running || live.state != api.PluginRunning || running[id] {
@@ -701,8 +702,10 @@ func (a *Agent) checkPluginContainers() {
 			live.crashes = 0 // it ran fine for a while before this crash
 		}
 		live.crashes++
-		slog.Warn("plugin stopped by itself", "plugin", id, "times", live.crashes)
 		live.busy = true
+		if live.manifest != nil {
+			memory[id] = live.manifest.Memory()
+		}
 		if live.crashes >= maxCrashes {
 			_ = a.savePluginConfig(id, func(p *config.InstalledPlugin) { p.Running, p.StoppedAfterCrashes = false, true })
 			a.setPluginState(id, api.PluginCrashed, "It stopped working several times in a row, so RasBeacon stopped it. Check its log, then start it again.")
@@ -712,16 +715,60 @@ func (a *Agent) checkPluginContainers() {
 		restart = append(restart, id)
 	}
 	a.mu.Unlock()
+	// Its log says why it stopped (what the owner sees on its page), before
+	// it starts again.
 	for _, id := range restart {
+		a.noteInPluginLog(id, "It stopped by itself ("+a.whyPluginStopped(id, memory[id])+"). Starting it again.")
 		_ = a.runPlugin(id)
 		a.endPluginWork(id)
 	}
 	// Those given up on: remove the dead container, and let go of the drive
 	// and the power socket until the owner starts them again.
 	for _, id := range giveUp {
+		a.noteInPluginLog(id, "It stopped by itself ("+a.whyPluginStopped(id, memory[id])+"), several times in a row, so RasBeacon stopped it.")
 		a.stopPluginContainer(id)
 		a.endPluginWork(id)
 	}
+}
+
+// exitKilled is the exit code of a program killed outright (128 + SIGKILL):
+// in a container, almost always because it ran out of its memory.
+const exitKilled = 137
+
+// whyPluginStopped asks Podman why a plugin's container stopped, in words
+// for its log: it ran out of its memory (memoryMB), or how its program
+// ended. Called without a.mu.
+func (a *Agent) whyPluginStopped(id string, memoryMB int) string {
+	out, err := a.plugins.runner.Run("podman", "inspect", "--format", "{{.State.OOMKilled}} {{.State.ExitCode}}", plugin.ContainerName(id))
+	fields := strings.Fields(out)
+	if err != nil || len(fields) != 2 {
+		return "RasBeacon can't tell why"
+	}
+	code, _ := strconv.Atoi(fields[1])
+	switch {
+	case fields[0] == "true":
+		return fmt.Sprintf("it ran out of its %d MB of memory", memoryMB)
+	case code == exitKilled:
+		return fmt.Sprintf("it was killed, most likely for running out of its %d MB of memory", memoryMB)
+	case code == 0:
+		return "its program ended"
+	default:
+		return fmt.Sprintf("its program ended with error code %d", code)
+	}
+}
+
+// noteInPluginLog adds a line from RasBeacon to a plugin's log, in Podman's
+// format (see lastLogLines), and to RasBeacon's own. Only while its
+// container is stopped: Podman writes to the file while it runs. Called
+// without a.mu.
+func (a *Agent) noteInPluginLog(id, text string) {
+	slog.Warn("plugin", "plugin", id, "note", text)
+	f, err := os.OpenFile(a.pluginLogFile(id), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	_, _ = fmt.Fprintf(f, "%s stderr F RasBeacon: %s\n", a.now().UTC().Format(time.RFC3339Nano), text)
 }
 
 // pluginCheck is one plugin's health check and metrics to read.

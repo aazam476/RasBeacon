@@ -521,6 +521,35 @@ func TestPlugins_KeptDataWithoutAnOwnerStaysAside(t *testing.T) {
 	}
 }
 
+func TestPlugins_ItsLogSaysWhyItStopped(t *testing.T) {
+	e := newPluginEnv(t)
+	if _, err := e.installTestPlugin(writeTestPlugin(t, testPluginManifest("1.0"), nil), nil); err != nil {
+		t.Fatal(err)
+	}
+	inspect := "podman inspect --format {{.State.OOMKilled}} {{.State.ExitCode}} " + plugin.ContainerName("adguard-home")
+	for _, c := range []struct{ podman, want string }{
+		{"true 137\n", "It stopped by itself (it ran out of its 256 MB of memory). Starting it again."},
+		{"false 137\n", "it was killed, most likely for running out of its 256 MB of memory"},
+		{"false 0\n", "its program ended)"},
+		{"false 3\n", "its program ended with error code 3"},
+		{"", "RasBeacon can't tell why"},
+	} {
+		e.runner.outputs[inspect] = c.podman
+		e.agent.checkPluginContainers()
+		logs, err := e.agent.PluginLogs("adguard-home")
+		if err != nil || len(logs.Lines) == 0 {
+			t.Fatalf("logs = %+v, %v", logs, err)
+		}
+		last := logs.Lines[len(logs.Lines)-1]
+		if !strings.Contains(last.Text, "RasBeacon: ") || !strings.Contains(last.Text, c.want) || last.Time == "" {
+			t.Errorf("podman says %q: the log's last line = %+v, want %q", c.podman, last, c.want)
+		}
+		e.agent.mu.Lock()
+		e.agent.plugins.live["adguard-home"].crashes = 0 // not given up on yet
+		e.agent.mu.Unlock()
+	}
+}
+
 func TestPlugins_CrashingFiveTimesStopsIt(t *testing.T) {
 	e := newPluginEnv(t)
 	if _, err := e.installTestPlugin(writeTestPlugin(t, testPluginManifest("1.0"), nil), nil); err != nil {
