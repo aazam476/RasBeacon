@@ -270,7 +270,15 @@ func (a *Agent) Diagnostics() string {
 	status := a.Status()
 
 	a.mu.Lock()
-	secretsToHide := []string{a.secrets.HotspotPassword, a.secrets.GuestPassword, a.setupPassword, a.identity.SuggestedHotspotPassword, a.secrets.UpdateNotifyURL}
+	secretsToHide := []string{a.secrets.HotspotPassword, a.secrets.GuestPassword, a.setupPassword, a.identity.SuggestedHotspotPassword, a.secrets.UpdateNotifyURL,
+		// The carrier's password for a mobile modem goes to mmcli on its
+		// command line, which an error from it names.
+		a.secrets.ModemPassword}
+	// Shares' recovery keys (they reach gocryptfs in a file, never on a
+	// command line; hidden all the same).
+	for _, key := range a.secrets.ShareKeys {
+		secretsToHide = append(secretsToHide, key)
+	}
 	// DoH addresses can hold a personal account ID (and may appear in an
 	// error from rbdoh).
 	secretsToHide = append(secretsToHide, a.cfg.DNS.DoH...)

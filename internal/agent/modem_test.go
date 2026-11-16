@@ -151,6 +151,43 @@ func TestModem_TurnsOnAndConnects(t *testing.T) {
 	}
 }
 
+// The carrier's password goes to mmcli on its command line, and a failed
+// command's error names the whole command. Neither the Internet page nor
+// the diagnostics report (made to be shared) may show the password.
+func TestModem_AFailedConnectionDoesntShowThePassword(t *testing.T) {
+	e := newClaimedEnv(t, false)
+	if err := e.agent.UpdateModemSettings(api.ModemSettings{APN: "fast.t-mobile.com", Username: "u", Password: "carrier-s3cret"}); err != nil {
+		t.Fatal(err)
+	}
+	e.fakeModem("registered", "none")
+	e.runner.failing = append(e.runner.failing, "mmcli -m 0 --simple-connect")
+	e.check()
+	if !e.runner.ran("password=carrier-s3cret") {
+		t.Fatalf("the test is broken: mmcli wasn't given the password: %v", e.runner.commands)
+	}
+	e.check() // the next check shows why the last one's connection failed
+	problem := e.modemState().Error
+	if problem == "" || strings.Contains(problem, "carrier-s3cret") {
+		t.Errorf("the modem's problem on the page: %q", problem)
+	}
+	if !strings.Contains(problem, "mmcli -m 0 --simple-connect=…") {
+		t.Errorf("the problem should still name the command that failed: %q", problem)
+	}
+
+	// The report hides it too, wherever it turns up (a log line from
+	// before this was fixed, or anything else that printed it).
+	e.runner.prefixOutputs = map[string]string{"journalctl": "rbd: the modem could not connect error=\"password=carrier-s3cret\"\n"}
+	if report := e.agent.Diagnostics(); strings.Contains(report, "carrier-s3cret") {
+		t.Errorf("the carrier's password is in the diagnostics report:\n%s", report)
+	}
+
+	// Without the command's name in it (mmcli's own words), the problem is
+	// shown as it is, less the password.
+	if got := withoutModemSecrets("couldn't connect: bad password carrier-s3cret", "--simple-connect=x", "carrier-s3cret"); got != "couldn't connect: bad password <redacted>" {
+		t.Errorf("withoutModemSecrets = %q", got)
+	}
+}
+
 func TestModem_SettingsAreChecked(t *testing.T) {
 	e := newClaimedEnv(t, false)
 	for field, req := range map[string]api.ModemSettings{

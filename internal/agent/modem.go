@@ -198,16 +198,31 @@ func (a *Agent) connectModem(m modem.Modem) {
 	if a.secrets.ModemPassword != "" {
 		settings = append(settings, "password="+a.secrets.ModemPassword)
 	}
-	out, err := a.runner.Run("mmcli", "-m", m.Index, "--simple-connect="+strings.Join(settings, ","))
+	connect := "--simple-connect=" + strings.Join(settings, ",")
+	out, err := a.runner.Run("mmcli", "-m", m.Index, connect)
 	if err != nil {
-		a.modem.connectError = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(out), "error:"))
-		if a.modem.connectError == "" {
-			a.modem.connectError = err.Error()
+		problem := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(out), "error:"))
+		if problem == "" {
+			problem = err.Error()
 		}
+		a.modem.connectError = withoutModemSecrets(problem, connect, a.secrets.ModemPassword)
 		slog.Warn("the modem could not connect", "error", a.modem.connectError)
 		return
 	}
 	a.modem.connectError = ""
+}
+
+// withoutModemSecrets takes the carrier's password out of why mmcli
+// failed. A command's error names the whole command (see
+// system.ExecRunner), and the connect command holds the password: the
+// problem is shown on the Internet page, logged, and so part of the
+// diagnostics report, which is made to be shared.
+func withoutModemSecrets(problem, connect, password string) string {
+	problem = strings.ReplaceAll(problem, connect, "--simple-connect=…")
+	if password != "" {
+		problem = strings.ReplaceAll(problem, password, "<redacted>")
+	}
+	return problem
 }
 
 // modemNetwork reads a connected modem's data connection and returns its
