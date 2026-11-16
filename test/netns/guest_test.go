@@ -10,6 +10,8 @@ package netns
 
 import (
 	"os/exec"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -115,6 +117,65 @@ func TestGuest_ReachesInternetButNothingElse(t *testing.T) {
 	}
 	if !tcpConnects(phoneNS, "10.87.0.1", "80") {
 		t.Error("the owner's devices should still reach the web UI")
+	}
+}
+
+// packetsCounted reads a counter made by countPackets.
+func packetsCounted(t *testing.T, ns string) int {
+	t.Helper()
+	out := inNS(t, ns, "nft", "list", "table", "ip", "rbtest")
+	_, rest, found := strings.Cut(out, "counter packets ")
+	if !found {
+		t.Fatalf("no counter in:\n%s", out)
+	}
+	count, _ := strconv.Atoi(strings.Fields(rest)[0])
+	return count
+}
+
+// countPackets counts, in namespace ns, the packets matching rule on their
+// way in ("input") or out ("output").
+func countPackets(t *testing.T, ns, hook, rule string) {
+	t.Helper()
+	rules := "table ip rbtest {\n\tchain count {\n\t\ttype filter hook " + hook + " priority 0;\n\t\t" + rule + " counter\n\t}\n}\n"
+	file := filepath.Join(t.TempDir(), "count.nft")
+	writeFile(t, file, rules)
+	inNS(t, ns, "nft", "-f", file)
+}
+
+// A guest that sends packets with the address of one of the owner's
+// devices as their sender must not get them through: the answers from the
+// internet would be delivered to that device, which is a way for a guest
+// (with a helper outside) to send it packets.
+func TestGuest_CantSendWithADevicesAddress(t *testing.T) {
+	requireRoot(t)
+	startGuestNetwork(t)
+	giveGuestAddress(t)
+	startUpstreamServer(t)
+
+	// What reaches the owner's phone from the upstream server.
+	countPackets(t, phoneNS, "input", "ip saddr 10.99.0.2 tcp sport 8080")
+	// The control: the phone's own connection is answered, and counted.
+	if !tcpConnects(phoneNS, "10.99.0.2", "8080") || packetsCounted(t, phoneNS) == 0 {
+		t.Fatal("test setup broken: the phone's own connection to the server isn't answered or counted")
+	}
+	before := packetsCounted(t, phoneNS)
+
+	// The guest takes the phone's address as its sender for that server.
+	inNS(t, guestNS, "ip", "address", "add", "10.87.0.99/32", "dev", "eth0")
+	inNS(t, guestNS, "ip", "route", "add", "10.99.0.2/32", "via", "10.87.1.1", "src", "10.87.0.99")
+	countPackets(t, guestNS, "output", "ip saddr 10.87.0.99 ip daddr 10.99.0.2")
+	tryInNS(guestNS, 4*time.Second, "busybox", "nc", "-w", "2", "10.99.0.2", "8080")
+	if packetsCounted(t, guestNS) == 0 {
+		t.Fatal("test setup broken: the guest sent nothing with the phone's address")
+	}
+	if got := packetsCounted(t, phoneNS) - before; got != 0 {
+		t.Errorf("the phone got %d packet(s) from the server in answer to what the guest sent with its address", got)
+	}
+
+	// With its own address the guest still reaches the internet.
+	inNS(t, guestNS, "ip", "route", "del", "10.99.0.2/32")
+	if !tcpConnects(guestNS, "10.99.0.2", "8080") {
+		t.Error("guests should still reach the internet with their own address")
 	}
 }
 

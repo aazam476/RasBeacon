@@ -205,7 +205,9 @@ access point (`guest0`) in the same hostapd, on its own bridge `br-guest`
 (10.87.1.0/24). Guests' traffic takes exactly the same path as yours (the
 VPN, kill switch included), but the firewall lets them reach only DHCP and
 DNS on RasBeacon, nothing on `br-lan`, and hostapd keeps guests apart from
-each other. It needs an adapter that can run two access points at once
+each other. It forwards guests' packets only with a sender address of the
+guest network: with one of your devices' addresses, the answers would go
+to that device. It needs an adapter that can run two access points at once
 (`radio.MaxAPInterfaces`).
 
 ## Plugins

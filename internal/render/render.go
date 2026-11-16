@@ -590,7 +590,9 @@ type FirewallInput struct {
 	// may reach, and its ports on RasBeacon.
 	Plugins []PluginRule
 	// LANAddress is RasBeacon's address on the hotspot, where devices reach
-	// plugins' ports. Needed with Plugins.
+	// plugins' ports. Needed with Plugins. With Guest, it also tells the
+	// guest network's addresses (see GuestPrefixFor): guests' traffic is
+	// only forwarded from those.
 	LANAddress netip.Addr
 	// Welcome, when set, holds devices on some networks at the welcome
 	// page (the owner's own captive portal) until they accept it.
@@ -711,6 +713,9 @@ type firewallData struct {
 	PluginLAN         []string
 	PluginPorts       []pluginPortData
 	LANAddress        string
+	// GuestSubnet is the guest network's addresses ("10.87.1.0/24"): the
+	// only ones guests' traffic may come from ("" without a guest network).
+	GuestSubnet string
 	// The welcome page (see FirewallInput.Welcome).
 	Welcome *welcomeData
 	// Priority devices (see FirewallInput.QoS).
@@ -760,6 +765,11 @@ func Firewall(in FirewallInput) (string, error) {
 		return "", fmt.Errorf("plugins need RasBeacon's hotspot address")
 	}
 	data.LANAddress = in.LANAddress.String()
+	if in.Guest && in.LANAddress.Is4() {
+		// The guest network that goes with the hotspot's (GuestPrefixFor).
+		lan := netip.PrefixFrom(in.LANAddress, DefaultLAN.Prefix.Bits())
+		data.GuestSubnet = GuestPrefixFor(lan).Masked().String()
+	}
 	usedPorts := map[string]bool{}
 	for _, p := range in.Plugins {
 		if !PluginSubnet.Contains(p.Address) || p.Address.String() == PluginGateway {

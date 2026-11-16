@@ -366,11 +366,23 @@ func TestFirewall_PortalOnlyAllowsWebAndDNS(t *testing.T) {
 }
 
 func TestFirewall_GuestNetworkIsolated(t *testing.T) {
-	got, err := Firewall(FirewallInput{Egress: []string{"wlan0"}, Guest: true})
+	got, err := Firewall(FirewallInput{Egress: []string{"wlan0"}, Guest: true, LANAddress: netip.MustParseAddr("10.87.0.1")})
 	if err != nil {
 		t.Fatal(err)
 	}
 	checkGolden(t, "firewall_guest", got)
+	// Guests can't send with another sender address (one of the owner's
+	// devices'), whose answers would then reach that device.
+	for _, want := range []string{`iifname "br-guest" ip saddr != 10.87.1.0/24 drop`, `iifname "br-guest" meta nfproto ipv6 drop`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	// The guest network moves with the hotspot's (see ChooseLANPrefix).
+	moved, err := Firewall(FirewallInput{Egress: []string{"wlan0"}, Guest: true, LANAddress: netip.MustParseAddr("192.168.87.1")})
+	if err != nil || !strings.Contains(moved, `iifname "br-guest" ip saddr != 192.168.88.0/24 drop`) {
+		t.Errorf("after the hotspot network moved: %v", err)
+	}
 	if !strings.Contains(got, `elements = { "br-lan", "br-guest" }`) {
 		t.Error("guests must be able to use the internet")
 	}

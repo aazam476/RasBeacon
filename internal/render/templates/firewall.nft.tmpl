@@ -113,6 +113,16 @@ table inet rasbeacon {
 	# internet). Anything not allowed here is dropped.
 	chain forward {
 		type filter hook forward priority filter; policy drop;
+{{- if .GuestSubnet}}
+
+		# Guests may only send from the guest network's own addresses. With
+		# another sender (the address of one of your devices, say), the
+		# answers from the internet would be delivered to that device: a
+		# way for a guest to send it packets. Guests get no IPv6 network,
+		# so no IPv6 of theirs is forwarded either.
+		iifname "{{.GuestBridge}}" ip saddr != {{.GuestSubnet}} drop
+		iifname "{{.GuestBridge}}" meta nfproto ipv6 drop
+{{- end}}
 {{- if or .PluginPorts .PluginLAN}}
 
 		# Plugins: devices on your hotspot may reach the ports you gave them

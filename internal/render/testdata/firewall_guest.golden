@@ -83,6 +83,14 @@ table inet rasbeacon {
 	chain forward {
 		type filter hook forward priority filter; policy drop;
 
+		# Guests may only send from the guest network's own addresses. With
+		# another sender (the address of one of your devices, say), the
+		# answers from the internet would be delivered to that device: a
+		# way for a guest to send it packets. Guests get no IPv6 network,
+		# so no IPv6 of theirs is forwarded either.
+		iifname "br-guest" ip saddr != 10.87.1.0/24 drop
+		iifname "br-guest" meta nfproto ipv6 drop
+
 		# Make new TCP connections use packets small enough for every link on
 		# the way ("MSS clamping"). Without this, some websites hang on hotel
 		# networks and tunnels that use smaller packets.
