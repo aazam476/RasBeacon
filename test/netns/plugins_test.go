@@ -161,3 +161,102 @@ func TestPlugins_ReachTheInternetOnlyThroughTheVPN(t *testing.T) {
 		t.Error("LEAK: without the tunnel, the plugin must reach nothing")
 	}
 }
+
+// loadPluginRules loads rbd's firewall for the network of buildPlugins.
+func loadPluginRules(t *testing.T, in render.FirewallInput) {
+	t.Helper()
+	in.LANAddress = render.DefaultLAN.Prefix.Addr()
+	rules, err := render.Firewall(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rulesFile := filepath.Join(t.TempDir(), "firewall.nft")
+	writeFile(t, rulesFile, rules)
+	inNS(t, routerNS, "nft", "-f", rulesFile)
+}
+
+// A plugin with the lan-access permission opens connections to the owner's
+// devices, and must get their answers back. The answers are neither a
+// connection to one of the plugin's ports nor headed for the internet, so
+// they need a rule of their own.
+func TestPlugins_WithLANAccessReachDevices(t *testing.T) {
+	requireRoot(t)
+	buildNetwork(t)
+	buildPlugins(t)
+	givePhoneAddress(t)
+	startBackground(t, phoneNS, "busybox", "nc", "-ll", "-p", "8080", "-e", "/bin/echo", "phone-standin")
+	startBackground(t, "rb-plug-b", "busybox", "nc", "-ll", "-p", "8080", "-e", "/bin/echo", "plugin-b-standin")
+	time.Sleep(300 * time.Millisecond)
+
+	// Plugin B may reach the owner's devices; plugin A has no permissions.
+	loadPluginRules(t, render.FirewallInput{
+		Egress: []string{"eth0"},
+		Plugins: []render.PluginRule{
+			{Address: netip.MustParseAddr("10.89.0.2")},
+			{Address: netip.MustParseAddr("10.89.0.3"), LANAccess: true},
+		},
+	})
+	if !tcpConnects("rb-plug-b", "10.87.0.99", "8080") {
+		t.Error("a plugin with lan-access should reach the owner's device and get its answer")
+	}
+	if tcpConnects("rb-plug-a", "10.87.0.99", "8080") {
+		t.Error("a plugin without lan-access reached the owner's device")
+	}
+	// The permission is one way: a device reaches a plugin only on the
+	// ports the owner gave it (none here).
+	if tcpConnects(phoneNS, "10.89.0.3", "8080") {
+		t.Error("the owner's device started a connection to the plugin's own address")
+	}
+}
+
+// With the VPN in use, devices' traffic is looked up in the tunnel's table.
+// A connection to a plugin's port (at RasBeacon's address, rewritten to the
+// plugin's) must not follow it into the tunnel: it would go to the VPN
+// server instead of the plugin. The tunnel is a stand-in here (a cable
+// called wg0): only the routes matter.
+func TestPlugins_DevicesReachTheirPortsWhileTheVPNIsOn(t *testing.T) {
+	requireRoot(t)
+	buildNetwork(t)
+	buildPlugins(t)
+	givePhoneAddress(t)
+	startBackground(t, "rb-plug-a", "busybox", "nc", "-ll", "-p", "8080", "-e", "/bin/echo", "plugin-a-standin")
+	time.Sleep(300 * time.Millisecond)
+	withPort := []render.PluginRule{{Address: netip.MustParseAddr("10.89.0.2"),
+		Ports: []render.PluginPort{{Protocol: "tcp", Host: 8443, Container: 8080}}}}
+
+	// The control: without the VPN the port answers.
+	loadPluginRules(t, render.FirewallInput{Egress: []string{"eth0"}, Plugins: withPort})
+	if !tcpConnects(phoneNS, "10.87.0.1", "8443") {
+		t.Fatal("the plugin's port should answer the owner's device (the test network is broken)")
+	}
+
+	// The VPN in use: devices' traffic goes to the tunnel's table, and may
+	// only leave through the tunnel.
+	tunnel := routing.TunnelInterface
+	inNS(t, routerNS, "ip", "link", "add", "dev", tunnel, "type", "veth", "peer", "name", "rbtmp-wg0")
+	inNS(t, routerNS, "ip", "address", "add", "10.66.0.2/32", "dev", tunnel)
+	inNS(t, routerNS, "ip", "link", "set", tunnel, "up")
+	inNS(t, routerNS, "ip", "link", "set", "rbtmp-wg0", "up")
+	inNS(t, routerNS, "ip", "-4", "route", "replace", "default", "dev", tunnel, "table", routing.TunnelTable)
+	runAll(t, routerNS, routing.ClientsThroughTunnel(false))
+	loadPluginRules(t, render.FirewallInput{Egress: []string{tunnel}, TunnelInterface: tunnel, Plugins: withPort})
+
+	if !tcpConnects(phoneNS, "10.87.0.1", "8443") {
+		route, _ := tryInNS(routerNS, 2*time.Second, "ip", "route", "get", "10.89.0.2", "from", "10.87.0.99", "iif", render.BridgeName)
+		t.Errorf("with the VPN in use, the plugin's port should still answer the owner's device; its packets go: %s", strings.TrimSpace(route))
+	}
+	// Still only its ports: the plugin's own address stays out of reach.
+	if tcpConnects(phoneNS, "10.89.0.2", "8080") {
+		t.Error("the owner's device reached the plugin's own address")
+	}
+
+	// Back to the uplink (the VPN turned off): the rules go, the port stays.
+	runAllIgnoringErrors(routerNS, routing.ClientsDirect())
+	loadPluginRules(t, render.FirewallInput{Egress: []string{"eth0"}, Plugins: withPort})
+	if out := inNS(t, routerNS, "ip", "-4", "rule"); strings.Contains(out, "10.89.0.0/24") {
+		t.Errorf("the rule for plugins' addresses should be removed with the others:\n%s", out)
+	}
+	if !tcpConnects(phoneNS, "10.87.0.1", "8443") {
+		t.Error("without the VPN the plugin's port should answer again")
+	}
+}

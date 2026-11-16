@@ -10,6 +10,7 @@
 // Linux picks a route by looking up "routing tables" in the order of its
 // "rules". RasBeacon adds:
 //
+//	rule 99:   traffic for a plugin (to 10.89.0.0/24) -> main table
 //	rule 100:  traffic arriving from the hotspot (iif br-lan) -> table 51820
 //	rule 101:  traffic arriving from the guest network (iif br-guest) -> same
 //	rule 102:  plugins' traffic (iif rbplug0) to your devices -> main table
@@ -140,6 +141,19 @@ var LANInterfaces = []string{"br-lan", "br-guest"}
 // only have IPv4 addresses.
 const PluginInterface = "rbplug0"
 
+// PluginNetwork is the plugins' addresses (render.PluginSubnet; the
+// agent's tests check the two agree).
+const PluginNetwork = "10.89.0.0/24"
+
+// toPluginsPriority is the rule that keeps traffic for a plugin out of
+// the tunnel. A device reaches a plugin's port at RasBeacon's address; the
+// firewall rewrites that to the plugin's own address before the route is
+// chosen, and the hotspot's rule (firstRulePriority) would then send the
+// connection into the tunnel, to the VPN server instead of the plugin. So
+// this rule comes just before it. The firewall still decides who may reach
+// a plugin (devices on its ports only, guests never).
+const toPluginsPriority = firstRulePriority - 1
+
 // pluginRulePriority is the first of the plugins' two rules: their replies
 // to your devices use the main table's routes to the hotspot (but not its
 // default route), everything else goes into the tunnel.
@@ -155,10 +169,13 @@ const pluginMarkPriority = "111"
 
 // ClientsThroughTunnel returns the commands that send devices' traffic
 // (arriving on LANInterfaces), plugins' traffic and RasBeacon's downloads
-// for plugins to table 51820. Run ClientsDirect first so the rules are
-// never added twice.
+// for plugins to table 51820, except what is for a plugin itself (see
+// toPluginsPriority). Run ClientsDirect first so the rules are never added
+// twice.
 func ClientsThroughTunnel(kernelIPv6 bool) [][]string {
-	var cmds [][]string
+	cmds := [][]string{
+		{"ip", "-4", "rule", "add", "priority", strconv.Itoa(toPluginsPriority), "to", PluginNetwork, "lookup", "main"},
+	}
 	for i, lan := range LANInterfaces {
 		priority := strconv.Itoa(firstRulePriority + i)
 		cmds = append(cmds, []string{"ip", "-4", "rule", "add", "priority", priority, "iif", lan, "lookup", TunnelTable})
@@ -179,7 +196,9 @@ func ClientsThroughTunnel(kernelIPv6 bool) [][]string {
 // devices' traffic uses the main table (the uplink). Errors mean a rule
 // was not there.
 func ClientsDirect() [][]string {
-	var cmds [][]string
+	cmds := [][]string{
+		{"ip", "-4", "rule", "delete", "priority", strconv.Itoa(toPluginsPriority)},
+	}
 	for i := range LANInterfaces {
 		priority := strconv.Itoa(firstRulePriority + i)
 		cmds = append(cmds,

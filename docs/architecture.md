@@ -223,10 +223,12 @@ details are in [plugins.md](plugins.md#how-it-works)).
   (`render.PluginRule`): with `internet`, the internet the way your devices
   reach it; with `lan-access`, your devices (not guests); devices reach a plugin only on the
   ports the owner gave it, on RasBeacon's address.
-- **The VPN:** routing rule 102 sends plugins' traffic for networks the Pi
-  is on to the main table (so replies reach your devices), rule 103 sends
-  the rest to the tunnel table, and rule 111 does the same for RasBeacon's
-  own downloads for plugins (marked `0x5242`). The firewall lets plugins out
+- **The VPN:** routing rule 99 keeps what is for a plugin (a device's
+  connection to one of its ports) out of the tunnel table, rule 102 sends
+  plugins' traffic for networks the Pi is on to the main table (so replies
+  reach your devices), rule 103 sends the rest to the tunnel table, and
+  rule 111 does the same for RasBeacon's own downloads for plugins (marked
+  `0x5242`). The firewall lets plugins out
   only through the interfaces devices may use, so with the VPN on that is
   the tunnel only (`test/netns` `TestPlugins_ReachTheInternetOnlyThroughTheVPN`).
 - **Storage:** each plugin's data is a fixed-size file, loop-mounted for its

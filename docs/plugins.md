@@ -335,8 +335,10 @@ catalogs; `internal/agent/plugins*.go` installs and runs them.
   (`render.PluginRule`) forwards devices' connections to a plugin's port only
   from the hotspot and only to RasBeacon's address (`dnat`), lets plugins with
   `internet` out like devices (into `wg0` when the VPN is in use; the routing
-  rules 102/103 send their traffic to the tunnel table), and lets nothing from
-  the uplink in. Each container's port on the bridge is named after its
+  rules 102/103 send their traffic to the tunnel table, and rule 99 keeps
+  devices' connections to plugins' ports out of it), lets plugins with
+  `lan-access` start connections to your devices (and their answers back),
+  and lets nothing from the uplink in. Each container's port on the bridge is named after its
   address (`rbport2` for `10.89.0.2`, Podman's `host_interface_name`), and a
   `bridge` table drops every packet one plugin's port passes to another's:
   the bridge passes those itself, so the `inet` rules never see them.

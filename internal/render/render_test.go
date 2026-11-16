@@ -712,8 +712,9 @@ func TestFirewall_Plugins(t *testing.T) {
 		`iifname "rbplug0" ip saddr { 10.89.0.2 } oifname @egress accept`,
 		`iifname "rbplug0" ip saddr { 10.89.0.2 } ip daddr 10.89.0.1 meta l4proto { tcp, udp } th dport 53 accept`,
 		`iifname "rbplug0" reject`,
-		// Only Samba may reach your devices.
+		// Only Samba may reach your devices, and gets their answers.
 		`iifname "rbplug0" ip saddr { 10.89.0.3 } oifname "br-lan" accept`,
+		`iifname "br-lan" oifname "rbplug0" ip daddr { 10.89.0.3 } ct state established,related accept`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q", want)

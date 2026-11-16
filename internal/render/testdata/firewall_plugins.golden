@@ -89,8 +89,11 @@ table inet rasbeacon {
 		# the internet can't reach them.
 		iifname "br-lan" oifname "rbplug0" ct status dnat accept
 		iifname "rbplug0" oifname "br-lan" ct state established,related accept
-		# Plugins allowed to reach your devices (not guests).
+		# Plugins allowed to reach your devices (not guests), and your
+		# devices' answers to them. Only answers: a device starts a
+		# connection to a plugin on the plugin's ports alone (above).
 		iifname "rbplug0" ip saddr { 10.89.0.3 } oifname "br-lan" accept
+		iifname "br-lan" oifname "rbplug0" ip daddr { 10.89.0.3 } ct state established,related accept
 
 		# Make new TCP connections use packets small enough for every link on
 		# the way ("MSS clamping"). Without this, some websites hang on hotel

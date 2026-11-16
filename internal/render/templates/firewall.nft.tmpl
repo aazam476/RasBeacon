@@ -124,8 +124,11 @@ table inet rasbeacon {
 		iifname "{{.PluginBridge}}" oifname "{{.Bridge}}" ct state established,related accept
 {{- end}}
 {{- if .PluginLAN}}
-		# Plugins allowed to reach your devices (not guests).
+		# Plugins allowed to reach your devices (not guests), and your
+		# devices' answers to them. Only answers: a device starts a
+		# connection to a plugin on the plugin's ports alone (above).
 		iifname "{{.PluginBridge}}" ip saddr { {{range $i, $a := .PluginLAN}}{{if $i}}, {{end}}{{$a}}{{end}} } oifname "{{.Bridge}}" accept
+		iifname "{{.Bridge}}" oifname "{{.PluginBridge}}" ip daddr { {{range $i, $a := .PluginLAN}}{{if $i}}, {{end}}{{$a}}{{end}} } ct state established,related accept
 {{- end}}
 {{- if .Egress}}
 

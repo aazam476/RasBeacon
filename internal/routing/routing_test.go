@@ -43,6 +43,7 @@ func TestTunnelUp(t *testing.T) {
 func TestClientRules(t *testing.T) {
 	got := joined(ClientsThroughTunnel(true))
 	for _, want := range []string{
+		"ip -4 rule add priority 99 to 10.89.0.0/24 lookup main",
 		"ip -4 rule add priority 100 iif br-lan lookup 51820",
 		"ip -6 rule add priority 100 iif br-lan lookup 51820",
 		"ip -4 rule add priority 101 iif br-guest lookup 51820",

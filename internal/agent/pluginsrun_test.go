@@ -7,6 +7,7 @@ import (
 
 	"rasbeacon/internal/plugin"
 	"rasbeacon/internal/render"
+	"rasbeacon/internal/routing"
 )
 
 // Filling in a plugin's templates (fillTemplate in pluginsrun.go).
@@ -65,6 +66,12 @@ func TestPluginNetwork_NamesMatchTheFirewall(t *testing.T) {
 	}
 	if port := plugin.HostPortName("10.89.0.17"); port != "rbport17" || !strings.HasPrefix(port, render.PluginPortPrefix) {
 		t.Errorf("port name %q doesn't start with the firewall's %q", port, render.PluginPortPrefix)
+	}
+	// The routing rule that keeps devices' connections to plugins out of
+	// the VPN tunnel names the plugins' network too.
+	if routing.PluginNetwork != render.PluginSubnet.String() || routing.PluginInterface != render.PluginBridge {
+		t.Errorf("routing's plugin network %s on %s, the firewall's %s on %s",
+			routing.PluginNetwork, routing.PluginInterface, render.PluginSubnet, render.PluginBridge)
 	}
 }
 
