@@ -133,6 +133,12 @@ still holds; a version that can install `v2.0.0` usually can install
 ## Checklist for a release
 
 1. CI is green on the commit you'll tag.
+
+   The programs are built with the Go version in `go.mod` and carry its
+   standard library, so `go.mod` should name the newest Go patch release,
+   and the modules their newest versions. `go run
+   golang.org/x/vuln/cmd/govulncheck@latest ./...` lists the known
+   vulnerabilities in what the programs really use: it should find none.
 2. Update `docs/compatibility.md` with any new hardware results.
 3. Either tag and push: `git tag -a v0.2.0 -m "RasBeacon v0.2.0" && git push origin v0.2.0`
    (a test version: `v0.2.0-beta.1`), which makes a draft release; or open

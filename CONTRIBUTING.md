@@ -27,7 +27,8 @@ docs/               design, architecture, API, UI contract, glossary, testing gu
 
 ## Tools you need
 
-- **Go 1.24 or newer.**
+- **Go 1.27 or newer.** `go.mod` names the exact version the release is
+  built with (an older Go, from 1.21 on, downloads it by itself).
 - **Node.js 22 or newer.**
 - **Linux**, for the network namespace tests and image builds. Everything
   else also works on macOS.
