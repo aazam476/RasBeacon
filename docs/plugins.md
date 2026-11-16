@@ -107,7 +107,10 @@ Nothing else may be in the file. The image must be for `linux/arm64`, and
 `image.tar` must not be compressed (RasBeacon reads the image names in it
 first). RasBeacon gives the image its own name; a tar that carries the name
 of another plugin's image (`rasbeacon-plugin/…`) is refused, because
-loading it would replace that plugin's program.
+loading it would replace that plugin's program. So is a tar in which those
+names could be read two ways: `manifest.json` or `index.json` there twice
+(also as `./manifest.json`) or as a link, or a file inside a link. `docker
+save` and `podman save` make none of these.
 
 Build the image, save it and zip it up:
 

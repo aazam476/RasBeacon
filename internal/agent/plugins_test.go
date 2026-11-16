@@ -309,6 +309,89 @@ func TestPlugins_AnImageCarryingAnotherPluginsNameIsRefused(t *testing.T) {
 	}
 }
 
+// Podman has the last word on the names in an image file. If it gives the
+// image another plugin's name although RasBeacon read none in the file (the
+// two read it differently), that name goes back to the image it led to and
+// the plugin is refused: it must never start as the other plugin.
+func TestPlugins_AnImageThatTakesAnotherPluginsNameIsPutBack(t *testing.T) {
+	samba := "localhost/rasbeacon-plugin/samba:4.20"
+	images := func(sambaImage string) string {
+		return `[{"Id":"` + sambaImage + `","Names":["` + samba + `"]},{"Id":"ccc","Names":["docker.io/library/alpine:latest"]}]`
+	}
+
+	// Podman names only the file's own name, but samba's name leads to
+	// another image after loading.
+	e := newPluginEnv(t)
+	e.runner.prefixOutputs["podman images"] = images("aaa")
+	effect := e.runner.effect
+	e.runner.effect = func(args []string) {
+		effect(args)
+		if len(args) > 1 && args[0] == "podman" && args[1] == "load" {
+			e.runner.prefixOutputs["podman images"] = images("bbb")
+		}
+	}
+	if _, err := e.installTestPlugin(writeTestPlugin(t, testPluginManifest("1.0"), nil), nil); err != nil {
+		t.Fatal(err)
+	}
+	p := e.plugin("adguard-home")
+	if p.State == api.PluginRunning || !strings.Contains(p.Message, "another plugin's name, "+samba) {
+		t.Errorf("after installing: %+v", p)
+	}
+	if !e.runner.ran("podman tag aaa " + samba) {
+		t.Error("samba's name must go back to the image it led to")
+	}
+	if e.runner.ran("podman run") || e.runner.ran("podman tag localhost/adguard:latest") {
+		t.Error("the plugin must not be named or started")
+	}
+
+	// Podman says it gave the image samba's name (and can't list images):
+	// the name is taken off again.
+	e = newPluginEnv(t)
+	e.runner.prefixOutputs["podman load"] = "Loaded image: localhost/adguard:latest\nLoaded image: " + samba + "\n"
+	if _, err := e.installTestPlugin(writeTestPlugin(t, testPluginManifest("1.0"), nil), nil); err != nil {
+		t.Fatal(err)
+	}
+	p = e.plugin("adguard-home")
+	if p.State == api.PluginRunning || !strings.Contains(p.Message, "another plugin's name, "+samba) {
+		t.Errorf("after installing: %+v", p)
+	}
+	if !e.runner.ran("podman untag "+samba+" "+samba) || !e.runner.ran("podman untag localhost/adguard:latest localhost/adguard:latest") {
+		t.Error("the names the file brought must be taken off its image")
+	}
+	if e.runner.ran("podman run") {
+		t.Error("the plugin must not be started")
+	}
+}
+
+func TestLoadedImagesAndTakenNames(t *testing.T) {
+	out := "Getting image source signatures\nLoaded image: localhost/a:1\nLoaded image(s): localhost/b:2, sha256:0123\n"
+	if got := strings.Join(loadedImages(out), " "); got != "localhost/a:1 localhost/b:2 sha256:0123" {
+		t.Errorf("loadedImages: %q", got)
+	}
+	if got := loadedImages("nothing loaded\n"); len(got) != 0 {
+		t.Errorf("loadedImages without any: %q", got)
+	}
+
+	own, other, added := plugin.LocalImage("mine", "1.0"), plugin.LocalImage("other", "2.0"), plugin.LocalImage("new", "3.0")
+	before := map[string]string{own: "old", other: "aaa"}
+	for name, c := range map[string]struct {
+		after  map[string]string
+		loaded []string
+		want   string
+	}{
+		"nothing but its own name":      {map[string]string{own: "new", other: "aaa"}, []string{"localhost/x:1", own}, ""},
+		"another plugin's name moved":   {map[string]string{own: "new", other: "new"}, []string{"localhost/x:1"}, other},
+		"a new name in the name space":  {map[string]string{own: "new", other: "aaa", added: "new"}, nil, added},
+		"Podman says so":                {nil, []string{other}, other},
+		"Podman says so, and it moved":  {map[string]string{other: "new"}, []string{other}, other},
+		"images can't be listed, clean": {nil, []string{"localhost/x:1"}, ""},
+	} {
+		if got := strings.Join(takenImageNames(before, c.after, c.loaded, own), " "); got != c.want {
+			t.Errorf("%s: got %q, want %q", name, got, c.want)
+		}
+	}
+}
+
 func TestPlugins_PortsAreChecked(t *testing.T) {
 	e := newPluginEnv(t)
 	data := writeTestPlugin(t, testPluginManifest("1.0"), nil)

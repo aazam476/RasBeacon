@@ -533,20 +533,6 @@ func (a *Agent) installPluginSteps(id string, s *stagedPlugin, oldImage string) 
 	return image, nil
 }
 
-// loadedImage reads the image name or ID from `podman load` output
-// ("Loaded image: localhost/x:1", or several such lines).
-func loadedImage(out string) string {
-	for _, line := range strings.Split(out, "\n") {
-		if _, name, ok := strings.Cut(line, "Loaded image:"); ok {
-			if name = strings.TrimSpace(name); name != "" {
-				first, _, _ := strings.Cut(name, ",")
-				return strings.TrimSpace(first)
-			}
-		}
-	}
-	return ""
-}
-
 // savePluginFiles writes the plugin's manifest, icon, readme and
 // templates into its folder (replacing an older version's).
 func (a *Agent) savePluginFiles(id string, s *stagedPlugin) error {
