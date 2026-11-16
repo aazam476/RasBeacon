@@ -105,6 +105,8 @@ func TestQuota_HoldsTheRestOfTheQuotaOnTheDrive(t *testing.T) {
 	if err := q.HoldWith(r); err != nil {
 		t.Fatal(err)
 	}
+	// Before smallSizes puts the sizes back, which the growing back reads.
+	t.Cleanup(q.Close)
 	if r.Size() > 20<<10 {
 		t.Errorf("held %d, at most the 20 KiB left", r.Size())
 	}
@@ -137,6 +139,8 @@ func TestMount_AReservedShareMakesRoomAsItFills(t *testing.T) {
 	if err := q.HoldWith(r); err != nil {
 		t.Fatal(err)
 	}
+	// Before smallSizes puts the sizes back, which the growing back reads.
+	t.Cleanup(q.Close)
 	waitFor(t, func() bool { return r.Size() == 824<<10 }, "holds the 824 KiB left")
 	if err := os.WriteFile(filepath.Join(view, "new.bin"), make([]byte, 300<<10), 0o644); err != nil {
 		t.Fatal(err)

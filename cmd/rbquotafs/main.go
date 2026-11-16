@@ -100,5 +100,7 @@ func serve(source, mountpoint string, limit int64, reservation *quotafs.Reservat
 	tell.Close()
 	log.Printf("rbquotafs: %s at %s, %d of %d bytes used", source, mountpoint, used, limit)
 	server.Wait()
+	// Unmounted: leave the reservation as it is (not in the middle of a step).
+	quota.Close()
 	return 0
 }

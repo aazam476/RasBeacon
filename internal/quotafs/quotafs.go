@@ -50,6 +50,10 @@ type Quota struct {
 	held        int64
 	fitting     sync.Mutex
 	regrow      chan struct{}
+	// stop is closed to end the growing back (see Close), and done once
+	// it has ended.
+	stop, done chan struct{}
+	closing    sync.Once
 }
 
 // slack is how much more than asked the reservation shrinks by when a
@@ -72,12 +76,26 @@ func NewQuota(used, limit int64) *Quota {
 func (q *Quota) HoldWith(r *Reservation) error {
 	q.reservation, q.held = r, r.Size()
 	q.regrow = make(chan struct{}, 1)
+	q.stop, q.done = make(chan struct{}), make(chan struct{})
 	if err := q.fit(0); err != nil {
+		close(q.done) // nothing grows back, so there is nothing to wait for
 		return err
 	}
 	go q.regrowing()
 	q.askRegrow()
 	return nil
+}
+
+// Close stops growing the reservation back and waits until that has
+// ended, so nothing touches the reservation's files afterwards. The count
+// itself goes on working. It does nothing for a quota without a
+// reservation, or when called again.
+func (q *Quota) Close() {
+	if q.stop == nil {
+		return
+	}
+	q.closing.Do(func() { close(q.stop) })
+	<-q.done
 }
 
 // fit makes room for bytes more in the share: the reservation then holds
@@ -122,11 +140,29 @@ func (q *Quota) askRegrow() {
 
 // regrowing grows the reservation back each time it is asked, after a
 // short wait, one step at a time (a write meanwhile waits for one step at
-// most). It runs as long as the mount.
+// most). It runs as long as the mount, or until Close.
 func (q *Quota) regrowing() {
-	for range q.regrow {
-		time.Sleep(regrowAfter)
-		for {
+	defer close(q.done)
+	stopped := func() bool {
+		select {
+		case <-q.stop:
+			return true
+		default:
+			return false
+		}
+	}
+	for {
+		select {
+		case <-q.stop:
+			return
+		case <-q.regrow:
+		}
+		select {
+		case <-q.stop:
+			return
+		case <-time.After(regrowAfter):
+		}
+		for !stopped() {
 			q.fitting.Lock()
 			q.mu.Lock()
 			want := q.limit - q.used
