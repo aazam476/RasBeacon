@@ -1046,13 +1046,17 @@ func (a *Agent) releaseShares(id string) {
 
 // releaseSharesOf is releaseShares for shares already read.
 func (a *Agent) releaseSharesOf(id string, shares []config.PluginShare) {
-	released := map[string]bool{}
+	// Top down: every share's quota view and opened view first, then the
+	// drives. A drive with two shares is busy until both are closed, so
+	// it is let go of only after all of them.
 	for _, share := range shares {
-		// Top down: the quota view, the opened view, then the drive.
 		if share.Drive != "" {
 			_, _ = a.plugins.runner.Run("umount", a.paths.ShareQuotaDir(id, share.ID))
 		}
 		_, _ = a.plugins.runner.Run("umount", a.paths.SharePlainDir(id, share.ID))
+	}
+	released := map[string]bool{}
+	for _, share := range shares {
 		if share.Drive != "" && !released[share.Drive] {
 			released[share.Drive] = true
 			a.releaseDrive(share.Drive)

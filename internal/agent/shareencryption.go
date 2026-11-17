@@ -36,6 +36,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"rasbeacon/internal/api"
 	"rasbeacon/internal/config"
@@ -164,14 +165,44 @@ func (a *Agent) openEncryptedFolder(store *os.Root, storeDir, plain, key string)
 	})
 }
 
+// How long releaseDrive keeps trying to unmount a drive that is busy: 20
+// times, a quarter of a second apart.
+const (
+	releaseTries = 20
+	releaseEvery = 250 * time.Millisecond
+)
+
 // releaseDrive unmounts a plugin's drive, so it can be pulled out (its
 // encrypted shares are closed first, by releaseSharesOf). Called without
 // a.mu.
+//
+// The programs that worked on the drive behind a share's views (gocryptfs
+// and rbquotafs) end a moment after their views are unmounted, and the
+// drive is busy until they have: unmounting it right away fails about one
+// time in three for an encrypted share, and the drive would stay mounted
+// while its owner pulls it out. So while it is still mounted, unmounting
+// is tried again for a few seconds; a drive that stays busy is logged.
 func (a *Agent) releaseDrive(uuid string) {
 	if !plugin.ValidDriveUUID(uuid) {
 		return
 	}
-	_, _ = a.plugins.runner.Run("umount", a.paths.DriveMountDir(uuid))
+	r, dir := a.plugins.runner, a.paths.DriveMountDir(uuid)
+	for try := 1; ; try++ {
+		_, err := r.Run("umount", dir)
+		if err == nil {
+			return
+		}
+		// mountpoint -q fails when nothing is mounted there: the drive
+		// wasn't mounted, or it is gone now.
+		if _, mounted := r.Run("mountpoint", "-q", dir); mounted != nil {
+			return
+		}
+		if try == releaseTries {
+			slog.Warn("a USB drive is still in use and stays mounted", "drive", uuid, "error", err)
+			return
+		}
+		a.sleep(releaseEvery)
+	}
 }
 
 // --- Moving the files ---

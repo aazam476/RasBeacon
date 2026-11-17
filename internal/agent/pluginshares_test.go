@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -583,5 +584,63 @@ func TestShares_AUSBShareHoldsItsRoomOnTheDrive(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(reserved, "adguard-home-s1-001.bin")); !errors.Is(err, os.ErrNotExist) {
 		t.Error("its reservation should be gone")
+	}
+}
+
+// Stopping a plugin lets go of its shares' drive, so it can be pulled
+// out: after every share's views are closed (a drive with two shares is
+// busy until both are), and again while the programs behind them are
+// still ending.
+func TestShares_StoppingLetsGoOfTheDriveOnceItIsFree(t *testing.T) {
+	e := newSharesEnv(t)
+	addShare(e, api.PluginShareAddRequest{Name: "Movies", Drive: "1234-ABCD", Folder: "Movies", QuotaMB: 512})
+	addShare(e, api.PluginShareAddRequest{Name: "Photos", Drive: "1234-ABCD", Folder: "Photos", QuotaMB: 512})
+	drive := e.paths.DriveMountDir("1234-ABCD")
+	// The drive is mounted, and busy the first two times it is unmounted.
+	e.runner.outputs["mountpoint -q "+drive] = ""
+	busy := 2
+	effect := e.runner.effect
+	e.runner.effect = func(args []string) {
+		effect(args)
+		if len(args) == 2 && args[0] == "umount" && args[1] == drive {
+			e.runner.failing = slices.DeleteFunc(e.runner.failing, func(s string) bool { return s == "umount "+drive })
+			if busy > 0 {
+				busy--
+				e.runner.failing = append(e.runner.failing, "umount "+drive)
+			}
+		}
+	}
+	before := len(e.runner.commands)
+	if err := e.agent.StopPlugin("adguard-home"); err != nil {
+		t.Fatal(err)
+	}
+	var umounts []string
+	for _, command := range e.runner.commands[before:] {
+		if dir, ok := strings.CutPrefix(command, "umount "); ok && (dir == drive || strings.Contains(dir, "/s1") || strings.Contains(dir, "/s2")) {
+			umounts = append(umounts, strings.TrimPrefix(dir, filepath.Dir(drive)))
+		}
+	}
+	// Two views for each share (its quota view and its opened view), then
+	// the drive three times: busy twice.
+	first := slices.Index(umounts, "/"+filepath.Base(drive))
+	if len(umounts) != 7 || first != 4 || umounts[5] != umounts[4] || umounts[6] != umounts[4] {
+		t.Errorf("unmounted %v, want both shares' views first, then the drive three times", umounts)
+	}
+
+	// A drive that isn't mounted is left alone after one try.
+	delete(e.runner.outputs, "mountpoint -q "+drive)
+	e.runner.failing = append(e.runner.failing, "umount "+drive)
+	tries := e.runner.count("umount " + drive)
+	e.agent.releaseDrive("1234-ABCD")
+	if got := e.runner.count("umount "+drive) - tries; got != 1 {
+		t.Errorf("an unmounted drive was unmounted %d times, want once", got)
+	}
+	// One that stays busy is given up on.
+	e.runner.outputs["mountpoint -q "+drive] = ""
+	busy = 1000
+	tries = e.runner.count("umount " + drive)
+	e.agent.releaseDrive("1234-ABCD")
+	if got := e.runner.count("umount "+drive) - tries; got != releaseTries {
+		t.Errorf("a busy drive was unmounted %d times, want %d", got, releaseTries)
 	}
 }
