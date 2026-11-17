@@ -379,6 +379,15 @@ func (a *Agent) AddPluginShare(req api.PluginShareAddRequest) (api.Plugin, error
 		if err := a.mountDrive(req.Drive); err != nil {
 			return api.Plugin{}, &config.ValidationError{Field: "drive", Message: "This drive isn't plugged in."}
 		}
+		// A folder that is there already must be a real one, and so must
+		// the folders it is in (see sharelinks.go): said now, not when the
+		// plugin fails to start.
+		store, err := a.openShareStore(req.ID, share, false)
+		if err == nil {
+			store.Close()
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return api.Plugin{}, &config.ValidationError{Field: "folder", Message: "This folder can't be a share: " + err.Error() + ". Choose another."}
+		}
 	}
 	used := 0
 	if share.Drive != "" {
@@ -430,7 +439,7 @@ func (a *Agent) AddPluginShare(req api.PluginShareAddRequest) (api.Plugin, error
 	share.ID, share.QuotaMB, share.Settings = nextShareID(p.Shares), req.QuotaMB, settings
 	// A folder RasBeacon encrypted for an earlier share opens again.
 	if share.Drive != "" && a.secrets.ShareKeys[shareKeyName(req.ID, share)] != "" {
-		if _, err := os.Stat(filepath.Join(a.shareStoreDir(req.ID, share), encryptedFolder, "gocryptfs.conf")); err == nil {
+		if a.hasEncryptedFolder(req.ID, share) {
 			share.Encryption, share.RecoveryKeySaved = encryptionOn, true
 		}
 	}
@@ -629,13 +638,28 @@ func (a *Agent) deleteShareFiles(id string, share config.PluginShare) error {
 	if share.Folder == "" {
 		return &config.ValidationError{Field: "deleteFiles", Message: "This share is the whole drive: its files stay on it."}
 	}
-	folder := a.shareStoreDir(id, share)
-	// Never above the drive's top: the folder was checked when the share
-	// was made, and is checked again here.
-	if rel, err := filepath.Rel(a.paths.DriveMountDir(share.Drive), folder); err != nil || rel == "." || strings.HasPrefix(rel, "..") {
-		return fmt.Errorf("the share's folder %q isn't on its drive", share.Folder)
+	// Its folder is deleted where it is on the drive, and nothing else:
+	// the folders it is in must be real ones (through a link, another
+	// folder's files would go), and nothing outside the drive is reached
+	// (see sharelinks.go).
+	parts, err := folderParts(share.Folder)
+	if err != nil {
+		return err
 	}
-	return os.RemoveAll(folder)
+	drive, err := os.OpenRoot(a.paths.DriveMountDir(share.Drive))
+	if err != nil {
+		return err
+	}
+	defer drive.Close()
+	parent, err := realFolder(drive, strings.Join(parts[:len(parts)-1], "/"), false)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil // nothing of it is there
+	}
+	if err != nil {
+		return &config.ValidationError{Field: "deleteFiles", Message: "The share's files can't be deleted: " + err.Error() + "."}
+	}
+	defer parent.Close()
+	return parent.RemoveAll(parts[len(parts)-1])
 }
 
 // forgetShareKey deletes a share's recovery key. The caller holds a.mu.
@@ -772,10 +796,7 @@ func (a *Agent) moveDataIntoShare(id string, old, updated *plugin.Manifest, reco
 	if err := a.mountImage(a.paths.PluginShareImage(id, share.ID), to, quota); err != nil {
 		return 0, err
 	}
-	if err := os.MkdirAll(from, 0o755); err != nil {
-		return 0, err
-	}
-	if err := a.moveFiles(from, to, func(rel string) bool { return rel == "lost+found" }, func(int, int) error { return nil }); err != nil {
+	if err := a.moveVolumeFiles(a.pluginDataMount(id), old.Volumes[index].Name, to); err != nil {
 		return 0, err
 	}
 	// Its data only holds the new version's own files now.
@@ -783,6 +804,30 @@ func (a *Agent) moveDataIntoShare(id string, old, updated *plugin.Manifest, reco
 		slog.Warn("could not shrink the plugin's data after moving its files", "plugin", id, "error", err)
 	}
 	return quota, nil
+}
+
+// moveVolumeFiles moves the files of the volume called name, a folder in
+// a plugin's data (mounted at dataMount), into the folder to. Both are
+// used as opened folders (see sharelinks.go: the plugin wrote what is in
+// the volume), and closed again before it returns: its data can't be
+// unmounted, to shrink it, while something in it is open.
+func (a *Agent) moveVolumeFiles(dataMount, name, to string) error {
+	data, err := os.OpenRoot(dataMount)
+	if err != nil {
+		return err
+	}
+	defer data.Close()
+	volume, err := realFolder(data, name, true)
+	if err != nil {
+		return err
+	}
+	defer volume.Close()
+	files, err := os.OpenRoot(to)
+	if err != nil {
+		return err
+	}
+	defer files.Close()
+	return a.moveFiles(volume, files, func(rel string) bool { return rel == "lost+found" }, func(int, int) error { return nil })
 }
 
 // measureFolderMB adds up the files in a folder, rounded up.
@@ -861,17 +906,29 @@ func (a *Agent) prepareShares(plan *pluginRunPlan) error {
 				plan.spec.Mounts = removeMount(plan.spec.Mounts, run.host)
 				continue
 			}
-			if err := os.MkdirAll(store, 0o755); err != nil {
-				return fmt.Errorf("the share %s's folder can't be made: %w", share.Name, err)
-			}
+		}
+		// Its folder, made on the drive if it isn't there: a real folder,
+		// reached through real folders (see sharelinks.go). rbquotafs and
+		// gocryptfs get its path only after that.
+		folder, err := a.openShareStore(plan.id, share, true)
+		if err != nil {
+			return fmt.Errorf("the share %s's folder can't be made: %w", share.Name, err)
 		}
 		if run.key != "" {
 			// Never the encrypted files themselves: if they can't be
 			// opened, the plugin doesn't start.
-			if err := a.openEncryptedFolder(store, a.paths.SharePlainDir(plan.id, share.ID), run.key); err != nil {
+			plain := a.paths.SharePlainDir(plan.id, share.ID)
+			err := a.openEncryptedFolder(folder, store, plain, run.key)
+			if err == nil && share.Drive != "" {
+				// rbquotafs works in the opened view next.
+				err = a.refuseLinksIn(plain)
+			}
+			if err != nil {
+				folder.Close()
 				return fmt.Errorf("the share %s: %w", share.Name, err)
 			}
 		}
+		folder.Close()
 		if share.Drive != "" {
 			if err := a.holdToQuota(plan.id, share); err != nil {
 				return fmt.Errorf("the share %s can't be held to its quota: %w", share.Name, err)

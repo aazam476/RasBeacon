@@ -298,13 +298,14 @@ func TestShareEncryption_Helpers(t *testing.T) {
 func TestShareEncryption_AMoveGoesOnWhereItStopped(t *testing.T) {
 	e := newTestEnv(t)
 	from, to := t.TempDir(), t.TempDir()
+	fromFolder, toFolder := openFolder(t, from), openFolder(t, to)
 	mustWrite(t, filepath.Join(from, "done.txt"), "copied before")
 	mustWrite(t, filepath.Join(to, "done.txt"), "copied before")
 	mustWrite(t, filepath.Join(from, "half.txt"), "the whole file")
 	mustWrite(t, filepath.Join(to, "half.txt"+partSuffix), "the wh")
 	mustWrite(t, filepath.Join(from, "old.txt"+partSuffix), "left from going the other way")
 	var steps []int
-	err := e.agent.moveFiles(from, to, func(string) bool { return false }, func(done, total int) error {
+	err := e.agent.moveFiles(fromFolder, toFolder, func(string) bool { return false }, func(done, total int) error {
 		steps = append(steps, done*10+total)
 		return nil
 	})
@@ -327,12 +328,12 @@ func TestShareEncryption_AMoveGoesOnWhereItStopped(t *testing.T) {
 	// The progress callback can stop it (the owner turned it around).
 	mustWrite(t, filepath.Join(from, "a.txt"), "a")
 	mustWrite(t, filepath.Join(from, "b.txt"), "b")
-	err = e.agent.moveFiles(from, to, func(string) bool { return false }, func(int, int) error { return errTurnedAround })
+	err = e.agent.moveFiles(fromFolder, toFolder, func(string) bool { return false }, func(int, int) error { return errTurnedAround })
 	if !errors.Is(err, errTurnedAround) {
 		t.Errorf("err = %v, want turned around", err)
 	}
 	// A file that can't be read stops it, naming the file.
-	if err := e.agent.moveFile(filepath.Join(from, "missing"), filepath.Join(to, "missing")); err == nil {
+	if err := e.agent.moveFile(fromFolder, toFolder, "missing"); err == nil {
 		t.Error("a missing file can't be moved")
 	}
 }

@@ -367,6 +367,16 @@ func TestParseDrives(t *testing.T) {
 	if kind, opts := MountOptions("ntfs"); kind != "ntfs3" || !strings.Contains(opts, "noexec") || !strings.Contains(opts, "nosuid") || !strings.Contains(opts, "nodev") {
 		t.Errorf("ntfs mount: %s %s", kind, opts)
 	}
+	// Whatever is on a drive, nothing on it runs, and no link on it is
+	// followed: RasBeacon's own programs work there as root.
+	for _, fsType := range DriveFilesystems {
+		_, opts := MountOptions(fsType)
+		for _, want := range []string{"nosuid", "nodev", "noexec", "nosymfollow"} {
+			if !slices.Contains(strings.Split(opts, ","), want) {
+				t.Errorf("a %s drive is mounted with %q, without %s", fsType, opts, want)
+			}
+		}
+	}
 }
 
 func TestRunArgs(t *testing.T) {

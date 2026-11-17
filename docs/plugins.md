@@ -79,7 +79,7 @@ images and data.
 |---|---|---|
 | `internet` | Use the internet | Connections out, the same way your devices go: through the VPN when it is on, not at all while the kill switch blocks or a hotel login is in the way. Also RasBeacon's DNS server. |
 | `lan-access` | Reach your devices | Connections to devices on your hotspot (never to guests). |
-| `usb-drive` | Use a USB drive | The drive the owner picks, mounted with `nosuid,nodev,noexec`, at `usbDrive.path`. Only one plugin gets a drive. |
+| `usb-drive` | Use a USB drive | The drive the owner picks, mounted with `nosuid,nodev,noexec,nosymfollow`, at `usbDrive.path`. Only one plugin gets a drive. |
 | `i2c` | Use the I²C bus | `/dev/i2c-*` (RasBeacon turns the bus on). |
 | `gpio` | Use the GPIO pins | `/dev/gpiochip*`. |
 | `power-button` | Shut down or restart RasBeacon | A socket to ask RasBeacon (see [Power](#power)). |
@@ -238,6 +238,27 @@ shares the owner makes on its page. RasBeacon mounts each one at
   decrypted, the plugin is stopped.
 - A share whose drive isn't plugged in is left out of `RASBEACON_SHARES`
   (and not mounted) until it is, when the plugin starts again.
+- **Links** (symbolic links) in a share work for the plugin as on any
+  folder: it can make them, and follows them inside its own container.
+  RasBeacon itself follows none. What is in a share is the plugin's, and
+  on a drive anyone's who had it in a computer, and a link can point to
+  any file on the Pi, where RasBeacon's own programs work as root. So:
+  - a share's folder on a drive, the folders it is in, the folder of its
+    encrypted files and the `RasBeacon reserved space` folder must be real
+    folders. A link in the place of one is refused: the share can't be
+    made there, or the plugin doesn't start, and its page says which name
+    is a link;
+  - when a share is encrypted or decrypted, links (and other special
+    files) stay where they are, as before, and files only ever move
+    between the share's folder and its encrypted view (`os.Root` keeps
+    rbd inside them). A link in the way of a folder that comes back from
+    the encrypted view gives way to it;
+  - drives are mounted with `nosymfollow`, and so is the decrypted view of
+    an encrypted share on a drive, so the kernel passes through no link
+    there for `rbquotafs` and `gocryptfs` either. The plugin doesn't
+    notice: it sees a drive's shares through `rbquotafs`. (An older
+    plugin that gets a whole drive with `usbDrive` sees the drive itself,
+    and doesn't follow links on it any more.)
 
 The plugin restarts when a share is added, changed or removed, so it reads
 `RASBEACON_SHARES` once, when it starts.

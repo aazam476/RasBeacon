@@ -64,9 +64,21 @@ func ParseDrives(lsblkJSON string) ([]Drive, error) {
 }
 
 // MountOptions are how a drive is mounted for a plugin: nothing on it can
-// run, and it can't hold device files or set-user-ID programs.
+// run, it can't hold device files or set-user-ID programs, and no link on
+// it is followed (nosymfollow).
+//
+// A drive comes from anywhere, and a link on it can point to any file on
+// the Pi ("Movies" to "/etc"). RasBeacon's own programs work on the drive
+// as root, by paths: rbquotafs in a share's folder, gocryptfs in its
+// encrypted files. With nosymfollow the kernel refuses to pass through a
+// link in such a path, so none of them can be sent outside the drive by
+// what is on it. Links can still be made and read there, and a plugin
+// still follows the links in its shares: it sees a share through
+// rbquotafs, where the kernel follows them inside the plugin's own
+// container. (A plugin that gets a whole drive directly, an older
+// "usbDrive" one, doesn't follow links on it any more.)
 func MountOptions(fsType string) (kind string, options string) {
-	options = "nosuid,nodev,noexec,noatime"
+	options = "nosuid,nodev,noexec,noatime,nosymfollow"
 	switch fsType {
 	case "ntfs":
 		return "ntfs3", options

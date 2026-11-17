@@ -130,22 +130,26 @@ func (a *Agent) withKeyFile(key string, run func(file string) error) error {
 	return run(f.Name())
 }
 
-// openEncryptedFolder makes the encrypted folder in a share (store) if it
-// isn't there yet, and opens it at plain. Called without a.mu.
-func (a *Agent) openEncryptedFolder(store, plain, key string) error {
+// openEncryptedFolder makes the encrypted folder in a share if it isn't
+// there yet, and opens it at plain. store is the share's folder, storeDir
+// its path (which the caller has checked, see openShareStore). Called
+// without a.mu.
+func (a *Agent) openEncryptedFolder(store *os.Root, storeDir, plain, key string) error {
 	r := a.plugins.runner
 	if _, err := r.Run("mountpoint", "-q", plain); err == nil {
 		return nil // already open
 	}
-	cipher := filepath.Join(store, encryptedFolder)
 	if err := os.MkdirAll(plain, 0o755); err != nil {
 		return err
 	}
+	// A real folder of the share's, never a link to another place.
+	ready, err := encryptedFolderIn(store)
+	if err != nil {
+		return fmt.Errorf("the encrypted folder can't be made: %w", err)
+	}
+	cipher := filepath.Join(storeDir, encryptedFolder)
 	return a.withKeyFile(key, func(keyFile string) error {
-		if _, err := os.Stat(filepath.Join(cipher, "gocryptfs.conf")); errors.Is(err, os.ErrNotExist) {
-			if err := os.MkdirAll(cipher, 0o700); err != nil {
-				return err
-			}
+		if !ready {
 			// -xchacha: XChaCha20-Poly1305, fast on a Pi without AES
 			// instructions (the Pi 4 and older).
 			if _, err := r.Run("gocryptfs", "-init", "-xchacha", "-q", "-passfile", keyFile, cipher); err != nil {
@@ -176,27 +180,24 @@ func (a *Agent) releaseDrive(uuid string) {
 // is copied before the old copy is removed).
 var errDriveFull = errors.New("the drive is too full")
 
-// moveFiles moves every file under from into to, keeping the folders they
-// are in, one file at a time (see moveFile). skip leaves out paths (relative
-// to from) and what is in them. progress is told after each file; an
-// error from it stops the move there. Empty folders left behind are
-// removed.
-func (a *Agent) moveFiles(from, to string, skip func(rel string) bool, progress func(done, total int) error) error {
+// moveFiles moves every file in the folder from into the folder to,
+// keeping the folders they are in, one file at a time (see moveFile). skip
+// leaves out paths (relative to from) and what is in them. progress is
+// told after each file; an error from it stops the move there. Empty
+// folders left behind are removed.
+//
+// Both folders are opened ones (see sharelinks.go): nothing is read or
+// written outside them, whatever links they hold. A link in to with the
+// name of a folder that comes from from gives way to that folder.
+func (a *Agent) moveFiles(from, to *os.Root, skip func(rel string) bool, progress func(done, total int) error) error {
 	var files, dirs []string
-	err := filepath.WalkDir(from, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, _ := filepath.Rel(from, path)
+	err := walkFolder(from, func(rel string, d fs.DirEntry) error {
 		switch {
-		case rel == ".":
 		case strings.HasSuffix(rel, partSuffix) && !d.IsDir():
 			// A copy that wasn't finished before a restart: made again.
-			_ = os.Remove(path)
+			_ = from.Remove(rel)
 		case skip(rel):
-			if d.IsDir() {
-				return filepath.SkipDir
-			}
+			return fs.SkipDir
 		case d.IsDir():
 			dirs = append(dirs, rel)
 		case d.Type().IsRegular():
@@ -210,12 +211,12 @@ func (a *Agent) moveFiles(from, to string, skip func(rel string) bool, progress 
 		return err
 	}
 	for _, rel := range dirs {
-		if err := os.MkdirAll(filepath.Join(to, rel), 0o755); err != nil {
+		if err := makeFolder(to, rel); err != nil {
 			return err
 		}
 	}
 	for i, rel := range files {
-		if err := a.moveFile(filepath.Join(from, rel), filepath.Join(to, rel)); err != nil {
+		if err := a.moveFile(from, to, rel); err != nil {
 			return fmt.Errorf("%s: %w", rel, err)
 		}
 		if err := progress(i+1, len(files)); err != nil {
@@ -226,50 +227,57 @@ func (a *Agent) moveFiles(from, to string, skip func(rel string) bool, progress 
 	// that still holds something (a link, say) stays.
 	slices.Reverse(dirs)
 	for _, rel := range dirs {
-		_ = os.Remove(filepath.Join(from, rel))
+		_ = from.Remove(rel)
 	}
 	return nil
 }
 
-// moveFile moves one file: copied to a part file next to where it goes,
-// written to the drive for sure, renamed into place, and only then removed
-// from where it was. If RasBeacon stopped in the middle last time, a part
-// file is made again, and a file already in place (the old copy wasn't
-// removed yet) only needs the old copy removed.
-func (a *Agent) moveFile(src, dst string) error {
-	info, err := os.Stat(src)
+// moveFile moves the file rel from the folder from to the same place in
+// the folder to: copied to a part file next to where it goes, written to
+// the drive for sure, renamed into place, and only then removed from where
+// it was. If RasBeacon stopped in the middle last time, a part file is
+// made again, and a file already in place (the old copy wasn't removed
+// yet) only needs the old copy removed.
+func (a *Agent) moveFile(from, to *os.Root, rel string) error {
+	info, err := from.Lstat(rel)
 	if err != nil {
 		return err
 	}
-	part := dst + partSuffix
-	_ = os.Remove(part)
-	if done, err := os.Stat(dst); err == nil && done.Size() == info.Size() {
-		return os.Remove(src)
+	if !info.Mode().IsRegular() {
+		return errors.New("it is not a plain file any more")
+	}
+	part := rel + partSuffix
+	_ = to.Remove(part)
+	// (A link with the file's name isn't the file: the file replaces it.)
+	if done, err := to.Lstat(rel); err == nil && done.Mode().IsRegular() && done.Size() == info.Size() {
+		return from.Remove(rel)
 	}
 	// Both copies are on the same drive for a moment: the new one (a bit
 	// bigger when encrypted) must fit next to the old.
-	if free, err := a.diskFree(filepath.Dir(dst)); err == nil && free < info.Size()+info.Size()/64+1<<20 {
+	if free, err := a.diskFree(to.Name()); err == nil && free < info.Size()+info.Size()/64+1<<20 {
 		return fmt.Errorf("%w: it needs about %s free", errDriveFull, sizeText(int(info.Size()>>20)+1))
 	}
-	if err := copyFileSynced(src, part, info); err != nil {
-		_ = os.Remove(part)
+	if err := copyFileSynced(from, to, rel, part, info); err != nil {
+		_ = to.Remove(part)
 		return err
 	}
-	if err := os.Rename(part, dst); err != nil {
+	if err := to.Rename(part, rel); err != nil {
 		return err
 	}
-	return os.Remove(src)
+	return from.Remove(rel)
 }
 
-// copyFileSynced copies src to dst (which must not exist), waits until it
-// is written to the drive, and keeps its modification time.
-func copyFileSynced(src, dst string, info fs.FileInfo) error {
-	in, err := os.Open(src)
+// copyFileSynced copies the file rel in the folder from to dst in the
+// folder to (which must not exist), waits until it is written to the
+// drive, and keeps its modification time.
+func copyFileSynced(from, to *os.Root, rel, dst string, info fs.FileInfo) error {
+	in, err := from.Open(rel)
 	if err != nil {
 		return err
 	}
 	defer in.Close()
-	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	// O_EXCL: a new file, never one a link with its name points to.
+	out, err := to.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if err != nil {
 		return err
 	}
@@ -284,7 +292,7 @@ func copyFileSynced(src, dst string, info fs.FileInfo) error {
 	if err := out.Close(); err != nil {
 		return err
 	}
-	return os.Chtimes(dst, info.ModTime(), info.ModTime())
+	return to.Chtimes(dst, info.ModTime(), info.ModTime())
 }
 
 // --- Turning encryption on and off ---
@@ -459,22 +467,29 @@ func (a *Agent) convertShare(id, shareID string) {
 // (encrypting) or out of it (decrypting). It stops with errTurnedAround
 // when the owner changed the direction. Called without a.mu.
 func (a *Agent) convertOnce(id string, share config.PluginShare, key string) error {
-	store, plain := a.shareStoreDir(id, share), a.paths.SharePlainDir(id, share.ID)
+	storeDir, plainDir := a.shareStoreDir(id, share), a.paths.SharePlainDir(id, share.ID)
 	if share.Drive == "" {
-		if err := a.mountImage(a.paths.PluginShareImage(id, share.ID), store, share.QuotaMB); err != nil {
+		if err := a.mountImage(a.paths.PluginShareImage(id, share.ID), storeDir, share.QuotaMB); err != nil {
 			return err
 		}
-	} else {
-		if err := a.mountDrive(share.Drive); err != nil {
-			return err
-		}
-		if err := os.MkdirAll(store, 0o755); err != nil {
-			return err
-		}
-	}
-	if err := a.openEncryptedFolder(store, plain, key); err != nil {
+	} else if err := a.mountDrive(share.Drive); err != nil {
 		return err
 	}
+	// The share's folder and its opened view, as opened folders: the files
+	// move between these two and nowhere else (see sharelinks.go).
+	store, err := a.openShareStore(id, share, true)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+	if err := a.openEncryptedFolder(store, storeDir, plainDir, key); err != nil {
+		return err
+	}
+	plain, err := os.OpenRoot(plainDir)
+	if err != nil {
+		return err
+	}
+	defer plain.Close()
 	direction := share.Encryption
 	progress := func(done, total int) error {
 		a.mu.Lock()
@@ -490,8 +505,7 @@ func (a *Agent) convertOnce(id string, share config.PluginShare, key string) err
 		return nil
 	}
 	if direction == encryptionEncrypting {
-		readme := filepath.Join(store, encryptedReadme)
-		if err := os.WriteFile(readme, []byte(encryptedReadmeText), 0o644); err != nil {
+		if err := writeNewFile(store, encryptedReadme, encryptedReadmeText); err != nil {
 			return err
 		}
 		// ext4 keeps lost+found at the top of a share on internal
@@ -502,15 +516,17 @@ func (a *Agent) convertOnce(id string, share config.PluginShare, key string) err
 	if err := a.moveFiles(plain, store, func(string) bool { return false }, progress); err != nil {
 		return err
 	}
-	// Everything is out: the encrypted folder and its README go.
-	if _, err := a.plugins.runner.Run("umount", plain); err != nil {
+	// Everything is out: the encrypted folder and its README go. (The view
+	// can only be closed once nothing has it open.)
+	plain.Close()
+	if _, err := a.plugins.runner.Run("umount", plainDir); err != nil {
 		return fmt.Errorf("the encrypted folder can't be closed: %w", err)
 	}
-	if err := os.RemoveAll(filepath.Join(store, encryptedFolder)); err != nil {
+	if err := store.RemoveAll(encryptedFolder); err != nil {
 		return err
 	}
 	// (No README when it was turned off before the first file moved.)
-	if err := os.Remove(filepath.Join(store, encryptedReadme)); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err := store.Remove(encryptedReadme); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 	return nil

@@ -93,6 +93,87 @@ func TestReservation_GrowsInPiecesAndShrinksFromTheEnd(t *testing.T) {
 	}
 }
 
+// A drive comes from anywhere: where the reservations' folder should be
+// there may be a link, and in the folder links with its files' names. The
+// reservation's files are made, cut short and deleted by root, never
+// where a link points.
+func TestReservation_FollowsNoLink(t *testing.T) {
+	smallSizes(t)
+	drive, elsewhere := t.TempDir(), t.TempDir()
+	settings := filepath.Join(elsewhere, "settings.json")
+	if err := os.WriteFile(settings, []byte("RasBeacon's own, and longer than a few bytes"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	untouched := func(when string) {
+		t.Helper()
+		if got, _ := os.ReadFile(settings); string(got) != "RasBeacon's own, and longer than a few bytes" {
+			t.Errorf("%s, the file a link pointed to = %q", when, got)
+		}
+		if entries, _ := os.ReadDir(elsewhere); len(entries) != 1 {
+			t.Errorf("%s, where a link pointed has %d files, want the 1 it had", when, len(entries))
+		}
+	}
+
+	// The folder itself is a link: nothing is held, nothing is made there.
+	dir := filepath.Join(drive, ReservedFolder)
+	if err := os.Symlink(elsewhere, dir); err != nil {
+		t.Fatal(err)
+	}
+	r := NewReservation(dir, "samba-s1")
+	if err := r.GrowTo(25 << 10); err == nil {
+		t.Error("a folder that is a link should be refused")
+	}
+	if err := r.AtMost(0); err == nil {
+		t.Error("a folder that is a link should be refused when shrinking too")
+	}
+	if r.Size() != 0 {
+		t.Errorf("size = %d, want nothing held", r.Size())
+	}
+	_ = r.Remove()
+	untouched("with a link for the folder")
+	if _, err := os.Lstat(dir); err != nil {
+		t.Errorf("the link should be left as it is: %v", err)
+	}
+
+	// A real folder, with links for the files the reservation would make:
+	// its lock, its README, its first piece.
+	if err := os.Remove(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"README.txt", ".samba-s1.lock", "samba-s1-001.bin"} {
+		if err := os.Symlink(settings, filepath.Join(dir, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := r.GrowTo(25 << 10); err == nil {
+		t.Error("a lock that is a link should be refused")
+	}
+	untouched("with a link for the lock")
+	if err := os.Remove(filepath.Join(dir, ".samba-s1.lock")); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.GrowTo(25 << 10); err == nil {
+		t.Error("a piece that is a link should be refused")
+	}
+	if err := r.AtMost(1); err != nil {
+		t.Errorf("shrinking: %v", err)
+	}
+	untouched("with a link for a piece")
+
+	// Another share on the drive isn't stopped by them.
+	other := NewReservation(dir, "samba-s2")
+	if err := other.GrowTo(12 << 10); err != nil || other.Size() != 12<<10 {
+		t.Errorf("another share's reservation: %v, size %d", err, other.Size())
+	}
+	if err := other.Remove(); err != nil {
+		t.Fatal(err)
+	}
+	untouched("after another share's reservation")
+}
+
 func TestQuota_HoldsTheRestOfTheQuotaOnTheDrive(t *testing.T) {
 	smallSizes(t)
 	r := NewReservation(filepath.Join(t.TempDir(), ReservedFolder), "samba-s1")

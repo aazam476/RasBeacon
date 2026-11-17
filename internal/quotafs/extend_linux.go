@@ -7,12 +7,12 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// extend makes the file at path grow from size to grown bytes, its new
+// extend makes the file name in dir grow from size to grown bytes, its new
 // part really taken on the drive. fallocate does that at once where the
 // drive's filesystem can (ext4, NTFS); elsewhere (exFAT, FAT32) making the
 // file longer takes the space too, as those can't have holes in files.
-func extend(path string, size, grown int64) error {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0o644)
+func extend(dir *os.Root, name string, size, grown int64) error {
+	f, err := dir.OpenFile(name, os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		return err
 	}

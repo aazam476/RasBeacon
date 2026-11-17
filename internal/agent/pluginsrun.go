@@ -537,7 +537,8 @@ func (a *Agent) unmountPluginData(id string) {
 	_, _ = a.plugins.runner.Run("umount", a.pluginDataMount(id))
 }
 
-// mountDrive mounts a USB drive for a plugin, so nothing on it can run.
+// mountDrive mounts a USB drive for a plugin, so that nothing on it can
+// run and no link on it is followed (see plugin.MountOptions).
 func (a *Agent) mountDrive(uuid string) error {
 	if !plugin.ValidDriveUUID(uuid) {
 		return errors.New("its USB drive's ID isn't valid; choose the drive again")
