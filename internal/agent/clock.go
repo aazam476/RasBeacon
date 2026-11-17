@@ -22,11 +22,19 @@ import (
 const (
 	// clockSaveInterval is how often the time floor is saved.
 	clockSaveInterval = 15 * time.Minute
-	// ntpGrace is how long NTP gets after the uplink connects before
-	// RasBeacon asks web servers for the time instead.
-	ntpGrace = 30 * time.Second
-	// clockCheckInterval is how often RunClockMonitor looks.
-	clockCheckInterval = 30 * time.Second
+	// clockCheckInterval is how often RunClockMonitor looks. Often, so
+	// the clock is set soon after the uplink connects: until then the
+	// VPN's first handshakes may look old to its server (the time floor
+	// can be 15 minutes behind after a power cut).
+	clockCheckInterval = 10 * time.Second
+	// clockAskInterval is how often web servers are asked for the time
+	// once they have agreed on it, and clockRetryInterval how soon again
+	// when they haven't.
+	clockAskInterval   = time.Hour
+	clockRetryInterval = time.Minute
+	// clockTolerance is how far the clock may be from the servers' time
+	// before it is set.
+	clockTolerance = 30 * time.Second
 )
 
 // applyTimeFloor moves the clock forward to the last saved time, if the
@@ -60,7 +68,14 @@ func (a *Agent) SaveClock() {
 	if now.Before(a.timeFloor()) {
 		return // never save an earlier time
 	}
-	if err := config.WriteFileAtomic(a.paths.ClockFile(), []byte(strconv.FormatInt(now.Unix(), 10)+"\n"), 0o644); err != nil {
+	a.saveTimeFloor(now)
+}
+
+// saveTimeFloor saves t as the time floor, whatever was saved before.
+// Only a time that web servers agreed on may replace a later one (see
+// checkClock).
+func (a *Agent) saveTimeFloor(t time.Time) {
+	if err := config.WriteFileAtomic(a.paths.ClockFile(), []byte(strconv.FormatInt(t.Unix(), 10)+"\n"), 0o644); err != nil {
 		slog.Warn("could not save the time", "error", err)
 	}
 }
@@ -72,16 +87,22 @@ func (a *Agent) setClock(t time.Time) {
 	}
 }
 
-// ntpSynchronized asks systemd-timesyncd whether NTP has set the clock.
-func (a *Agent) ntpSynchronized() bool {
-	out, err := a.runner.Run("timedatectl", "show", "--property=NTPSynchronized", "--value")
-	return err == nil && strings.TrimSpace(out) == "yes"
+// stopNTP stops the system's NTP client, if one runs. RasBeacon takes the
+// time from web servers over HTTPS only (see internal/clock for why): an
+// NTP answer can't be checked, and the network names the server. The
+// image has systemd-timesyncd masked (image/layer/rasbeacon.yaml); this
+// is for a system where it runs all the same.
+func (a *Agent) stopNTP() {
+	if _, err := a.runner.Run("systemctl", "stop", "systemd-timesyncd.service"); err != nil {
+		slog.Debug("no NTP client to stop", "error", err)
+	}
 }
 
-// RunClockMonitor saves the time floor regularly and, if NTP doesn't work
-// on the current network, sets the clock from web servers' "Date" headers.
-// cmd/rbd starts it in the background (not on the simulated device).
+// RunClockMonitor saves the time floor regularly and sets the clock from
+// web servers' "Date" headers. cmd/rbd starts it in the background (not on
+// the simulated device).
 func (a *Agent) RunClockMonitor() {
+	a.stopNTP()
 	client := clock.Client(nil)
 	watch := &clockWatch{fetch: func() []time.Time { return fetchDates(client) }}
 	for {
@@ -93,9 +114,10 @@ func (a *Agent) RunClockMonitor() {
 // clockWatch is what the clock monitor remembers from one round to the
 // next.
 type clockWatch struct {
-	// lastSaved and lastSet are when it last saved the time floor and
-	// last set the clock from web servers.
-	lastSaved, lastSet time.Time
+	// lastSaved is when it last saved the time floor, lastAsked when it
+	// last asked web servers for the time, and lastAgreed when they last
+	// agreed on it.
+	lastSaved, lastAsked, lastAgreed time.Time
 	// fetch asks web servers for the time (fetchDates on the device).
 	fetch func() []time.Time
 }
@@ -107,38 +129,38 @@ func (a *Agent) checkClock(w *clockWatch, now time.Time) {
 		w.lastSaved = now
 	}
 
-	// Only fall back to web servers when NTP hasn't worked, the uplink has
-	// been connected for a while, and we haven't just done it.
-	// Not while a login page is in the way either: the network answers
-	// in the servers' place then, so there is no time to get.
+	// Web servers are asked as soon as this uplink has been checked for a
+	// login page and none is in the way, and then once an hour. With a
+	// login page the network answers in the servers' place, so there is
+	// no time to get.
 	a.mu.Lock()
 	connected := a.uplink.status.Connected
-	connectedFor := a.now().Sub(a.uplink.connectedSince)
-	open := a.portal.result.State == portal.Open
+	open := a.portal.result.State == portal.Open && a.portal.probedUplinkSince.Equal(a.uplink.connectedSince)
 	a.mu.Unlock()
-	if !connected || !open || connectedFor < ntpGrace {
+	if !connected || !open {
 		return
 	}
-	if a.ntpSynchronized() {
-		a.setClockUnsure(false)
+	if now.Sub(w.lastAgreed) < clockAskInterval || now.Sub(w.lastAsked) < clockRetryInterval {
 		return
 	}
-	if now.Sub(w.lastSet) < time.Hour {
-		return
-	}
+	w.lastAsked = now
 
-	agreed, ok := clock.AgreedTime(w.fetch(), a.timeFloor())
+	agreed, ok := clock.AgreedTime(w.fetch())
 	if !ok {
-		slog.Warn("NTP is not working and web servers did not agree on the time")
+		slog.Warn("web servers did not agree on the time")
 		a.setClockUnsure(true)
 		return
 	}
 	a.setClockUnsure(false)
-	w.lastSet = now
-	if difference := agreed.Sub(now); difference > 30*time.Second || difference < -30*time.Second {
-		slog.Warn("NTP is not working; setting the clock from web servers", "time", agreed.UTC(), "change", difference)
+	w.lastAgreed = now
+	if difference := agreed.Sub(now); difference > clockTolerance || difference < -clockTolerance {
+		slog.Warn("setting the clock from web servers", "time", agreed.UTC(), "change", difference)
 		a.setClock(agreed)
-		a.SaveClock()
+		// The floor follows, also back: a clock that was ahead (a
+		// battery-backed clock gone wrong, or a time an older version
+		// took from a network's time server) must not come back at the
+		// next boot.
+		a.saveTimeFloor(agreed)
 	}
 }
 
@@ -167,11 +189,11 @@ func (a *Agent) setClockUnsure(unsure bool) {
 	a.clockUnsure = unsure
 }
 
-// clockWarnings warns when neither NTP nor web servers could set the
-// clock on a network that otherwise works. The clock then runs from the
-// last saved time, which never goes back (it keeps the VPN's handshakes
-// valid): if that time was wrong, secure websites and the VPN may fail
-// until the clock is set. The caller holds a.mu.
+// clockWarnings warns when web servers couldn't set the clock on a
+// network that otherwise works. The clock then runs from the last saved
+// time, which keeps the VPN's handshakes valid across a reboot: if that
+// time was wrong, secure websites and the VPN may fail until the clock is
+// set. The caller holds a.mu.
 func (a *Agent) clockWarnings() []string {
 	if !a.clockUnsure {
 		return nil

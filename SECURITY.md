@@ -39,7 +39,9 @@ For example:
   the internet outside the VPN, your devices, guests, the web UI, other
   files or devices), or being reachable by guests or from the uplink;
 - a plugin update accepted that isn't signed by the key of the installed
-  version, or a changed `.rba` passing its signature check.
+  version, or a changed `.rba` passing its signature check;
+- a network RasBeacon joins leaving something behind that breaks it after
+  you've left (a wrong time that is saved, say).
 
 ## Supported versions
 
@@ -70,6 +72,7 @@ code. Some of them, for problems found in reviews:
 | Guests can't reach your devices | A guest sending with one of your devices' addresses as the sender got the answers from the internet delivered to that device | `test/netns` `TestGuest_CantSendWithADevicesAddress`, `internal/render` `TestFirewall_GuestNetworkIsolated` |
 | A plugin does only what its permissions allow | With the VPN on, a device's connection to a plugin's port was routed into the tunnel (to the VPN server) instead of to the plugin | `test/netns` `TestPlugins_DevicesReachTheirPortsWhileTheVPNIsOn` |
 | A plugin does only what its permissions allow | rbd, as root, followed links in a share's files, which the plugin writes (and on a USB drive anyone who had it in a computer): encrypting or decrypting a share, deleting it, or holding its room on the drive could write, cut short or delete files anywhere on the Pi, and a link for a share's folder made another folder the share | `internal/agent` `TestShareLinks_*`, `internal/quotafs` `TestReservation_FollowsNoLink`, `internal/plugin` `TestParseDrives` (drives are mounted `nosymfollow`) |
+| A network leaves nothing behind that breaks RasBeacon later | The clock was set by NTP, from the time server the network names: a time years ahead was saved for every later boot, and the VPN's server then refused handshakes with the right time | `internal/agent` `TestClock_TakesNoTimeFromNTP`, `TestClock_AClockThatIsAheadIsPutBack`, `internal/clock` `TestFetchDate_TheTimeIsOneTheCertificateIsValidAt` |
 | No traffic outside the VPN while the kill switch is on | Guests' traffic was only checked without the VPN | `test/netns` `TestGuest_UsesTheVPNAndTheKillSwitch` |
 | No getting past the admin login | A second setup in the seconds before the network switch replaced the owner's password | `internal/agent` `TestClaim_SecondClaimBeforeTheSwitchIsRejected` |
 | No secrets in logs or the diagnostics report | A mobile modem's carrier password is on mmcli's command line, which a failed connection's error named: it was shown on the Internet page and logged | `internal/agent` `TestModem_AFailedConnectionDoesntShowThePassword` |

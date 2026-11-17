@@ -28,8 +28,9 @@ hotel login pages.
   - Google's and Apple's "is there internet?" addresses, every 10 minutes
     (more often while the VPN can't connect), to notice a hotel's login
     page, as phones do;
-  - the time: NTP, or Google, Apple and Cloudflare over HTTPS where NTP is
-    blocked;
+  - the time: Google, Apple and Cloudflare over HTTPS, once an hour (not a
+    time server: a network names its own, and what it answers can't be
+    checked);
   - GitHub, once a day while plugins from the catalog are installed (to
     offer their updates), and for new RasBeacon versions only if you
     choose a schedule on the System page.

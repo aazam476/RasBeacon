@@ -34,7 +34,7 @@ check "the system's CA list is there (Enterprise login servers)" test -s "$root/
 # The network programs rbd drives.
 for tool in usr/sbin/hostapd usr/sbin/dnsmasq usr/sbin/nft usr/sbin/iw usr/sbin/rfkill \
   usr/sbin/wpa_supplicant usr/sbin/wpa_cli usr/bin/networkctl usr/lib/systemd/systemd-resolved \
-  usr/bin/wg usr/bin/dhcp_release usr/bin/timedatectl usr/bin/zstd; do
+  usr/bin/wg usr/bin/dhcp_release usr/bin/zstd; do
   check "$tool is installed" test -x "$root/$tool"
 done
 
@@ -96,6 +96,7 @@ check "wg-quick is not started at boot" sh -c "! ls '$root'/etc/systemd/system/*
 check "forwarding is off at boot" grep -q "^net.ipv4.ip_forward = 0" "$root/usr/lib/sysctl.d/90-rasbeacon.conf"
 check "SSH is not started at boot" sh -c "! ls '$root'/etc/systemd/system/*.wants/ssh.service"
 check "Debian's hostapd service is masked" sh -c "[ \"\$(readlink '$root/etc/systemd/system/hostapd.service')\" = /dev/null ]"
+check "NTP is off (rbd sets the clock from web servers over HTTPS)" sh -c "[ \"\$(readlink '$root/etc/systemd/system/systemd-timesyncd.service')\" = /dev/null ]"
 check "iwd is not installed" test ! -e "$root/usr/libexec/iwd"
 
 # SSH: our settings file must be the first one OpenSSH reads.

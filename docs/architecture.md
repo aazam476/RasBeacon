@@ -160,9 +160,11 @@ the kill switch means devices never use the internet outside the VPN.
 
 The clock matters for WireGuard and certificates, and the Pi has no clock
 battery: `internal/agent/clock.go` saves the time regularly, never lets it
-go backwards across a reboot, and falls back to HTTPS servers' `Date`
-headers when NTP is blocked (`internal/clock`). When neither sets it, the
-Status page warns.
+go backwards across a reboot, and sets it from three HTTPS servers' `Date`
+headers when at least two agree (`internal/clock`). It uses no NTP: a
+network names its own time server, an NTP answer can't be checked, and a
+wrong time would be saved and break the VPN long after. When the servers
+can't set it, the Status page warns.
 
 ## Hotel login pages (captive portals)
 

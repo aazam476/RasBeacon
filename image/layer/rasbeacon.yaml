@@ -108,6 +108,10 @@ mmdebstrap:
     - install -d -m 2775 $1/var/lib/lockdown
     # Debian's own hostapd service must not start with the default config.
     - chroot $1 systemctl mask hostapd.service
+    # No NTP: its answers can't be checked, and a network names its own
+    # time server. rbd sets the clock from web servers over HTTPS instead
+    # (see internal/clock).
+    - chroot $1 systemctl mask systemd-timesyncd.service
     # Optional factory-reset button between GPIO 17 (pin 11) and ground
     # (pin 9): the kernel reports it as the RESTART key, and rbd erases all
     # settings when it is held for 10 seconds. Without a button nothing

@@ -46,7 +46,8 @@ compatibility table records the result.
 - **Image contents:**
   - Kernel and firmware
   - `hostapd`, `wpa_supplicant`, `dnsmasq`, `nftables`, `wireguard-tools`,
-    `systemd-networkd`, `systemd-timesyncd`, `iw`, `wireless-regdb`
+    `systemd-networkd`, `iw`, `wireless-regdb` (`systemd-timesyncd` is
+    installed but masked: no NTP, see 4.7)
   - Our two binaries and static web assets
 
   **Removed:** NetworkManager, desktop/X, Bluetooth services, avahi, and
@@ -281,7 +282,7 @@ main:        default via <uplink gw> (networkd, metric by uplink priority)
   - In `DIRECT`, rule 100 is deleted rather than swapped (same effect).
   - The tunnel doesn't wait for the clock: it simply doesn't handshake
     until the clock is right, which the state machine already treats as
-    "not working". The time floor and the HTTPS `Date` fallback (4.7) keep
+    "not working". The time floor and the HTTPS `Date` headers (4.7) keep
     the clock right.
   - The health check is the handshake age (at most 180 s, with keepalive
     25 s); probes through the tunnel are left for later if hardware
@@ -327,8 +328,7 @@ main:        default via <uplink gw> (networkd, metric by uplink priority)
 - **Device's own traffic:** a second resolver listens on 127.0.0.53 and uses
   the uplink's DNS. Only these flows leave via the uplink:
   - WireGuard UDP
-  - NTP
-  - HTTP time and portal probes
+  - HTTPS time and HTTP portal probes
   - DNS for those
   - DHCP
   - the opt-in update check
@@ -506,21 +506,35 @@ tunnel health check plus a portal probe, and the flow repeats.
   at shutdown). It is applied at boot before anything else, so certificate
   validity checks (EAP) and WireGuard handshake timestamps start from a sane
   time.
-- **Sync:** `systemd-timesyncd` does NTP via the uplink. **If NTP is blocked**
-  (not synchronized 30 s after the uplink connects), `rbd` falls back to the
-  `Date` header of three HTTPS servers (Google, Apple, Cloudflare), at most
-  once an hour and never while a login page is in the way. Their
-  certificates are checked as of the day each became valid, since the clock
-  that would check the dates is the one being set; plain HTTP would let a
-  network with a login page answer with any time. It accepts a time only
-  when at least 2 agree within 5 s and the time is at or after the floor.
-  When neither works, the Status page warns, with the time RasBeacon reads:
-  a floor that was wrong (in the future) would otherwise go unnoticed while
-  secure websites and the VPN fail.
+- **Sync:** `rbd` sets the clock from the `Date` header of three HTTPS
+  servers (Google, Apple, Cloudflare): as soon as the uplink has been
+  checked for a login page and none is in the way, then once an hour (a
+  minute later when they didn't agree). It accepts a
+  time only when at least 2 agree within 5 s, and sets the clock when it is
+  more than 30 s off. Their certificates are checked as usual, but not by
+  the clock, which is what is being set: each must be valid at the time its
+  server gives. Plain HTTP would let a network with a login page answer
+  with any time.
+- **No NTP** (`systemd-timesyncd` is masked, and `rbd` stops it if it runs):
+  an NTP answer can't be checked, and a network names its own time server
+  over DHCP. On the networks RasBeacon is for, that means anyone's time: a
+  time years ahead would be saved as the floor and come back at every
+  boot, and a WireGuard server that saw one handshake from then refuses
+  the ones with the right time, so the VPN and every secure connection
+  would fail long after leaving that network. (As planned and as built
+  until 0.3.0, NTP came first and HTTPS only where NTP was blocked.)
+- The servers' time also moves the clock, and the floor, **back**: a clock
+  that is ahead (a battery-backed clock gone wrong, or a floor from a
+  network's time server in an older version) is put right the first time
+  the servers are reached. Nothing else lowers the floor.
+- When the servers can't be asked or don't agree, the Status page warns,
+  with the time RasBeacon reads: a clock that is wrong would otherwise go
+  unnoticed while secure websites and the VPN fail.
 - **Tunnel dependency:** WireGuard servers reject handshakes whose
   timestamp isn't newer than the last one they accepted, so the clock must
-  never go back: the time floor applied at boot sees to that, and the tunnel
-  starts without waiting for NTP.
+  not go back from one boot to the next: the time floor applied at boot
+  sees to that, and the tunnel starts without waiting for the servers'
+  time.
 
 ### 4.8 Client behaviour
 - **Private or rotating MAC addresses** only produce new leases; the pool
