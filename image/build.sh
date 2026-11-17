@@ -19,6 +19,12 @@
 #   <name>-<version>.rbupdate      signed update file (Pi 4/5 only, and only
 #                                   when the RASBEACON_UPDATE_SIGNING_KEY
 #                                   environment variable is set)
+#   update-bundle.tar.zst          the update bundle, not signed yet (Pi 4/5
+#                                   only, and only with
+#                                   RASBEACON_KEEP_UPDATE_BUNDLE=1 and no
+#                                   signing key): image/sign-update.sh
+#                                   makes the update file from it, on a
+#                                   machine that has the key
 #   <name>-<version>.update.json   the update's version and the oldest
 #                                   version that can install it (from
 #                                   image/update-from), for the online check
@@ -46,6 +52,14 @@ out="$repo_root/build/image"
 #    program this script starts inherits its environment, including npm and
 #    the install scripts of every web dependency, so the key moves into a
 #    plain (not exported) shell variable and is handed to rbsign alone.
+#
+#    This keeps the key out of their environment, not out of their reach:
+#    a program can still read the environment this script was started with
+#    (/proc/<its number>/environ). So only build with the key set on a
+#    machine where you trust everything the build runs. The release
+#    workflow doesn't: it builds without the key, keeps the update bundle
+#    (RASBEACON_KEEP_UPDATE_BUNDLE=1) and signs it in a job of its own with
+#    image/sign-update.sh.
 signing_key="${RASBEACON_UPDATE_SIGNING_KEY:-}"
 unset RASBEACON_UPDATE_SIGNING_KEY
 
@@ -112,17 +126,13 @@ if [ "$board" = rpi64 ] && [ -n "$signing_key" ] && [ -z "$bundle" ]; then
   exit 1
 fi
 if [ "$board" = rpi64 ] && [ -n "$signing_key" ]; then
-  sudo cat "$bundle" > "$out/bundle.tmp"
-  # The oldest version that can install this update: image/update-from,
-  # without its comment lines (empty: any version).
-  min_from="$( { grep -v '^#' "$repo_root/image/update-from" || true; } | tr -d '[:space:]')"
-  # -trusted: the public keys this image trusts. rbsign prints which one
-  # belongs to the signing key, and stops if none does (devices would
-  # refuse the update).
-  RASBEACON_UPDATE_SIGNING_KEY="$signing_key" go run "$repo_root/cmd/rbsign" pack -board "$board" -version "$version" -min-from "$min_from" \
-    -bundle "$out/bundle.tmp" -out "$out/$name-$version.rbupdate" -info "$out/$name-$version.update.json" \
-    -trusted "$repo_root/image/layer/rasbeacon.d/customize.overlay/usr/lib/rasbeacon/update-keys"
-  rm -f "$out/bundle.tmp"
+  # Signed here (see step 0 for when that is a good idea).
+  sudo cat "$bundle" > "$out/update-bundle.tar.zst"
+  RASBEACON_UPDATE_SIGNING_KEY="$signing_key" "$repo_root/image/sign-update.sh" "$out" "$version"
+elif [ "$board" = rpi64 ] && [ -n "$bundle" ] && [ "${RASBEACON_KEEP_UPDATE_BUNDLE:-}" = 1 ]; then
+  # Kept for image/sign-update.sh to sign elsewhere (the release workflow).
+  sudo cat "$bundle" > "$out/update-bundle.tar.zst"
+  echo "Kept the update bundle to be signed: $out/update-bundle.tar.zst"
 else
   echo "No update file made (no signing key, or a board without one)."
 fi

@@ -35,6 +35,12 @@ on:
 
 # Jobs can only read the repository unless they say otherwise: the image
 # job runs npm and many build tools, and only publish needs to write.
+#
+# The update signing key is given to one job only, sign, which runs
+# nothing but rbsign (Go's standard library) on a machine of its own. The
+# image job never has it: whatever runs next to a secret can read it, and
+# that job runs npm with its packages' install scripts, apt and the image
+# tools.
 permissions:
   contents: read
 
@@ -46,6 +52,9 @@ jobs:
   image:
     name: Image (${{ matrix.target.title }})
     runs-on: ${{ inputs.runner || 'ubuntu-24.04-arm' }}
+    outputs:
+      # The same for both images; the sign job needs it too.
+      version: ${{ steps.version.outputs.version }}
     strategy:
       fail-fast: false
       matrix:
@@ -98,22 +107,80 @@ jobs:
 
       - name: Build image
         env:
-          # Signs the update file. Stored as a repository secret (see
-          # docs/releasing.md); without it, no update file is made.
-          # build.sh removes it from the environment before running
-          # anything else and passes it only to rbsign.
-          RASBEACON_UPDATE_SIGNING_KEY: ${{ secrets.RASBEACON_UPDATE_SIGNING_KEY }}
           # Passed as variables, never pasted into the command line, so
-          # nothing in them can run as a command next to the signing key.
+          # nothing in them can run as a command.
           BOARD: ${{ matrix.target.board }}
           VERSION: ${{ steps.version.outputs.version }}
+          # No signing key here (see the top of this file). The Pi 4/5
+          # build keeps its update bundle instead, for the sign job.
+          RASBEACON_KEEP_UPDATE_BUNDLE: "1"
         run: image/build.sh "$BOARD" "$VERSION"
 
       - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.target.name }}-${{ steps.version.outputs.version }}
-          path: build/image/
+          # Everything but the update bundle, which is not for the release.
+          path: |
+            build/image/
+            !build/image/update-bundle.tar.zst
           # Images are large; keep test builds for a week.
+          retention-days: 7
+
+      # The update bundle goes to the sign job by itself (its name doesn't
+      # start with "rasbeacon-", so publish leaves it out).
+      - uses: actions/upload-artifact@v7
+        if: matrix.target.board == 'rpi64'
+        with:
+          name: update-bundle-${{ steps.version.outputs.version }}
+          path: build/image/update-bundle.tar.zst
+          # Without it the sign job fails, which says so more clearly.
+          if-no-files-found: warn
+          retention-days: 1
+
+  sign:
+    name: Sign the update file
+    needs: image
+    runs-on: ubuntu-24.04
+    steps:
+      # Forks have no signing key: their builds make images but no update
+      # file (see docs/releasing.md).
+      - name: Is there a signing key?
+        id: key
+        env:
+          RASBEACON_UPDATE_SIGNING_KEY: ${{ secrets.RASBEACON_UPDATE_SIGNING_KEY }}
+        run: |
+          if [ -n "$RASBEACON_UPDATE_SIGNING_KEY" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No signing key: no update file is made."
+          fi
+      - uses: actions/checkout@v7
+        if: steps.key.outputs.present == 'true'
+      - uses: actions/setup-go@v7
+        if: steps.key.outputs.present == 'true'
+        with:
+          go-version-file: go.mod
+      - uses: actions/download-artifact@v8
+        if: steps.key.outputs.present == 'true'
+        with:
+          name: update-bundle-${{ needs.image.outputs.version }}
+          path: dist
+      # Prints which public key in update-keys/ belongs to the signing key
+      # ("Signing with the key of release.pub"), and fails if none does, or
+      # if the image job kept no update bundle: no release goes out that
+      # devices can't update to.
+      - name: Sign
+        if: steps.key.outputs.present == 'true'
+        env:
+          RASBEACON_UPDATE_SIGNING_KEY: ${{ secrets.RASBEACON_UPDATE_SIGNING_KEY }}
+          VERSION: ${{ needs.image.outputs.version }}
+        run: image/sign-update.sh dist "$VERSION"
+      - uses: actions/upload-artifact@v7
+        if: steps.key.outputs.present == 'true'
+        with:
+          name: rasbeacon-${{ needs.image.outputs.version }}-update
+          path: dist/
+          if-no-files-found: error
           retention-days: 7
 
   publish:
@@ -121,14 +188,17 @@ jobs:
     # A pushed tag makes a draft to check first; a release asked for from
     # the Actions tab is published at once (a beta as a pre-release).
     if: github.ref_type == 'tag' || inputs.release != ''
-    needs: image
+    needs: [image, sign]
     runs-on: ubuntu-24.04
     permissions:
       # To make the release and upload its files.
       contents: write
     steps:
+      # The two images' files and the signed update file (not the unsigned
+      # update bundle, whose artifact has another name).
       - uses: actions/download-artifact@v8
         with:
+          pattern: rasbeacon-*
           path: dist
           merge-multiple: true
       - name: Combine checksums

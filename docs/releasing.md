@@ -63,10 +63,19 @@ public half is built into the image; the private half signs releases.
 Images built **before** step 3 have no key and can't install update files;
 their owners update by flashing once. From then on, updates work.
 
-Only `rbsign` ever sees the key: `image/build.sh` takes it out of the
-environment before it runs anything else (npm and its packages' install
-scripts included), and only the release workflow's `publish` job may write
-to the repository.
+Only `rbsign` ever sees the key. The release workflow gives it to one job
+only, `sign`, which runs nothing but `rbsign` (`image/sign-update.sh`) on a
+machine of its own. The `image` job, which builds the images, never has
+it: that job runs npm with its packages' install scripts, apt and the
+image tools, and whatever runs next to a secret can read it (a program
+finds the environment of the script that started it in `/proc`, even after
+the script removed the variable). It keeps the update bundle instead, and
+`sign` makes the update file from it. Only the `publish` job may write to
+the repository.
+
+`image/build.sh` still signs by itself when the key is in its environment,
+for a build by hand. Do that only on a computer where you trust everything
+the build runs.
 
 **Changing the key** (for example if the private key may have leaked):
 
@@ -86,13 +95,13 @@ to the repository.
 
 Every build that makes an update file prints which public key in
 `update-keys/` belongs to the signing key ("Signing with the key of
-release.pub", in the "Build image" step of the Pi 4 and Pi 5 job), and
+release.pub", in the "Sign" step of the "Sign the update file" job), and
 fails if none does. To check a new secret before a release, run "Release
 images" from the Actions tab with the release name left empty: a test
 build, published nowhere.
 
-With the signing key set, the Pi 4 and Pi 5 build also fails if
-rpi-image-gen made no update bundle, and publishing fails if any of the
+With the signing key set, signing also fails if the Pi 4 and Pi 5 build
+made no update bundle, and publishing fails if any of the
 release's files is missing, so no release goes out that devices can't
 update to.
 
