@@ -47,6 +47,11 @@ const (
 	saltLength      = 16
 )
 
+// maxArgonMemoryKiB is the most memory a stored hash may ask for when it
+// is checked: 256 MiB, eight times what new hashes use, and still within
+// what the smallest Pi has.
+const maxArgonMemoryKiB = 256 * 1024
+
 // MinAdminPasswordLength is the shortest admin password we accept.
 const MinAdminPasswordLength = 10
 
@@ -93,6 +98,14 @@ func VerifyPassword(password, stored string) (bool, error) {
 	wantKey, err := b64.DecodeString(parts[5])
 	if err != nil {
 		return false, fmt.Errorf("stored password hash is unreadable: %w", err)
+	}
+
+	// Settings argon2 can't run with (no passes, no threads, or an empty
+	// hash: it panics), settings that would take more memory than a Pi
+	// has, or a salt or hash so short that guessing gets easy. HashPassword
+	// makes none of these; a damaged settings file could hold one.
+	if iterations < 1 || threads < 1 || memory > maxArgonMemoryKiB || len(salt) < 8 || len(wantKey) < 16 {
+		return false, errors.New("stored password hash has settings that can't be used")
 	}
 
 	gotKey := argon2.IDKey([]byte(password), salt, iterations, memory, threads, uint32(len(wantKey)))

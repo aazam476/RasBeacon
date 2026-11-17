@@ -42,6 +42,33 @@ func TestVerifyPassword_DamagedHashIsAnError(t *testing.T) {
 	}
 }
 
+// A stored hash with settings that argon2 can't run with (it panicked),
+// that would take more memory than a Pi has, or with a salt or hash too
+// short to be safe is damaged too: it is an error, and matches no
+// password.
+func TestVerifyPassword_UnusableSettingsMatchNothing(t *testing.T) {
+	const salt, hash = "c2FsdHNhbHRzYWx0c2FsdA", "aGFzaGhhc2hoYXNoaGFzaGhhc2hoYXNoaGFzaGhhc2g"
+	for name, stored := range map[string]string{
+		"an empty hash":          "$argon2id$v=19$m=32768,t=3,p=2$" + salt + "$",
+		"a hash of a few bytes":  "$argon2id$v=19$m=32768,t=3,p=2$" + salt + "$aGFzaA",
+		"no salt":                "$argon2id$v=19$m=32768,t=3,p=2$$" + hash,
+		"no passes":              "$argon2id$v=19$m=32768,t=0,p=2$" + salt + "$" + hash,
+		"no threads":             "$argon2id$v=19$m=32768,t=3,p=0$" + salt + "$" + hash,
+		"more memory than a Pi":  "$argon2id$v=19$m=4294967295,t=3,p=2$" + salt + "$" + hash,
+		"a gigabyte, still more": "$argon2id$v=19$m=1048576,t=3,p=2$" + salt + "$" + hash,
+	} {
+		ok, err := VerifyPassword("any password", stored)
+		if ok || err == nil {
+			t.Errorf("%s: matched = %v, error = %v; want no match and an error", name, ok, err)
+		}
+	}
+	// What HashPassword makes still verifies.
+	stored, _ := HashPassword("correct horse battery staple")
+	if ok, err := VerifyPassword("correct horse battery staple", stored); !ok || err != nil {
+		t.Errorf("a real hash: %v, %v", ok, err)
+	}
+}
+
 func TestCheckAdminPasswordStrength(t *testing.T) {
 	tests := []struct {
 		password string
