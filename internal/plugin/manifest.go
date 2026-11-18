@@ -679,8 +679,9 @@ func (m *Manifest) checkMetrics() error {
 
 // checkLine checks a one-line text shown on RasBeacon's screens (a name, a
 // label): at most limit characters, no control characters such as line
-// breaks, and not empty when required. Characters are counted, not bytes:
-// "é" is one character but two bytes.
+// breaks, no invisible formatting (see hiddenFormat), and not empty when
+// required. Characters are counted, not bytes: "é" is one character but
+// two bytes.
 func checkLine(field, text string, limit int, required bool) error {
 	switch {
 	case required && strings.TrimSpace(text) == "":
@@ -689,12 +690,15 @@ func checkLine(field, text string, limit int, required bool) error {
 		return fmt.Errorf("%s must be at most %d characters", field, limit)
 	case strings.ContainsFunc(text, unicode.IsControl):
 		return fmt.Errorf("%s must be one line", field)
+	case strings.ContainsFunc(text, hiddenFormat):
+		return fmt.Errorf("%s has an invisible character that changes how it shows", field)
 	}
 	return nil
 }
 
 // checkParagraph checks a longer text (a description, help): at most limit
-// characters; line breaks are fine, other control characters aren't.
+// characters; line breaks are fine, other control characters and
+// invisible formatting aren't.
 func checkParagraph(field, text string, limit int) error {
 	if utf8.RuneCountInString(text) > limit {
 		return fmt.Errorf("%s must be at most %d characters", field, limit)
@@ -702,7 +706,23 @@ func checkParagraph(field, text string, limit int) error {
 	if strings.ContainsFunc(text, func(r rune) bool { return unicode.IsControl(r) && r != '\n' }) {
 		return fmt.Errorf("%s has a character that can't be shown", field)
 	}
+	if strings.ContainsFunc(text, hiddenFormat) {
+		return fmt.Errorf("%s has an invisible character that changes how it shows", field)
+	}
 	return nil
+}
+
+// zeroWidthJoiner joins emoji into one ("👩‍💻"): the one invisible formatting
+// character a plugin's text may have.
+const zeroWidthJoiner = '\u200d'
+
+// hiddenFormat reports whether r is an invisible formatting character
+// (Unicode's "format" category) other than the zero-width joiner: a
+// right-to-left override, an isolate, a zero-width space and the like.
+// They make text show other than it is: a plugin's author could read as
+// another's, or a label hide part of itself.
+func hiddenFormat(r rune) bool {
+	return r != zeroWidthJoiner && unicode.Is(unicode.Cf, r)
 }
 
 // oneLine reports whether a value has no line breaks or NUL characters.

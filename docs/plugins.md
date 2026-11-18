@@ -166,7 +166,7 @@ Or name a published image in the manifest (pinned by digest) and leave
 | Field | |
 |---|---|
 | `id` | 2 to 32 lowercase letters, digits and dashes. Updates must keep it. |
-| `name`, `version`, `description`, `author`, `homepage` | Shown to the owner. `name` at most 40 characters, `version` without spaces or `/`, `description` at most 300, `homepage` an `https://` address. |
+| `name`, `version`, `description`, `author`, `homepage` | Shown to the owner. `name` at most 40 characters, `version` without spaces or `/`, `description` at most 300, `homepage` an `https://` address. No text in a manifest (or a catalog) may have invisible formatting characters, such as right-to-left overrides or zero-width spaces, which make text show other than it is; the zero-width joiner in emoji is fine. |
 | `boards` | `pi5`, `pi4`, `pi3` (3B, 3B+), `zero2w`; empty: all. Others refuse it. |
 | `minRasBeacon` | The oldest RasBeacon it works with, like `0.2.0` (empty: any). An older RasBeacon shows it in the catalog as *Needs RasBeacon 0.2.0 or newer* and refuses to install it. Set it when the plugin uses something a newer RasBeacon added. |
 | `image` | A registry image: `ref` starting with its registry (`docker.io/…`, `ghcr.io/…`) without a digest, plus `digest` (`sha256:…`, the image index or the arm64 image). Leave it out with `image.tar`. |

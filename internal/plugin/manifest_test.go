@@ -112,3 +112,31 @@ func TestParseInstalledManifest(t *testing.T) {
 		t.Error("broken JSON must be refused")
 	}
 }
+
+// Invisible formatting makes text show other than it is (an author reading
+// as another's, a label hiding part of itself): a manifest may have none,
+// except the zero-width joiner emoji are made with.
+func TestCheckText_InvisibleFormatting(t *testing.T) {
+	for _, bad := range []string{
+		"Trip \u202eseton",   // right-to-left override
+		"Files\u2066x\u2069", // isolate
+		"Fi\u200bles",        // zero-width space
+		"\ufeffFiles",        // byte order mark
+		"Files\u00ad",        // soft hyphen
+	} {
+		if checkLine("name", bad, 40, true) == nil {
+			t.Errorf("name %q: accepted", bad)
+		}
+		if checkParagraph("description", bad, 400) == nil {
+			t.Errorf("description %q: accepted", bad)
+		}
+	}
+	for _, good := range []string{"Files", "Café", "👩\u200d💻 Developer tools", "شبکه", "日本語"} {
+		if err := checkLine("name", good, 40, true); err != nil {
+			t.Errorf("name %q: %v", good, err)
+		}
+	}
+	if checkParagraph("description", "Line one\nline two", 400) != nil {
+		t.Error("line breaks are fine in a paragraph")
+	}
+}

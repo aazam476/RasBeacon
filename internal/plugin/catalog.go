@@ -150,6 +150,13 @@ func FetchSource(client *http.Client, source string) ([]Entry, error) {
 			if !ok || !strings.HasSuffix(c.File, ".rba") {
 				continue
 			}
+			// Its name and description are shown before it is installed,
+			// so they are held to a manifest's rules. One that breaks them
+			// is listed by its file's name (below), as one the catalog
+			// doesn't describe.
+			if checkLine("name", c.Name, maxNameLength, false) != nil || checkParagraph("description", c.Description, maxDescriptionLength) != nil {
+				continue
+			}
 			e := Entry{
 				Source: source, File: c.File, ID: c.ID, Name: c.Name, Version: c.Version,
 				Description: c.Description, Permissions: c.Permissions, Boards: c.Boards, MinRasBeacon: c.MinRasBeacon,

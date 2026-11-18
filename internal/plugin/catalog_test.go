@@ -85,6 +85,28 @@ func TestFetchSource_DescribedAndUndescribedPlugins(t *testing.T) {
 	}
 }
 
+// A catalog's name or description with invisible formatting (a
+// right-to-left override, say) isn't shown: the plugin is listed by its
+// file's name, as one the catalog doesn't describe.
+func TestFetchSource_InvisibleFormattingIsNotShown(t *testing.T) {
+	gh := &fakeGitHub{files: map[string]string{
+		releaseURL: `{"tag_name": "v1", "assets": [` + asset("notes.rba", 2000) + `,` + asset("files.rba", 2000) + `,` + asset(CatalogFile, 100) + `]}`,
+		"https://github.com/example/plugins/releases/download/v1/" + CatalogFile: `{"plugins": [
+			{"file": "notes.rba", "name": "Trip \u202eseton"},
+			{"file": "files.rba", "name": "Files", "description": "Shares\u200b files"}
+		]}`,
+	}}
+	entries, err := FetchSource(gh.client(), "example/plugins")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if e.Name != strings.TrimSuffix(e.File, ".rba") || e.Description != "" {
+			t.Errorf("%s shown as %q, %q; want its file's name only", e.File, e.Name, e.Description)
+		}
+	}
+}
+
 func TestFetchSource_Refusals(t *testing.T) {
 	reset := time.Now().Add(20 * time.Minute).Truncate(time.Second)
 	tests := []struct {
