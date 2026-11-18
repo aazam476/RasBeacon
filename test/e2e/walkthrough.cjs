@@ -112,6 +112,9 @@ async function main() {
     await page.getByLabel("Type it again").fill("tangerine-orbit-42");
     await page.getByRole("button", { name: "Finish setup" }).click();
     await page.getByRole("heading", { name: "Setup complete" }).waitFor();
+    // HTTPS is on from setup: the page says what the browser's warning
+    // should show.
+    await page.getByText(/^[0-9A-F]{2}(:[0-9A-F]{2}){31}$/).waitFor();
   });
 
   await step("status page lists connected devices", async () => {
@@ -294,11 +297,18 @@ async function main() {
     await page.getByText("When a device uses up its data, its traffic is blocked").waitFor();
   });
 
-  await step("HTTPS can be turned on and shows the certificate fingerprint", async () => {
+  await step("HTTPS is on from setup, shows the certificate fingerprint, and can be turned off and on", async () => {
     await open("HTTPS");
-    await page.getByRole("switch", { name: "Use HTTPS for these settings pages" }).click();
-    await page.getByText("HTTPS is on.").waitFor();
+    const httpsSwitch = page.getByRole("switch", { name: "Use HTTPS for these settings pages" });
+    await httpsSwitch.waitFor();
+    if (!(await httpsSwitch.isChecked())) {
+      throw new Error("HTTPS should be on from setup");
+    }
     await page.getByText("SHA-256 fingerprint").waitFor();
+    await httpsSwitch.click();
+    await page.getByText("HTTPS is off.").waitFor();
+    await httpsSwitch.click();
+    await page.getByText("HTTPS is on.").waitFor();
     // (The simulated device doesn't restart its web server, so this browser
     // stays on plain HTTP for the remaining steps.)
   });
