@@ -51,6 +51,15 @@ The reasons behind the big decisions are in [design.md](design.md) and
 - **nftables** is the Linux firewall. It also does the *NAT* that lets all
   your devices share RasBeacon's one address on the upstream network.
 - **wpa_supplicant** joins upstream Wi-Fi networks with the built-in radio.
+- hostapd, wpa_supplicant and dnsmasq read what any device in range or on
+  the hotspot sends, so their systemd units sandbox them: only the network
+  capabilities they use, `/usr`, `/etc` and `/boot` read-only, no devices
+  but rfkill (none for dnsmasq), no kernel settings or modules, and only
+  the system calls of an ordinary service (`@system-service`).
+  `image/verify.sh` fails the build without it. rbd itself isn't
+  sandboxed this way: it mounts drives, sets the clock and runs Podman,
+  and a system call filter would be inherited by every plugin and the
+  login browser it starts.
 - **WireGuard** (`wg0`, set up with the `wg` and `ip` tools) is the VPN
   tunnel. rbd reads the `.conf` file itself (`internal/wireguard`) and never
   runs wg-quick.

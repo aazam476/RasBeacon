@@ -99,6 +99,10 @@ check "wg-quick is not started at boot" sh -c "! ls '$root'/etc/systemd/system/*
 check "forwarding is off at boot" grep -q "^net.ipv4.ip_forward = 0" "$root/usr/lib/sysctl.d/90-rasbeacon.conf"
 check "SSH is not started at boot" sh -c "! ls '$root'/etc/systemd/system/*.wants/ssh.service"
 check "Debian's hostapd service is masked" sh -c "[ \"\$(readlink '$root/etc/systemd/system/hostapd.service')\" = /dev/null ]"
+# The daemons that read what devices send run sandboxed (see their units).
+for unit in rasbeacon-hostapd.service rasbeacon-wpa@.service rasbeacon-dnsmasq.service; do
+  check "$unit is sandboxed" sh -c "grep -qx 'SystemCallFilter=@system-service' '$root/usr/lib/systemd/system/$unit' && grep -q '^CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW' '$root/usr/lib/systemd/system/$unit' && grep -qx 'ProtectSystem=full' '$root/usr/lib/systemd/system/$unit'"
+done
 check "NTP is off (rbd sets the clock from web servers over HTTPS)" sh -c "[ \"\$(readlink '$root/etc/systemd/system/systemd-timesyncd.service')\" = /dev/null ]"
 check "iwd is not installed" test ! -e "$root/usr/libexec/iwd"
 
