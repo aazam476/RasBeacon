@@ -20,6 +20,10 @@
 //   - a mount with nosuid, nodev, noexec and nosymfollow, like the drives
 //     the kernel reads (see plugin.MountOptions).
 //
+// The image's exfat-fuse is RasBeacon's build (image/exfat-fuse): Debian's,
+// with a patch so files grow without writing zeros, as the kernel's driver
+// grows them. A share's reservation on a drive is then taken at once.
+//
 // NTFS stays with the kernel (ntfs3): Debian's ntfs-3g opens /dev/fuse
 // and mounts by itself, which only root may, and built with libfuse it
 // refuses block devices to anyone but root.

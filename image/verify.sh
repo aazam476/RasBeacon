@@ -75,6 +75,8 @@ check "rbd can't load kernel modules or change the system" \
 check "the data partition grows to fill the card" test -L "$root/etc/systemd/system/multi-user.target.wants/rasbeacon-grow-data.service"
 check "gocryptfs and FUSE are installed (encrypted USB drives)" sh -c "test -x '$root/usr/bin/gocryptfs' && test -x '$root/usr/bin/fusermount3'"
 check "exfat-fuse is installed (exFAT drives aren't read by the kernel)" test -x "$root/usr/sbin/mount.exfat-fuse"
+check "exfat-fuse is RasBeacon's build (files grow without writing zeros)" grep -aq "RasBeacon exfat-fuse: files grow without writing zeros" "$root/usr/sbin/mount.exfat-fuse"
+check "exfat-fuse's package file isn't left in the image" test ! -e "$root/usr/lib/rasbeacon/exfat-fuse"
 # exfat-fuse looks up its user's name: user 1 in its namespace.
 check "user 1 has a name (exfat-fuse runs as it)" grep -q "^[a-z]*:[^:]*:1:" "$root/etc/passwd"
 # USB drives are mounted with nosymfollow; a mount that didn't know the

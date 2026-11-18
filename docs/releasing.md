@@ -177,6 +177,11 @@ still holds; a version that can install `v2.0.0` usually can install
 
 ## Debian's updates between releases
 
+(The image's `exfat-fuse` is built from Debian's source with RasBeacon's
+patch, and keeps Debian's version, so this covers it too; see
+[image/exfat-fuse/README.md](../image/exfat-fuse/README.md) for when the
+patch stops applying.)
+
 A device's system is read-only and replaced whole by an update, so it gets
 Debian's and Raspberry Pi's fixed packages (the kernel, Chromium, OpenSSL,
 hostapd, …) only with a new RasBeacon release. The **Debian updates**

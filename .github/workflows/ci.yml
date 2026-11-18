@@ -96,7 +96,11 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Install network tools
-        run: sudo apt-get update -q && sudo apt-get install -y -q nftables dnsmasq-base busybox iproute2 iputils-ping wireguard-tools procps exfat-fuse exfatprogs
+        run: sudo apt-get update -q && sudo apt-get install -y -q nftables dnsmasq-base busybox iproute2 iputils-ping wireguard-tools procps exfat-fuse exfatprogs libfuse3-dev autoconf automake pkg-config
+      # The USB drive tests check RasBeacon's exfat-fuse, as the image has
+      # it: exFAT's driver with image/exfat-fuse's patch.
+      - name: Build RasBeacon's exfat-fuse
+        run: image/exfat-fuse/build-for-tests.sh
       - name: Run tests as root
         # RASBEACON_REQUIRE_NETNS=1 makes the tests fail instead of skipping
         # if they can't run.

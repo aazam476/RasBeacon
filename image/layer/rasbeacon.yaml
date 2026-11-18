@@ -68,8 +68,8 @@ mmdebstrap:
     - conmon
     - netavark
     # Plugins' USB drives: exFAT, read by exfat-fuse, confined (see
-    # internal/fusedrive), and its tools (NTFS is in the kernel, ntfs3)
-    - exfat-fuse
+    # internal/fusedrive), and its tools (NTFS is in the kernel, ntfs3).
+    # exfat-fuse itself is RasBeacon's build, installed by a hook below.
     - exfatprogs
     # Encrypting a plugin's USB drive (internal/agent/driveencryption.go):
     # gocryptfs, and FUSE, which it opens the encrypted files with
@@ -90,6 +90,13 @@ mmdebstrap:
     - chroot $1 useradd --system --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin rbbrowser
     # The programs are copied in by the overlay; make sure they can run.
     - chmod 0755 $1/usr/bin/rbd $1/usr/bin/rbweb $1/usr/bin/rbdoh $1/usr/bin/rbquotafs $1/usr/lib/rasbeacon/grow-data-partition
+    # exFAT's driver: Debian's exfat-fuse with RasBeacon's patch, so files
+    # grow without writing zeros (image/exfat-fuse). image/build.sh builds
+    # the package and leaves it in the overlay; it is installed, then its
+    # file taken out of the image. It keeps Debian's version, so the daily
+    # check for Debian's fixes watches it like any other package.
+    - chroot $1 sh -c 'dpkg -i /usr/lib/rasbeacon/exfat-fuse/exfat-fuse_*.deb'
+    - rm -rf $1/usr/lib/rasbeacon/exfat-fuse
     # Start the early firewall, rbd and rbweb at boot. hostapd and dnsmasq
     # are started by rbd when it has written their configuration.
     - $BDEBSTRAP_HOOKS/enable-units "$1" rasbeacon-firewall-early.service rbd.service rbweb.service

@@ -40,19 +40,64 @@ func requireDriveTools(t *testing.T) {
 // not formatted), and returns its device.
 func loopDrive(t *testing.T, mkfs ...string) string {
 	t.Helper()
-	image := filepath.Join(t.TempDir(), "drive.img")
+	_, device := loopDriveOfSize(t, 64<<20, mkfs...)
+	return device
+}
+
+// loopDriveOfSize is loopDrive for a drive of size bytes, and returns the
+// file it is made of too. The file is sparse: what is never written takes
+// no room.
+func loopDriveOfSize(t *testing.T, size int64, mkfs ...string) (image, device string) {
+	t.Helper()
+	image = filepath.Join(t.TempDir(), "drive.img")
 	if err := os.WriteFile(image, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Truncate(image, 64<<20); err != nil {
+	if err := os.Truncate(image, size); err != nil {
 		t.Fatal(err)
 	}
 	if len(mkfs) > 0 {
 		run(t, mkfs[0], append(mkfs[1:], image)...)
 	}
-	device := strings.TrimSpace(run(t, "losetup", "--find", "--show", image))
+	device = strings.TrimSpace(run(t, "losetup", "--find", "--show", image))
 	t.Cleanup(func() { _ = exec.Command("losetup", "--detach", device).Run() })
-	return device
+	return image, device
+}
+
+// requireRasBeaconExFAT skips (or fails, in CI) unless the exFAT driver is
+// RasBeacon's build (image/exfat-fuse; CI installs it with
+// image/exfat-fuse/build-for-tests.sh).
+func requireRasBeaconExFAT(t *testing.T) {
+	t.Helper()
+	driver, err := os.ReadFile("/usr/sbin/mount.exfat-fuse")
+	if err == nil && strings.Contains(string(driver), "RasBeacon exfat-fuse: files grow without writing zeros") {
+		return
+	}
+	if os.Getenv("RASBEACON_REQUIRE_NETNS") == "1" {
+		t.Fatal("/usr/sbin/mount.exfat-fuse isn't RasBeacon's build: run image/exfat-fuse/build-for-tests.sh")
+	}
+	t.Skip("skipping: /usr/sbin/mount.exfat-fuse isn't RasBeacon's build (image/exfat-fuse/build-for-tests.sh)")
+}
+
+// allocated is how much of a file is really on its disk.
+func allocated(t *testing.T, path string) int64 {
+	t.Helper()
+	unix.Sync()
+	var st unix.Stat_t
+	if err := unix.Stat(path, &st); err != nil {
+		t.Fatal(err)
+	}
+	return st.Blocks * 512
+}
+
+// usedBytes is how much of the filesystem at dir is taken.
+func usedBytes(t *testing.T, dir string) int64 {
+	t.Helper()
+	var st unix.Statfs_t
+	if err := unix.Statfs(dir, &st); err != nil {
+		t.Fatal(err)
+	}
+	return int64(st.Blocks-st.Bfree) * st.Bsize
 }
 
 // driverOf finds the process running as user, and its status lines.
@@ -189,5 +234,97 @@ func TestDrives_ADriveTheDriverCantReadIsntLeftMounted(t *testing.T) {
 	}
 	if pid, _ := driverOf(t, user); pid != "" {
 		t.Errorf("a driver runs: process %s", pid)
+	}
+}
+
+// RasBeacon's exfat-fuse grows a file without writing zeros, as exFAT
+// allows: the room a share's reservation holds is taken at once, and it
+// reads as zeros all the same, never as what a deleted file left there.
+// Data written later reads back exactly, and the drive stays valid.
+func TestDrives_ExFATFilesGrowWithoutWritingZeros(t *testing.T) {
+	requireDriveTools(t)
+	requireRasBeaconExFAT(t)
+	if _, err := exec.LookPath("fsck.exfat"); err != nil {
+		t.Fatal("needs fsck.exfat (exfatprogs)")
+	}
+	image, device := loopDriveOfSize(t, 2<<30, "mkfs.exfat")
+	dir := t.TempDir()
+	if err := fusedrive.Mount(device, "exfat", dir, fusedrive.UserBase+9); err != nil {
+		t.Fatal(err)
+	}
+	mounted := true
+	t.Cleanup(func() {
+		if mounted {
+			_ = unix.Unmount(dir, unix.MNT_DETACH)
+		}
+	})
+
+	// The free room holds what a deleted file left there, as on any drive.
+	old := filepath.Join(dir, "old.bin")
+	if err := os.WriteFile(old, []byte(strings.Repeat("\xaa", 32<<20)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(old); err != nil {
+		t.Fatal(err)
+	}
+
+	// A reservation grows by 1 GB: it takes the room, and writes nothing.
+	onDisk, used := allocated(t, image), usedBytes(t, dir)
+	reservation := filepath.Join(dir, "reservation.bin")
+	if err := os.WriteFile(reservation, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Truncate(reservation, 1<<30); err != nil {
+		t.Fatal(err)
+	}
+	if written := allocated(t, image) - onDisk; written > 8<<20 {
+		t.Errorf("growing a file by 1 GB wrote %d MB to the drive", written>>20)
+	}
+	if taken := usedBytes(t, dir) - used; taken < 1<<30 {
+		t.Errorf("the drive counts %d MB as taken by a 1 GB file", taken>>20)
+	}
+	data, err := os.ReadFile(reservation)
+	if err != nil || int64(len(data)) != 1<<30 {
+		t.Fatalf("read %d bytes, %v", len(data), err)
+	}
+	if strings.Trim(string(data), "\x00") != "" {
+		t.Error("the grown file shows what was on the drive, not zeros")
+	}
+
+	// A file grown, then written in its middle and at its end.
+	file := filepath.Join(dir, "app.bin")
+	if err := os.WriteFile(file, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Truncate(file, 8<<20); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.OpenFile(file, os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteAt([]byte("hello"), 4<<20); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteAt([]byte("tail"), 8<<20); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	want := make([]byte, 8<<20)
+	copy(want[4<<20:], "hello")
+	want = append(want, "tail"...)
+	if got, err := os.ReadFile(file); err != nil || string(got) != string(want) {
+		t.Errorf("the file reads back wrong (%d bytes, %v)", len(got), err)
+	}
+
+	// Unmounted, the drive is valid exFAT.
+	if err := unix.Unmount(dir, 0); err != nil {
+		t.Fatal(err)
+	}
+	mounted = false
+	if out, err := exec.Command("fsck.exfat", "-n", device).CombinedOutput(); err != nil {
+		t.Errorf("fsck.exfat: %v\n%s", err, out)
 	}
 }

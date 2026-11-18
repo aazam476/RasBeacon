@@ -75,6 +75,9 @@ install -m 0755 "$repo_root/build/arm64/rbd" "$repo_root/build/arm64/rbweb" "$re
 rm -f "$stage/layer/rasbeacon.d/customize.overlay/usr/bin/.gitkeep"
 # Which board this image is for: update files must match it.
 echo "$board" > "$stage/layer/rasbeacon.d/customize.overlay/usr/lib/rasbeacon/board"
+# exFAT's driver: Debian's exfat-fuse built from its source with RasBeacon's
+# patch (image/exfat-fuse/README.md). The layer installs the package.
+"$repo_root/image/exfat-fuse/build.sh" "$stage/layer/rasbeacon.d/customize.overlay/usr/lib/rasbeacon/exfat-fuse"
 
 # 3. Build the image (rpi-image-gen needs its work directory to exist).
 mkdir -p "$repo_root/build/rig-$board"

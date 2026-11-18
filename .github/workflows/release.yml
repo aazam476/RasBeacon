@@ -105,6 +105,9 @@ jobs:
             sudo apt-get install -y -q qemu-user-static binfmt-support
           fi
           sudo ../rpi-image-gen/install_deps.sh
+          # image/exfat-fuse/build.sh builds exFAT's driver in a Debian
+          # trixie of its own; Debian's signing keys check what it fetches.
+          sudo apt-get install -y -q mmdebstrap debian-archive-keyring
 
       - name: Build image
         env:

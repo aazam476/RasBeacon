@@ -29,6 +29,15 @@ To get that source:
   `pool/` folder, by source name), or Raspberry Pi's GitHub repositories
   (`raspberrypi/linux` for the kernel).
 
+## exfat-fuse, changed by RasBeacon
+
+The images' `exfat-fuse` (GPL-2.0 or later) is Debian's, built from
+Debian's source with one change of RasBeacon's:
+[image/exfat-fuse/grow-without-writing.patch](../image/exfat-fuse/grow-without-writing.patch)
+(see [image/exfat-fuse/README.md](../image/exfat-fuse/README.md)). Its
+source is Debian's source of the version `packages.txt` names, as above,
+with that patch applied (`patch -p1`).
+
 ## Written offer
 
 If you received a RasBeacon device or image and can't get the source code

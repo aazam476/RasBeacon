@@ -1,0 +1,106 @@
+Description: Grow files without writing zeros
+ exfat-fuse writes zeros over the new part of a file whenever the file
+ grows (ftruncate past its end, or a write past it), even though exFAT
+ needn't: a file's clusters past its valid data length read as zeros.
+ Windows and Linux's own exFAT driver grow a file by allocating its
+ clusters and leaving its valid data length where it is, and write zeros
+ only when data is later written past it, over the part in between.
+ .
+ This does the same: growing a file allocates its clusters only, and a
+ write past the valid data length first erases what lies between. Reading
+ already returns zeros past the valid data length (exfat_generic_pread),
+ and files made this way are valid exFAT (valid data length at most the
+ data length), as Windows makes them too.
+ .
+ RasBeacon holds the room a share's quota promises on a USB drive with
+ files grown to its size: with this, that takes a moment instead of
+ writing the whole quota to the drive. A marker string lets RasBeacon's
+ image check tell this build from Debian's.
+Author: RasBeacon
+Forwarded: no
+---
+--- a/fuse/main.c
++++ b/fuse/main.c
+@@ -43,6 +43,12 @@
+ 
+ struct exfat ef;
+ 
++/* RasBeacon's build of exfat-fuse grows files without writing zeros (see
++   image/exfat-fuse/ in RasBeacon's repository); its image check looks for
++   this text. */
++const char rasbeacon_build[] __attribute__((used)) =
++		"RasBeacon exfat-fuse: files grow without writing zeros";
++
+ static struct exfat_node* get_node(const struct fuse_file_info* fi)
+ {
+ 	return (struct exfat_node*) (size_t) fi->fh;
+@@ -89,7 +95,10 @@
+ 	if (rc != 0)
+ 		return rc;
+ 
+-	rc = exfat_truncate(&ef, node, size, true);
++	/* Growing a file only allocates its clusters: the part past valid_size
++	   reads as zeros, and is erased when data is first written there (see
++	   exfat_generic_pwrite), as Windows and Linux's own driver do. */
++	rc = exfat_truncate(&ef, node, size, false);
+ 	if (rc != 0)
+ 	{
+ 		exfat_flush_node(&ef, node);	/* ignore return code */
+--- a/libexfat/cluster.c
++++ b/libexfat/cluster.c
+@@ -368,7 +368,7 @@
+ 	return true;
+ }
+ 
+-static int erase_range(struct exfat* ef, struct exfat_node* node,
++int exfat_erase_range(struct exfat* ef, struct exfat_node* node,
+ 		uint64_t begin, uint64_t end)
+ {
+ 	uint64_t cluster_boundary;
+@@ -426,7 +426,7 @@
+ 
+ 	if (erase)
+ 	{
+-		rc = erase_range(ef, node, node->valid_size, size);
++		rc = exfat_erase_range(ef, node, node->valid_size, size);
+ 		if (rc != 0)
+ 			return rc;
+ 		node->valid_size = size;
+--- a/libexfat/exfat.h
++++ b/libexfat/exfat.h
+@@ -183,6 +183,8 @@
+ 		struct exfat_node* node, uint32_t count);
+ int exfat_flush_nodes(struct exfat* ef);
+ int exfat_flush(struct exfat* ef);
++int exfat_erase_range(struct exfat* ef, struct exfat_node* node,
++		uint64_t begin, uint64_t end);
+ int exfat_truncate(struct exfat* ef, struct exfat_node* node, uint64_t size,
+ 		bool erase);
+ uint32_t exfat_count_free_clusters(const struct exfat* ef);
+--- a/libexfat/io.c
++++ b/libexfat/io.c
+@@ -462,17 +462,20 @@
+ 
+ 	if (offset < 0)
+ 		return -EINVAL;
+-	if (uoffset > node->size)
++	if (uoffset + size > node->size)
+ 	{
+-		rc = exfat_truncate(ef, node, uoffset, true);
++		rc = exfat_truncate(ef, node, uoffset + size, false);
+ 		if (rc != 0)
+ 			return rc;
+ 	}
+-	if (uoffset + size > node->size)
++	/* Writing past valid_size: what lies between reads as zeros, so it must
++	   be zeros on the disk before valid_size moves past it. */
++	if (uoffset > node->valid_size)
+ 	{
+-		rc = exfat_truncate(ef, node, uoffset + size, false);
++		rc = exfat_erase_range(ef, node, node->valid_size, uoffset);
+ 		if (rc != 0)
+ 			return rc;
++		node->valid_size = uoffset;
+ 	}
+ 	if (size == 0)
+ 		return 0;
