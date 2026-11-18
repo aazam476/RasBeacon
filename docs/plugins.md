@@ -234,8 +234,13 @@ shares the owner makes on its page. RasBeacon mounts each one at
   1 GB, as FAT32 needs, with a README), so the drive shows as full as its
   shares may become and nothing else fills that room; they shrink as the
   share's files grow and grow back as they are deleted, and go when the
-  share is removed. A whole-drive share (carried over from an older
-  version) holds none. RasBeacon holds the share to its quota itself: the plugin gets the
+  share is removed. On FAT32 and exFAT drives, which can't have holes in
+  files, holding room means writing it: when a share is made or its quota
+  raised, RasBeacon writes the room it holds to the drive once, in the
+  background, 64 MB at a time (the share works meanwhile; a large quota
+  takes as long as the drive needs to write that much). ext4, btrfs and
+  NTFS drives set it aside at once. A whole-drive share (carried over
+  from an older version) holds none. RasBeacon holds the share to its quota itself: the plugin gets the
   folder through a layer (`rbquotafs`) that counts its files' sizes and,
   once they reach the quota, refuses anything that adds more (writing past
   a file's end, a new file or folder: "no space left on device"), while
