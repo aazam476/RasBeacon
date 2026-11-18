@@ -1037,6 +1037,8 @@ func TestPlugins_DownloadProxyTunnelsHTTPS(t *testing.T) {
 		var d net.Dialer
 		return d.DialContext(ctx, "tcp", registry.Listener.Addr().String())
 	}
+	// The test's own user stands for root, as Podman runs.
+	e.agent.plugins.proxyUser = os.Getuid()
 	proxy, err := e.agent.downloadProxy()
 	if err != nil {
 		t.Fatal(err)
@@ -1054,6 +1056,53 @@ func TestPlugins_DownloadProxyTunnelsHTTPS(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	if string(body) != "image layers" || !reflect.DeepEqual(asked, []string{"registry.example:443"}) {
 		t.Errorf("through the proxy: %q, dialed %v", body, asked)
+	}
+}
+
+// Only root's programs (Podman) may use the download proxy: another
+// program on the Pi could otherwise make connections through the VPN with
+// RasBeacon's mark. Here the test's own user isn't the one allowed.
+func TestPlugins_DownloadProxyIsRootsOnly(t *testing.T) {
+	e := newPluginEnv(t)
+	dialed := false
+	e.agent.plugins.proxyDial = func(ctx context.Context, address string) (net.Conn, error) {
+		dialed = true
+		return nil, errors.New("not here")
+	}
+	e.agent.plugins.proxyUser = os.Getuid() + 1
+	proxy, err := e.agent.downloadProxy()
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(&url.URL{Scheme: "http", Host: proxy})}}
+	if resp, err := client.Get("https://registry.example/v2/"); err == nil {
+		resp.Body.Close()
+		t.Error("another user's program got through the proxy")
+	}
+	if dialed {
+		t.Error("nothing may be dialed for another user")
+	}
+}
+
+// /proc/net/tcp's addresses, and finding a socket's owner there.
+func TestSocketUser(t *testing.T) {
+	client := &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 54178}
+	proxy := &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 8080}
+	addr := procTCPAddress(proxy)
+	if addr != "0100007F:1F90" && addr != "7F000001:1F90" { // this machine's byte order
+		t.Errorf("127.0.0.1:8080 = %s", addr)
+	}
+	table := "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n" +
+		"   0: " + procTCPAddress(proxy) + " " + procTCPAddress(client) + " 01 00000000:00000000 00:00000000 00000000     0        0 1 1 0\n" +
+		"   1: " + procTCPAddress(client) + " " + procTCPAddress(proxy) + " 01 00000000:00000000 00:00000000 00000000  1000        0 2 1 0\n"
+	if user, err := socketUser(table, client, proxy); err != nil || user != 1000 {
+		t.Errorf("the client's socket: user %d, %v; want 1000", user, err)
+	}
+	if user, err := socketUser(table, proxy, client); err != nil || user != 0 {
+		t.Errorf("the proxy's own socket: user %d, %v; want 0", user, err)
+	}
+	if _, err := socketUser(table, &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1}, proxy); err == nil {
+		t.Error("a connection that isn't listed has no user")
 	}
 }
 

@@ -85,6 +85,9 @@ type pluginsState struct {
 	// proxyDial opens the proxy's connections: marked, through the VPN
 	// (pluginDialer); tests replace it.
 	proxyDial func(ctx context.Context, address string) (net.Conn, error)
+	// proxyUser is the only user whose programs may use the proxy: root,
+	// as Podman runs (tests use their own).
+	proxyUser int
 	// watchEvery is how often the crash watch runs (0: never, in tests).
 	watchEvery time.Duration
 	// shareUsage is the last measurement of each share's files, by

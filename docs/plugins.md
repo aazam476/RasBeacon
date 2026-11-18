@@ -378,7 +378,8 @@ catalogs; `internal/agent/plugins*.go` installs and runs them.
 - **Downloads** (catalog, `.rba`, images) carry the firewall mark `0x5242`,
   which rule 111 sends into the tunnel; names are looked up with dnsmasq, which
   asks the VPN's DNS. Podman downloads through a proxy in rbd that makes such
-  connections.
+  connections (on 127.0.0.1, for root's programs only: rbd looks up who owns
+  each connection's other end in `/proc/net/tcp`).
 - **Data:** each plugin's `data.img` (ext4, `fallocate`d) in
   `/persistent/rasbeacon/plugins/installed/<id>/`, loop-mounted `nosuid,nodev`
   under `/run/rbd/plugins/<id>/`.

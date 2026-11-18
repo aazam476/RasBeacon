@@ -12,12 +12,15 @@ package agent
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"maps"
 	"net"
 	"net/http"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -154,8 +157,78 @@ func (a *Agent) downloadProxy() (string, error) {
 		Handler:           http.HandlerFunc(a.proxyConnect),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
-	go func() { _ = server.Serve(listener) }()
+	// Only Podman's (root's): any other program on the Pi could otherwise
+	// make connections through the VPN with RasBeacon's mark. (Plugins have
+	// their own network and can't reach it; the login browser is kept
+	// from it by the firewall.)
+	go func() {
+		_ = server.Serve(userListener{Listener: listener, user: a.plugins.proxyUser, peerUser: localPeerUser})
+	}()
 	return a.plugins.proxy, nil
+}
+
+// userListener accepts only connections from programs of one user, on
+// this machine: others are closed at once.
+type userListener struct {
+	net.Listener
+	user int
+	// peerUser finds the user of the program at a connection's other end.
+	peerUser func(net.Conn) (int, error)
+}
+
+// Accept returns the next connection from the user, closing others.
+func (l userListener) Accept() (net.Conn, error) {
+	for {
+		conn, err := l.Listener.Accept()
+		if err != nil {
+			return nil, err
+		}
+		user, err := l.peerUser(conn)
+		if err == nil && user == l.user {
+			return conn, nil
+		}
+		slog.Warn("refused a connection to the download proxy from another user", "user", user, "error", err)
+		conn.Close()
+	}
+}
+
+// localPeerUser finds the user of the program at the other end of conn, a
+// TCP connection between two programs on this machine: the owner of its
+// socket, which /proc/net/tcp lists with its addresses the other way
+// around.
+func localPeerUser(conn net.Conn) (int, error) {
+	local, ok := conn.LocalAddr().(*net.TCPAddr)
+	remote, ok2 := conn.RemoteAddr().(*net.TCPAddr)
+	if !ok || !ok2 || local.IP.To4() == nil || remote.IP.To4() == nil {
+		return -1, errors.New("not an IPv4 TCP connection")
+	}
+	data, err := os.ReadFile("/proc/net/tcp")
+	if err != nil {
+		return -1, err
+	}
+	return socketUser(string(data), remote, local)
+}
+
+// socketUser finds, in /proc/net/tcp's text, the owner of the socket from
+// address from to address to. The columns are a line number, the two
+// addresses, the state, the queues, the timers, the retransmits, and the
+// user.
+func socketUser(table string, from, to *net.TCPAddr) (int, error) {
+	want := procTCPAddress(from) + " " + procTCPAddress(to)
+	for _, line := range strings.Split(table, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) >= 8 && fields[1]+" "+fields[2] == want {
+			return strconv.Atoi(fields[7])
+		}
+	}
+	return -1, errors.New("no such connection")
+}
+
+// procTCPAddress writes an IPv4 address and port as /proc/net/tcp does:
+// the address's four bytes as one number in this machine's byte order, and
+// the port, both in hex ("0100007F:1F90" for 127.0.0.1:8080 on a Pi).
+func procTCPAddress(a *net.TCPAddr) string {
+	return fmt.Sprintf("%08X:%04X", binary.NativeEndian.Uint32(a.IP.To4()), a.Port)
 }
 
 // proxyConnect handles one CONNECT request: "connect me to host:443".
