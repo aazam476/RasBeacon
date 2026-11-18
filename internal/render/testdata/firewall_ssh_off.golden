@@ -100,10 +100,13 @@ table inet rasbeacon {
 # devices; rbd reads these with "nft -j list set bridge rasbeacon up" and
 # "... down"). The "input" hook sees what a device sends to RasBeacon (and
 # through it, the internet): "up". The "output" hook sees what RasBeacon
-# sends to a device: "down". Every bridge is counted, but rbd only uses the
-# counts of devices on a cable. A device not seen for a day is dropped from
-# the sets, and reloading the firewall starts the counts again from zero;
-# rbd adds up the differences, so neither loses what it already counted.
+# sends to a device: "down". Only the cable ports are counted: a set holds
+# at most 1024 addresses, and a device on the hotspot, the guest network or
+# a plugin's port could otherwise fill it with made-up ones, so that no
+# device on a cable is counted any more. A device not seen for a day is
+# dropped from the sets, and reloading the firewall starts the counts again
+# from zero; rbd adds up the differences, so neither loses what it already
+# counted.
 table bridge rasbeacon
 delete table bridge rasbeacon
 
@@ -126,11 +129,15 @@ table bridge rasbeacon {
 
 	chain input {
 		type filter hook input priority filter; policy accept;
+		iifname { "ap0", "guest0" } accept
+		iifname "rbport*" accept
 		update @up { ether saddr }
 	}
 
 	chain output {
 		type filter hook output priority filter; policy accept;
+		oifname { "ap0", "guest0" } accept
+		oifname "rbport*" accept
 		update @down { ether daddr }
 	}
 

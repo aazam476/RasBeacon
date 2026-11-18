@@ -716,6 +716,10 @@ type firewallData struct {
 	// GuestSubnet is the guest network's addresses ("10.87.1.0/24"): the
 	// only ones guests' traffic may come from ("" without a guest network).
 	GuestSubnet string
+	// RadioPorts are the radios' ports on the bridges (the hotspot's and
+	// the guest network's): their devices' data use is the radios' count,
+	// not the firewall's.
+	RadioPorts []string
 	// The welcome page (see FirewallInput.Welcome).
 	Welcome *welcomeData
 	// Priority devices (see FirewallInput.QoS).
@@ -760,6 +764,7 @@ func Firewall(in FirewallInput) (string, error) {
 		PluginBridge:      PluginBridge,
 		PluginGateway:     PluginGateway,
 		PluginBridgePorts: PluginPortPrefix + "*",
+		RadioPorts:        []string{radio.HotspotInterfaceName, GuestInterface},
 	}
 	if len(in.Plugins) > 0 && !in.LANAddress.Is4() {
 		return "", fmt.Errorf("plugins need RasBeacon's hotspot address")

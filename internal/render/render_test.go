@@ -480,7 +480,10 @@ func TestFirewall_NoUplinksMeansNoForwarding(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(got, "masquerade") || strings.Contains(got, "oifname") {
+	// (The bridge table's counters name the radios' ports; they forward
+	// nothing.)
+	routing := got[:strings.Index(got, "table bridge rasbeacon")]
+	if strings.Contains(routing, "masquerade") || strings.Contains(routing, "oifname") {
 		t.Error("without uplinks nothing may be forwarded")
 	}
 }
