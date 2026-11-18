@@ -48,6 +48,7 @@ system copy, so it has no update file). Each release contains:
 | `rasbeacon-<version>.update.json` | The update's version and the oldest version that can install it, for the online check |
 | `rasbeacon-<version>.packages.txt`, `rasbeacon-pi3-zero2w-<version>.packages.txt` | Every Debian package in the image, with its source package and version (see [source-code.md](source-code.md)) |
 | `SHA256SUMS` | Checksums of all of the above |
+| `SHA256SUMS.sig` | `SHA256SUMS` signed with the update signing key, as an OpenSSH file signature: anyone can check it with `ssh-keygen` and [`release.allowed_signers`](release.allowed_signers) (see README.md, *Checking your download*) |
 
 ## One-time setup: the update signing key
 
@@ -65,8 +66,11 @@ public half is built into the image; the private half signs releases.
    the private key anywhere else unless you have a safe place (a password
    manager).
 3. Save the public key as
-   `image/layer/rasbeacon.d/customize.overlay/usr/lib/rasbeacon/update-keys/release.pub`
-   and commit it.
+   `image/layer/rasbeacon.d/customize.overlay/usr/lib/rasbeacon/update-keys/release.pub`,
+   put the line rbsign printed for `docs/release.allowed_signers` in that
+   file in place of the old key's (people check the releases' `SHA256SUMS`
+   with it; a test checks it lists the keys in `update-keys/`), and commit
+   both.
 
 Images built **before** step 3 have no key and can't install update files;
 their owners update by flashing once. From then on, updates work.
@@ -81,6 +85,14 @@ the script removed the variable). It keeps the update bundle instead, and
 `sign` makes the update file from it. Only the `publish` job may write to
 the repository.
 
+`sign` also signs `SHA256SUMS`, with the same key (`rbsign
+sign-checksums`): the image jobs hand it their checksums alone, a few
+lines, and it signs nothing but checksum lines, as an OpenSSH file
+signature. That signs "SSHSIG", a namespace and a hash of the list, never
+the list itself, so a signed list can't pass for a signed update (whose
+signature covers the update's JSON). `publish` checks the list matches
+every file it publishes.
+
 `image/build.sh` still signs by itself when the key is in its environment,
 for a build by hand. Do that only on a computer where you trust everything
 the build runs.
@@ -88,7 +100,7 @@ the build runs.
 **Changing the key** (for example if the private key may have leaked):
 
 1. Make a new key pair and add the new public key as a second file
-   (`release-2.pub`).
+   (`release-2.pub`), and its line to `docs/release.allowed_signers`.
 2. Release, still signed with the *old* key. That release holds both
    public keys, so devices that install it trust both.
 3. Switch the secret to the new key. In the next release, remove the old
@@ -164,7 +176,7 @@ still holds; a version that can install `v2.0.0` usually can install
    pre-release), so skip the publishing in step 4.
 4. When the workflow finishes, open the draft release, check the files are
    all there (the two images, the update file and its `.update.json`, the
-   two package lists, `SHA256SUMS`), write the notes, and publish (a test version: tick *Set as a
+   two package lists, `SHA256SUMS` and `SHA256SUMS.sig`), write the notes, and publish (a test version: tick *Set as a
    pre-release* first).
 5. Test the update file on a device running the previous release (System
    page → **Check now** → **Update now**, which downloads it from the

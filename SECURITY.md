@@ -27,7 +27,11 @@ For example:
 - getting past the admin login, CSRF protection or login rate limit;
 - reading passwords, keys or certificates without the admin password;
 - secrets appearing in logs or the diagnostics report;
-- installing an update that wasn't signed with the release key;
+- installing an update that wasn't signed with the release key, or one
+  older than the version running (a beta is older than its release; a
+  test build installs only over a test build);
+- a release's `SHA256SUMS` that its signature (`SHA256SUMS.sig`) accepts
+  but the release workflow didn't sign;
 - a WireGuard file or uploaded certificate that runs commands or changes
   settings it shouldn't;
 - guests reaching your devices, other guests, the web UI or SSH, or
@@ -69,6 +73,8 @@ code. Some of them, for problems found in reviews:
 | A plugin does only what its permissions allow | A template that never finishes stopped the other plugins and backups | `internal/plugin` `TestCheckTemplate`, `internal/agent` `TestFillTemplate_RefusesLoops` |
 | A plugin does only what its permissions allow | Data kept from a removed plugin went to another author's plugin with the same ID | `internal/agent` `TestPlugins_SigningKeyIsPinnedOnFirstSignedInstall`, `TestPlugins_UnsignedKeptDataComesBackOnlyWhenChosen` |
 | A plugin does only what its permissions allow | A template built a value of gigabytes with variables or `printf`, and rbd ran out of memory at every start | `internal/plugin` `TestCheckTemplate`, `internal/agent` `TestFillTemplate_RefusesHugeValues` |
+| Only signed updates, never an older version | A beta counted as its release (only the numbers were compared), and a test build has no number, so a beta's or a test build's update file installed over a release | `internal/version` `TestCompare`, `internal/update` `TestCheckVersion` |
+| Only signed updates, never an older version | Signing a release's `SHA256SUMS`, which the image build writes, with the update key could have signed anything that build put in it, a forged update's manifest among them | `cmd/rbsign` `TestSignChecksums_SignsOnlyAListOfChecksums`, `TestSignChecksums_SshKeygenChecksIt` |
 | No traffic outside the VPN while the kill switch is on | In login mode, connections opened earlier through the tunnel carried on through the hotel's network (routed IPv6, which isn't NATed) | `test/netns` `TestLoginMode_ConnectionsOpenedThroughTheVPNDontLeaveOutsideIt`, `TestLoginMode_RoutedIPv6ConnectionsDontLeaveOutsideTheVPN` |
 | Guests can't reach your devices | A guest sending with one of your devices' addresses as the sender got the answers from the internet delivered to that device | `test/netns` `TestGuest_CantSendWithADevicesAddress`, `internal/render` `TestFirewall_GuestNetworkIsolated` |
 | A plugin does only what its permissions allow | With the VPN on, a device's connection to a plugin's port was routed into the tunnel (to the VPN server) instead of to the plugin | `test/netns` `TestPlugins_DevicesReachTheirPortsWhileTheVPNIsOn` |

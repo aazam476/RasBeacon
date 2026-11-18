@@ -3,7 +3,8 @@
 # image/README.md).
 #
 # - Pushing a tag like v0.1.0 builds both and publishes a GitHub release
-#   with the images, the update file (Pi 4/5) and SHA256SUMS.
+#   with the images, the update file (Pi 4/5), and SHA256SUMS with its
+#   signature.
 # - "Run workflow" on the Actions tab builds them for testing without a
 #   release (download them from the run's artifacts), or, with a release
 #   name like v0.1.0 or v0.2.0-beta.1, also creates that tag on the commit
@@ -40,7 +41,7 @@ on:
 # nothing but rbsign (Go's standard library) on a machine of its own. The
 # image job never has it: whatever runs next to a secret can read it, and
 # that job runs npm with its packages' install scripts, apt and the image
-# tools.
+# tools. sign signs the update file and SHA256SUMS.
 permissions:
   contents: read
 
@@ -126,6 +127,15 @@ jobs:
           # Images are large; keep test builds for a week.
           retention-days: 7
 
+      # The checksums by themselves, for the sign job to sign into
+      # SHA256SUMS (a few lines, where the images are gigabytes).
+      - uses: actions/upload-artifact@v7
+        with:
+          name: checksums-${{ matrix.target.name }}-${{ steps.version.outputs.version }}
+          path: build/image/*.sha256
+          if-no-files-found: error
+          retention-days: 1
+
       # The update bundle goes to the sign job by itself (its name doesn't
       # start with "rasbeacon-", so publish leaves it out).
       - uses: actions/upload-artifact@v7
@@ -175,6 +185,27 @@ jobs:
           RASBEACON_UPDATE_SIGNING_KEY: ${{ secrets.RASBEACON_UPDATE_SIGNING_KEY }}
           VERSION: ${{ needs.image.outputs.version }}
         run: image/sign-update.sh dist "$VERSION"
+      # Both images' checksums, which with the update file's make
+      # SHA256SUMS: signed with the same key, so a download can be checked
+      # against the key in the repository (README.md, "Checking your
+      # download"). rbsign signs nothing but checksum lines, as an OpenSSH
+      # file signature, which can't pass for a signed update.
+      - uses: actions/download-artifact@v8
+        if: steps.key.outputs.present == 'true'
+        with:
+          pattern: checksums-*-${{ needs.image.outputs.version }}
+          path: dist
+          merge-multiple: true
+      - name: Sign the checksums
+        if: steps.key.outputs.present == 'true'
+        env:
+          RASBEACON_UPDATE_SIGNING_KEY: ${{ secrets.RASBEACON_UPDATE_SIGNING_KEY }}
+        run: |
+          cat dist/*.sha256 > dist/SHA256SUMS
+          rm dist/*.sha256
+          go run ./cmd/rbsign sign-checksums -in dist/SHA256SUMS \
+            -trusted image/layer/rasbeacon.d/customize.overlay/usr/lib/rasbeacon/update-keys
+          cat dist/SHA256SUMS
       - uses: actions/upload-artifact@v7
         if: steps.key.outputs.present == 'true'
         with:
@@ -194,16 +225,25 @@ jobs:
       # To make the release and upload its files.
       contents: write
     steps:
-      # The two images' files and the signed update file (not the unsigned
-      # update bundle, whose artifact has another name).
+      # The two images' files, and the signed update file and SHA256SUMS
+      # (not the unsigned update bundle, whose artifact has another name).
       - uses: actions/download-artifact@v8
         with:
           pattern: rasbeacon-*
           path: dist
           merge-multiple: true
-      - name: Combine checksums
+      # The signed SHA256SUMS must list every file published, as it is.
+      - name: Check the checksums
         working-directory: dist
-        run: cat *.sha256 > SHA256SUMS && rm *.sha256 && cat SHA256SUMS
+        run: |
+          rm -f -- *.sha256
+          sha256sum --strict -c SHA256SUMS
+          for f in *.img.xz *.rbupdate *.update.json *.packages.txt; do
+            if ! awk -v f="$f" '$2 == f { found = 1 } END { exit !found }' SHA256SUMS; then
+              echo "::error::$f is not in SHA256SUMS"
+              exit 1
+            fi
+          done
       - uses: softprops/action-gh-release@v3
         with:
           # A release must have every file, the update file above all:
@@ -215,6 +255,7 @@ jobs:
             dist/*.update.json
             dist/*.packages.txt
             dist/SHA256SUMS
+            dist/SHA256SUMS.sig
           tag_name: ${{ inputs.release || github.ref_name }}
           name: ${{ inputs.release || github.ref_name }}
           target_commitish: ${{ github.sha }}

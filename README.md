@@ -65,7 +65,7 @@ hotel login pages.
 1. **Download** `rasbeacon-<version>.img.xz` from the
    [Releases](../../releases) page: one image for the Pi 4, 400, 5 and 500.
    For a Pi Zero 2 W, 3B or 3B+, download `rasbeacon-pi3-zero2w-<version>.img.xz`
-   instead (its card drive is called `BOOT` rather than `BOOTCONFIG`). Also download `SHA256SUMS` if you want to
+   instead (its card drive is called `BOOT` rather than `BOOTCONFIG`). Also download `SHA256SUMS` and `SHA256SUMS.sig` if you want to
    check the file (see [Checking your download](#checking-your-download)).
 2. **Flash** it with [Raspberry Pi Imager](https://www.raspberrypi.com/software/):
    1. Choose your device.
@@ -136,12 +136,23 @@ hotel login pages.
 
 ## Checking your download
 
-Each release lists the SHA-256 checksum of every image in `SHA256SUMS`.
+Each release lists the SHA-256 checksum of every file in `SHA256SUMS`, and
+signs that list with RasBeacon's release key in `SHA256SUMS.sig` (the key
+RasBeacon checks its updates with).
 
-- **macOS/Linux:** `shasum -a 256 rasbeacon-<version>.img.xz`
-- **Windows PowerShell:** `Get-FileHash rasbeacon-<version>.img.xz`
+1. **Check the list is RasBeacon's.** Put `SHA256SUMS`, `SHA256SUMS.sig`
+   and [`release.allowed_signers`](docs/release.allowed_signers) (from this
+   repository's `docs` folder) in one folder, open a terminal there, and
+   run (macOS, Linux; on Windows, put the line in `cmd /c "…"`):
+   ```bash
+   ssh-keygen -Y verify -f release.allowed_signers -I rasbeacon-release -n rasbeacon-checksums -s SHA256SUMS.sig < SHA256SUMS
+   ```
+   It must say `Good "rasbeacon-checksums" signature for rasbeacon-release`.
+2. **Check the image against it:**
+   - **macOS/Linux:** `shasum -a 256 rasbeacon-<version>.img.xz`
+   - **Windows PowerShell:** `Get-FileHash rasbeacon-<version>.img.xz`
 
-The result must match the line in `SHA256SUMS`.
+   The result must match the image's line in `SHA256SUMS`.
 
 ## Updating
 

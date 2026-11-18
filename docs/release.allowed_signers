@@ -1,0 +1,10 @@
+# The key that signs each RasBeacon release's SHA256SUMS: the update
+# signing key, whose public half devices trust as
+# image/layer/rasbeacon.d/customize.overlay/usr/lib/rasbeacon/update-keys/release.pub.
+# Check a release's checksums with OpenSSH (macOS, Linux, Windows):
+#
+#   ssh-keygen -Y verify -f release.allowed_signers -I rasbeacon-release -n rasbeacon-checksums -s SHA256SUMS.sig < SHA256SUMS
+#
+# It prints "Good "rasbeacon-checksums" signature for rasbeacon-release".
+# See README.md, "Checking your download".
+rasbeacon-release namespaces="rasbeacon-checksums" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAXOzWX2a+d3DyIqV1+vXB+GsEYnLsIm/2nCfp6RXaGV

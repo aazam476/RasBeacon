@@ -54,6 +54,7 @@ func TestUsage(t *testing.T) {
 		{"pack", "-unknown-flag"},   // a flag rbsign doesn't know
 		{"plugin-sign", "-in", "x"}, // no -out
 		{"plugin-check"},            // no files
+		{"sign-checksums"},          // no -in
 	} {
 		code, _, stderr := rbsign(t, nil, args...)
 		if code != 2 || !strings.Contains(stderr, "usage: rbsign") {

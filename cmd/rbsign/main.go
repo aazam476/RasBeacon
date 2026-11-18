@@ -3,8 +3,9 @@
 //
 //	rbsign keygen
 //	    Prints a new private key (keep it secret: it goes into the
-//	    RASBEACON_UPDATE_SIGNING_KEY secret of the GitHub repository) and its
-//	    public key (commit it to image/.../usr/lib/rasbeacon/update-keys/).
+//	    RASBEACON_UPDATE_SIGNING_KEY secret of the GitHub repository), its
+//	    public key (commit it to image/.../usr/lib/rasbeacon/update-keys/),
+//	    and the public key's line for docs/release.allowed_signers.
 //
 //	rbsign pack -board rpi64 -version v1.2.0 [-min-from v1.0.0] -bundle x.update.tar.zst -out x.rbupdate [-info x.update.json] [-trusted DIR]
 //	    Makes a signed update file. The private key is read from the
@@ -16,6 +17,12 @@
 //	    -trusted names the folder of public keys the image trusts: pack
 //	    then says which of them belongs to the signing key, and refuses to
 //	    sign when none does (devices would refuse such an update).
+//
+//	rbsign sign-checksums -in SHA256SUMS [-out SHA256SUMS.sig] [-trusted DIR]
+//	    Signs a release's list of checksums with the same key, as an
+//	    OpenSSH file signature, which `ssh-keygen -Y verify` checks with
+//	    docs/release.allowed_signers. It signs nothing but checksum lines.
+//	    -trusted as for pack.
 //
 //	rbsign plugin-keygen
 //	    Prints a new key for signing plugins: the private key (keep it
@@ -71,6 +78,8 @@ func run(args []string, env func(string) string, stdout, stderr io.Writer) int {
 			err = keygen(stdout)
 		case "pack":
 			err = pack(args[1:], env, stdout)
+		case "sign-checksums":
+			err = signChecksums(args[1:], env, stdout)
 		case "plugin-keygen":
 			err = pluginKeygen(stdout)
 		case "plugin-sign":
@@ -83,7 +92,7 @@ func run(args []string, env func(string) string, stdout, stderr io.Writer) int {
 	case err == nil:
 		return 0
 	case errors.Is(err, errUsage):
-		fmt.Fprintln(stderr, "usage: rbsign keygen | rbsign pack -board B -version V -bundle FILE -out FILE")
+		fmt.Fprintln(stderr, "usage: rbsign keygen | rbsign pack -board B -version V -bundle FILE -out FILE | rbsign sign-checksums -in SHA256SUMS")
 		fmt.Fprintln(stderr, "       rbsign plugin-keygen | rbsign plugin-sign -in FILE.rba -out FILE.rba | rbsign plugin-check FILE.rba...")
 		return 2
 	default:
@@ -113,7 +122,16 @@ func keygen(stdout io.Writer) error {
 	fmt.Fprintln(stdout)
 	fmt.Fprintln(stdout, "Public key (save as image/layer/rasbeacon.d/customize.overlay/usr/lib/rasbeacon/update-keys/<name>.pub):")
 	fmt.Fprintln(stdout, base64.StdEncoding.EncodeToString(public))
+	fmt.Fprintln(stdout)
+	fmt.Fprintln(stdout, "Its line for docs/release.allowed_signers (it checks the releases' SHA256SUMS):")
+	fmt.Fprintln(stdout, allowedSigner(public))
 	return nil
+}
+
+// allowedSigner is the line of an OpenSSH allowed_signers file that lets
+// `ssh-keygen -Y verify` check checksum lists signed with the key public.
+func allowedSigner(public ed25519.PublicKey) string {
+	return fmt.Sprintf("rasbeacon-release namespaces=%q %s %s", checksumsNamespace, sshKeyType, base64.StdEncoding.EncodeToString(sshPublicKey(public)))
 }
 
 // pack makes a signed update file from rpi-image-gen's update bundle.
