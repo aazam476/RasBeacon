@@ -588,10 +588,13 @@ func hotelLogin(t *testing.T) {
 		t.Errorf("the uplink to the hotel's Wi-Fi 6 network reports %q", got)
 	}
 
-	rbd(t, "POST", "/portal/browser/start", map[string]int{"width": 400, "height": 600}, nil)
+	// rbd shows the login browser only to the device that opened it: rbweb
+	// passes on that device's secret, which the test makes up.
+	session := strings.Repeat("5e", 32)
+	rbd(t, "POST", "/portal/browser/start", map[string]any{"width": 400, "height": 600, "session": session}, nil)
 	waitFor(t, "the login page in the browser", time.Minute, func() (bool, string) {
 		var frame struct{ URL, Title string }
-		tryRBD("GET", "/portal/browser/frame?after=0", nil, &frame)
+		tryRBD("GET", "/portal/browser/frame?after=0&session="+session, nil, &frame)
 		return strings.Contains(frame.URL, hotelLAN), frame.URL + " " + frame.Title
 	})
 	// On a failure, show what the hotel saw.
@@ -603,12 +606,12 @@ func hotelLogin(t *testing.T) {
 		}
 	})
 	// The page is one big button: a click in the middle accepts.
-	rbd(t, "POST", "/portal/browser/input", map[string]any{"action": "click", "x": 200, "y": 300}, nil)
+	rbd(t, "POST", "/portal/browser/input", map[string]any{"action": "click", "x": 200, "y": 300, "session": session}, nil)
 	// RasBeacon may notice the login worked and close its browser before
 	// the hotel's page shows: either counts.
 	waitFor(t, "the hotel's welcome page", time.Minute, func() (bool, string) {
 		var frame struct{ URL, Title string }
-		tryRBD("GET", "/portal/browser/frame?after=0", nil, &frame)
+		tryRBD("GET", "/portal/browser/frame?after=0&session="+session, nil, &frame)
 		var portal struct {
 			Detected bool `json:"detected"`
 		}
@@ -620,7 +623,7 @@ func hotelLogin(t *testing.T) {
 		s := rbdStatus(t)
 		return !s.Portal.Detected, "still detected"
 	})
-	tryRBD("POST", "/portal/browser/stop", nil, nil)
+	tryRBD("POST", "/portal/browser/stop", map[string]string{"session": session}, nil)
 
 	hotelAddress, _, _ := strings.Cut(rbdStatus(t).Uplink.Address, "/")
 	waitFor(t, "phone1 to reach the internet", time.Minute, func() (bool, string) {
