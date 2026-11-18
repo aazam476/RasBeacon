@@ -1,3 +1,5 @@
+//go:build linux
+
 package agent
 
 import (
@@ -34,6 +36,18 @@ func deviceACLUsers(t *testing.T, path string) []string {
 		}
 	}
 	return named
+}
+
+// checkDeviceGiven fails the test unless the device at path was given to
+// the user and group base by its access list.
+func checkDeviceGiven(t *testing.T, path string, base int) {
+	t.Helper()
+	users := deviceACLUsers(t, path)
+	for _, want := range []string{fmt.Sprintf("u:%d:rw", base), fmt.Sprintf("g:%d:rw", base)} {
+		if !slices.Contains(users, want) {
+			t.Errorf("%s's access list = %v, want %s", path, users, want)
+		}
+	}
 }
 
 // A device a plugin may use is given to its root (its base user and

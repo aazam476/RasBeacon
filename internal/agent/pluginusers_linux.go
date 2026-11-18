@@ -1,3 +1,5 @@
+//go:build linux
+
 package agent
 
 // Plugins' users: each plugin's container runs in a user namespace of its

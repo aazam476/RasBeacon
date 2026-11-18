@@ -20,7 +20,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"slices"
 	"strings"
 	"testing"
 
@@ -809,10 +808,7 @@ func TestPlugins_PowerSocketShutsDown(t *testing.T) {
 	}
 	// And its devices are given to its root, by an access list.
 	for _, device := range []string{"i2c-1", "gpiochip0"} {
-		path := filepath.Join(e.paths.DevDir(), device)
-		if users := deviceACLUsers(t, path); !slices.Contains(users, "u:1179648:rw") || !slices.Contains(users, "g:1179648:rw") {
-			t.Errorf("%s's access list = %v, want the plugin's root", device, users)
-		}
+		checkDeviceGiven(t, filepath.Join(e.paths.DevDir(), device), 1179648)
 	}
 
 	// The plugin asks over the socket, as an HTTP request.
