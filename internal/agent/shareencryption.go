@@ -190,11 +190,13 @@ func (a *Agent) releaseDrive(uuid string) {
 	for try := 1; ; try++ {
 		_, err := r.Run("umount", dir)
 		if err == nil {
+			a.freeDriverUser(uuid) // its program ends with the mount
 			return
 		}
 		// mountpoint -q fails when nothing is mounted there: the drive
 		// wasn't mounted, or it is gone now.
 		if _, mounted := r.Run("mountpoint", "-q", dir); mounted != nil {
+			a.freeDriverUser(uuid)
 			return
 		}
 		if try == releaseTries {

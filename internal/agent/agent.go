@@ -92,6 +92,7 @@ import (
 	"rasbeacon/internal/api"
 	"rasbeacon/internal/config"
 	"rasbeacon/internal/dhcpprobe"
+	"rasbeacon/internal/fusedrive"
 	"rasbeacon/internal/identity"
 	"rasbeacon/internal/led"
 	"rasbeacon/internal/paths"
@@ -275,6 +276,7 @@ func New(p paths.Paths, runner system.Runner) *Agent {
 		return a.pluginDialer().DialContext(ctx, "tcp", address)
 	}
 	a.plugins.watchEvery = pluginWatchEvery
+	a.plugins.mountDriver = fusedrive.Mount
 	a.background = func(f func()) { go f() }
 	if _, real := runner.(system.ExecRunner); real {
 		// Podman downloads and loads images: much longer than other commands.

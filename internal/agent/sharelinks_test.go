@@ -227,8 +227,11 @@ func TestShareLinks_DecryptingWritesThroughNoLink(t *testing.T) {
 // where links work as before.
 func TestShareLinks_DrivesAreMountedWithoutFollowingLinks(t *testing.T) {
 	e, _, open := newEncryptionEnv(t)
-	if !e.runner.ran("mount -t exfat -o nosuid,nodev,noexec,noatime,nosymfollow,") {
-		t.Error("the drive should be mounted with nosymfollow")
+	// The test stick is exFAT, which its program reads: mounted
+	// nosymfollow (test/netns TestDrives_ExFATIsReadByAConfinedProgram), as
+	// the drives the kernel reads are (plugin.MountOptions).
+	if !e.runner.ran("fusedrive /dev/sda1 exfat " + e.paths.DriveMountDir("1234-ABCD")) {
+		t.Error("the drive should be read by its program")
 	}
 	for _, share := range []string{"s1", "s2"} {
 		if _, err := setEncryption(e, share, true, ""); err != nil {

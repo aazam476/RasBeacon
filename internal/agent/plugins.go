@@ -51,6 +51,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -93,6 +94,13 @@ type pluginsState struct {
 	// shareUsage is the last measurement of each share's files, by
 	// drive, folder and ID (see pluginshares.go).
 	shareUsage map[string]shareUsage
+	// mountDriver mounts a drive that a program reads rather than the
+	// kernel (fusedrive.Mount); tests replace it.
+	mountDriver func(device, fsType, dir string, user int) error
+	// driverUsers are the users the drives' programs run as, by the UUID
+	// of the drive each reads (see takeDriverUser).
+	driverMu    sync.Mutex
+	driverUsers map[string]int
 }
 
 // pluginLive is one plugin's state in memory.

@@ -59,7 +59,9 @@ The reasons behind the big decisions are in [design.md](design.md) and
   `image/verify.sh` fails the build without it. rbd itself isn't
   sandboxed this way: it mounts drives, sets the clock and runs Podman,
   and a system call filter would be inherited by every plugin and the
-  login browser it starts. It sees `/usr`, `/etc` and `/boot` read-only
+  login browser it starts. (exFAT drives are read by a program of their
+  own rather than the kernel, confined as a user of its own:
+  `internal/fusedrive`.) It sees `/usr`, `/etc` and `/boot` read-only
   and `/home` not at all, and has no capability that neither it nor what
   it starts uses (loading kernel modules, restarting the Pi by itself,
   audit rules, immutable files and a few more): see its unit.

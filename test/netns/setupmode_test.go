@@ -15,7 +15,8 @@
 // # Running
 //
 // These tests need root (to create namespaces) and the tools ip, nft,
-// dnsmasq and busybox. Without root they are skipped, unless
+// dnsmasq and busybox (the USB drive tests: losetup, mkfs.exfat and
+// exfat-fuse too). Without root they are skipped, unless
 // RASBEACON_REQUIRE_NETNS=1 is set (as CI does), in which case they fail.
 //
 //	sudo -E go test ./test/netns/ -v

@@ -82,7 +82,8 @@ func MountOptions(fsType string) (kind string, options string) {
 	// FAT, exFAT and NTFS keep no owners RasBeacon's plugins could use
 	// (and their drivers can't idmap): every file is open to everyone, as
 	// the plugin's users are its own (see plugin.UserBase). The drive is
-	// in a folder only root can reach.
+	// in a folder only root can reach. (exFAT drives are read by a program
+	// instead of the kernel, with the same options: internal/fusedrive.)
 	switch fsType {
 	case "ntfs":
 		return "ntfs3", options + ",uid=0,gid=0,umask=0000"

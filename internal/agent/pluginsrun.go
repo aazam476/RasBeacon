@@ -32,6 +32,7 @@ import (
 
 	"rasbeacon/internal/api"
 	"rasbeacon/internal/config"
+	"rasbeacon/internal/fusedrive"
 	"rasbeacon/internal/plugin"
 	"rasbeacon/internal/render"
 	"rasbeacon/internal/system"
@@ -577,6 +578,9 @@ func (a *Agent) mountDrive(uuid string) error {
 		if d.UUID != uuid {
 			continue
 		}
+		if fusedrive.Handles(d.FSType) {
+			return a.mountWithDriver(d, dir)
+		}
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
 		}
@@ -587,6 +591,61 @@ func (a *Agent) mountDrive(uuid string) error {
 		return nil
 	}
 	return errors.New("its USB drive isn't plugged in")
+}
+
+// mountWithDriver mounts a drive that a program reads rather than the
+// kernel (exFAT), the program confined and running as a user of its own
+// (see internal/fusedrive).
+func (a *Agent) mountWithDriver(d plugin.Drive, dir string) error {
+	// The program ends with rbd, and its mount stays behind, every use of
+	// it failing: after rbd restarted, that mount is let go of first.
+	_, _ = a.plugins.runner.Run("umount", dir)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	user, err := a.takeDriverUser(d.UUID)
+	if err != nil {
+		return err
+	}
+	if err := a.plugins.mountDriver(d.Device, d.FSType, dir, user); err != nil {
+		a.freeDriverUser(d.UUID)
+		return fmt.Errorf("the USB drive can't be opened: %w", err)
+	}
+	return nil
+}
+
+// takeDriverUser returns the user the program reading the drive uuid runs
+// as: the one it has, or the first one free. Each drive's is its own, so
+// the program reading one drive can't reach another.
+func (a *Agent) takeDriverUser(uuid string) (int, error) {
+	p := &a.plugins
+	p.driverMu.Lock()
+	defer p.driverMu.Unlock()
+	if user, ok := p.driverUsers[uuid]; ok {
+		return user, nil
+	}
+	taken := map[int]bool{}
+	for _, user := range p.driverUsers {
+		taken[user] = true
+	}
+	for user := fusedrive.UserBase; user < fusedrive.UserBase+fusedrive.Users; user++ {
+		if !taken[user] {
+			if p.driverUsers == nil {
+				p.driverUsers = map[string]int{}
+			}
+			p.driverUsers[uuid] = user
+			return user, nil
+		}
+	}
+	return 0, fmt.Errorf("more than %d USB drives are open; unplug one", fusedrive.Users)
+}
+
+// freeDriverUser gives back the user of the drive uuid's program, once
+// nothing reads the drive.
+func (a *Agent) freeDriverUser(uuid string) {
+	a.plugins.driverMu.Lock()
+	delete(a.plugins.driverUsers, uuid)
+	a.plugins.driverMu.Unlock()
 }
 
 // stopPluginContainer stops and removes a plugin's container, unmounts its

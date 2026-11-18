@@ -137,8 +137,11 @@ sudo -E go test -count=1 -v ./test/netns/
 ```
 
 Needs Linux, root, `nftables`, `dnsmasq`, `busybox`, `iproute2` and
-`wireguard-tools` (CI's `netns` job lists them). Without root the tests
-are skipped; `RASBEACON_REQUIRE_NETNS=1` makes them fail instead.
+`wireguard-tools`, and for the USB drive test (`drives_linux_test.go`:
+a real exFAT drive from a file, read by its confined program) `losetup`,
+`exfatprogs` and `exfat-fuse` (CI's `netns` job lists them). Without root
+the tests are skipped; `RASBEACON_REQUIRE_NETNS=1` makes them fail
+instead.
 
 ### Simulated Wi-Fi tests (`test/hwsim/`)
 

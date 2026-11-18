@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -261,6 +262,12 @@ func (e *testEnv) newAgent() *Agent {
 	}
 	a.background = func(f func()) { e.backgroundMu.Lock(); e.pending = append(e.pending, f); e.backgroundMu.Unlock() }
 	a.plugins.watchEvery = 0
+	// A drive's program (fusedrive.Mount) is a command of the fake
+	// runner's: "fusedrive <device> <fsType> <dir> <user>".
+	a.plugins.mountDriver = func(device, fsType, dir string, user int) error {
+		_, err := e.runner.Run("fusedrive", device, fsType, dir, strconv.Itoa(user))
+		return err
+	}
 	a.dhcpProbe = e.fakeDHCPProbe
 	return a
 }

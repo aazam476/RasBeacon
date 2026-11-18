@@ -67,7 +67,9 @@ mmdebstrap:
     - crun
     - conmon
     - netavark
-    # Plugins' USB drives: exFAT (NTFS is in the kernel, ntfs3)
+    # Plugins' USB drives: exFAT, read by exfat-fuse, confined (see
+    # internal/fusedrive), and its tools (NTFS is in the kernel, ntfs3)
+    - exfat-fuse
     - exfatprogs
     # Encrypting a plugin's USB drive (internal/agent/driveencryption.go):
     # gocryptfs, and FUSE, which it opens the encrypted files with

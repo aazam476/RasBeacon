@@ -74,6 +74,9 @@ check "rbd can't load kernel modules or change the system" \
   sh -c "grep -qx 'ProtectSystem=full' '$root/usr/lib/systemd/system/rbd.service' && grep -q '^CapabilityBoundingSet=~CAP_SYS_MODULE ' '$root/usr/lib/systemd/system/rbd.service'"
 check "the data partition grows to fill the card" test -L "$root/etc/systemd/system/multi-user.target.wants/rasbeacon-grow-data.service"
 check "gocryptfs and FUSE are installed (encrypted USB drives)" sh -c "test -x '$root/usr/bin/gocryptfs' && test -x '$root/usr/bin/fusermount3'"
+check "exfat-fuse is installed (exFAT drives aren't read by the kernel)" test -x "$root/usr/sbin/mount.exfat-fuse"
+# exfat-fuse looks up its user's name: user 1 in its namespace.
+check "user 1 has a name (exfat-fuse runs as it)" grep -q "^[a-z]*:[^:]*:1:" "$root/etc/passwd"
 # USB drives are mounted with nosymfollow; a mount that didn't know the
 # option would refuse every drive.
 check "mount knows nosymfollow (USB drives)" sh -c "grep -aq nosymfollow '$root'/usr/lib/*/libmount.so.1"

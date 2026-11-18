@@ -2,11 +2,13 @@ package agent
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
 	"rasbeacon/internal/api"
 	"rasbeacon/internal/config"
+	"rasbeacon/internal/fusedrive"
 	"rasbeacon/internal/plugin"
 )
 
@@ -39,9 +41,13 @@ func installOnDrive(e *testEnv, data []byte, drive string) (api.Plugin, error) {
 	return p, err
 }
 
+// ntfsLsblk is usbLsblk with the stick formatted NTFS, which the kernel
+// reads.
+var ntfsLsblk = strings.Replace(usbLsblk, `"fstype":"exfat"`, `"fstype":"ntfs"`, 1)
+
 func TestDrives_APluginMountsItsDriveSoNothingOnItCanRun(t *testing.T) {
 	e := newPluginEnv(t)
-	e.runner.outputs["lsblk "+strings.Join(plugin.LsblkArgs, " ")] = usbLsblk
+	e.runner.outputs["lsblk "+strings.Join(plugin.LsblkArgs, " ")] = ntfsLsblk
 
 	drives, err := e.agent.PluginDrives()
 	if err != nil || len(drives.Drives) != 1 || drives.Drives[0].Label != "STICK" || drives.Drives[0].UsedBy != "" {
@@ -63,6 +69,106 @@ func TestDrives_APluginMountsItsDriveSoNothingOnItCanRun(t *testing.T) {
 	// The list says who uses it now.
 	if drives, _ := e.agent.PluginDrives(); drives.Drives[0].UsedBy != "AdGuard Home" {
 		t.Errorf("used by = %q", drives.Drives[0].UsedBy)
+	}
+}
+
+// An exFAT drive is read by a program, confined, as a user of its own
+// (internal/fusedrive), not by the kernel.
+func TestDrives_ExFATIsReadByItsOwnProgram(t *testing.T) {
+	e := newPluginEnv(t)
+	e.runner.outputs["lsblk "+strings.Join(plugin.LsblkArgs, " ")] = usbLsblk
+	if _, err := installOnDrive(e, drivePlugin(t, false), "1234-ABCD"); err != nil {
+		t.Fatal(err)
+	}
+	dir := e.paths.DriveMountDir("1234-ABCD")
+	driver := fmt.Sprintf("fusedrive /dev/sda1 exfat %s %d", dir, fusedrive.UserBase)
+	if !e.runner.ran(driver) {
+		t.Errorf("the stick should be read by its program as user %d; ran %q", fusedrive.UserBase, e.runner.commands)
+	}
+	if e.runner.ran("mount -t exfat") {
+		t.Error("the kernel should not read an exFAT drive")
+	}
+	if p := e.plugin("adguard-home"); p.State != api.PluginRunning {
+		t.Errorf("plugin = %s %q", p.State, p.Message)
+	}
+
+	// Stopped, the drive is let go of, and its user with it.
+	if err := e.agent.StopPlugin("adguard-home"); err != nil {
+		t.Fatal(err)
+	}
+	e.runBackground()
+	if len(e.agent.plugins.driverUsers) != 0 {
+		t.Errorf("driver users = %v after the drive was let go of", e.agent.plugins.driverUsers)
+	}
+
+	// rbd restarted: the program ended with it, and its mount is still
+	// there, useless; it is unmounted before the drive is read again.
+	e.runner.mu.Lock()
+	e.runner.commands = nil
+	e.runner.mu.Unlock()
+	if err := e.agent.StartPlugin("adguard-home"); err != nil {
+		t.Fatal(err)
+	}
+	e.runBackground()
+	umount, read := -1, -1
+	for i, c := range e.runner.commands {
+		switch {
+		case c == "umount "+dir && read < 0:
+			umount = i
+		case c == driver:
+			read = i
+		}
+	}
+	if umount < 0 || read < umount {
+		t.Errorf("want umount %s before the drive is read again; ran %q", dir, e.runner.commands)
+	}
+
+	// A drive its program can't read: the plugin doesn't start, and the
+	// user is free again.
+	if err := e.agent.StopPlugin("adguard-home"); err != nil {
+		t.Fatal(err)
+	}
+	e.runBackground()
+	e.runner.failing = append(e.runner.failing, "fusedrive")
+	if err := e.agent.StartPlugin("adguard-home"); err == nil {
+		e.runBackground()
+	}
+	if p := e.plugin("adguard-home"); p.State != api.PluginFailed || !strings.Contains(p.Message, "can't be opened") {
+		t.Errorf("plugin = %s %q, want failed: the drive can't be opened", p.State, p.Message)
+	}
+	if len(e.agent.plugins.driverUsers) != 0 {
+		t.Errorf("driver users = %v after the drive couldn't be read", e.agent.plugins.driverUsers)
+	}
+}
+
+// Each drive's program runs as a user of its own, so one can't reach
+// another drive; a user is reused once its drive is let go of.
+func TestDrives_EachDrivesProgramHasItsOwnUser(t *testing.T) {
+	e := newTestEnv(t)
+	a := e.agent
+	first, err := a.takeDriverUser("1111-AAAA")
+	if err != nil || first != fusedrive.UserBase {
+		t.Fatalf("first = %d, %v", first, err)
+	}
+	if again, _ := a.takeDriverUser("1111-AAAA"); again != first {
+		t.Errorf("the same drive got %d, then %d", first, again)
+	}
+	second, _ := a.takeDriverUser("2222-BBBB")
+	if second == first {
+		t.Errorf("two drives share user %d", first)
+	}
+	a.freeDriverUser("1111-AAAA")
+	if third, _ := a.takeDriverUser("3333-CCCC"); third != first {
+		t.Errorf("the free user %d wasn't reused: got %d", first, third)
+	}
+	// There are only so many.
+	for i := 2; i < fusedrive.Users; i++ { // two are taken
+		if _, err := a.takeDriverUser(fmt.Sprintf("%04X-0000", i)); err != nil {
+			t.Fatalf("drive %d: %v", i, err)
+		}
+	}
+	if _, err := a.takeDriverUser("FFFF-FFFF"); err == nil || !strings.Contains(err.Error(), "unplug one") {
+		t.Errorf("one drive too many: %v", err)
 	}
 }
 

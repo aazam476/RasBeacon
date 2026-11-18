@@ -270,6 +270,20 @@ shares the owner makes on its page. RasBeacon mounts each one at
     plugin that gets a whole drive with `usbDrive` sees the drive itself,
     and doesn't follow links on it any more.)
 
+A drive's filesystem is whatever a computer wrote there, or what someone
+made to break the code that reads it, so an exFAT drive isn't read by the
+kernel but by a program, `exfat-fuse`, confined
+([internal/fusedrive](../internal/fusedrive/fusedrive.go)): it runs as a
+host user of its own (1048512 and up, one per drive), an ordinary user of
+a user namespace of its own, without groups, capabilities or network; it
+opens the drive through a device node made for it and removed right
+after, and serves the mount rbd made (with the options above). A flaw it
+has is that program's, not the Pi's. It ends with rbd, which mounts the
+drive again when it starts the plugins. FAT32, ext4 and btrfs drives are
+read by the kernel (ext4 and btrfs keep their owners for plugins through
+idmapped mounts, which FUSE can't do), and so are NTFS drives: Debian's
+`ntfs-3g` opens `/dev/fuse` and mounts by itself, which only root may.
+
 The plugin restarts when a share is added, changed or removed, so it reads
 `RASBEACON_SHARES` once, when it starts.
 
