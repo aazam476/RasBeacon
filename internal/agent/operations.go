@@ -102,6 +102,19 @@ func (a *Agent) Claim(req api.ClaimRequest) (api.ClaimResponse, error) {
 	if err := config.WriteJSON(a.paths.SecretsFile(), newSecrets, 0o600); err != nil {
 		return api.ClaimResponse{}, err
 	}
+	// HTTPS is on from the start, with a certificate RasBeacon makes
+	// itself (see https.go): over plain HTTP anyone who knows the hotspot's
+	// password could read the admin password and the session on its way.
+	// The setup pages, the login-page notice and the captive portal stay
+	// on plain HTTP, as phones open them in a sheet that refuses such a
+	// certificate (see webserver.Server.UseHTTPS).
+	fingerprint := ""
+	if err := a.generateCertificate(); err != nil {
+		slog.Warn("no HTTPS certificate could be made; the web UI stays on HTTP", "error", err)
+	} else {
+		newCfg.HTTPS.Enabled, newCfg.HTTPS.Uploaded = true, false
+		fingerprint = a.certFingerprint()
+	}
 	newCfg.Claimed = true
 	if err := config.WriteJSON(a.paths.ConfigFile(), newCfg, 0o644); err != nil {
 		return api.ClaimResponse{}, err
@@ -113,10 +126,15 @@ func (a *Agent) Claim(req api.ClaimRequest) (api.ClaimResponse, error) {
 	// Switch networks a little later so this response reaches the phone.
 	a.afterFunc(switchDelay, a.finishClaim)
 
+	scheme := "http"
+	if newCfg.HTTPS.Enabled {
+		scheme = "https"
+	}
 	return api.ClaimResponse{
 		HotspotSSID:     newCfg.Hotspot.SSID,
 		SwitchInSeconds: int(switchDelay.Seconds()),
-		AdminURL:        "http://" + a.lan.Address() + "/",
+		AdminURL:        scheme + "://" + a.lan.Address() + "/",
+		CertFingerprint: fingerprint,
 	}, nil
 }
 
@@ -141,6 +159,9 @@ func (a *Agent) finishClaim() {
 		return
 	}
 	a.background(a.startPlugins)
+	// rbweb serves HTTPS (on since the claim) once it restarts with the
+	// certificate.
+	a.useHTTPSNow()
 	// If hostapd can't run the chosen band, the owner would have neither
 	// the setup network nor the new hotspot. Fall back to what every radio
 	// can run: 2.4 GHz on its default channel.

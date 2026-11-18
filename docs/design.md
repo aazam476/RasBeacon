@@ -590,7 +590,14 @@ tunnel health check plus a portal probe, and the flow repeats.
 **Admin UI:**
 - Reachable only from the client side, `br-lan` (see 4.4), at `http://10.87.0.1` and
   `http://rasbeacon.lan`.
-- **HTTP by default.** Settings → Security → HTTPS offers two choices:
+- **HTTPS by default** (since 0.3.0; HTTP before): setup makes the generated
+  certificate below and turns HTTPS on, and the setup-complete page shows
+  its fingerprint, so the browser's first warning can be checked. On a
+  WPA2 hotspot anyone who knows its password can read other devices'
+  traffic, admin password and session included. Setup, the login-page
+  notice and the captive portal API stay on plain HTTP (phones open them
+  in a sheet that refuses a self-signed certificate). Devices set up
+  before keep their setting. Settings → Security → HTTPS offers two choices:
   - **Generated certificate:** a per-device self-signed certificate for
     `rasbeacon.lan` and `10.87.0.1`. The UI shows its SHA-256 fingerprint so
     you can check it in the browser warning, and a "regenerate" button.
@@ -970,7 +977,7 @@ wins.
 
 - Q1: Apache-2.0.
 - Q2: developed privately, then published as a public repository (see 2.1).
-- Q4: HTTP by default; HTTPS setting with a generated or uploaded certificate.
+- Q4: HTTPS by default since 0.3.0 (HTTP before), with a generated or uploaded certificate.
 - Q6: IPv6 for clients (ULA plus NAT66, section 4.4).
 - Q8: manual upload, plus an opt-in GitHub check.
 - Q9: SSH off by default, with a setting to turn it on.

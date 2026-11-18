@@ -66,6 +66,8 @@ export interface ClaimResponse {
   hotspotSsid: string;
   switchInSeconds: number;
   adminUrl: string;
+  /** The SHA-256 fingerprint of RasBeacon's own HTTPS certificate (absent when HTTPS is off). */
+  certFingerprint?: string;
 }
 
 // --- Status (GET /api/v1/status) -------------------------------------------------------------

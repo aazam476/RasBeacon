@@ -140,6 +140,38 @@ func (a *Agent) UpdateHTTPSSettings(req api.HTTPSSettings) error {
 	return nil
 }
 
+// useHTTPSNow gives rbweb its copy of the certificate (or takes it away)
+// as the HTTPS setting says, and restarts rbweb if that changed it. A
+// problem is a warning on the Status page: the web UI stays on HTTP. The
+// caller holds a.mu.
+func (a *Agent) useHTTPSNow() {
+	changed, err := a.applyHTTPS()
+	if err != nil {
+		slog.Error("HTTPS could not be set up; the web UI stays on HTTP", "error", err)
+		a.warnings = append(a.warnings, "HTTPS could not be set up: "+err.Error())
+		return
+	}
+	if changed {
+		if err := system.ServiceRestart(a.runner, rbwebService); err != nil {
+			slog.Error("could not restart the web server for HTTPS", "error", err)
+		}
+	}
+}
+
+// certFingerprint is the fingerprint of the certificate in use ("" if
+// there is none).
+func (a *Agent) certFingerprint() string {
+	data, err := os.ReadFile(a.tlsCertFile())
+	if err != nil {
+		return ""
+	}
+	info, err := tlscert.Describe(string(data))
+	if err != nil {
+		return ""
+	}
+	return info.Fingerprint
+}
+
 // certCheckEvery is how often the uplink monitor looks whether the
 // generated certificate needs renewing.
 const certCheckEvery = time.Hour

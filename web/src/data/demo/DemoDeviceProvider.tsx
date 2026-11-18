@@ -365,13 +365,27 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
       finishSetup: async (form) => {
         await wait(1200);
         failIfAny(checkSetupForm(form));
+        // HTTPS is on from the start, with a certificate of its own (as rbd does).
+        const fingerprint = randomFingerprint();
         change((d) => {
           d.router.setup = { ...d.router.setup, mode: 'normal', claimed: true };
           Object.assign(d.router.hotspotSettings, { ssid: form.hotspotSsid, band: form.hotspotBand, channel: 0 });
           Object.assign(d.router.status.hotspot, { ssid: form.hotspotSsid, band: form.hotspotBand });
           d.router.hotspotPassword = form.hotspotPassword;
+          Object.assign(d.router.httpsSettings, {
+            enabled: true,
+            uploaded: false,
+            subject: 'CN=RasBeacon 7162',
+            fingerprint,
+            validUntil: '2036-10-06',
+          });
         });
-        return { hotspotSsid: form.hotspotSsid, switchInSeconds: 8, adminUrl: 'http://192.168.8.1/' };
+        return {
+          hotspotSsid: form.hotspotSsid,
+          switchInSeconds: 8,
+          adminUrl: 'https://192.168.8.1/',
+          certFingerprint: fingerprint,
+        };
       },
       logIn: async (password) => {
         await wait(900);

@@ -214,9 +214,12 @@ since their image has one copy of the system.
 - **Public IPv6 through the VPN:** if your WireGuard server routes a public
   IPv6 /64 to RasBeacon, enter it on the **VPN** page (under *Server
   details*); devices then get their own public IPv6 addresses.
-- **HTTPS** for the settings pages: the **HTTPS** page. Your browser warns
+- **HTTPS** for the settings pages, on from setup: your browser warns
   about RasBeacon's own certificate the first time; compare the
-  fingerprint shown on that page.
+  fingerprint the setup page shows (and the **HTTPS** page later), or
+  upload a certificate of your own there. Setup itself and the hotel
+  login help stay on plain HTTP, as phones open them in a sheet that
+  refuses such a certificate.
 - **Plugins:** the **Plugins** page adds features like ad blocking (AdGuard
   Home), file sharing (Samba) or the Argon ONE V2 case's fan. Each runs on
   its own with only the permissions you allow, and reaches the internet

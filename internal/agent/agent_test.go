@@ -417,8 +417,14 @@ func TestClaim_SavesSettingsThenSwitchesToOwnersHotspot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Claim: %v", err)
 	}
-	if resp.HotspotSSID != validClaim.HotspotSSID || resp.AdminURL != "http://10.87.0.1/" {
+	// HTTPS is on from the start: the address is https, and the answer has
+	// the fingerprint of the certificate RasBeacon made, which the
+	// browser's warning should show.
+	if resp.HotspotSSID != validClaim.HotspotSSID || resp.AdminURL != "https://10.87.0.1/" {
 		t.Errorf("unexpected response: %+v", resp)
+	}
+	if want := e.agent.HTTPSSettings().Fingerprint; resp.CertFingerprint == "" || resp.CertFingerprint != want {
+		t.Errorf("fingerprint = %q, want the certificate's %q", resp.CertFingerprint, want)
 	}
 
 	// Saved to disk, with the secrets file private.
@@ -434,11 +440,21 @@ func TestClaim_SavesSettingsThenSwitchesToOwnersHotspot(t *testing.T) {
 		t.Error("the admin password itself must never be stored, only its hash")
 	}
 
-	// The network switch happens later (after the response reaches the phone).
+	// The network switch happens later (after the response reaches the
+	// phone): only then does rbweb start serving HTTPS.
+	if e.runner.ran("systemctl restart rbweb.service") || fileExists(e.paths.RunTLSDir()) {
+		t.Error("rbweb must keep serving the setup page until the switch")
+	}
 	e.timers.runAll()
 
 	if mode := e.agent.SetupState().Mode; mode != api.ModeNormal {
 		t.Fatalf("mode = %q, want normal", mode)
+	}
+	if s := e.agent.HTTPSSettings(); !s.Enabled || s.Uploaded {
+		t.Errorf("HTTPS = %+v, want on with RasBeacon's own certificate", s)
+	}
+	if !fileExists(filepath.Join(e.paths.RunTLSDir(), "cert.pem")) || !e.runner.ran("systemctl restart rbweb.service") {
+		t.Error("rbweb should get the certificate and restart to serve HTTPS")
 	}
 	hostapd := e.readFile(e.paths.HostapdConfig())
 	if !strings.Contains(hostapd, "wpa_passphrase="+validClaim.HotspotPassword) {

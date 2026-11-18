@@ -217,7 +217,18 @@ function SetupComplete({ result, place }: { result: ClaimResponse; place: SetupP
           : 'The setup network is off now, and your hotspot is starting.'}
       </p>
 
-      <Section title="Next">
+      <Section
+        title="Next"
+        footer={
+          result.certFingerprint && (
+            <>
+              The first time, your browser warns that the connection isn’t private: RasBeacon makes its own certificate.
+              It’s RasBeacon’s if the warning shows this fingerprint (SHA-256):{' '}
+              <span className="selectable font-mono wrap-anywhere text-label">{result.certFingerprint}</span>
+            </>
+          )
+        }
+      >
         <ol>
           <Step number={1}>
             Open your Wi-Fi settings and join <strong className="font-semibold">{result.hotspotSsid}</strong> with the

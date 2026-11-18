@@ -86,6 +86,10 @@ type ClaimResponse struct {
 	SwitchInSeconds int `json:"switchInSeconds"`
 	// AdminURL is where to log in after joining the new hotspot.
 	AdminURL string `json:"adminUrl"`
+	// CertFingerprint is the SHA-256 fingerprint of the HTTPS certificate
+	// RasBeacon made (empty when HTTPS is off): browsers warn about it the
+	// first time, and this is what their warning should show.
+	CertFingerprint string `json:"certFingerprint,omitempty"`
 }
 
 // PasswordRequest carries the admin password, for login and for actions

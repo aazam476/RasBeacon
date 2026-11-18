@@ -350,14 +350,7 @@ func (a *Agent) Start() error {
 			slog.Error("could not make a new HTTPS certificate", "error", err)
 		}
 	}
-	if changed, err := a.applyHTTPS(); err != nil {
-		slog.Error("HTTPS could not be set up; the web UI stays on HTTP", "error", err)
-		a.warnings = append(a.warnings, "HTTPS could not be set up: "+err.Error())
-	} else if changed {
-		if err := system.ServiceRestart(a.runner, rbwebService); err != nil {
-			slog.Error("could not restart the web server for HTTPS", "error", err)
-		}
-	}
+	a.useHTTPSNow()
 
 	// 3. Firewall first, so the web UI is only reachable from the hotspot.
 	//    Only then may the kernel forward packets between interfaces.
