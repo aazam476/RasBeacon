@@ -325,7 +325,7 @@ func TestRoutes_EachReachesItsAction(t *testing.T) {
 		{"POST /portal/extend", nil},
 		{"POST /portal/stop", nil},
 		{"POST /portal/check", nil},
-		{"POST /portal/browser/stop", nil},
+		{"POST /portal/browser/stop", map[string]any{"session": ""}},
 		{"POST /plugins/upload", "not a plugin"},
 		{"POST /plugins/cancel", map[string]any{"stagingId": "x"}},
 		{"POST /system/restore/upload", "not a backup"},
