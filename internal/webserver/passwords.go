@@ -46,7 +46,7 @@ func (s *Server) passwordGate(w http.ResponseWriter, r *http.Request) (done func
 		s.passwordMu.Unlock()
 		w.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
 		writeJSON(w, http.StatusTooManyRequests, api.ErrorResponse{
-			Error: "Too many wrong passwords. Please wait " + wait.Round(time.Second).String() + " and try again.",
+			Error: "Too many wrong passwords. Please wait " + waitText(wait) + " and try again.",
 		})
 		return nil, false
 	}
@@ -130,4 +130,21 @@ func (s *Server) handleAdminPassword(w http.ResponseWriter, r *http.Request) {
 		clearRememberCookie(w)
 	}
 	writeRaw(w, status, "application/json", respBody)
+}
+
+// waitText says how long to wait in words: "8 seconds", "3 minutes", "an
+// hour" (rounded up, so the wait is over when the time is).
+func waitText(d time.Duration) string {
+	seconds := int((d + time.Second - 1) / time.Second)
+	switch {
+	case seconds <= 1:
+		return "a second"
+	case seconds < 60:
+		return strconv.Itoa(seconds) + " seconds"
+	case seconds <= 60:
+		return "a minute"
+	case seconds < 3600:
+		return strconv.Itoa((seconds+59)/60) + " minutes"
+	}
+	return "an hour"
 }

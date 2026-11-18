@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -274,21 +275,91 @@ func TestUnknownAPIRouteIsJSON404(t *testing.T) {
 	}
 }
 
-func TestLoginLimiter_GlobalLockoutAndRecovery(t *testing.T) {
+func TestLoginLimiter_EachDeviceWaitsLongerUpToAnHour(t *testing.T) {
 	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 	l := newLoginLimiter()
 	l.now = func() time.Time { return now }
 
-	// 20 failures from 20 different devices trigger the global lockout.
-	for i := 0; i < globalFailureLimit; i++ {
-		l.recordFailure("10.87.0." + string(rune('a'+i)))
+	// Five wrong passwords are free; then the waits double: 2 s, 4 s, ...
+	const ip = "10.87.0.50"
+	for i := 0; i < freeAttempts; i++ {
+		l.recordFailure(ip)
+		if ok, _ := l.allow(ip); !ok {
+			t.Fatalf("wrong password %d: already waiting", i+1)
+		}
 	}
-	if ok, _ := l.allow("10.87.0.200"); ok {
-		t.Error("a new device should be blocked during the global lockout")
+	var waits []time.Duration
+	for range 14 {
+		l.recordFailure(ip)
+		_, wait := l.allow(ip)
+		waits = append(waits, wait)
+		now = now.Add(wait) // it waits, then tries again
 	}
-	now = now.Add(globalLockout + time.Second)
-	if ok, _ := l.allow("10.87.0.200"); !ok {
-		t.Error("logins should work again after the lockout")
+	want := []time.Duration{2 * time.Second, 4 * time.Second, 8 * time.Second, 16 * time.Second}
+	for i, w := range want {
+		if waits[i] != w {
+			t.Errorf("wait %d = %v, want %v (all: %v)", i+1, waits[i], w, waits)
+		}
+	}
+	// Up to an hour, never more.
+	if last := waits[len(waits)-1]; last != time.Hour || waits[10] != 2048*time.Second || waits[11] != time.Hour {
+		t.Errorf("waits = %v, want them to stop at an hour", waits)
+	}
+	if ok, _ := l.allow(ip); !ok {
+		t.Error("after its wait, it may try again")
+	}
+
+	// Nothing across devices: another device isn't held up, whatever the
+	// others did.
+	for i := range 200 {
+		l.recordFailure("10.87.0." + strconv.Itoa(i))
+		l.recordFailure("10.87.0." + strconv.Itoa(i))
+	}
+	if ok, _ := l.allow("10.87.0.201"); !ok {
+		t.Error("a device that guessed nothing must never wait")
+	}
+
+	// A correct password, or a day without a wrong one, starts afresh.
+	l.recordSuccess(ip)
+	l.recordFailure(ip)
+	if ok, _ := l.allow(ip); !ok {
+		t.Error("after a correct password, the count starts again")
+	}
+	other := "10.87.0.60"
+	for range freeAttempts + 1 {
+		l.recordFailure(other)
+	}
+	now = now.Add(forgetAfter)
+	l.recordFailure(other)
+	if ok, _ := l.allow(other); !ok {
+		t.Error("a day later, a device's old wrong passwords are forgotten")
+	}
+}
+
+func TestWaitText(t *testing.T) {
+	for d, want := range map[time.Duration]string{
+		500 * time.Millisecond: "a second", 2 * time.Second: "2 seconds", 59*time.Second + time.Millisecond: "a minute",
+		61 * time.Second: "2 minutes", 32 * time.Minute: "32 minutes", time.Hour: "an hour",
+	} {
+		if got := waitText(d); got != want {
+			t.Errorf("waitText(%v) = %q, want %q", d, got, want)
+		}
+	}
+}
+
+// A device that changes its address all the time can't make the list of
+// counts grow without end: the forgotten ones are cleared out.
+func TestLoginLimiter_ForgetsOldDevices(t *testing.T) {
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	l := newLoginLimiter()
+	l.now = func() time.Time { return now }
+	for i := range maxTracked {
+		l.recordFailure("fd00::" + strconv.FormatInt(int64(i), 16))
+	}
+	now = now.Add(forgetAfter)
+	l.recordFailure("fd00::ffff")
+	if len(l.devices) != 1 {
+		t.Errorf("%d devices kept, want only the new one", len(l.devices))
 	}
 }
 

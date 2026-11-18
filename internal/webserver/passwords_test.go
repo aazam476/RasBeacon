@@ -110,8 +110,8 @@ func TestAdminPassword_LogsOutEveryOtherBrowser(t *testing.T) {
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("wrong current password = %d", rec.Code)
 	}
-	if s.limiter.failures["10.87.0.23"] != 1 {
-		t.Errorf("failures = %d, want the wrong password counted", s.limiter.failures["10.87.0.23"])
+	if s.limiter.devices["10.87.0.23"].count != 1 {
+		t.Errorf("failures = %d, want the wrong password counted", s.limiter.devices["10.87.0.23"].count)
 	}
 
 	rec = request(s, "POST", "http://10.87.0.1/api/v1/system/admin-password",
@@ -183,8 +183,8 @@ func TestPasswordGate_NothingIsCountedWhenRBDDoesntAnswer(t *testing.T) {
 			t.Errorf("%s without rbd = %d, want 502", path, rec.Code)
 		}
 	}
-	if len(s.limiter.failures) != 0 {
-		t.Errorf("failures = %v, want none counted", s.limiter.failures)
+	if len(s.limiter.devices) != 0 {
+		t.Errorf("failures = %v, want none counted", s.limiter.devices)
 	}
 	// The gate is free again.
 	if !s.passwordMu.TryLock() {

@@ -613,8 +613,9 @@ tunnel health check plus a portal probe, and the flow repeats.
   automatically 30 days before they run out.
 - Sessions: HttpOnly, SameSite=Strict cookies with CSRF tokens, 12 h idle
   timeout.
-- Login back-off: exponential per client IP, with a global lockout of 5 min
-  after 20 failures.
+- Login back-off: exponential per client IP, after 5 free tries, up to an
+  hour. No lockout across devices: one would let any device on the hotspot
+  keep the owner out (until 0.3.0: 5 min after 20 failures from any mix).
 
 **Factory reset:**
 1. In the UI (asks for the password again).

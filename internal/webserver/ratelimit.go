@@ -2,14 +2,17 @@ package webserver
 
 // Login rate limiting: slows down anyone trying to guess the admin password.
 //
-// Rules:
-//   - Per device (IP address): the first 5 wrong passwords are free. After
-//     that, each attempt must wait twice as long as the previous one
-//     (2 s, 4 s, 8 s, ... up to 5 minutes).
-//   - Overall: after 20 wrong passwords within 5 minutes from any mix of
-//     devices, all logins are paused for 5 minutes.
+// Rules, per device (IP address):
+//   - The first 5 wrong passwords are free.
+//   - After that, each attempt must wait twice as long as the previous one:
+//     2 s, 4 s, 8 s, ... up to an hour.
+//   - A correct password resets the count; so does a day without a wrong
+//     one.
 //
-// A correct password resets the counter for that device.
+// There is deliberately no limit across devices: one would let any device
+// on the hotspot keep the owner out by failing on purpose. Guessing from
+// many addresses at once is still slow: each check takes about a third of
+// a second on purpose, and checks run one at a time (see passwords.go).
 
 import (
 	"sync"
@@ -18,38 +21,34 @@ import (
 
 // The rules above, as numbers.
 const (
-	freeAttempts        = 5               // wrong passwords per device before it must wait
-	maxBackoff          = 5 * time.Minute // the longest wait for one device
-	globalFailureLimit  = 20              // wrong passwords from all devices together...
-	globalFailureWindow = 5 * time.Minute // ...within this long...
-	globalLockout       = 5 * time.Minute // ...pause all logins for this long
+	freeAttempts = 5              // wrong passwords per device before it must wait
+	maxBackoff   = time.Hour      // the longest wait for one device
+	forgetAfter  = 24 * time.Hour // a device's count is forgotten this long after its last wrong password
+	// maxTracked is how many devices' counts are kept before the forgotten
+	// ones are cleared out, so a device changing its address all the time
+	// can't make the list grow without end.
+	maxTracked = 1024
 )
 
+// deviceFailures is one device's wrong passwords: how many in a row, when
+// the last one was, and when it may try again.
+type deviceFailures struct {
+	count       int
+	last, until time.Time
+}
+
 // loginLimiter slows down password guessing: it counts failed logins per
-// address and for everyone together, and refuses logins for a while after
-// too many.
+// address and refuses logins from that address for a while after too
+// many.
 type loginLimiter struct {
-	mu  sync.Mutex
-	now func() time.Time
-
-	// Per IP address: how many failures in a row, and when the next attempt
-	// is allowed.
-	failures    map[string]int
-	nextAllowed map[string]time.Time
-
-	// Across all addresses: times of recent failures, and the end of a
-	// global lockout (zero if none).
-	recentFailures []time.Time
-	lockedUntil    time.Time
+	mu      sync.Mutex
+	now     func() time.Time
+	devices map[string]deviceFailures
 }
 
 // newLoginLimiter makes an empty limiter on the real clock.
 func newLoginLimiter() *loginLimiter {
-	return &loginLimiter{
-		now:         time.Now,
-		failures:    map[string]int{},
-		nextAllowed: map[string]time.Time{},
-	}
+	return &loginLimiter{now: time.Now, devices: map[string]deviceFailures{}}
 }
 
 // allow reports whether ip may try a password now. If not, it also returns
@@ -58,12 +57,8 @@ func (l *loginLimiter) allow(ip string) (bool, time.Duration) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	now := l.now()
-
-	if now.Before(l.lockedUntil) {
-		return false, l.lockedUntil.Sub(now)
-	}
-	if next, ok := l.nextAllowed[ip]; ok && now.Before(next) {
-		return false, next.Sub(now)
+	if d, ok := l.devices[ip]; ok && now.Before(d.until) {
+		return false, d.until.Sub(now)
 	}
 	return true, 0
 }
@@ -73,29 +68,26 @@ func (l *loginLimiter) recordFailure(ip string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	now := l.now()
-
-	// Per-IP backoff.
-	l.failures[ip]++
-	if extra := l.failures[ip] - freeAttempts; extra > 0 {
-		backoff := time.Second << extra // 2 s, 4 s, 8 s, ...
-		if backoff > maxBackoff || backoff <= 0 {
-			backoff = maxBackoff
-		}
-		l.nextAllowed[ip] = now.Add(backoff)
+	d := l.devices[ip]
+	if now.Sub(d.last) >= forgetAfter {
+		d = deviceFailures{}
 	}
-
-	// Global limit: keep only failures from the last window, then add this one.
-	cutoff := now.Add(-globalFailureWindow)
-	kept := l.recentFailures[:0]
-	for _, t := range l.recentFailures {
-		if t.After(cutoff) {
-			kept = append(kept, t)
+	d.count++
+	d.last = now
+	if extra := d.count - freeAttempts; extra > 0 {
+		backoff := maxBackoff
+		if extra < 32 {
+			backoff = min(time.Second<<extra, maxBackoff) // 2 s, 4 s, 8 s, ...
 		}
+		d.until = now.Add(backoff)
 	}
-	l.recentFailures = append(kept, now)
-	if len(l.recentFailures) >= globalFailureLimit {
-		l.lockedUntil = now.Add(globalLockout)
-		l.recentFailures = nil
+	l.devices[ip] = d
+	if len(l.devices) > maxTracked {
+		for other, f := range l.devices {
+			if now.Sub(f.last) >= forgetAfter {
+				delete(l.devices, other)
+			}
+		}
 	}
 }
 
@@ -103,6 +95,5 @@ func (l *loginLimiter) recordFailure(ip string) {
 func (l *loginLimiter) recordSuccess(ip string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	delete(l.failures, ip)
-	delete(l.nextAllowed, ip)
+	delete(l.devices, ip)
 }

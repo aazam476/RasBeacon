@@ -28,7 +28,7 @@ func TestHosts_TheAPIAnswersOnlyUnderRasBeaconsNames(t *testing.T) {
 	if rec := request(s, "POST", "http://evil.example/api/v1/session", `{"password":"guess"}`, map[string]string{"Content-Type": "application/json"}, nil); rec.Code != http.StatusMisdirectedRequest {
 		t.Errorf("login under another name = %d", rec.Code)
 	}
-	if len(s.limiter.failures) != 0 {
+	if len(s.limiter.devices) != 0 {
 		t.Error("nothing should be counted")
 	}
 }

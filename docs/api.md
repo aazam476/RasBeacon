@@ -35,9 +35,10 @@ hotspot**, never from the upstream network.
    (`remembered-logins.json` on the data partition). Logging out forgets it;
    a factory reset forgets all of them.
 5. **Rate limiting:** after 5 wrong passwords from one device, each further
-   attempt waits twice as long (2 s, 4 s, … up to 5 min). After 20 wrong
-   passwords within 5 minutes from any mix of devices, all logins pause for
-   5 minutes. A limited request gets 429 with a `Retry-After` header.
+   attempt waits twice as long (2 s, 4 s, … up to an hour); a correct
+   password, or a day without a wrong one, starts the count again. There is
+   no limit across devices, so no device can keep the others out. A limited
+   request gets 429 with a `Retry-After` header.
 
 *Planned (before the v2 mobile app):* token login for apps, sent as
 `Authorization: Bearer <token>`, alongside cookies.
