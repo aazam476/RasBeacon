@@ -263,7 +263,8 @@ Updates use the two copies ("slots", A and B) of the system on the SD card
    checks. Its manifest
    is signed with the release key (Ed25519); the public key is built into
    the image. Nothing is written until the signature and board check out,
-   and until the version does: never older than the one running, and the
+   and until the version does: never older than the one running (a beta
+   comes before its release), never a test build over a release, and the
    running one must be at least the manifest's `minFromVersion` (the
    oldest version that can install it; see docs/releasing.md). Too old a
    RasBeacon refuses the file and the System page shows the way instead: a

@@ -23,6 +23,14 @@ pre-release*): devices' update check reads the newest 30 releases and
 leaves pre-releases (and drafts) out, so nobody is offered a test version by
 surprise.
 
+Versions are ordered as Semantic Versioning orders them: a label comes
+before its release (`v0.2.0-beta.1`, then `v0.2.0-beta.2`, then `v0.2.0`),
+so a device running a beta is offered the release, and the release can't
+be replaced by its beta. A minimum (`minFromVersion`, a plugin's
+`minRasBeacon`) counts only the numbers: a beta of 0.2.0 meets "0.2.0".
+A test build (`dev-394ecff`, from CI) has no number, so it installs only on
+a device running a test build.
+
 Plugins follow along: the plugins repository's release tags start with the
 RasBeacon version they're made for (`v0.1.0`, `v0.1.1`, … for RasBeacon
 0.1), and a plugin that needs a newer RasBeacon says so in its manifest

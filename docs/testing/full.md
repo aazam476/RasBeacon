@@ -596,9 +596,11 @@ install updates (on the Pi 3/Zero 2 W image, check instead that System says
    On a device running an older release, **Check now** sends one
    notification about the new version, and only once.
 6. **Versions (released images only):** test builds are called `dev-…` and
-   skip the version checks, so do this on a device flashed with a release
+   install anything, so do this on a device flashed with a release
    (like `v0.1.0`). Install an **older** release's `.rbupdate`. **Expect:**
-   refused (*older than the … running*), no restart. To see the fresh-install
+   refused (*older than the … running*), no restart. Install a test build's
+   `.rbupdate` (from a CI run). **Expect:** refused (*only a RasBeacon
+   running a test build installs those*), no restart. To see the fresh-install
    steps, open the demo (`npm run demo`) state *New version needs a fresh
    install*: **Back up settings** opens the backup sheet, **Release page**
    opens the release.

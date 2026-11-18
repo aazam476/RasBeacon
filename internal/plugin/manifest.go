@@ -841,7 +841,7 @@ func SupportedBy(min, running string) bool {
 	if min == "" {
 		return true
 	}
-	result, ok := version.Compare(running, min)
+	result, ok := version.CompareNumbers(running, min)
 	return !ok || result >= 0
 }
 

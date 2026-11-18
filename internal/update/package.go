@@ -178,18 +178,25 @@ func (e *NeedsReflashError) Error() string {
 
 // CheckVersion reports whether the version running may install an update
 // with manifest m. It refuses an older version (a downgrade could meet
-// settings it doesn't understand), and a version that needs a newer
-// RasBeacon to install it (a *NeedsReflashError). The same version again
-// is allowed, to repair a damaged system copy. Development builds ("dev")
-// have no number to compare, so they install anything.
+// settings it doesn't understand; a beta is older than its release), a
+// test build over a release, and a version that needs a newer RasBeacon to
+// install it (a *NeedsReflashError). The same version again is allowed, to
+// repair a damaged system copy. A development build running ("dev") has
+// no number to compare, so it installs anything.
 func CheckVersion(m Manifest, running string) error {
 	if result, ok := version.Compare(m.Version, running); ok && result < 0 {
 		return fmt.Errorf("this update is %s, which is older than the %s running, and RasBeacon doesn't go back to older versions", m.Version, running)
 	}
+	// A test build ("dev-394ecff") has no number either, so nothing would
+	// show it is older than a release: it could be any commit, an old one
+	// with known flaws. Only a RasBeacon running a test build takes one.
+	if len(version.Numbers(m.Version)) == 0 && len(version.Numbers(running)) > 0 {
+		return fmt.Errorf("this update is a test build (%s), and only a RasBeacon running a test build installs those", m.Version)
+	}
 	if m.MinFromVersion == "" {
 		return nil
 	}
-	if result, ok := version.Compare(running, m.MinFromVersion); ok && result < 0 {
+	if result, ok := version.CompareNumbers(running, m.MinFromVersion); ok && result < 0 {
 		return &NeedsReflashError{Version: m.Version, MinFromVersion: m.MinFromVersion, Running: running}
 	}
 	return nil
@@ -220,7 +227,7 @@ func Pack(out io.Writer, bundle io.ReadSeeker, board, newVersion, minFrom string
 		}
 		// A version that can't install itself would be a mistake. (A
 		// development build has no number to compare.)
-		if result, ok := version.Compare(minFrom, newVersion); ok && result > 0 {
+		if result, ok := version.CompareNumbers(minFrom, newVersion); ok && result > 0 {
 			return fmt.Errorf("the oldest version to update from (%s) must be no newer than %s", minFrom, newVersion)
 		}
 	}
