@@ -1,0 +1,39 @@
+# Dependabot proposes updates as pull requests once a week: the Go modules,
+# the npm packages of the web UI and of the end-to-end test, and the
+# Actions the workflows use (pinned to commits: Dependabot moves the commit
+# and the version in its comment together). Small updates come grouped, one
+# pull request per kind. A version is proposed a week after it came out at
+# the earliest, as a package taken over by someone else is usually found
+# and pulled within days. (Security updates, a setting under Settings →
+# Code security, don't wait.)
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      go-modules:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directories: [/web, /test/e2e]
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      npm-packages:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        update-types: [minor, patch]

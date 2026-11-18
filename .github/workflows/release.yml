@@ -63,11 +63,11 @@ jobs:
           - { board: rpi64, name: rasbeacon, title: Pi 4 and Pi 5 }
           - { board: rpi3, name: rasbeacon-pi3-zero2w, title: Pi Zero 2 W and Pi 3 }
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: go.mod
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
 
@@ -117,7 +117,7 @@ jobs:
           RASBEACON_KEEP_UPDATE_BUNDLE: "1"
         run: image/build.sh "$BOARD" "$VERSION"
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ matrix.target.name }}-${{ steps.version.outputs.version }}
           # Everything but the update bundle, which is not for the release.
@@ -129,7 +129,7 @@ jobs:
 
       # The checksums by themselves, for the sign job to sign into
       # SHA256SUMS (a few lines, where the images are gigabytes).
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: checksums-${{ matrix.target.name }}-${{ steps.version.outputs.version }}
           path: build/image/*.sha256
@@ -138,7 +138,7 @@ jobs:
 
       # The update bundle goes to the sign job by itself (its name doesn't
       # start with "rasbeacon-", so publish leaves it out).
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: matrix.target.board == 'rpi64'
         with:
           name: update-bundle-${{ steps.version.outputs.version }}
@@ -164,13 +164,13 @@ jobs:
           else
             echo "No signing key: no update file is made."
           fi
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: steps.key.outputs.present == 'true'
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         if: steps.key.outputs.present == 'true'
         with:
           go-version-file: go.mod
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         if: steps.key.outputs.present == 'true'
         with:
           name: update-bundle-${{ needs.image.outputs.version }}
@@ -190,7 +190,7 @@ jobs:
       # against the key in the repository (README.md, "Checking your
       # download"). rbsign signs nothing but checksum lines, as an OpenSSH
       # file signature, which can't pass for a signed update.
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         if: steps.key.outputs.present == 'true'
         with:
           pattern: checksums-*-${{ needs.image.outputs.version }}
@@ -206,7 +206,7 @@ jobs:
           go run ./cmd/rbsign sign-checksums -in dist/SHA256SUMS \
             -trusted image/layer/rasbeacon.d/customize.overlay/usr/lib/rasbeacon/update-keys
           cat dist/SHA256SUMS
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: steps.key.outputs.present == 'true'
         with:
           name: rasbeacon-${{ needs.image.outputs.version }}-update
@@ -227,7 +227,7 @@ jobs:
     steps:
       # The two images' files, and the signed update file and SHA256SUMS
       # (not the unsigned update bundle, whose artifact has another name).
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: rasbeacon-*
           path: dist
@@ -244,7 +244,7 @@ jobs:
               exit 1
             fi
           done
-      - uses: softprops/action-gh-release@v3
+      - uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           # A release must have every file, the update file above all:
           # without it, no RasBeacon could update to this release.

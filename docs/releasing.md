@@ -165,9 +165,11 @@ still holds; a version that can install `v2.0.0` usually can install
 
    The programs are built with the Go version in `go.mod` and carry its
    standard library, so `go.mod` should name the newest Go patch release,
-   and the modules their newest versions. `go run
-   golang.org/x/vuln/cmd/govulncheck@latest ./...` lists the known
-   vulnerabilities in what the programs really use: it should find none.
+   and the modules their newest versions. The **Known vulnerabilities**
+   workflow (`.github/workflows/vulnerabilities.yml`, on every push and
+   daily) must be green too: govulncheck for the Go standard library and
+   modules the programs really call, and `npm audit` for the web UI's
+   packages. Dependabot proposes the updates (`.github/dependabot.yml`).
 2. Update `docs/compatibility.md` with any new hardware results.
 3. Either tag and push: `git tag -a v0.2.0 -m "RasBeacon v0.2.0" && git push origin v0.2.0`
    (a test version: `v0.2.0-beta.1`), which makes a draft release; or open

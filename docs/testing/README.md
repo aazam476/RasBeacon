@@ -69,6 +69,14 @@ owner can change it):
 The full-system test joins the list once it has passed about 20 runs in a
 row.
 
+The **Known vulnerabilities** workflow (`vulnerabilities.yml`) runs on every
+push and once a day: govulncheck for the Go standard library and modules,
+`npm audit` for the web UI's packages (moderate or worse fails) and for the
+tools that build and test it (critical fails). It can turn red without a
+change, when a vulnerability is published: update the Go version in
+`go.mod` or the package (Dependabot proposes it), so it isn't a required
+check.
+
 ## Back end
 
 ### Go unit tests

@@ -1,0 +1,56 @@
+# Looks for known vulnerabilities in what RasBeacon is made of, on every
+# push and once a day (new ones are published for code that didn't change
+# too):
+# - govulncheck: the Go standard library (the Go version in go.mod) and the
+#   Go modules, as far as the programs really call them;
+# - npm audit: the web UI's packages, which ship in the image (a known
+#   vulnerability of moderate severity or more fails), and the tools that
+#   build and test it (only critical ones fail, like a package version
+#   known to be malicious: the tools never read untrusted input, and some
+#   of their advisories have no fixed version).
+# It reads the lock files only: nothing is installed and nothing runs.
+# Dependabot (.github/dependabot.yml) proposes the updates.
+#
+# Pushes and pull requests from forks only, as in ci.yml.
+name: Known vulnerabilities
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "47 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    name: Go (govulncheck)
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.10.0 ./...
+
+  npm:
+    name: npm packages (npm audit)
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: The web UI's packages (in the image)
+        working-directory: web
+        run: npm audit --omit=dev --audit-level=moderate
+      - name: The tools that build the web UI
+        working-directory: web
+        run: npm audit --audit-level=critical
+      - name: The end-to-end test's tools
+        working-directory: test/e2e
+        run: npm audit --audit-level=critical

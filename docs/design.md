@@ -773,7 +773,9 @@ wins.
   behavior (e.g. `TestKillSwitchOn_TunnelDown_DropsClientDNS`).
 - **Error messages say what went wrong and what to try next.**
 - **Formatters and linters in CI:** `gofmt`, `go vet` and `staticcheck` for Go;
-  the matching formatter and linter for the web UI.
+  the matching formatter and linter for the web UI. Known vulnerabilities
+  (govulncheck, `npm audit`) are looked for on every push and daily, and
+  Dependabot proposes updates; the workflows' Actions are pinned to commits.
 - **Docs for newcomers:** `docs/architecture.md` (how the pieces fit, with
   diagrams), `docs/glossary.md`, and `CONTRIBUTING.md` (how to build, run the
   simulated network and add a test).
