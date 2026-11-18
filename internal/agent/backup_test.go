@@ -294,6 +294,77 @@ func TestBackup_RestoreRefusesUnsafePluginSettings(t *testing.T) {
 	}
 }
 
+// A backup's settings are checked as their pages would check them, before
+// anything is restored: a backup may have been changed since it was made,
+// and its settings go into hostapd's, dnsmasq's and the firewall's files.
+func TestBackup_RestoreRefusesSettingsItsPagesWouldRefuse(t *testing.T) {
+	const unusableHash = "$argon2id$v=19$m=32768,t=0,p=2$c2FsdHNhbHRzYWx0c2FsdA$aGFzaGhhc2hoYXNoaGFzaGhhc2hoYXNoaGFzaGhhc2g"
+	const device = "aa:bb:cc:dd:ee:01"
+	cases := map[string]struct {
+		change func(c *config.Config, s *config.Secrets)
+		want   string
+	}{
+		"a country code with a line break": {func(c *config.Config, _ *config.Secrets) {
+			c.Hotspot.Country = "US\nctrl_interface=/tmp"
+		}, "hotspot.country"},
+		"a name RasBeacon can't have": {func(c *config.Config, _ *config.Secrets) {
+			c.Hostname = "two words"
+		}, "RasBeacon's name"},
+		"a device name with a line break": {func(c *config.Config, _ *config.Secrets) {
+			c.Clients.Names = map[string]string{device: "laptop\nevil"}
+		}, "device name"},
+		"a paused device that isn't a MAC address": {func(c *config.Config, _ *config.Secrets) {
+			c.Clients.Paused = map[string]time.Time{`aa:bb" accept`: time.Now()}
+		}, "paused device"},
+		"a fixed address that isn't an address": {func(c *config.Config, _ *config.Secrets) {
+			c.Clients.FixedAddresses = map[string]string{device: "10.87.0.5,set:other"}
+		}, "fixed address"},
+		"a job for a radio that doesn't exist": {func(c *config.Config, _ *config.Secrets) {
+			c.Radios.Roles = map[string]string{device: "everything"}
+		}, "job for a radio"},
+		"a VPN profile in use that isn't there": {func(c *config.Config, _ *config.Secrets) {
+			c.VPN.Active = "gone.conf"
+		}, "VPN profile in use"},
+		"a hotspot password Wi-Fi doesn't allow": {func(_ *config.Config, s *config.Secrets) {
+			s.HotspotPassword = "short"
+		}, "hotspot's password"},
+		"an admin password hash argon2 can't use": {func(_ *config.Config, s *config.Secrets) {
+			s.AdminPasswordHash = unusableHash
+		}, "admin password"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			e := newClaimedEnv(t, false)
+			// The backup is made from settings that were changed behind
+			// the pages' back.
+			e.agent.mu.Lock()
+			saved, savedSecrets := e.agent.cfg.Clone(), e.agent.secrets.Clone()
+			tc.change(&e.agent.cfg, &e.agent.secrets)
+			e.agent.mu.Unlock()
+			file, err := e.backUp(api.BackupRequest{Password: "backup-pass-1", Plugins: "settings"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			e.agent.mu.Lock()
+			e.agent.cfg, e.agent.secrets = saved, savedSecrets
+			e.agent.mu.Unlock()
+
+			before := e.readFile(e.paths.ConfigFile())
+			if err := e.agent.StageRestore(bytes.NewReader(file)); err != nil {
+				t.Fatal(err)
+			}
+			_, err = e.agent.Restore(api.RestoreRequest{Password: "backup-pass-1"})
+			var verr *config.ValidationError
+			if !errors.As(err, &verr) || verr.Field != "file" || !strings.Contains(verr.Message, tc.want) {
+				t.Fatalf("restored with %s: %v", name, err)
+			}
+			if e.readFile(e.paths.ConfigFile()) != before {
+				t.Error("a refused backup must change nothing")
+			}
+		})
+	}
+}
+
 func TestBackup_CopySparseKeepsTheData(t *testing.T) {
 	dir := t.TempDir()
 	src, dst := filepath.Join(dir, "data.img"), filepath.Join(dir, "copy.img")

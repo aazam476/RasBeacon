@@ -425,6 +425,13 @@ func (a *Agent) Restore(req api.RestoreRequest) (api.RestoreResult, error) {
 	if err := config.ReadJSON(filepath.Join(staging, "secrets.json"), &secrets); err != nil || secrets.AdminPasswordHash == "" || !cfg.Claimed {
 		return api.RestoreResult{}, &config.ValidationError{Field: "file", Message: "The backup's settings are incomplete."}
 	}
+	// Every setting is checked as its page would (see restorecheck.go), as
+	// rbd will read it: with the defaults of a newer version filled in.
+	check := cfg.Clone()
+	check.FillDefaults()
+	if err := a.checkRestoredSettings(check, secrets, staging); err != nil {
+		return api.RestoreResult{}, &config.ValidationError{Field: "file", Message: "This backup's settings can't be restored: " + err.Error() + "."}
+	}
 	// Backups made before RasBeacon 0.2 without plugins say nothing about
 	// them: the installed ones stay. Every other backup brings its plugins
 	// (perhaps none) in place of the installed ones.
