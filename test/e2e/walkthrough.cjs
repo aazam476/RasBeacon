@@ -254,6 +254,24 @@ async function main() {
       await phone.getByText("Grand Hotel Wi-Fi", { exact: true }).waitFor({ timeout: 20000 });
       if (SCREENSHOT_DIR) await phone.screenshot({ path: `${SCREENSHOT_DIR}/zero-leak-login.png` });
 
+      // Another device on the hotspot can't watch it or type into it: the
+      // page, and what is typed there, are the phone's.
+      const laptop = await browser.newPage();
+      await laptop.goto(BASE_URL + "/#/portal");
+      const peek = await laptop.evaluate(async () => {
+        const frame = await fetch("/api/v1/portal/browser/frame?after=0");
+        const typing = await fetch("/api/v1/portal/browser/input", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "type", text: "x" }),
+        });
+        return [frame.status, typing.status];
+      });
+      if (peek.some((status) => status < 400 || status >= 500)) {
+        throw new Error(`another device reached the login browser (statuses ${peek})`);
+      }
+      await laptop.close();
+
       // Tap the room field on the picture (it sits at 24..324 x 120..160 on
       // the 390-pixel-wide page), type the room number, press Enter.
       const picture = phone.getByRole("img", { name: /login page/ });

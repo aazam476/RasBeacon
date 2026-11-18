@@ -530,6 +530,15 @@ type PortalStatus struct {
 type PortalBrowserStart struct {
 	Width  int `json:"width"`
 	Height int `json:"height"`
+	// Session is the secret of the device that opens it, which rbweb keeps
+	// in that browser's cookie: only that device may see the page and use
+	// it (see agent/portalbrowser.go). rbweb fills it in.
+	Session string `json:"session"`
+}
+
+// PortalBrowserStop closes the login browser of a session.
+type PortalBrowserStop struct {
+	Session string `json:"session"`
 }
 
 // PortalBrowserFrame is a picture of the login page in RasBeacon's own
@@ -561,6 +570,9 @@ type PortalBrowserInput struct {
 	Text   string  `json:"text,omitempty"`
 	Key    string  `json:"key,omitempty"`
 	URL    string  `json:"url,omitempty"`
+	// Session is the secret of the device that opened the browser (see
+	// PortalBrowserStart). rbweb fills it in.
+	Session string `json:"session"`
 }
 
 // VPNStatus describes the WireGuard tunnel.

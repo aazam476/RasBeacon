@@ -14,11 +14,17 @@ package agent
 //
 // Like login mode, it is available to any device on your own hotspot
 // (not guests) without logging in to RasBeacon, because it starts from the
-// notice page that opens in a phone's "Log in to network" sheet.
+// notice page that opens in a phone's "Log in to network" sheet. But only
+// the device that opened it may see the page and use it: what is typed
+// there (a room number, a name, a card) is that device's. rbweb gives it a
+// secret in a cookie (api.PortalBrowserStart.Session); another device may
+// open the browser for itself once nobody has used it for browserTakeover.
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"os"
@@ -40,6 +46,10 @@ const (
 	BrowserIdleTimeout = 5 * time.Minute
 	// BrowserMaxTime closes the browser after this long in any case.
 	BrowserMaxTime = 30 * time.Minute
+	// browserTakeover is how long the login browser must have gone unused
+	// (no picture asked for, no tap or typing) before another device may
+	// open it for itself.
+	browserTakeover = 20 * time.Second
 	// browserUser is the unprivileged user the browser runs as.
 	browserUser = "rbbrowser"
 )
@@ -91,17 +101,43 @@ func startRealBrowser(opts browser.Options) (loginBrowser, error) {
 	return s, nil
 }
 
-// startChromium starts Chromium. If its sandbox can't work on this system
-// (it needs user namespaces), it starts again without it: the browser
-// still runs as its own user, behind the firewall rule.
+// startChromium starts Chromium, with its sandbox. If the sandbox can't
+// work on this system (it needs user namespaces), the browser doesn't
+// start: it shows pages from the network it logs in to, and without the
+// sandbox a flaw in Chromium would reach rbbrowser's files and programs
+// directly. (The simulated device turns the sandbox off itself, as it runs
+// as root; see SetBrowser.)
 func startChromium(opts browser.Options) (*browser.Session, error) {
 	s, err := browser.Start(opts)
 	if err != nil && !opts.NoSandbox && strings.Contains(strings.ToLower(err.Error()), "sandbox") {
-		slog.Warn("Chromium's sandbox is not available here; starting without it", "error", err)
-		opts.NoSandbox = true
-		s, err = browser.Start(opts)
+		return nil, fmt.Errorf("Chromium's sandbox can't start here, and RasBeacon doesn't run it without: %w", err)
 	}
 	return s, err
+}
+
+// errBrowserInUse refuses to open the login browser for a device while
+// another one uses it.
+var errBrowserInUse = &config.ValidationError{Field: "session", Message: "Another device is using the login browser. It can be opened here once it has been left alone for 20 seconds."}
+
+// errNotYourBrowser refuses to show or work the login browser for a device
+// that didn't open it.
+var errNotYourBrowser = &config.ValidationError{Field: "session", Message: "The login browser was opened on another device."}
+
+// validBrowserSession reports whether s looks like rbweb's secret for a
+// device: 64 hex digits.
+func validBrowserSession(s string) bool {
+	if len(s) != 64 {
+		return false
+	}
+	_, err := hex.DecodeString(s)
+	return err == nil
+}
+
+// ownsBrowser reports whether session is the secret of the device that
+// opened the login browser. The caller holds a.mu.
+func (a *Agent) ownsBrowser(session string) bool {
+	return a.portal.browser != nil && a.portal.browserSession != "" &&
+		subtle.ConstantTimeCompare([]byte(session), []byte(a.portal.browserSession)) == 1
 }
 
 // SetBrowser changes how the login browser is started (for the simulated
@@ -152,10 +188,18 @@ func (a *Agent) canBrowse() bool {
 // StartPortalBrowser opens the network's login page in RasBeacon's own
 // browser, sized for the phone screen in req.
 func (a *Agent) StartPortalBrowser(req api.PortalBrowserStart) error {
+	if !validBrowserSession(req.Session) {
+		return &config.ValidationError{Field: "session", Message: "This browser has no session for the login browser."}
+	}
 	a.mu.Lock()
 	if !a.canBrowse() || a.portal.browserStarting {
 		a.mu.Unlock()
 		return ErrWrongMode
+	}
+	// Another device's, still in use: not taken from it.
+	if a.portal.browser != nil && !a.ownsBrowser(req.Session) && a.now().Sub(a.portal.browserSeen) < browserTakeover {
+		a.mu.Unlock()
+		return errBrowserInUse
 	}
 	previous := a.portal.browser
 	a.portal.browser = nil
@@ -188,6 +232,8 @@ func (a *Agent) StartPortalBrowser(req api.PortalBrowserStart) error {
 		return fmt.Errorf("the login browser could not start: %w", err)
 	}
 	a.portal.browser = b
+	a.portal.browserSession = req.Session
+	a.portal.browserSeen = a.now()
 	a.portal.browserStarted = a.now()
 	a.portal.browserUsed = a.now()
 	a.portal.browserSawPortal = a.portal.result.State == portal.Portal
@@ -201,11 +247,19 @@ func (a *Agent) StartPortalBrowser(req api.PortalBrowserStart) error {
 	return nil
 }
 
-// StopPortalBrowser closes the login browser.
-func (a *Agent) StopPortalBrowser() {
+// StopPortalBrowser closes the login browser, for the device that opened
+// it.
+func (a *Agent) StopPortalBrowser(req api.PortalBrowserStop) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if a.portal.browser == nil {
+		return nil
+	}
+	if !a.ownsBrowser(req.Session) {
+		return errNotYourBrowser
+	}
 	a.stopBrowser("closed from the web UI")
+	return nil
 }
 
 // stopBrowser closes the browser, if one is open. The caller holds a.mu.
@@ -214,7 +268,7 @@ func (a *Agent) stopBrowser(reason string) {
 	if b == nil {
 		return
 	}
-	a.portal.browser = nil
+	a.portal.browser, a.portal.browserSession = nil, ""
 	slog.Info("login browser closed", "reason", reason)
 	go b.Close() // takes a moment; don't hold the lock meanwhile
 }
@@ -248,27 +302,45 @@ func (a *Agent) checkBrowser() {
 }
 
 // PortalBrowserFrame waits (until ctx ends) for a picture of the page newer
-// than after, and returns the newest one.
-func (a *Agent) PortalBrowserFrame(ctx context.Context, after int64) api.PortalBrowserFrame {
+// than after, and returns the newest one, to the device that opened the
+// browser (session).
+func (a *Agent) PortalBrowserFrame(ctx context.Context, after int64, session string) (api.PortalBrowserFrame, error) {
 	a.mu.Lock()
 	b := a.portal.browser
+	if b != nil && !a.ownsBrowser(session) {
+		a.mu.Unlock()
+		return api.PortalBrowserFrame{}, errNotYourBrowser
+	}
+	a.portal.browserSeen = a.now()
 	a.mu.Unlock()
 	if b == nil {
-		return api.PortalBrowserFrame{}
+		return api.PortalBrowserFrame{}, nil
 	}
 	f := b.NextFrame(ctx, after)
+	// Still watched (the wait can take a while).
+	a.mu.Lock()
+	if a.portal.browser == b {
+		a.portal.browserSeen = a.now()
+	}
+	a.mu.Unlock()
 	return api.PortalBrowserFrame{
 		Running: true, Seq: f.Seq, Image: base64.StdEncoding.EncodeToString(f.JPEG),
 		Width: f.Width, Height: f.Height, URL: f.URL, Title: f.Title,
-	}
+	}, nil
 }
 
-// PortalBrowserInput passes a tap, scroll or typing to the browser.
+// PortalBrowserInput passes a tap, scroll or typing to the browser, from
+// the device that opened it.
 func (a *Agent) PortalBrowserInput(in api.PortalBrowserInput) error {
 	a.mu.Lock()
 	b := a.portal.browser
+	if b != nil && !a.ownsBrowser(in.Session) {
+		a.mu.Unlock()
+		return errNotYourBrowser
+	}
 	if b != nil {
 		a.portal.browserUsed = a.now()
+		a.portal.browserSeen = a.now()
 	}
 	a.mu.Unlock()
 	if b == nil {

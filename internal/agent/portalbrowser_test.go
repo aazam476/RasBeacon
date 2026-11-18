@@ -126,7 +126,7 @@ func TestPortalBrowser_OpensLoginPageAndClosesWhenLoggedIn(t *testing.T) {
 	if s := e.agent.PortalStatus(); !s.CanBrowse || s.Browsing {
 		t.Fatalf("status = %+v", s)
 	}
-	if err := e.agent.StartPortalBrowser(api.PortalBrowserStart{Width: 390, Height: 700}); err != nil {
+	if err := e.agent.StartPortalBrowser(api.PortalBrowserStart{Width: 390, Height: 700, Session: phoneSession}); err != nil {
 		t.Fatal(err)
 	}
 	b := last()
@@ -150,6 +150,7 @@ func TestPortalBrowser_OpensLoginPageAndClosesWhenLoggedIn(t *testing.T) {
 	for _, in := range []api.PortalBrowserInput{
 		{Action: "click", X: 10, Y: 20}, {Action: "type", Text: "Room 412"}, {Action: "key", Key: "Enter"},
 	} {
+		in.Session = phoneSession
 		if err := e.agent.PortalBrowserInput(in); err != nil {
 			t.Fatal(err)
 		}
@@ -159,8 +160,8 @@ func TestPortalBrowser_OpensLoginPageAndClosesWhenLoggedIn(t *testing.T) {
 			t.Errorf("the browser didn't get %q", action)
 		}
 	}
-	frame := e.agent.PortalBrowserFrame(context.Background(), 0)
-	if !frame.Running || frame.Seq != 1 || frame.Image != "/9g=" || frame.Width != 390 {
+	frame, err := e.agent.PortalBrowserFrame(context.Background(), 0, phoneSession)
+	if err != nil || !frame.Running || frame.Seq != 1 || frame.Image != "/9g=" || frame.Width != 390 {
 		t.Errorf("frame = %+v", frame)
 	}
 
@@ -170,7 +171,7 @@ func TestPortalBrowser_OpensLoginPageAndClosesWhenLoggedIn(t *testing.T) {
 	if !b.isClosed() || e.agent.PortalStatus().Browsing {
 		t.Error("the browser should close once the login worked")
 	}
-	if f := e.agent.PortalBrowserFrame(context.Background(), 0); f.Running {
+	if f, _ := e.agent.PortalBrowserFrame(context.Background(), 0, phoneSession); f.Running {
 		t.Error("no frames after closing")
 	}
 }
@@ -178,11 +179,11 @@ func TestPortalBrowser_OpensLoginPageAndClosesWhenLoggedIn(t *testing.T) {
 func TestPortalBrowser_ClosesWhenUnused(t *testing.T) {
 	e, c, p := newPortalEnv(t)
 	last := withFakeBrowser(t, e)
-	if err := e.agent.StartPortalBrowser(api.PortalBrowserStart{Width: 390, Height: 700}); err != nil {
+	if err := e.agent.StartPortalBrowser(api.PortalBrowserStart{Width: 390, Height: 700, Session: phoneSession}); err != nil {
 		t.Fatal(err)
 	}
 	c.advance(BrowserIdleTimeout - time.Minute)
-	if err := e.agent.PortalBrowserInput(api.PortalBrowserInput{Action: "scroll", DeltaY: 100}); err != nil {
+	if err := e.agent.PortalBrowserInput(api.PortalBrowserInput{Action: "scroll", DeltaY: 100, Session: phoneSession}); err != nil {
 		t.Fatal(err)
 	}
 	c.advance(BrowserIdleTimeout - time.Minute)
@@ -203,7 +204,7 @@ func TestPortalBrowser_RefusedWithoutLoginPageOrBrowser(t *testing.T) {
 	e.fakeUplink("wlan0", "192.168.4.20", "24", false)
 	e.check()
 	e.agent.CheckPortal((&fakeProbe{result: portal.Result{State: portal.Open}}).probe)
-	if err := e.agent.StartPortalBrowser(api.PortalBrowserStart{}); !errors.Is(err, ErrWrongMode) {
+	if err := e.agent.StartPortalBrowser(api.PortalBrowserStart{Session: phoneSession}); !errors.Is(err, ErrWrongMode) {
 		t.Errorf("no login page and no VPN problem: got %v", err)
 	}
 
@@ -217,10 +218,10 @@ func TestPortalBrowser_RefusedWithoutLoginPageOrBrowser(t *testing.T) {
 func TestPortalBrowser_InputIsChecked(t *testing.T) {
 	e, _, _ := newPortalEnv(t)
 	withFakeBrowser(t, e)
-	if err := e.agent.PortalBrowserInput(api.PortalBrowserInput{Action: "click"}); !errors.Is(err, ErrWrongMode) {
+	if err := e.agent.PortalBrowserInput(api.PortalBrowserInput{Action: "click", Session: phoneSession}); !errors.Is(err, ErrWrongMode) {
 		t.Errorf("no browser open: got %v", err)
 	}
-	if err := e.agent.StartPortalBrowser(api.PortalBrowserStart{}); err != nil {
+	if err := e.agent.StartPortalBrowser(api.PortalBrowserStart{Session: phoneSession}); err != nil {
 		t.Fatal(err)
 	}
 	for field, in := range map[string]api.PortalBrowserInput{
@@ -230,6 +231,7 @@ func TestPortalBrowser_InputIsChecked(t *testing.T) {
 		"text":   {Action: "type", Text: strings.Repeat("x", 1001)},
 	} {
 		var ve *config.ValidationError
+		in.Session = phoneSession
 		if err := e.agent.PortalBrowserInput(in); !errors.As(err, &ve) || ve.Field != field {
 			t.Errorf("%s: got %v", field, err)
 		}
@@ -246,13 +248,77 @@ func TestPortalBrowser_NoFirewallRuleWithoutBrowserUser(t *testing.T) {
 func TestPortalBrowser_CloseFromThePage(t *testing.T) {
 	e, _, _ := newPortalEnv(t)
 	last := withFakeBrowser(t, e)
-	if err := e.agent.StartPortalBrowser(api.PortalBrowserStart{Width: 390, Height: 700}); err != nil {
+	if err := e.agent.StartPortalBrowser(api.PortalBrowserStart{Width: 390, Height: 700, Session: phoneSession}); err != nil {
 		t.Fatal(err)
 	}
-	e.agent.StopPortalBrowser()
+	if err := e.agent.StopPortalBrowser(api.PortalBrowserStop{Session: phoneSession}); err != nil {
+		t.Fatal(err)
+	}
 	if !last().isClosed() || e.agent.PortalStatus().Browsing {
 		t.Error("Close should close RasBeacon's browser")
 	}
 	// Closing again is fine.
-	e.agent.StopPortalBrowser()
+	if err := e.agent.StopPortalBrowser(api.PortalBrowserStop{Session: phoneSession}); err != nil {
+		t.Error(err)
+	}
+}
+
+// The secrets of two devices on the hotspot (rbweb's cookies).
+const (
+	phoneSession  = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	laptopSession = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+)
+
+// Only the device that opened the login browser may see the page and use
+// it: what is typed there (a room number, a name, a card) is its own.
+// Another device may open it for itself once it has been left alone for a
+// while.
+func TestPortalBrowser_OnlyTheDeviceThatOpenedIt(t *testing.T) {
+	e, c, _ := newPortalEnv(t)
+	last := withFakeBrowser(t, e)
+	if err := e.agent.StartPortalBrowser(api.PortalBrowserStart{Session: "not a secret"}); err == nil {
+		t.Error("a start without rbweb's secret must be refused")
+	}
+	if err := e.agent.StartPortalBrowser(api.PortalBrowserStart{Width: 390, Height: 700, Session: phoneSession}); err != nil {
+		t.Fatal(err)
+	}
+	phones := last()
+
+	// Another device can't see it, type into it or close it.
+	if _, err := e.agent.PortalBrowserFrame(context.Background(), 0, laptopSession); !errors.Is(err, errNotYourBrowser) {
+		t.Errorf("another device's picture: %v", err)
+	}
+	if _, err := e.agent.PortalBrowserFrame(context.Background(), 0, ""); !errors.Is(err, errNotYourBrowser) {
+		t.Errorf("a device without a secret's picture: %v", err)
+	}
+	if err := e.agent.PortalBrowserInput(api.PortalBrowserInput{Action: "type", Text: "x", Session: laptopSession}); !errors.Is(err, errNotYourBrowser) {
+		t.Errorf("another device's typing: %v", err)
+	}
+	if phones.did("type x") {
+		t.Error("another device's typing reached the browser")
+	}
+	if err := e.agent.StopPortalBrowser(api.PortalBrowserStop{Session: laptopSession}); !errors.Is(err, errNotYourBrowser) || phones.isClosed() {
+		t.Errorf("another device closing it: %v", err)
+	}
+	// Nor take it over while the phone uses it.
+	c.advance(browserTakeover / 2)
+	if _, err := e.agent.PortalBrowserFrame(context.Background(), 0, phoneSession); err != nil {
+		t.Fatal(err)
+	}
+	c.advance(browserTakeover / 2)
+	if err := e.agent.StartPortalBrowser(api.PortalBrowserStart{Session: laptopSession}); !errors.Is(err, errBrowserInUse) || phones.isClosed() {
+		t.Errorf("taking over a browser in use: %v", err)
+	}
+	// Left alone, it can be opened for another device: a new browser,
+	// the old one closed.
+	c.advance(browserTakeover)
+	if err := e.agent.StartPortalBrowser(api.PortalBrowserStart{Width: 390, Height: 700, Session: laptopSession}); err != nil {
+		t.Fatal(err)
+	}
+	if !phones.isClosed() || last() == phones {
+		t.Error("the phone's browser should close, and a new one open for the laptop")
+	}
+	if _, err := e.agent.PortalBrowserFrame(context.Background(), 0, phoneSession); !errors.Is(err, errNotYourBrowser) {
+		t.Errorf("the phone after the laptop took over: %v", err)
+	}
 }

@@ -60,6 +60,10 @@ type portalState struct {
 	browserStarted   time.Time
 	browserUsed      time.Time
 	browserSawPortal bool
+	// browserSession is the secret of the device that opened it, and
+	// browserSeen when that device last asked for a picture or used it.
+	browserSession string
+	browserSeen    time.Time
 
 	// pathFailed is set when applying devices' path after a change of
 	// login mode or the notice failed; CheckPortal then tries again every

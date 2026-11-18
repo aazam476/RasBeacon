@@ -24,7 +24,9 @@ type fakeRBD struct {
 	portalNotice  bool
 	adminPassword string
 	lastForwarded string
-	remembered    map[string]bool
+	// lastBody is the body of the last request forwarded to "/".
+	lastBody   string
+	remembered map[string]bool
 	// verifyDelay is how long a password check takes (about half a second
 	// on a Pi; nothing by default).
 	verifyDelay time.Duration
@@ -66,6 +68,11 @@ func (f *fakeRBD) handler() http.Handler {
 		f.lastForwarded = r.Method + " " + r.URL.Path
 		if r.URL.RawQuery != "" {
 			f.lastForwarded += "?" + r.URL.RawQuery
+		}
+		f.lastBody = ""
+		if r.Body != nil { // (called directly, a request may have none)
+			body, _ := io.ReadAll(r.Body)
+			f.lastBody = string(body)
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"ok": "yes"})
 	})
@@ -408,10 +415,53 @@ func TestPortalBrowser_PublicButJSONOnly(t *testing.T) {
 	if rec := request(s, "POST", "http://10.87.0.1/api/v1/portal/browser/input", "a=b", form, nil); rec.Code != http.StatusUnsupportedMediaType || rbd.lastForwarded != "" {
 		t.Errorf("form post: got %d, forwarded %q", rec.Code, rbd.lastForwarded)
 	}
-	// The frame request passes on only a clean number.
+	// The frame request passes on only a clean number (and the device's
+	// secret, here none).
 	request(s, "GET", "http://10.87.0.1/api/v1/portal/browser/frame?after=41&x=../y", "", nil, nil)
-	if rbd.lastForwarded != "GET /portal/browser/frame?after=41" {
+	if rbd.lastForwarded != "GET /portal/browser/frame?after=41&session=" {
 		t.Errorf("forwarded %q", rbd.lastForwarded)
+	}
+}
+
+// The device that opens the login browser gets a secret in a cookie, which
+// goes to rbd with all it asks of the browser: rbd shows the page to that
+// secret only. One the browser sends itself in a request's body is
+// replaced.
+func TestPortalBrowser_TheOpeningDeviceGetsASecret(t *testing.T) {
+	s, rbd := newTestServer(api.ModeNormal)
+	rec := request(s, "POST", "http://10.87.0.1/api/v1/portal/browser/start", `{"width":390,"height":700,"session":"mine"}`, nil, nil)
+	var secret *http.Cookie
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == browserCookieName {
+			secret = c
+		}
+	}
+	if rec.Code != http.StatusOK || secret == nil || len(secret.Value) != 64 || !secret.HttpOnly ||
+		secret.SameSite != http.SameSiteStrictMode || secret.Path != "/api/v1/portal/browser" {
+		t.Fatalf("start: %d, cookie %+v", rec.Code, secret)
+	}
+	var start api.PortalBrowserStart
+	if err := json.Unmarshal([]byte(rbd.lastBody), &start); err != nil || start.Session != secret.Value || start.Width != 390 {
+		t.Errorf("rbd got %s, want the cookie's secret", rbd.lastBody)
+	}
+	// Opening it again from the same browser keeps the secret.
+	request(s, "POST", "http://10.87.0.1/api/v1/portal/browser/start", `{}`, nil, []*http.Cookie{secret})
+	if err := json.Unmarshal([]byte(rbd.lastBody), &start); err != nil || start.Session != secret.Value {
+		t.Errorf("again: rbd got %s", rbd.lastBody)
+	}
+
+	request(s, "POST", "http://10.87.0.1/api/v1/portal/browser/input", `{"action":"type","text":"412","session":"forged"}`, nil, []*http.Cookie{secret})
+	var in api.PortalBrowserInput
+	if err := json.Unmarshal([]byte(rbd.lastBody), &in); err != nil || in.Session != secret.Value || in.Text != "412" {
+		t.Errorf("input: rbd got %s", rbd.lastBody)
+	}
+	request(s, "POST", "http://10.87.0.1/api/v1/portal/browser/stop", `{}`, nil, []*http.Cookie{secret})
+	if !strings.Contains(rbd.lastBody, `"session":"`+secret.Value+`"`) {
+		t.Errorf("stop: rbd got %s", rbd.lastBody)
+	}
+	request(s, "GET", "http://10.87.0.1/api/v1/portal/browser/frame?after=3", "", nil, []*http.Cookie{secret})
+	if rbd.lastForwarded != "GET /portal/browser/frame?after=3&session="+secret.Value {
+		t.Errorf("frame: forwarded %q", rbd.lastForwarded)
 	}
 }
 

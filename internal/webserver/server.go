@@ -108,13 +108,15 @@ func (s *Server) Handler() http.Handler {
 	}
 	// The zero-leak login: RasBeacon's own browser shows the login page.
 	// Public for the same reason. Only devices on the hotspot can reach it
-	// (not guests, not the upstream network).
-	for _, action := range []string{"start", "input", "stop"} {
-		mux.Handle("POST /api/v1/portal/browser/"+action, requireJSON(s.forwardTo("/portal/browser/"+action)))
-	}
+	// (not guests, not the upstream network), and only the one that opened
+	// it may see it and use it (see loginbrowser.go).
+	mux.Handle("POST /api/v1/portal/browser/start", requireJSON(http.HandlerFunc(s.handleBrowserStart)))
+	mux.Handle("POST /api/v1/portal/browser/input", requireJSON(http.HandlerFunc(s.handleBrowserInput)))
+	mux.Handle("POST /api/v1/portal/browser/stop", requireJSON(http.HandlerFunc(s.handleBrowserStop)))
 	mux.HandleFunc("GET /api/v1/portal/browser/frame", func(w http.ResponseWriter, r *http.Request) {
 		after, _ := strconv.ParseInt(r.URL.Query().Get("after"), 10, 64)
-		s.forward(w, http.MethodGet, "/portal/browser/frame?after="+strconv.FormatInt(after, 10), nil)
+		s.forward(w, http.MethodGet, "/portal/browser/frame?after="+strconv.FormatInt(after, 10)+
+			"&session="+url.QueryEscape(browserSession(r)), nil)
 	})
 
 	// --- Login required: forwarded to rbd unchanged ---

@@ -189,9 +189,14 @@ on, devices can't reach that page either (`internal/agent/portal.go`):
 3. **Zero-leak login** (recommended, `portalbrowser.go`): rbd opens the
    login page in its own headless Chromium (`internal/browser`, controlled
    over a pipe), running as the unprivileged user `rbbrowser`, which the
-   firewall only lets reach the uplink. The notice page shows pictures of
-   the page and sends taps and typing back. Devices stay in the tunnel.
-   The browser closes once the login worked, or after 5 idle minutes.
+   firewall only lets reach the uplink, always in Chromium's sandbox (rbd
+   doesn't start it without). The notice page shows pictures of the page
+   and sends taps and typing back. Devices stay in the tunnel. Any device
+   on the hotspot may open it, but only that device sees it and uses it:
+   rbweb gives it a secret in a cookie, and rbd answers that secret only
+   (another device may open it for itself once it has gone 20 seconds
+   unused). The browser closes once the login worked, or after 5 idle
+   minutes.
 4. Or **login mode**: for 10 minutes, devices may start web and DNS
    connections (only) directly to the network. Connections opened earlier
    through the VPN stop: the firewall labels every connection that leaves

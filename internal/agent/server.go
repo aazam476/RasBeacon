@@ -171,17 +171,25 @@ func (a *Agent) Handler() http.Handler {
 	}
 	// The login browser (zero-leak login, see portalbrowser.go).
 	mux.HandleFunc("POST /portal/browser/start", save(a.StartPortalBrowser, a.PortalStatus))
-	mux.HandleFunc("POST /portal/browser/stop", result(func() (api.PortalStatus, error) {
-		a.StopPortalBrowser()
+	mux.HandleFunc("POST /portal/browser/stop", call(func(req api.PortalBrowserStop) (api.PortalStatus, error) {
+		if err := a.StopPortalBrowser(req); err != nil {
+			return api.PortalStatus{}, err
+		}
 		return a.PortalStatus(), nil
 	}))
 	mux.HandleFunc("POST /portal/browser/input", do(a.PortalBrowserInput))
-	// Waits up to frameWait for a picture newer than ?after=.
+	// Waits up to frameWait for a picture newer than ?after=, for the
+	// device whose secret is ?session=.
 	mux.HandleFunc("GET /portal/browser/frame", func(w http.ResponseWriter, r *http.Request) {
 		after, _ := strconv.ParseInt(r.URL.Query().Get("after"), 10, 64)
 		ctx, cancel := context.WithTimeout(r.Context(), frameWait)
 		defer cancel()
-		writeJSON(w, http.StatusOK, a.PortalBrowserFrame(ctx, after))
+		frame, err := a.PortalBrowserFrame(ctx, after, r.URL.Query().Get("session"))
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, frame)
 	})
 
 	// --- Plugins (plugins.go) ------------------------------------------
