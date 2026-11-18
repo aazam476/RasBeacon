@@ -1,0 +1,96 @@
+# Debian and Raspberry Pi publish fixed packages between RasBeacon's
+# releases: the kernel, Chromium, OpenSSL, hostapd and the rest. A device
+# only gets them with a new release, as its system is read-only and
+# replaced whole by updates. So once a day this looks whether the newest
+# release's packages have newer versions (image/check-updates.sh), and if
+# so builds the next patch release from the same commit, the way a pushed
+# tag does: it makes the tag, starts the release workflow on it, and that
+# makes a draft release. An issue lists what changed and asks for the
+# draft to be checked and published. Nothing more starts while that issue
+# is open.
+name: Debian updates
+
+on:
+  schedule:
+    - cron: "23 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Check for newer packages
+    runs-on: ubuntu-24.04
+    permissions:
+      # To make the next version's tag, start the release workflow on it,
+      # and open the issue. Nothing here runs code from elsewhere: the
+      # check only reads the archives' package lists.
+      contents: write
+      actions: write
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: The newest release's packages
+        id: release
+        run: |
+          tag="$(gh release view --json tagName --jq .tagName)"
+          # Only vMAJOR.MINOR.PATCH (a label would be a pre-release, which
+          # gh leaves out anyway); the name reaches commands below.
+          if ! printf '%s' "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::The newest release, $tag, isn't named like v0.1.0"
+            exit 1
+          fi
+          gh release download "$tag" --pattern '*.packages.txt' --dir lists
+          IFS=. read -r major minor patch <<<"${tag#v}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "next=v$major.$minor.$((patch + 1))" >> "$GITHUB_OUTPUT"
+
+      - name: Newer packages
+        id: check
+        run: |
+          status=0
+          image/check-updates.sh lists/*.packages.txt > updates.txt || status=$?
+          cat updates.txt
+          case "$status" in
+            0) echo "found=false" >> "$GITHUB_OUTPUT" ;;
+            3) echo "found=true" >> "$GITHUB_OUTPUT" ;;
+            *) exit "$status" ;;
+          esac
+
+      - name: Build the next patch release
+        if: steps.check.outputs.found == 'true'
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+          NEXT: ${{ steps.release.outputs.next }}
+        run: |
+          # One such build at a time: its issue stays open until its draft
+          # is published.
+          if [ "$(gh issue list --state open --label debian-updates --json number --jq length)" != 0 ]; then
+            echo "A build with Debian's updates waits to be published (see the open debian-updates issue)."
+            exit 0
+          fi
+          # The tag first, on the release's commit, so the release workflow
+          # runs as for a pushed tag (version from the tag, a draft). (A tag
+          # made with this job's token starts no workflow by itself.)
+          commit="$(gh api "repos/$GH_REPO/commits/$TAG" --jq .sha)"
+          gh api "repos/$GH_REPO/git/refs" -f ref="refs/tags/$NEXT" -f sha="$commit" > /dev/null
+          gh workflow run release.yml --ref "$NEXT" -f runner=ubuntu-24.04-arm
+          gh label create debian-updates --color D93F0B \
+            --description "A patch release with Debian's updates" --force
+          {
+            echo "Debian and Raspberry Pi have newer versions of these packages than $TAG has:"
+            echo
+            echo '```'
+            cat updates.txt
+            echo '```'
+            echo
+            echo "The release workflow is building $NEXT from $TAG's commit with them (see the Actions tab)."
+            echo "When it's done, check the draft release $NEXT and publish it: devices are offered it then."
+            echo "Close this issue once it's published. Until then, no other such build starts."
+          } > body.md
+          gh issue create --title "Debian updates: $NEXT" --label debian-updates --body-file body.md

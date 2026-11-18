@@ -162,6 +162,31 @@ still holds; a version that can install `v2.0.0` usually can install
    page → **Check now** → **Update now**, which downloads it from the
    release), and check it comes back on the new version.
 
+## Debian's updates between releases
+
+A device's system is read-only and replaced whole by an update, so it gets
+Debian's and Raspberry Pi's fixed packages (the kernel, Chromium, OpenSSL,
+hostapd, …) only with a new RasBeacon release. The **Debian updates**
+workflow (`.github/workflows/debian-updates.yml`) makes sure there is one:
+once a day it compares the newest release's package lists with the
+archives the image is built from (`image/check-updates.sh`), and when
+something is newer it
+
+1. tags the next patch version (`v0.3.1` after `v0.3.0`) on the newest
+   release's commit, and starts **Release images** on that tag, which
+   builds both images with today's packages and makes a draft release, as
+   a pushed tag does;
+2. opens an issue labelled `debian-updates` that lists the newer packages.
+
+Check the draft as in steps 4 and 5 above, publish it, and close the
+issue: devices are offered the release then (on their own if their owner
+chose an update schedule). No other such build starts while the issue is
+open. To check by hand: `image/check-updates.sh rasbeacon-v0.3.0.packages.txt`
+prints the newer packages, or nothing.
+
+The workflow runs from the default branch, and builds with the release
+workflow of the release it starts from.
+
 ## How updates work on the device
 
 See `internal/agent/update.go`. In short: the signature and board are
