@@ -28,8 +28,8 @@ For example:
 - reading passwords, keys or certificates without the admin password;
 - secrets appearing in logs or the diagnostics report;
 - installing an update that wasn't signed with the release key, or one
-  older than the version running (a beta is older than its release; a
-  test build installs only over a test build);
+  older than the version running (a test build installs only over a test
+  build);
 - a release's `SHA256SUMS` that its signature (`SHA256SUMS.sig`) accepts
   but the release workflow didn't sign;
 - a WireGuard file or uploaded certificate that runs commands or changes
@@ -73,7 +73,7 @@ code. Some of them, for problems found in reviews:
 | A plugin does only what its permissions allow | A template that never finishes stopped the other plugins and backups | `internal/plugin` `TestCheckTemplate`, `internal/agent` `TestFillTemplate_RefusesLoops` |
 | A plugin does only what its permissions allow | Data kept from a removed plugin went to another author's plugin with the same ID | `internal/agent` `TestPlugins_SigningKeyIsPinnedOnFirstSignedInstall`, `TestPlugins_UnsignedKeptDataComesBackOnlyWhenChosen` |
 | A plugin does only what its permissions allow | A template built a value of gigabytes with variables or `printf`, and rbd ran out of memory at every start | `internal/plugin` `TestCheckTemplate`, `internal/agent` `TestFillTemplate_RefusesHugeValues` |
-| Only signed updates, never an older version | A beta counted as its release (only the numbers were compared), and a test build has no number, so a beta's or a test build's update file installed over a release | `internal/version` `TestCompare`, `internal/update` `TestCheckVersion` |
+| Only signed updates, never an older version | A test build (`dev-394ecff`) has no version number, so nothing showed it older than a release: its update file, from any commit, installed over a release | `internal/update` `TestCheckVersion` |
 | Only signed updates, never an older version | Signing a release's `SHA256SUMS`, which the image build writes, with the update key could have signed anything that build put in it, a forged update's manifest among them | `cmd/rbsign` `TestSignChecksums_SignsOnlyAListOfChecksums`, `TestSignChecksums_SshKeygenChecksIt` |
 | A plugin does only what its permissions allow | A USB drive's filesystem, made to break the code that reads it, was read by the kernel's exFAT driver, where a flaw is the whole Pi's | `test/netns` `TestDrives_ExFATIsReadByAConfinedProgram` (its own user, no groups, capabilities or network), `internal/agent` `TestDrives_ExFATIsReadByItsOwnProgram`, `TestDrives_EachDrivesProgramHasItsOwnUser` |
 | No traffic outside the VPN while the kill switch is on | In login mode, connections opened earlier through the tunnel carried on through the hotel's network (routed IPv6, which isn't NATed) | `test/netns` `TestLoginMode_ConnectionsOpenedThroughTheVPNDontLeaveOutsideIt`, `TestLoginMode_RoutedIPv6ConnectionsDontLeaveOutsideTheVPN` |

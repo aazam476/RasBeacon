@@ -194,11 +194,10 @@ func TestCheckVersion(t *testing.T) {
 		{"v1.2.0", "", "v1.1.0", true, false},
 		{"v1.2.0", "", "v1.2.0", true, false},              // the same again, to repair
 		{"v1.2.0", "", "v1.10.0", false, false},            // older: refused
-		{"v1.2.0-beta.1", "", "v1.2.0", false, false},      // a beta is older than its release
-		{"v1.2.0", "", "v1.2.0-beta.1", true, false},       // the release after its beta
+		{"v1.2.0-beta.1", "", "v1.2.0", true, false},       // only the numbers count
 		{"v2.0.0", "v1.5.0", "v1.5.0", true, false},        // new enough
 		{"v2.0.0", "v1.5.0", "v1.4.9", false, true},        // too old: flash instead
-		{"v2.0.0", "v1.5.0", "v1.5.0-beta.2", true, false}, // a beta of 1.5.0 is on its way there
+		{"v2.0.0", "v1.5.0", "v1.5.0-beta.2", true, false}, // a beta of 1.5.0 counts as 1.5.0
 		{"v0.1.0", "v9.0.0", "dev", true, false},           // development builds install anything
 		{"dev-394ecff", "", "v1.2.0", false, false},        // a test build doesn't go over a release
 		{"dev-394ecff", "", "dev-1a2b3c4", true, false},    // but over a test build

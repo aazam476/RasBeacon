@@ -409,7 +409,7 @@ func (a *Agent) Restore(req api.RestoreRequest) (api.RestoreResult, error) {
 	}
 
 	// The settings must be ones this version understands.
-	if newer, ok := version.CompareNumbers(info.Version, version.Version); ok && newer > 0 {
+	if newer, ok := version.Compare(info.Version, version.Version); ok && newer > 0 {
 		return api.RestoreResult{}, &config.ValidationError{Field: "file", Message: fmt.Sprintf(
 			"This backup was made by RasBeacon %s, which is newer than this one (%s). Update RasBeacon first.",
 			strings.TrimPrefix(info.Version, "v"), strings.TrimPrefix(version.Version, "v"))}

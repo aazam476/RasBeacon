@@ -876,7 +876,7 @@ func canInstallOver(release latestRelease, running string) bool {
 	if release.minFromVersion == "" {
 		return true
 	}
-	result, ok := version.CompareNumbers(running, release.minFromVersion)
+	result, ok := version.Compare(running, release.minFromVersion)
 	return !ok || result >= 0
 }
 

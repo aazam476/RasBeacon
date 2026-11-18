@@ -100,9 +100,8 @@ As built in milestone 1, this uses rpi-image-gen's `image-rota` layout
 - **Update flow, following the Pi firmware's documented A/B procedure:**
   1. Verify the bundle's Ed25519 signature and check that its version is not
      older than the running one (downgrades are refused; the way back is a
-     flash; versions are ordered as Semantic Versioning does, a beta before
-     its release), that it isn't a test build (`dev-…`, which has no number
-     to compare) over a release, and that the running one is at least the
+     flash), that it isn't a test build (`dev-…`, which has no number to
+     compare) over a release, and that the running one is at least the
      update's `minFromVersion` (otherwise: back up, flash, restore).
   2. Write the inactive boot and root slots, verify their hashes, then run
      `reboot "0 tryboot"`.
