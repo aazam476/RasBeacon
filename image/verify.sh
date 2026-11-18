@@ -70,6 +70,8 @@ check "lockdown firewall runs at boot" test -L "$root/etc/systemd/system/sysinit
 check "rbd runs at boot" test -L "$root/etc/systemd/system/multi-user.target.wants/rbd.service"
 check "rbd shares /tmp with wpa_supplicant and hostapd (no PrivateTmp)" \
   sh -c "! grep -q '^PrivateTmp=yes' '$root/usr/lib/systemd/system/rbd.service'"
+check "rbd can't load kernel modules or change the system" \
+  sh -c "grep -qx 'ProtectSystem=full' '$root/usr/lib/systemd/system/rbd.service' && grep -q '^CapabilityBoundingSet=~CAP_SYS_MODULE ' '$root/usr/lib/systemd/system/rbd.service'"
 check "the data partition grows to fill the card" test -L "$root/etc/systemd/system/multi-user.target.wants/rasbeacon-grow-data.service"
 check "gocryptfs and FUSE are installed (encrypted USB drives)" sh -c "test -x '$root/usr/bin/gocryptfs' && test -x '$root/usr/bin/fusermount3'"
 # USB drives are mounted with nosymfollow; a mount that didn't know the

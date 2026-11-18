@@ -12,7 +12,24 @@ ExecStart=/usr/bin/rbd
 Restart=always
 RestartSec=3
 # rbd must run as root to change network settings. Limit what else it can do.
+#
+# Most of systemd's other sandboxing would stop rbd's own work (it sets
+# kernel settings, the clock and the name, reads the kernel log after a
+# hotspot stall, mounts drives, writes updates to the card, and Podman
+# writes cgroups), or be inherited by what it starts, the plugins'
+# containers and the login browser: a system call filter, no new
+# privileges (setuid programs and file capabilities in plugin images would
+# stop working), no 32-bit system calls (32-bit plugin images).
 ProtectHome=yes
+# The system is read-only anyway: rbd writes only to /persistent, /bootfs,
+# /run and /tmp, and Podman's files are on /persistent and /run
+# (/etc/containers).
+ProtectSystem=full
+# Capabilities that neither rbd nor anything it starts uses: the kernel
+# loads its modules by itself, the Pi restarts through systemd, and nothing
+# writes audit rules, process accounting, immutable files or wake alarms.
+# (Plugins get Podman's default capabilities, which are none of these.)
+CapabilityBoundingSet=~CAP_SYS_MODULE CAP_SYS_BOOT CAP_SYS_PACCT CAP_SYS_TTY_CONFIG CAP_LINUX_IMMUTABLE CAP_WAKE_ALARM CAP_BLOCK_SUSPEND CAP_AUDIT_CONTROL CAP_AUDIT_READ CAP_CHECKPOINT_RESTORE
 # No PrivateTmp: wpa_cli and hostapd_cli, which rbd runs, create their reply
 # socket in /tmp, and wpa_supplicant and hostapd must be able to answer it
 # there. With a private /tmp every command times out (exit status 254).

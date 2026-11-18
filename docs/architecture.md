@@ -59,7 +59,10 @@ The reasons behind the big decisions are in [design.md](design.md) and
   `image/verify.sh` fails the build without it. rbd itself isn't
   sandboxed this way: it mounts drives, sets the clock and runs Podman,
   and a system call filter would be inherited by every plugin and the
-  login browser it starts.
+  login browser it starts. It sees `/usr`, `/etc` and `/boot` read-only
+  and `/home` not at all, and has no capability that neither it nor what
+  it starts uses (loading kernel modules, restarting the Pi by itself,
+  audit rules, immutable files and a few more): see its unit.
 - **WireGuard** (`wg0`, set up with the `wg` and `ip` tools) is the VPN
   tunnel. rbd reads the `.conf` file itself (`internal/wireguard`) and never
   runs wg-quick.
