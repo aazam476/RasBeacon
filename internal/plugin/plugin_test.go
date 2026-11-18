@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -399,6 +400,56 @@ func TestRunArgs(t *testing.T) {
 	}
 	if strings.Contains(joined, "--publish") || strings.Contains(joined, "--privileged") {
 		t.Error("ports are RasBeacon's firewall's job, and nothing runs privileged")
+	}
+}
+
+// Each plugin runs in a user namespace of its own, by its address: its
+// root is no user of the Pi's, nor of another plugin's, and its files show
+// their stored owners through idmapped mounts.
+func TestRunArgs_AUserNamespaceOfItsOwn(t *testing.T) {
+	if UserBase("10.89.0.2") != 1<<20+2<<16 || UserBase("10.89.0.254") != 1<<20+254<<16 {
+		t.Errorf("bases %d and %d", UserBase("10.89.0.2"), UserBase("10.89.0.254"))
+	}
+	seen := map[int]bool{}
+	for last := 1; last <= 254; last++ {
+		base := UserBase("10.89.0." + strconv.Itoa(last))
+		// Above every user of the Pi's, and apart from every other plugin's.
+		if base < 1<<20 || seen[base] || base+UserRange > 1<<25 {
+			t.Fatalf("10.89.0.%d: base %d", last, base)
+		}
+		for other := range seen {
+			if base < other+UserRange && other < base+UserRange {
+				t.Fatalf("10.89.0.%d's users overlap another plugin's", last)
+			}
+		}
+		seen[base] = true
+	}
+	for _, bad := range []string{"10.89.0.0", "10.89.0.255", "10.89.0.x", ""} {
+		if UserBase(bad) != 0 {
+			t.Errorf("%q: base %d, want none", bad, UserBase(bad))
+		}
+	}
+
+	args := strings.Join(RunArgs(RunSpec{
+		ID: "samba", Image: "img", Address: "10.89.0.3", UserBase: UserBase("10.89.0.3"),
+		Mounts: []Mount{
+			{Host: "/data/files", Container: "/files", IDMap: true},
+			{Host: "/data/conf", Container: "/conf", ReadOnly: true, IDMap: true},
+			{Host: "/shares/s1", Container: "/shares/s1"},
+		},
+	}), " ")
+	for _, want := range []string{
+		"--uidmap 0:1245184:65536 --gidmap 0:1245184:65536",
+		"--volume /data/files:/files:idmap", "--volume /data/conf:/conf:ro,idmap", "--volume /shares/s1:/shares/s1 ",
+	} {
+		if !strings.Contains(args+" ", want) {
+			t.Errorf("missing %q in\n%s", want, args)
+		}
+	}
+	// Without a namespace, no mapping and no idmapped mounts.
+	plain := strings.Join(RunArgs(RunSpec{ID: "x", Image: "img", Address: "10.89.0.3", Mounts: []Mount{{Host: "/a", Container: "/b", IDMap: true}}}), " ")
+	if strings.Contains(plain, "--uidmap") || strings.Contains(plain, "idmap") {
+		t.Errorf("without a user base: %s", plain)
 	}
 }
 

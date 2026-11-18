@@ -61,10 +61,18 @@ func addShare(e *testEnv, req api.PluginShareAddRequest) {
 	e.runBackground()
 }
 
-// reserveArgs are rbquotafs's arguments for a USB share's reservation
-// (with a space after them).
+// reserveArgs are rbquotafs's arguments for a USB share's reservation,
+// and the plugin's user namespace (with a space after them).
 func reserveArgs(e *testEnv, shareID string) string {
-	return "-reserve " + filepath.Join(e.paths.DriveMountDir("1234-ABCD"), quotafs.ReservedFolder) + " -name adguard-home-" + shareID + " "
+	return "-reserve " + filepath.Join(e.paths.DriveMountDir("1234-ABCD"), quotafs.ReservedFolder) + " -name adguard-home-" + shareID + " " + userBaseArgs(e)
+}
+
+// userBaseArgs is rbquotafs's argument for the test plugin's user
+// namespace (with a space after it).
+func userBaseArgs(e *testEnv) string {
+	e.agent.mu.Lock()
+	defer e.agent.mu.Unlock()
+	return "-user-base " + strconv.Itoa(plugin.UserBase(e.agent.cfg.Plugins.Installed["adguard-home"].Address.String())) + " "
 }
 
 // sharesEnvOf is RASBEACON_SHARES as the plugin last started with it.

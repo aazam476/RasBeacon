@@ -240,14 +240,15 @@ func FolderSize(dir string) int64 {
 
 // Mount shows source at mountpoint, held to q, until it is unmounted
 // (Wait on the server). allowOther lets other users, the plugin's
-// container among them, use it.
-func Mount(source, mountpoint string, q *Quota, allowOther bool) (*fuse.Server, error) {
+// container among them, use it. userBase is where the plugin's user
+// namespace starts on the host (see owners), 0 for none.
+func Mount(source, mountpoint string, q *Quota, allowOther bool, userBase uint32) (*fuse.Server, error) {
 	var st syscall.Stat_t
 	if err := syscall.Stat(source, &st); err != nil {
 		return nil, err
 	}
 	root := &gofs.LoopbackRoot{Path: source, Dev: uint64(st.Dev)}
-	node := &node{LoopbackNode: &gofs.LoopbackNode{RootData: root}, quota: q}
+	node := &node{LoopbackNode: &gofs.LoopbackNode{RootData: root}, quota: q, owners: owners{base: userBase}}
 	root.RootNode = node
 	return gofs.Mount(mountpoint, node, &gofs.Options{
 		MountOptions: fuse.MountOptions{AllowOther: allowOther, FsName: source, Name: "rbquota"},
@@ -255,15 +256,45 @@ func Mount(source, mountpoint string, q *Quota, allowOther bool) (*fuse.Server, 
 }
 
 // node is a file or folder of the share: go-fuse's loopback, with what
-// adds to the share checked against the quota.
+// adds to the share checked against the quota, and its owners as the
+// plugin's user namespace sees them (see owners).
 type node struct {
 	*gofs.LoopbackNode
-	quota *Quota
+	quota  *Quota
+	owners owners
 }
 
 // WrapChild makes every file and folder below the root a node too.
 func (n *node) WrapChild(_ context.Context, ops gofs.InodeEmbedder) gofs.InodeEmbedder {
-	return &node{LoopbackNode: ops.(*gofs.LoopbackNode), quota: n.quota}
+	return &node{LoopbackNode: ops.(*gofs.LoopbackNode), quota: n.quota, owners: n.owners}
+}
+
+// Lookup finds a file or folder, its owners shifted for the view.
+func (n *node) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*gofs.Inode, syscall.Errno) {
+	inode, errno := n.LoopbackNode.Lookup(ctx, name, out)
+	n.owners.showAttr(&out.Attr)
+	return inode, errno
+}
+
+// Getattr reads the attributes, the owners shifted for the view.
+func (n *node) Getattr(ctx context.Context, f gofs.FileHandle, out *fuse.AttrOut) syscall.Errno {
+	errno := n.LoopbackNode.Getattr(ctx, f, out)
+	n.owners.showAttr(&out.Attr)
+	return errno
+}
+
+// Statx reads the extended attributes, the owners shifted for the view.
+func (n *node) Statx(ctx context.Context, f gofs.FileHandle, flags, mask uint32, out *fuse.StatxOut) syscall.Errno {
+	errno := n.LoopbackNode.Statx(ctx, f, flags, mask, out)
+	n.owners.showStatx(&out.Statx)
+	return errno
+}
+
+// made finishes something just made in this folder: stored with the owner
+// the drive keeps (see owners), its attributes as the view shows them.
+func (n *node) made(ctx context.Context, name string, out *fuse.EntryOut) {
+	n.owners.storeNew(ctx, filepath.Join(n.path(), name))
+	n.owners.showAttr(&out.Attr)
 }
 
 // sizeOf is the size of the regular file name in this folder (0 for
@@ -292,13 +323,16 @@ func (n *node) Create(ctx context.Context, name string, flags, mode uint32, out 
 		return nil, nil, 0, syscall.ENOSPC
 	}
 	inode, fh, fuseFlags, errno := n.LoopbackNode.Create(ctx, name, flags, mode, out)
-	return inode, wrapFile(fh, n.quota), fuseFlags, errno
+	if errno == 0 {
+		n.made(ctx, name, out)
+	}
+	return inode, wrapFile(fh, n.quota, n.owners), fuseFlags, errno
 }
 
 // Open opens a file; what is written to it is counted.
 func (n *node) Open(ctx context.Context, flags uint32) (gofs.FileHandle, uint32, syscall.Errno) {
 	fh, fuseFlags, errno := n.LoopbackNode.Open(ctx, flags)
-	return wrapFile(fh, n.quota), fuseFlags, errno
+	return wrapFile(fh, n.quota, n.owners), fuseFlags, errno
 }
 
 // Mkdir makes a folder, unless the share is full.
@@ -306,7 +340,11 @@ func (n *node) Mkdir(ctx context.Context, name string, mode uint32, out *fuse.En
 	if n.quota.Full() {
 		return nil, syscall.ENOSPC
 	}
-	return n.LoopbackNode.Mkdir(ctx, name, mode, out)
+	inode, errno := n.LoopbackNode.Mkdir(ctx, name, mode, out)
+	if errno == 0 {
+		n.made(ctx, name, out)
+	}
+	return inode, errno
 }
 
 // Mknod makes a special file, unless the share is full.
@@ -314,7 +352,11 @@ func (n *node) Mknod(ctx context.Context, name string, mode, rdev uint32, out *f
 	if n.quota.Full() {
 		return nil, syscall.ENOSPC
 	}
-	return n.LoopbackNode.Mknod(ctx, name, mode, rdev, out)
+	inode, errno := n.LoopbackNode.Mknod(ctx, name, mode, rdev, out)
+	if errno == 0 {
+		n.made(ctx, name, out)
+	}
+	return inode, errno
 }
 
 // Symlink makes a link, unless the share is full.
@@ -322,7 +364,11 @@ func (n *node) Symlink(ctx context.Context, target, name string, out *fuse.Entry
 	if n.quota.Full() {
 		return nil, syscall.ENOSPC
 	}
-	return n.LoopbackNode.Symlink(ctx, target, name, out)
+	inode, errno := n.LoopbackNode.Symlink(ctx, target, name, out)
+	if errno == 0 {
+		n.made(ctx, name, out)
+	}
+	return inode, errno
 }
 
 // Link gives a file another name, unless the share is full.
@@ -330,7 +376,9 @@ func (n *node) Link(ctx context.Context, target gofs.InodeEmbedder, name string,
 	if n.quota.Full() {
 		return nil, syscall.ENOSPC
 	}
-	return n.LoopbackNode.Link(ctx, target, name, out)
+	inode, errno := n.LoopbackNode.Link(ctx, target, name, out)
+	n.owners.showAttr(&out.Attr)
+	return inode, errno
 }
 
 // Unlink deletes a file, and frees its size.
@@ -359,6 +407,8 @@ func (n *node) Rename(ctx context.Context, name string, newParent gofs.InodeEmbe
 // Setattr changes a file's attributes; a new size is checked and counted
 // (through the open file, when there is one).
 func (n *node) Setattr(ctx context.Context, f gofs.FileHandle, in *fuse.SetAttrIn, out *fuse.AttrOut) syscall.Errno {
+	n.owners.storeSetattr(in)
+	defer n.owners.showAttr(&out.Attr)
 	size, resizing := in.GetSize()
 	if _, open := f.(*file); open || !resizing {
 		return n.LoopbackNode.Setattr(ctx, f, in, out)
@@ -378,18 +428,36 @@ func (n *node) Setattr(ctx context.Context, f gofs.FileHandle, in *fuse.SetAttrI
 }
 
 // file is an open file of the share: go-fuse's loopback file, with what
-// makes it bigger checked against the quota.
+// makes it bigger checked against the quota, and its owners as the
+// plugin's user namespace sees them.
 type file struct {
 	*gofs.LoopbackFile
-	quota *Quota
+	quota  *Quota
+	owners owners
 }
 
 // wrapFile makes an opened file count its growth (nil stays nil).
-func wrapFile(fh gofs.FileHandle, q *Quota) gofs.FileHandle {
+func wrapFile(fh gofs.FileHandle, q *Quota, o owners) gofs.FileHandle {
 	if loop, ok := fh.(*gofs.LoopbackFile); ok {
-		return &file{LoopbackFile: loop, quota: q}
+		return &file{LoopbackFile: loop, quota: q, owners: o}
 	}
 	return fh
+}
+
+// Getattr reads the open file's attributes, the owners shifted for the
+// view.
+func (f *file) Getattr(ctx context.Context, out *fuse.AttrOut) syscall.Errno {
+	errno := f.LoopbackFile.Getattr(ctx, out)
+	f.owners.showAttr(&out.Attr)
+	return errno
+}
+
+// Statx reads the open file's extended attributes, the owners shifted for
+// the view.
+func (f *file) Statx(ctx context.Context, flags, mask uint32, out *fuse.StatxOut) syscall.Errno {
+	errno := f.LoopbackFile.Statx(ctx, flags, mask, out)
+	f.owners.showStatx(&out.Statx)
+	return errno
 }
 
 // size is the file's size now (0 if it can't be read).
@@ -460,6 +528,8 @@ func (f *file) Allocate(ctx context.Context, off, size uint64, mode uint32) sysc
 
 // Setattr changes the file's attributes; a bigger size is checked first.
 func (f *file) Setattr(ctx context.Context, in *fuse.SetAttrIn, out *fuse.AttrOut) syscall.Errno {
+	f.owners.storeSetattr(in)
+	defer f.owners.showAttr(&out.Attr)
 	size, resizing := in.GetSize()
 	if !resizing {
 		return f.LoopbackFile.Setattr(ctx, in, out)

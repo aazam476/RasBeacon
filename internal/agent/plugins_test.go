@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -224,6 +225,10 @@ func TestPlugins_InstallFromAFileStartsItWithItsOwnAddressPortsAndData(t *testin
 		"podman run --detach --replace --name rasbeacon-adguard-home",
 		"--network rasbeacon-plugins:ip=10.89.0.2,host_interface_name=rbport2 --dns 10.89.0.1",
 		"--security-opt mask=/sys/class/thermal", "--env-file " + e.paths.PluginEnvFile("adguard-home"),
+		// A user namespace of its own (see pluginusers.go), its data
+		// idmapped.
+		"--uidmap 0:1179648:65536 --gidmap 0:1179648:65536",
+		"--volume " + filepath.Join(e.agent.pluginDataMount("adguard-home"), "conf") + ":/opt/adguardhome/conf:idmap",
 	} {
 		if !e.runner.ran(want) {
 			t.Errorf("never ran %q", want)
@@ -793,10 +798,22 @@ func TestPlugins_PowerSocketShutsDown(t *testing.T) {
 		t.Error("with the temperature permission the sensors aren't hidden")
 	}
 	socket := filepath.Join(e.agent.pluginSocketDir("adguard-home"), "rbd.sock")
-	if _, err := os.Stat(socket); err != nil {
+	info, err := os.Stat(socket)
+	if err != nil {
 		t.Fatalf("the power socket should exist: %v", err)
 	}
 	defer e.agent.closePowerSocket("adguard-home")
+	// The container's users are users of their own: they may connect.
+	if info.Mode().Perm() != 0o666 {
+		t.Errorf("socket mode %o, want 666", info.Mode().Perm())
+	}
+	// And its devices are given to its root, by an access list.
+	for _, device := range []string{"i2c-1", "gpiochip0"} {
+		path := filepath.Join(e.paths.DevDir(), device)
+		if users := deviceACLUsers(t, path); !slices.Contains(users, "u:1179648:rw") || !slices.Contains(users, "g:1179648:rw") {
+			t.Errorf("%s's access list = %v, want the plugin's root", device, users)
+		}
+	}
 
 	// The plugin asks over the socket, as an HTTP request.
 	client := &http.Client{Transport: &http.Transport{

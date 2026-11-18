@@ -6,11 +6,13 @@
 // and deleting still work. rbd runs one for each share on a USB drive and
 // gives the plugin the mount point.
 //
-//	rbquotafs -limit <bytes> [-reserve <folder> -name <name>] <folder> <mount point>
+//	rbquotafs -limit <bytes> [-reserve <folder> -name <name>] [-user-base <id>] <folder> <mount point>
 //
 // With -reserve, the room the files don't use is held on the drive by the
 // share's reservation (see quotafs.Reservation): name's files in that
-// folder (the drive's quotafs.ReservedFolder).
+// folder (the drive's quotafs.ReservedFolder). With -user-base, the view
+// shows owners as the plugin's user namespace sees them, its users 0 to
+// 65535 being the host's from that ID on (see quotafs/owners.go).
 //
 // Like gocryptfs, it returns once the share is mounted, and keeps serving
 // it in the background until it is unmounted (umount <mount point>).
@@ -36,9 +38,10 @@ func main() {
 	limit := flag.Int64("limit", 0, "the quota, in bytes")
 	reserve := flag.String("reserve", "", "the folder holding the share's reservation")
 	name := flag.String("name", "", "the reservation's name")
+	userBase := flag.Uint("user-base", 0, "the host user ID of the plugin's root, in its user namespace (0: none)")
 	flag.Parse()
-	if flag.NArg() != 2 || *limit <= 0 || (*reserve == "") != (*name == "") {
-		fmt.Fprintln(os.Stderr, "usage: rbquotafs -limit <bytes> [-reserve <folder> -name <name>] <folder> <mount point>")
+	if flag.NArg() != 2 || *limit <= 0 || (*reserve == "") != (*name == "") || *userBase > 1<<31 {
+		fmt.Fprintln(os.Stderr, "usage: rbquotafs -limit <bytes> [-reserve <folder> -name <name>] [-user-base <id>] <folder> <mount point>")
 		os.Exit(2)
 	}
 	source, mountpoint := flag.Arg(0), flag.Arg(1)
@@ -49,7 +52,7 @@ func main() {
 	if *reserve != "" {
 		reservation = quotafs.NewReservation(*reserve, *name)
 	}
-	os.Exit(serve(source, mountpoint, *limit, reservation))
+	os.Exit(serve(source, mountpoint, *limit, reservation, uint32(*userBase)))
 }
 
 // startInBackground runs this program again as a background process (in a
@@ -82,7 +85,7 @@ func startInBackground() int {
 // serve mounts the share, held to limit (and its room held on the drive by
 // reservation, if it has one), tells the waiting command (on fd 3), and
 // serves it until it is unmounted. It returns the exit code.
-func serve(source, mountpoint string, limit int64, reservation *quotafs.Reservation) int {
+func serve(source, mountpoint string, limit int64, reservation *quotafs.Reservation, userBase uint32) int {
 	tell := os.NewFile(3, "ready")
 	used := quotafs.FolderSize(source)
 	quota := quotafs.NewQuota(used, limit)
@@ -91,7 +94,7 @@ func serve(source, mountpoint string, limit int64, reservation *quotafs.Reservat
 			log.Printf("rbquotafs: the share's reservation: %v", err) // its files stay usable
 		}
 	}
-	server, err := quotafs.Mount(source, mountpoint, quota, true)
+	server, err := quotafs.Mount(source, mountpoint, quota, true, userBase)
 	if err != nil {
 		fmt.Fprintln(tell, err)
 		return 1

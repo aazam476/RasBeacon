@@ -32,6 +32,11 @@ type Mount struct {
 	Host      string
 	Container string
 	ReadOnly  bool
+	// IDMap shows the files' owners to the container as they are stored
+	// (an idmapped mount): the stored 0 is the container's root, though it
+	// runs as UserBase on the host. Only some filesystems can (ext4 and
+	// btrfs among them; not FUSE).
+	IDMap bool
 }
 
 // RunSpec is everything needed to start a plugin's container.
@@ -55,6 +60,27 @@ type RunSpec struct {
 	Masked  []string
 	LogFile string
 	Command []string
+	// UserBase is where the container's user namespace starts on the host
+	// (see UserBase): its users and groups 0 to 65535 are the host's
+	// UserBase to UserBase+65535. 0 runs it without one.
+	UserBase int
+}
+
+// UserRange is how many user (and group) IDs a plugin's user namespace has.
+const UserRange = 1 << 16
+
+// UserBase is where the user namespace of the plugin with this address
+// starts on the host: 1048576 plus 65536 for each number of its address's
+// last part (10.89.0.3: 1245184). Each plugin has its own address, so its
+// own users, none of them a user of the Pi's or of another plugin: what
+// breaks out of a container is nobody there. The address stays the
+// plugin's, so the numbers do too, and so do its files' owners.
+func UserBase(address string) int {
+	last, err := strconv.Atoi(address[strings.LastIndex(address, ".")+1:])
+	if err != nil || last < 1 || last > 254 {
+		return 0
+	}
+	return 1<<20 + last*UserRange
 }
 
 // HostPortName is the name of the port that plugs the plugin with this
@@ -99,10 +125,25 @@ func RunArgs(s RunSpec) []string {
 		"--log-opt", "path=" + s.LogFile,
 		"--log-opt", "max-size=256k",
 	}
+	if s.UserBase > 0 {
+		// Its own user namespace: its root is a user of no importance on
+		// the Pi (see UserBase).
+		id := strconv.Itoa(s.UserBase)
+		args = append(args,
+			"--uidmap", "0:"+id+":"+strconv.Itoa(UserRange),
+			"--gidmap", "0:"+id+":"+strconv.Itoa(UserRange))
+	}
 	for _, m := range s.Mounts {
 		volume := m.Host + ":" + m.Container
+		var options []string
 		if m.ReadOnly {
-			volume += ":ro"
+			options = append(options, "ro")
+		}
+		if m.IDMap && s.UserBase > 0 {
+			options = append(options, "idmap")
+		}
+		if len(options) > 0 {
+			volume += ":" + strings.Join(options, ",")
 		}
 		args = append(args, "--volume", volume)
 	}

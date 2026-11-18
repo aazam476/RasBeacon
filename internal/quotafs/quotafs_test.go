@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"syscall"
 	"testing"
@@ -50,7 +51,7 @@ func mounted(t *testing.T) (source, view string, q *Quota) {
 		t.Fatal(err)
 	}
 	q = NewQuota(FolderSize(source), 1<<20)
-	server, err := Mount(source, view, q, false)
+	server, err := Mount(source, view, q, false, 0)
 	if err != nil {
 		t.Skipf("can't mount here: %v", err)
 	}
@@ -141,5 +142,82 @@ func TestMount_HoldsTheShareToItsQuota(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(source, "c.bin"))
 	if err != nil || !bytes.Equal(data, nil) && len(data) != 0 {
 		t.Errorf("c.bin on the drive: %d bytes, %v", len(data), err)
+	}
+}
+
+// A plugin's container runs in a user namespace of its own (see
+// owners.go): the view shows the drive's owners as the container's host
+// users, and stores what the container makes, and the owners it sets,
+// with the container's own numbers, as the drive always had them.
+func TestMount_ShowsOwnersAsThePluginsUserNamespaceSeesThem(t *testing.T) {
+	if _, err := os.Stat("/dev/fuse"); err != nil || os.Geteuid() != 0 {
+		t.Skip("needs /dev/fuse and root")
+	}
+	const base = 0x120000
+	// Folders the container's users can reach (t.TempDir's aren't).
+	top, err := os.MkdirTemp("", "owners")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(top) })
+	source, view := filepath.Join(top, "drive"), filepath.Join(top, "view")
+	for _, dir := range []string{top, source, view} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		os.Chmod(dir, 0o755)
+	}
+	old := filepath.Join(source, "old.txt")
+	if err := os.WriteFile(old, []byte("from before"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	os.Lchown(old, 7, 7)
+	server, err := Mount(source, view, NewQuota(0, 1<<20), true, base)
+	if err != nil {
+		t.Skipf("can't mount here: %v", err)
+	}
+	t.Cleanup(func() { _ = server.Unmount() })
+
+	owner := func(path string) uint32 {
+		t.Helper()
+		var st syscall.Stat_t
+		if err := syscall.Lstat(path, &st); err != nil {
+			t.Fatal(err)
+		}
+		return st.Uid
+	}
+	// The drive's 7 is the container's 7: base+7 on the host.
+	if got := owner(filepath.Join(view, "old.txt")); got != base+7 {
+		t.Errorf("old.txt in the view: owner %d, want %d", got, base+7)
+	}
+	// What the container's user 1000 makes is stored as 1000.
+	made := exec.Command("/bin/sh", "-c", "echo hi > made.txt && mkdir folder && ln -s made.txt link")
+	made.Dir = view
+	made.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: base + 1000, Gid: base + 1000}}
+	if out, err := made.CombinedOutput(); err != nil {
+		t.Fatalf("the container's user can't make files: %v\n%s", err, out)
+	}
+	for _, name := range []string{"made.txt", "folder", "link"} {
+		if got := owner(filepath.Join(source, name)); got != 1000 {
+			t.Errorf("%s on the drive: owner %d, want the container's 1000", name, got)
+		}
+		if got := owner(filepath.Join(view, name)); got != base+1000 {
+			t.Errorf("%s in the view: owner %d, want %d", name, got, base+1000)
+		}
+	}
+	// An owner set in the view (the container's 5) is stored as 5.
+	if err := os.Lchown(filepath.Join(view, "made.txt"), base+5, base+5); err != nil {
+		t.Fatal(err)
+	}
+	if got := owner(filepath.Join(source, "made.txt")); got != 5 {
+		t.Errorf("after chown in the view: owner %d on the drive, want 5", got)
+	}
+	// The Pi's own users are no users of the namespace: the drive's 0 is
+	// the container's root, and what the Pi's root makes stays 0.
+	if err := os.WriteFile(filepath.Join(view, "by-root.txt"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if owner(filepath.Join(source, "by-root.txt")) != 0 || owner(filepath.Join(view, "by-root.txt")) != base {
+		t.Error("the Pi's root makes files the container's root owns")
 	}
 }

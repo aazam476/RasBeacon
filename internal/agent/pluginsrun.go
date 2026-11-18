@@ -132,6 +132,8 @@ func (a *Agent) planPluginRun(id string) (*pluginRunPlan, error) {
 	spec := plugin.RunSpec{
 		ID: id, Image: p.Image, Address: p.Address.String(), MemoryMB: m.Memory(), CPUs: m.CPULimit(),
 		Env: env, EnvFile: a.paths.PluginEnvFile(id), LogFile: a.pluginLogFile(id), Command: m.Command,
+		// A user namespace of its own (see pluginusers.go).
+		UserBase: plugin.UserBase(p.Address.String()),
 	}
 	dataMount := a.pluginDataMount(id)
 	for _, v := range m.Volumes {
@@ -139,7 +141,8 @@ func (a *Agent) planPluginRun(id string) (*pluginRunPlan, error) {
 		if p.Drive != "" && m.USBDrive != nil && m.USBDrive.Path == v.Path {
 			continue
 		}
-		spec.Mounts = append(spec.Mounts, plugin.Mount{Host: filepath.Join(dataMount, v.Name), Container: v.Path})
+		// Its data is ext4: idmapped, its files keep their owners.
+		spec.Mounts = append(spec.Mounts, plugin.Mount{Host: filepath.Join(dataMount, v.Name), Container: v.Path, IDMap: true})
 	}
 	if p.Drive != "" && m.USBDrive != nil {
 		spec.Mounts = append(spec.Mounts, plugin.Mount{Host: a.paths.DriveMountDir(p.Drive), Container: m.USBDrive.Path})
@@ -431,12 +434,29 @@ func (a *Agent) preparePluginRun(plan *pluginRunPlan) error {
 		}
 	}
 	if plan.drive != "" {
+		drive := a.paths.DriveMountDir(plan.drive)
 		if err := a.mountDrive(plan.drive); err != nil {
 			if plan.manifest.USBDrive == nil || !plan.manifest.USBDrive.Optional {
 				return err
 			}
 			slog.Warn("the plugin's USB drive isn't there; starting without it", "plugin", plan.id, "error", err)
-			plan.spec.Mounts = removeMount(plan.spec.Mounts, a.paths.DriveMountDir(plan.drive))
+			plan.spec.Mounts = removeMount(plan.spec.Mounts, drive)
+		} else if idmapCapable(drive) {
+			// Its owners as stored, where the drive's filesystem can (see
+			// pluginusers.go).
+			for i := range plan.spec.Mounts {
+				if plan.spec.Mounts[i].Host == drive {
+					plan.spec.Mounts[i].IDMap = true
+				}
+			}
+		}
+	}
+	// The devices it may use are root's: its own root is given them.
+	if plan.spec.UserBase > 0 {
+		for _, device := range plan.spec.Devices {
+			if err := grantDevice(device, plan.spec.UserBase); err != nil {
+				return fmt.Errorf("it can't be given %s: %w", device, err)
+			}
 		}
 	}
 	if err := a.prepareShares(plan); err != nil {
@@ -915,6 +935,13 @@ func (a *Agent) openPowerSocket(id string) error {
 	_ = os.Remove(path) // left over from before a restart
 	listener, err := net.Listen("unix", path)
 	if err != nil {
+		return err
+	}
+	// The container's users connect as users of their own (see
+	// pluginusers.go), and the folder is only the container's (and
+	// root's: /run/rbd is root's only).
+	if err := os.Chmod(path, 0o666); err != nil {
+		listener.Close()
 		return err
 	}
 	mux := http.NewServeMux()

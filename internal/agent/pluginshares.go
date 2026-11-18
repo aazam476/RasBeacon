@@ -102,12 +102,21 @@ func (a *Agent) shareFilesDir(id string, share config.PluginShare) string {
 
 // shareHostDir is what the plugin gets as the share: on a USB drive, its
 // files held to the quota (rbquotafs), since nothing sets space aside
-// there; on internal storage its files, whose own filesystem is the quota.
+// there; on internal storage its files, whose own filesystem is the
+// quota, but through rbquotafs too when they are encrypted, for their
+// owners in the plugin's user namespace (see pluginusers.go).
 func (a *Agent) shareHostDir(id string, share config.PluginShare) string {
-	if share.Drive != "" {
+	if throughQuotaView(share) {
 		return a.paths.ShareQuotaDir(id, share.ID)
 	}
 	return a.shareFilesDir(id, share)
+}
+
+// throughQuotaView reports whether the plugin gets a share through
+// rbquotafs: on a USB drive, or encrypted. Else the share is its own ext4
+// filesystem, mounted into the container idmapped.
+func throughQuotaView(share config.PluginShare) bool {
+	return share.Drive != "" || share.Encryption == encryptionOn
 }
 
 // shareKeyName is where a share's recovery key is kept in
@@ -856,7 +865,7 @@ func (a *Agent) planShares(plan *pluginRunPlan, spec *plugin.RunSpec, p config.I
 			run.key = a.secrets.ShareKeys[shareKeyName(plan.id, share)]
 		}
 		plan.shares = append(plan.shares, run)
-		spec.Mounts = append(spec.Mounts, plugin.Mount{Host: run.host, Container: path.Join(plan.manifest.Shares.Path, share.ID)})
+		spec.Mounts = append(spec.Mounts, plugin.Mount{Host: run.host, Container: path.Join(plan.manifest.Shares.Path, share.ID), IDMap: !throughQuotaView(share)})
 	}
 	spec.Env["RASBEACON_SHARES"] = sharesEnv(plan.manifest.Shares.Path, plan.shares)
 }
@@ -929,8 +938,8 @@ func (a *Agent) prepareShares(plan *pluginRunPlan) error {
 			}
 		}
 		folder.Close()
-		if share.Drive != "" {
-			if err := a.holdToQuota(plan.id, share); err != nil {
+		if throughQuotaView(share) {
+			if err := a.holdToQuota(plan.id, share, plan.spec.UserBase); err != nil {
 				return fmt.Errorf("the share %s can't be held to its quota: %w", share.Name, err)
 			}
 		}
@@ -942,19 +951,23 @@ func (a *Agent) prepareShares(plan *pluginRunPlan) error {
 	return nil
 }
 
-// holdToQuota mounts a USB share's quota view (rbquotafs) over its files,
+// holdToQuota mounts a share's quota view (rbquotafs) over its files,
 // counted afresh and with its quota as it is now: one already mounted
-// (from before a change of quota) is unmounted first. Called without
-// a.mu, with the plugin stopped.
-func (a *Agent) holdToQuota(id string, share config.PluginShare) error {
+// (from before a change of quota) is unmounted first. It shows the files'
+// owners as the plugin's user namespace (from userBase, 0 for none) sees
+// them. Called without a.mu, with the plugin stopped.
+func (a *Agent) holdToQuota(id string, share config.PluginShare, userBase int) error {
 	view := a.paths.ShareQuotaDir(id, share.ID)
 	_, _ = a.plugins.runner.Run("umount", view)
 	if err := os.MkdirAll(view, 0o755); err != nil {
 		return err
 	}
 	args := []string{"-limit", strconv.FormatInt(int64(share.QuotaMB)<<20, 10)}
-	if share.Folder != "" {
+	if share.Drive != "" && share.Folder != "" {
 		args = append(args, "-reserve", a.reservedFolder(share.Drive), "-name", reservationName(id, share))
+	}
+	if userBase > 0 {
+		args = append(args, "-user-base", strconv.Itoa(userBase))
 	}
 	_, err := a.plugins.runner.Run(rbquotafs, append(args, a.shareFilesDir(id, share), view)...)
 	return err
@@ -1050,7 +1063,7 @@ func (a *Agent) releaseSharesOf(id string, shares []config.PluginShare) {
 	// drives. A drive with two shares is busy until both are closed, so
 	// it is let go of only after all of them.
 	for _, share := range shares {
-		if share.Drive != "" {
+		if throughQuotaView(share) {
 			_, _ = a.plugins.runner.Run("umount", a.paths.ShareQuotaDir(id, share.ID))
 		}
 		_, _ = a.plugins.runner.Run("umount", a.paths.SharePlainDir(id, share.ID))

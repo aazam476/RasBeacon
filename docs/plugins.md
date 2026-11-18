@@ -201,6 +201,16 @@ hotspot), `{port:3000}` (the port on RasBeacon chosen for container port
   `10.89.0.1` (with the internet permission).
 - Its volumes, its drive, and the devices its permissions give. No privileges,
   `no-new-privileges`, at most 512 processes.
+- Its own users: the container runs in a user namespace of its own, its
+  users and groups 0 to 65535 being the Pi's 1048576 + 65536 × the last
+  number of its address and up (`10.89.0.3`: 1245184). Its root is root in
+  the container, and a user of no importance on the Pi: whatever breaks
+  out of the container gets nowhere. Files look as they always did: their
+  stored owners (0 for its root) show as its own, through idmapped mounts
+  for its data and its shares on internal storage, through `rbquotafs`
+  for shares on USB drives and encrypted ones, and a FAT, exFAT or NTFS
+  drive has every file open to everyone. Its I2C and GPIO devices are
+  given to its root by an access list, and its power socket is open to it.
 - Its output goes to its log (256 KB, in memory; its page shows the last 500 lines).
 
 ### Shares

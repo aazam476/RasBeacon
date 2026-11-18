@@ -79,9 +79,13 @@ func ParseDrives(lsblkJSON string) ([]Drive, error) {
 // "usbDrive" one, doesn't follow links on it any more.)
 func MountOptions(fsType string) (kind string, options string) {
 	options = "nosuid,nodev,noexec,noatime,nosymfollow"
+	// FAT, exFAT and NTFS keep no owners RasBeacon's plugins could use
+	// (and their drivers can't idmap): every file is open to everyone, as
+	// the plugin's users are its own (see plugin.UserBase). The drive is
+	// in a folder only root can reach.
 	switch fsType {
 	case "ntfs":
-		return "ntfs3", options
+		return "ntfs3", options + ",uid=0,gid=0,umask=0000"
 	case "vfat", "exfat":
 		return fsType, options + ",uid=0,gid=0,umask=0000"
 	}
