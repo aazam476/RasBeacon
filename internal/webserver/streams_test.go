@@ -1,9 +1,12 @@
 package webserver
 
 import (
+	"bytes"
+	"errors"
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -210,4 +213,46 @@ func TestRBDClient_TalksOverTheUnixSocket(t *testing.T) {
 		t.Fatal(err)
 	}
 	resp.Body.Close()
+}
+
+// An answer from rbd over the limit is an error, not the part that fits
+// (which would be broken JSON, or a report cut off without a word).
+func TestRBDClient_AnAnswerTooLargeIsAnError(t *testing.T) {
+	dir, err := os.MkdirTemp("", "rbd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	socket := filepath.Join(dir, "rbd.sock")
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Skip("no Unix sockets here:", err)
+	}
+	defer listener.Close()
+	go func() {
+		_ = http.Serve(listener, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			size := maxAnswer
+			if r.URL.Path == "/big" {
+				size++
+			}
+			_, _ = w.Write(bytes.Repeat([]byte("x"), size))
+		}))
+	}()
+	client := NewRBDClient(socket)
+	if _, body, err := client.Do(http.MethodGet, "/fits", nil); err != nil || len(body) != maxAnswer {
+		t.Errorf("an answer of exactly the limit: %d bytes, %v", len(body), err)
+	}
+	if _, _, err := client.Do(http.MethodGet, "/big", nil); !errors.Is(err, errAnswerTooLarge) {
+		t.Errorf("an answer over the limit: %v, want errAnswerTooLarge", err)
+	}
+	if _, _, err := client.Stream("/big", strings.NewReader("")); !errors.Is(err, errAnswerTooLarge) {
+		t.Errorf("a streamed request's answer over the limit: %v", err)
+	}
+	// rbweb tells the browser, rather than passing on part of it.
+	s := New(client, nil)
+	rec := httptest.NewRecorder()
+	s.forward(rec, http.MethodGet, "/big", nil)
+	if rec.Code != http.StatusBadGateway || !strings.Contains(rec.Body.String(), "too large") {
+		t.Errorf("forwarded: %d %s", rec.Code, rec.Body.String())
+	}
 }

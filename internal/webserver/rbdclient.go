@@ -6,12 +6,34 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"time"
 )
+
+// maxAnswer is the most rbd's answer to Do, DoSlow or Stream may hold: far
+// more than any it gives (the diagnostics report, the largest, holds 400
+// lines of log). Open's answers, streamed, have no limit.
+const maxAnswer = 10 << 20
+
+// errAnswerTooLarge is returned for an answer over maxAnswer, rather than
+// passing on the part that fits (broken JSON, a cut-off report).
+var errAnswerTooLarge = errors.New("rbd's answer is too large")
+
+// readAnswer reads a whole answer, at most maxAnswer bytes.
+func readAnswer(body io.Reader) ([]byte, error) {
+	data, err := io.ReadAll(io.LimitReader(body, maxAnswer+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > maxAnswer {
+		return nil, errAnswerTooLarge
+	}
+	return data, nil
+}
 
 // RBDClient sends requests to rbd's local API.
 type RBDClient struct {
@@ -51,7 +73,7 @@ func (c *RBDClient) Stream(path string, body io.Reader) (int, []byte, error) {
 		return 0, nil, fmt.Errorf("contacting rbd: %w", err)
 	}
 	defer resp.Body.Close()
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
+	respBody, err := readAnswer(resp.Body)
 	return resp.StatusCode, respBody, err
 }
 
@@ -100,7 +122,7 @@ func (c *RBDClient) do(client *http.Client, method, path string, body []byte) (i
 		return 0, nil, fmt.Errorf("contacting rbd: %w", err)
 	}
 	defer resp.Body.Close()
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
+	respBody, err := readAnswer(resp.Body)
 	return resp.StatusCode, respBody, err
 }
 
