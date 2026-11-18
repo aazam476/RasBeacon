@@ -397,6 +397,8 @@ export interface StorageInfo {
   health: string;
   /** The space each plugin's data takes (reserved, used or not); not counted in `userGb`. */
   plugins?: StoragePlugin[];
+  /** The space the swap file takes; not counted in `userGb`. */
+  swapGb?: number;
 }
 
 /** The space one plugin's data takes on the SD card. */

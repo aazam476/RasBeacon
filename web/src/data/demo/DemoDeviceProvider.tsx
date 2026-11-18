@@ -852,6 +852,8 @@ export function DemoDeviceProvider({ children }: { children: ReactNode }) {
           d.router.swapSettings.sizeGb = sizeGb;
           d.router.status.system.swapTotalMb = sizeGb * 1024;
           d.router.status.system.swapUsedMb = Math.min(d.router.status.system.swapUsedMb, sizeGb * 1024);
+          // Its space on the card, in GB (10^9 bytes) as the Storage bar counts.
+          d.router.status.storage.swapGb = (sizeGb * 2 ** 30) / 1e9;
         });
       },
       saveDnsSettings: async (text, withVpn) => {

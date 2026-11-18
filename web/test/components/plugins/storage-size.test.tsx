@@ -146,8 +146,30 @@ describe('System → Storage', () => {
     expect(storage.getByText('Plugins')).toBeTruthy();
     expect(storage.getByText('2.5 GB')).toBeTruthy();
     expect(storage.getByText('Plugins: AdGuard Home 0.5 GB, Samba 2.0 GB.')).toBeTruthy();
-    // 10 GB less RasBeacon (3.8), settings (2.4) and plugins (2.5).
+    // 10 GB less RasBeacon (3.8), settings (0.3), plugins (2.5) and swap (2.1).
     expect(storage.getByText('1.3 GB of 10.0 GB free')).toBeTruthy();
+  });
+
+  it('shows the swap file as a part of its own, last', () => {
+    renderScreen(<SystemScreen />, fakeDevice(), '/system');
+    const storage = within(section('Storage'));
+    const labels = storage.getAllByRole('term').map((term) => term.textContent);
+    expect(labels).toEqual(['RasBeacon', 'Settings and logs', 'Plugins', 'Swap']);
+    const swap = storage.getByText('Swap').parentElement!;
+    expect(within(swap).getByText('2.1 GB')).toBeTruthy();
+    // In a color of its own.
+    expect(swap.querySelector('.bg-tile-purple')).toBeTruthy();
+  });
+
+  it('has no Swap part with swap off', () => {
+    renderScreen(
+      <SystemScreen />,
+      fakeDevice((router) => {
+        router.status.storage.swapGb = 0;
+      }),
+      '/system',
+    );
+    expect(within(section('Storage')).queryByText('Swap')).toBeNull();
   });
 
   it('has no Plugins part without plugins', () => {

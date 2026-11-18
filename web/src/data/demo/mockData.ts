@@ -308,7 +308,9 @@ export function createMockRouter(): MockRouter {
       storage: {
         totalGb: 10,
         firmwareGb: 3.8,
-        userGb: 2.4,
+        userGb: 0.3,
+        // The 2 GB swap file (swapSettings).
+        swapGb: 2.1,
         medium: 'eMMC',
         filesystem: 'SquashFS + OverlayFS',
         health: '99%',

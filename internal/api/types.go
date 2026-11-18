@@ -220,7 +220,10 @@ type StorageInfo struct {
 	// FirmwareGB is the boot and system partitions (both A/B copies).
 	FirmwareGB float64 `json:"firmwareGb"`
 	// UserGB is what settings and logs use on the data partition.
-	UserGB     float64 `json:"userGb"`
+	UserGB float64 `json:"userGb"`
+	// SwapGB is what the swap file takes on the data partition. It is not
+	// counted in UserGB.
+	SwapGB     float64 `json:"swapGb"`
 	Medium     string  `json:"medium"`
 	Filesystem string  `json:"filesystem"`
 	// Health is "unknown": SD cards don't report it.

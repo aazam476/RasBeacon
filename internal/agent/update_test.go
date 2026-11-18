@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -704,6 +705,40 @@ func TestUpdate_ThePi3ImageIsFlashedInstead(t *testing.T) {
 	}
 }
 
+// On the Pi 4/5 image the swap file is on the data partition, shown on its
+// own: not in "Settings and logs".
+func TestStorage_TheSwapFileIsShownOnItsOwn(t *testing.T) {
+	e, _ := newUpdateEnv(t)
+	storage := func() api.StorageInfo {
+		e.agent.mu.Lock()
+		defer e.agent.mu.Unlock()
+		return e.agent.storageInfo()
+	}
+	before := storage()
+	if before.SwapGB != 0 {
+		t.Errorf("without a swap file: %+v", before)
+	}
+	// 256 MB, set aside like the real one (fallocate).
+	f, err := os.Create(e.paths.SwapFile())
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = syscall.Fallocate(int(f.Fd()), 0, 0, 256<<20)
+	f.Close()
+	if err != nil {
+		t.Skip("this filesystem can't set space aside:", err)
+	}
+	after := storage()
+	if after.SwapGB*1e9 < 256<<20 {
+		t.Errorf("swap = %.3f GB, want the 256 MB file", after.SwapGB)
+	}
+	// "Settings and logs" didn't grow by it. (Other tests write to the same
+	// disk meanwhile, so roughly.)
+	if grew := after.UserGB - before.UserGB; grew > 0.128 {
+		t.Errorf("settings went from %.3f to %.3f GB: the swap file was counted in them", before.UserGB, after.UserGB)
+	}
+}
+
 func TestStorage_ThePi3ImageHasOneSystemPartition(t *testing.T) {
 	e, _ := newUpdateEnv(t)
 	mustWrite(t, e.paths.BoardFile(), "rpi3\n")
@@ -721,6 +756,7 @@ func TestStorage_ThePi3ImageHasOneSystemPartition(t *testing.T) {
 	}
 	mustWrite(t, filepath.Join(e.paths.SysClassBlock(), "mmcblk0p1", "size"), "524288\n")
 	mustWrite(t, filepath.Join(e.paths.PersistentDir(), "rasbeacon", "settings"), strings.Repeat("x", 4096))
+	mustWrite(t, e.paths.SwapFile(), strings.Repeat("s", 2<<20))
 
 	storage := func() api.StorageInfo {
 		e.agent.mu.Lock()
@@ -737,8 +773,12 @@ func TestStorage_ThePi3ImageHasOneSystemPartition(t *testing.T) {
 	if s.Medium != "microSD card" || !strings.HasPrefix(s.Filesystem, "Writable system") {
 		t.Errorf("storage = %+v", s)
 	}
-	if s.FirmwareGB < 0.268 || s.UserGB <= 0 || s.TotalGB < s.FirmwareGB+s.UserGB {
+	if s.FirmwareGB < 0.268 || s.UserGB <= 0 || s.TotalGB < s.FirmwareGB+s.UserGB+s.SwapGB {
 		t.Errorf("storage = %+v: RasBeacon is the boot partition and the system files, settings what /persistent holds", s)
+	}
+	// The swap file is in /persistent, but shown on its own.
+	if s.SwapGB*1e9 < 2<<20 || s.UserGB*1e9 >= 1<<20 {
+		t.Errorf("storage = %+v: the 2 MB swap file should be swap, not settings", s)
 	}
 	// Not measured again for 10 minutes.
 	storage()

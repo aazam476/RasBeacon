@@ -312,10 +312,12 @@ func (a *Agent) storageInfo() api.StorageInfo {
 	if err := syscall.Statfs(a.paths.DataDir(), &fs); err == nil {
 		total := fs.Blocks * uint64(fs.Bsize)
 		used := (fs.Blocks - fs.Bfree) * uint64(fs.Bsize)
-		// The plugins' data is shown on its own.
+		// The plugins' data and the swap file are shown on their own.
 		var plugins uint64
 		s.Plugins, plugins = a.pluginStorageUse()
-		s.UserGB = float64(used-min(plugins, used)) / gb
+		swap := min(a.swapFileBytes(), used-min(plugins, used))
+		s.SwapGB = float64(swap) / gb
+		s.UserGB = float64(used-min(plugins, used)-swap) / gb
 		s.TotalGB = float64(firmware+total) / gb
 	}
 	if fsType := a.mountType(a.paths.DataDir()); fsType != "" {
@@ -326,8 +328,9 @@ func (a *Agent) storageInfo() api.StorageInfo {
 
 // singleSystemStorage is storageInfo for the Pi Zero 2 W image: a boot
 // partition and one writable system partition that also holds /persistent.
-// "Settings and logs" is what /persistent holds (with the swap file, as on
-// the Pi 4/5 image); the rest of what the partition uses is RasBeacon.
+// "Settings and logs" is what /persistent holds, less the plugins' data and
+// the swap file (shown on their own, as on the Pi 4/5 image); the rest of
+// what the partition uses is RasBeacon.
 func (a *Agent) singleSystemStorage() api.StorageInfo {
 	const gb = 1e9
 	boot, _ := a.partitionBytes("active", "boot")
@@ -343,10 +346,13 @@ func (a *Agent) singleSystemStorage() api.StorageInfo {
 		total := st.Blocks * uint64(st.Bsize)
 		used := (st.Blocks - st.Bfree) * uint64(st.Bsize)
 		persistent = min(persistent, used)
-		// The plugins' data is in /persistent too, but shown on its own.
+		// The plugins' data and the swap file are in /persistent too, but
+		// shown on their own.
 		var plugins uint64
 		s.Plugins, plugins = a.pluginStorageUse()
-		s.UserGB = float64(persistent-min(plugins, persistent)) / gb
+		swap := min(a.swapFileBytes(), persistent-min(plugins, persistent))
+		s.SwapGB = float64(swap) / gb
+		s.UserGB = float64(persistent-min(plugins, persistent)-swap) / gb
 		s.FirmwareGB = float64(boot+used-persistent) / gb
 		s.TotalGB = float64(boot+total) / gb
 	}

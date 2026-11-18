@@ -45,6 +45,16 @@ func (a *Agent) swapFileSize() int64 {
 	return info.Size()
 }
 
+// swapFileBytes is what the swap file takes on the card: its blocks (it is
+// set aside in full, so that is its size), 0 if there is none.
+func (a *Agent) swapFileBytes() uint64 {
+	var st syscall.Stat_t
+	if err := syscall.Stat(a.paths.SwapFile(), &st); err != nil {
+		return 0
+	}
+	return uint64(st.Blocks) * 512
+}
+
 // swapMaxGB is the largest swap file that fits.
 func (a *Agent) swapMaxGB() int {
 	free, err := a.diskFree(a.paths.DataDir())

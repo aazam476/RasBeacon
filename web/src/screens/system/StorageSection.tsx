@@ -5,17 +5,20 @@ import { RowText, Section } from '@/ui';
 
 /**
  * The SD card as one bar split by what uses it, like iPhone Storage, with a legend. The plugins'
- * data is a part of its own (the space is set aside, used or not), and the footer says how much
- * each plugin takes.
+ * data and the swap file are parts of their own (their space is set aside, used or not), and the
+ * footer says how much each plugin takes. Swap comes last, in purple: next to orange it stays
+ * distinct for colorblind eyes too.
  */
 export function StorageSection({ storage }: { storage: StorageInfo }) {
   const plugins = storage.plugins ?? [];
   const pluginsGb = plugins.reduce((sum, plugin) => sum + plugin.gb, 0);
-  const free = storage.totalGb - storage.firmwareGb - storage.userGb - pluginsGb;
+  const swapGb = storage.swapGb ?? 0;
+  const free = storage.totalGb - storage.firmwareGb - storage.userGb - pluginsGb - swapGb;
   const segments = [
     { label: 'RasBeacon', gb: storage.firmwareGb, color: 'bg-tile-indigo' },
     { label: 'Settings and logs', gb: storage.userGb, color: 'bg-tile-teal' },
     ...(plugins.length > 0 ? [{ label: 'Plugins', gb: pluginsGb, color: 'bg-tile-orange' }] : []),
+    ...(swapGb > 0 ? [{ label: 'Swap', gb: swapGb, color: 'bg-tile-purple' }] : []),
   ];
   const footer =
     plugins.length > 0
